@@ -1,7 +1,21 @@
 import * as path from "node:path";
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, dialog } from "electron";
+import { fork, type ChildProcess } from "node:child_process";
+import {
+  ensureDirs,
+  openDatabase,
+  getSetupStatus,
+  getDatabase,
+  getAnybotDir,
+  getLogDir,
+} from "./database";
+import { registerIpcHandlers } from "./ipc-handlers";
 
-function createWindow() {
+let mainWindow: BrowserWindow | null = null;
+let serverProcess: ChildProcess | null = null;
+
+function createWindow(setupMode: boolean) {
+  const route = setupMode ? "/setup" : "/";
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -12,10 +26,97 @@ function createWindow() {
     },
   });
 
-  win.loadURL("http://localhost:3001");
+  win.loadURL(`http://localhost:3001${route}`);
+
+  if (!app.isPackaged) {
+    win.webContents.openDevTools();
+  }
+
+  return win;
 }
 
-app.whenReady().then(createWindow);
+function startServerAgent(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const serverAgentPath = path.join(
+      __dirname,
+      "..",
+      "..",
+      "server-agent",
+      "dist",
+      "main.js",
+    );
+
+    serverProcess = fork(serverAgentPath, [], {
+      stdio: "pipe",
+      env: {
+        ...process.env,
+        ANYBOT_DIR: getAnybotDir(),
+      },
+    });
+
+    const timeout = setTimeout(() => {
+      reject(new Error("server-agent start timeout (30s)"));
+    }, 30000);
+
+    serverProcess.on("error", (err) => {
+      clearTimeout(timeout);
+      reject(err);
+    });
+
+    serverProcess.on("exit", (code) => {
+      clearTimeout(timeout);
+      if (code !== 0 && code !== null) {
+        reject(new Error(`server-agent exited with code ${code}`));
+      }
+    });
+
+    // Poll for server-agent to be ready
+    const poll = () => {
+      const http = require("node:http");
+      const req = http.get("http://localhost:3100", (res: any) => {
+        clearTimeout(timeout);
+        resolve();
+      });
+      req.on("error", () => {
+        setTimeout(poll, 500);
+      });
+      req.setTimeout(2000, () => {
+        req.destroy();
+        setTimeout(poll, 500);
+      });
+    };
+    setTimeout(poll, 1000);
+  });
+}
+
+app.whenReady().then(async () => {
+  try {
+    ensureDirs();
+    const database = openDatabase();
+    const { needsSetup } = getSetupStatus(database);
+
+    registerIpcHandlers(database, () => mainWindow);
+
+    if (!needsSetup) {
+      try {
+        await startServerAgent();
+      } catch (err: any) {
+        dialog.showErrorBox(
+          "Server Agent 启动失败",
+          `无法启动 server-agent：${err.message}\n\n请检查日志：${getLogDir()}`,
+        );
+      }
+    }
+
+    mainWindow = createWindow(needsSetup);
+  } catch (err: any) {
+    dialog.showErrorBox(
+      "启动失败",
+      `无法初始化应用：${err.message}\n\n请检查 ${getAnybotDir()} 目录权限`,
+    );
+    app.quit();
+  }
+});
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
@@ -25,6 +126,15 @@ app.on("window-all-closed", () => {
 
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
+    const database = getDatabase();
+    const { needsSetup } = getSetupStatus(database);
+    mainWindow = createWindow(needsSetup);
+  }
+});
+
+app.on("before-quit", () => {
+  if (serverProcess) {
+    serverProcess.kill();
+    serverProcess = null;
   }
 });
