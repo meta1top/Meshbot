@@ -1,4 +1,5 @@
 import * as path from "node:path";
+import * as http from "node:http";
 import { app, BrowserWindow, dialog } from "electron";
 import { fork, type ChildProcess } from "node:child_process";
 import {
@@ -72,8 +73,7 @@ function startServerAgent(): Promise<void> {
 
     // Poll for server-agent to be ready
     const poll = () => {
-      const http = require("node:http");
-      const req = http.get("http://localhost:3100", (res: any) => {
+      const req = http.get("http://localhost:3100", (res: http.IncomingMessage) => {
         clearTimeout(timeout);
         resolve();
       });
@@ -100,19 +100,21 @@ app.whenReady().then(async () => {
     if (!needsSetup) {
       try {
         await startServerAgent();
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
         dialog.showErrorBox(
           "Server Agent 启动失败",
-          `无法启动 server-agent：${err.message}\n\n请检查日志：${getLogDir()}`,
+          `无法启动 server-agent：${message}\n\n请检查日志：${getLogDir()}`,
         );
       }
     }
 
     mainWindow = createWindow(needsSetup);
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
     dialog.showErrorBox(
       "启动失败",
-      `无法初始化应用：${err.message}\n\n请检查 ${getAnybotDir()} 目录权限`,
+      `无法初始化应用：${message}\n\n请检查 ${getAnybotDir()} 目录权限`,
     );
     app.quit();
   }
@@ -126,9 +128,13 @@ app.on("window-all-closed", () => {
 
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) {
-    const database = getDatabase();
-    const { needsSetup } = getSetupStatus(database);
-    mainWindow = createWindow(needsSetup);
+    try {
+      const database = getDatabase();
+      const { needsSetup } = getSetupStatus(database);
+      mainWindow = createWindow(needsSetup);
+    } catch {
+      // App was never fully initialized
+    }
   }
 });
 
