@@ -31,6 +31,9 @@ release/
 .DS_Store
 Thumbs.db
 
+# worktrees
+.worktrees/
+
 # debug
 npm-debug.log*
 yarn-debug.log*
