@@ -187,6 +187,9 @@ importers:
       '@anybot/types':
         specifier: workspace:*
         version: link:../../libs/types
+      zod:
+        specifier: ^3
+        version: 3.25.76
 
   packages/design:
     dependencies:
