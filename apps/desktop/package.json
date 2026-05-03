@@ -10,6 +10,7 @@
     "clean": "rm -rf dist",
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "test": "vitest run",
+    "postinstall": "npx @electron/rebuild -o better-sqlite3",
     "pack": "electron-builder --dir",
     "dist": "electron-builder"
   },
