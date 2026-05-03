@@ -14,7 +14,8 @@
       "@/*": ["./src/*"]
     },
     "allowJs": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "lib": ["dom", "dom.iterable", "esnext"]
   },
   "include": ["src", "next-env.d.ts", ".next/types/**/*.ts"],
   "exclude": ["node_modules"]
