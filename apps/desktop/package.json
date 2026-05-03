@@ -9,6 +9,7 @@
     "start": "electron dist/main.js",
     "clean": "rm -rf dist",
     "typecheck": "tsc --project tsconfig.json --noEmit",
+    "test": "vitest run",
     "pack": "electron-builder --dir",
     "dist": "electron-builder"
   },
@@ -21,6 +22,7 @@
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22",
     "electron": "^35",
-    "electron-builder": "^25"
+    "electron-builder": "^25",
+    "vitest": "^4.1.5"
   }
 }
