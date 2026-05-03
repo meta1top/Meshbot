@@ -2,35 +2,18 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { Module, type OnModuleInit } from "@nestjs/common";
+import Database from "better-sqlite3";
 
 function loadConfig() {
   const anybotDir = process.env.ANYBOT_DIR ?? path.join(homedir(), ".anybot");
   const dbPath = path.join(anybotDir, "agent.db");
-
-  if (!existsSync(anybotDir)) {
-    console.log(
-      "[server-agent] Config directory does not exist — skipping config load",
-    );
-    return [];
-  }
 
   if (!existsSync(dbPath)) {
     console.log("[server-agent] agent.db not found — skipping config load");
     return [];
   }
 
-  // Dynamic require — native module may not match current Node version
-  let Database: typeof import("better-sqlite3");
-  try {
-    Database = require("better-sqlite3");
-  } catch {
-    console.log(
-      "[server-agent] Unable to load better-sqlite3 — skipping config load",
-    );
-    return [];
-  }
-
-  let db: InstanceType<typeof Database>;
+  let db: Database.Database;
   try {
     db = new Database(dbPath, { readonly: true });
   } catch {
