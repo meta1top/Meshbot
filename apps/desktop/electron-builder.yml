@@ -1,0 +1,16 @@
+appId: com.anybot.desktop
+productName: Anybot
+directories:
+  output: release
+files:
+  - dist/**/*
+mac:
+  target:
+    - dmg
+    - zip
+win:
+  target:
+    - nsis
+linux:
+  target:
+    - AppImage

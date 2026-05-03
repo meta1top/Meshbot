@@ -1,0 +1,22 @@
+{
+  "name": "@anybot/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "dev": "tsc --project tsconfig.json --watch",
+    "start": "electron dist/main.js",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "dependencies": {
+    "electron-updater": "^6"
+  },
+  "devDependencies": {
+    "electron": "^35",
+    "electron-builder": "^25"
+  }
+}
