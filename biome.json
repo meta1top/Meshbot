@@ -19,9 +19,24 @@
       "recommended": true
     }
   },
+  "overrides": [
+    {
+      "includes": ["apps/server-agent/**", "apps/server-main/**", "libs/shared/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useImportType": "off"
+          }
+        }
+      }
+    }
+  ],
   "javascript": {
     "formatter": {
       "quoteStyle": "double"
+    },
+    "parser": {
+      "unsafeParameterDecoratorsEnabled": true
     }
   },
   "assist": {
