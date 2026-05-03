@@ -19,11 +19,7 @@ export const PROVIDERS: ProviderDef[] = [
     name: "Anthropic",
     description: "Claude Opus, Sonnet, Haiku 系列模型",
     default_base_url: "https://api.anthropic.com",
-    models: [
-      "claude-opus-4-7",
-      "claude-sonnet-4-6",
-      "claude-haiku-4-5",
-    ],
+    models: ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"],
   },
   {
     type: "google",

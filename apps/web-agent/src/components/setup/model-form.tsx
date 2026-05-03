@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { ProviderInfo, ModelConfigData } from "@/types/electron";
+import type { ModelConfigData, ProviderInfo } from "@/types/electron";
 
 interface ModelFormProps {
   provider: ProviderInfo;

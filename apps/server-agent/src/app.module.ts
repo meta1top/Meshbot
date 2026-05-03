@@ -1,14 +1,16 @@
-import { Module, type OnModuleInit } from "@nestjs/common";
 import { existsSync } from "node:fs";
-import { homedir } from "os";
-import path from "path";
+import { homedir } from "node:os";
+import path from "node:path";
+import { Module, type OnModuleInit } from "@nestjs/common";
 
 function loadConfig() {
   const anybotDir = process.env.ANYBOT_DIR ?? path.join(homedir(), ".anybot");
   const dbPath = path.join(anybotDir, "agent.db");
 
   if (!existsSync(anybotDir)) {
-    console.log("[server-agent] Config directory does not exist — skipping config load");
+    console.log(
+      "[server-agent] Config directory does not exist — skipping config load",
+    );
     return [];
   }
 
@@ -18,19 +20,23 @@ function loadConfig() {
   }
 
   // Dynamic require — native module may not match current Node version
-  let Database: any;
+  let Database: typeof import("better-sqlite3");
   try {
     Database = require("better-sqlite3");
   } catch {
-    console.log("[server-agent] Unable to load better-sqlite3 — skipping config load");
+    console.log(
+      "[server-agent] Unable to load better-sqlite3 — skipping config load",
+    );
     return [];
   }
 
-  let db: any;
+  let db: InstanceType<typeof Database>;
   try {
     db = new Database(dbPath, { readonly: true });
   } catch {
-    console.log("[server-agent] Unable to open agent.db — skipping config load");
+    console.log(
+      "[server-agent] Unable to open agent.db — skipping config load",
+    );
     return [];
   }
 
@@ -49,10 +55,12 @@ function loadConfig() {
   db.close();
 
   console.log(`[server-agent] Loaded ${models.length} model(s) from agent.db`);
-  for (const m of models as any[]) {
-    console.log(
-      `  - ${m.name}: ${m.provider_type}/${m.model}`,
-    );
+  for (const m of models as Array<{
+    name: string;
+    provider_type: string;
+    model: string;
+  }>) {
+    console.log(`  - ${m.name}: ${m.provider_type}/${m.model}`);
   }
 
   return models;

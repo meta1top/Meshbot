@@ -1,10 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import ProviderCard from "@/components/setup/provider-card";
+import { useEffect, useState } from "react";
 import ModelForm from "@/components/setup/model-form";
-import type { ProviderInfo, ModelConfigData, ElectronAPI } from "@/types/electron";
+import ProviderCard from "@/components/setup/provider-card";
+import type {
+  ElectronAPI,
+  ModelConfigData,
+  ProviderInfo,
+} from "@/types/electron";
 
 function getAPI(): ElectronAPI | null {
   if (typeof window !== "undefined" && window.electronAPI) {

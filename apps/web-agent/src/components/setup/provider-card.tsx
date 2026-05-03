@@ -17,9 +17,10 @@ export default function ProviderCard({
     <button
       onClick={onSelect}
       className={`flex flex-col gap-2 rounded-xl border-2 p-4 text-left transition-all cursor-pointer
-        ${selected
-          ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500"
-          : "border-gray-200 hover:border-gray-300 bg-white"
+        ${
+          selected
+            ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500"
+            : "border-gray-200 hover:border-gray-300 bg-white"
         }`}
     >
       <span className="font-semibold text-gray-900">{name}</span>

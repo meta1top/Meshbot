@@ -95,7 +95,7 @@ function syncProviders(database: Database.Database): void {
     database
       .prepare("SELECT type FROM providers")
       .all()
-      .map((r: any) => r.type),
+      .map((r: unknown) => (r as { type: string }).type),
   );
 
   const txn = database.transaction(() => {
@@ -104,8 +104,8 @@ function syncProviders(database: Database.Database): void {
         ? (
             database
               .prepare("SELECT id FROM providers WHERE type = ?")
-              .get(p.type) as any
-          ).id
+              .get(p.type) as { id: string } | undefined
+          )?.id ?? randomUUID()
         : randomUUID();
 
       upsert.run({
@@ -129,7 +129,7 @@ export function getSetupStatus(database: Database.Database): {
 } {
   const row = database
     .prepare("SELECT COUNT(*) as count FROM models WHERE enabled = 1")
-    .get() as any;
+    .get() as { count: number };
   return { needsSetup: row.count === 0 };
 }
 
@@ -195,5 +195,14 @@ export function getEnabledModels(database: Database.Database): Array<{
        JOIN providers p ON m.provider_id = p.id
        WHERE m.enabled = 1`,
     )
-    .all() as any[];
+    .all() as Array<{
+      id: string;
+      provider_type: string;
+      provider_name: string;
+      name: string;
+      model: string;
+      api_key: string;
+      base_url: string;
+      default_base_url: string;
+    }>;
 }
