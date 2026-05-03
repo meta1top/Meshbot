@@ -1,5 +1,5 @@
 {
-  "name": "anybot",
+  "name": "anybot", 
   "private": true,
   "scripts": {
     "build": "turbo run build",

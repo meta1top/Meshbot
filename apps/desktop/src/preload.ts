@@ -27,13 +27,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getSetupStatus: (): Promise<SetupStatus> =>
     ipcRenderer.invoke("get-setup-status"),
 
-  saveModelConfig: (
-    data: ModelConfigData,
-  ): Promise<{ success: boolean }> =>
+  saveModelConfig: (data: ModelConfigData): Promise<{ success: boolean }> =>
     ipcRenderer.invoke("save-model-config", data),
 
-  completeSetup: (): Promise<void> =>
-    ipcRenderer.invoke("complete-setup"),
+  completeSetup: (): Promise<void> => ipcRenderer.invoke("complete-setup"),
 
   onSetupComplete: (callback: () => void) => {
     ipcRenderer.on("setup-complete", () => callback());

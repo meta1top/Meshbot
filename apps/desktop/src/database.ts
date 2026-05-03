@@ -1,10 +1,10 @@
-import { randomUUID } from "crypto";
-import { mkdirSync } from "fs";
-import { homedir } from "os";
-import path from "path";
-import Database from "better-sqlite3";
-import { PROVIDERS } from "@anybot/common";
+import { randomUUID } from "node:crypto";
+import { mkdirSync } from "node:fs";
+import { homedir } from "node:os";
+import path from "node:path";
 import type { ProviderDef } from "@anybot/common";
+import { PROVIDERS } from "@anybot/common";
+import Database from "better-sqlite3";
 
 const ANYBOT_DIR = path.join(homedir(), ".anybot");
 const DB_PATH = path.join(ANYBOT_DIR, "agent.db");
@@ -101,9 +101,11 @@ function syncProviders(database: Database.Database): void {
   const txn = database.transaction(() => {
     for (const p of PROVIDERS) {
       const id = existing.has(p.type)
-        ? (database
-            .prepare("SELECT id FROM providers WHERE type = ?")
-            .get(p.type) as any).id
+        ? (
+            database
+              .prepare("SELECT id FROM providers WHERE type = ?")
+              .get(p.type) as any
+          ).id
         : randomUUID();
 
       upsert.run({
@@ -122,9 +124,9 @@ function syncProviders(database: Database.Database): void {
 
 // ── Config queries ────────────────────────────────────
 
-export function getSetupStatus(
-  database: Database.Database,
-): { needsSetup: boolean } {
+export function getSetupStatus(database: Database.Database): {
+  needsSetup: boolean;
+} {
   const row = database
     .prepare("SELECT COUNT(*) as count FROM models WHERE enabled = 1")
     .get() as any;
@@ -175,9 +177,7 @@ export function saveModelConfig(
   return { success: true, id };
 }
 
-export function getEnabledModels(
-  database: Database.Database,
-): Array<{
+export function getEnabledModels(database: Database.Database): Array<{
   id: string;
   provider_type: string;
   provider_name: string;

@@ -1,14 +1,14 @@
-import * as path from "node:path";
+import { type ChildProcess, fork } from "node:child_process";
 import * as http from "node:http";
+import * as path from "node:path";
 import { app, BrowserWindow, dialog } from "electron";
-import { fork, type ChildProcess } from "node:child_process";
 import {
   ensureDirs,
-  openDatabase,
-  getSetupStatus,
-  getDatabase,
   getAnybotDir,
+  getDatabase,
   getLogDir,
+  getSetupStatus,
+  openDatabase,
 } from "./database";
 import { registerIpcHandlers } from "./ipc-handlers";
 
@@ -109,7 +109,7 @@ async function forkServerAgent(): Promise<void> {
 
       pollForReady(30000)
         .then(resolve)
-        .catch((err) => {
+        .catch((_err) => {
           if (serverProcess) {
             serverProcess.kill();
             serverProcess = null;

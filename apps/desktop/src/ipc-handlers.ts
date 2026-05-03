@@ -1,10 +1,6 @@
-import { ipcMain, BrowserWindow } from "electron";
 import type Database from "better-sqlite3";
-import {
-  getSetupStatus,
-  getProvidersList,
-  saveModelConfig,
-} from "./database";
+import { type BrowserWindow, ipcMain } from "electron";
+import { getProvidersList, getSetupStatus, saveModelConfig } from "./database";
 
 export function registerIpcHandlers(
   database: Database.Database,

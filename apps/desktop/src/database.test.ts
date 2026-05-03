@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
 import Database from "better-sqlite3";
-import { getSetupStatus, getProvidersList, saveModelConfig } from "./database";
+import { describe, expect, it } from "vitest";
+import { getProvidersList, getSetupStatus, saveModelConfig } from "./database";
 
 // Use an in-memory database for tests
 function createTestDb(): Database.Database {
