@@ -4,6 +4,11 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
+    "dev:web-agent": "pnpm --filter @anybot/web-agent dev",
+    "dev:web-main": "pnpm --filter @anybot/web-main dev",
+    "dev:server-agent": "pnpm --filter @anybot/server-agent dev",
+    "dev:server-main": "pnpm --filter @anybot/server-main dev",
+    "dev:desktop": "pnpm --filter @anybot/desktop dev",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "clean": "turbo run clean && rm -rf node_modules"

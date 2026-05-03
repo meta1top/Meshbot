@@ -19,6 +19,7 @@
     "rxjs": "^7"
   },
   "devDependencies": {
-    "@nestjs/cli": "^11"
+    "@nestjs/cli": "^11",
+    "@types/node": "^22"
   }
 }

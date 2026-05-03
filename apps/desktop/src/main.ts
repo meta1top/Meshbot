@@ -12,9 +12,7 @@ function createWindow() {
     },
   });
 
-  if (process.env.NODE_ENV === 'development') {
-    win.loadURL('http://localhost:3001');
-  }
+  win.loadURL('http://localhost:3001');
 }
 
 app.whenReady().then(createWindow);
