@@ -2,14 +2,7 @@ import { type ChildProcess, fork } from "node:child_process";
 import * as http from "node:http";
 import * as path from "node:path";
 import { app, BrowserWindow, dialog } from "electron";
-import {
-  ensureDirs,
-  getAnybotDir,
-  getDatabase,
-  getLogDir,
-  getSetupStatus,
-  openDatabase,
-} from "./database";
+import { ensureDirs, getAnybotDir, getLogDir, getSetupStatus } from "./database";
 import { registerIpcHandlers } from "./ipc-handlers";
 
 let mainWindow: BrowserWindow | null = null;
@@ -146,6 +139,7 @@ async function connectToServerAgent(): Promise<void> {
       });
       if (response === 1) {
         app.quit();
+        return;
       }
     }
   }
@@ -154,25 +148,12 @@ async function connectToServerAgent(): Promise<void> {
 app.whenReady().then(async () => {
   try {
     ensureDirs();
-    const database = openDatabase();
-    const { needsSetup } = getSetupStatus(database);
 
-    registerIpcHandlers(database, () => mainWindow, startServerAgent);
+    await startServerAgent();
 
-    if (!needsSetup) {
-      try {
-        await startServerAgent();
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        if (app.isPackaged) {
-          dialog.showErrorBox(
-            "Server Agent 启动失败",
-            `无法启动 server-agent：${message}\n\n请检查日志：${getLogDir()}`,
-          );
-          app.quit();
-        }
-      }
-    }
+    const { needsSetup } = await getSetupStatus();
+
+    registerIpcHandlers(() => mainWindow);
 
     mainWindow = createWindow(needsSetup);
   } catch (err: unknown) {
@@ -191,14 +172,13 @@ app.on("window-all-closed", () => {
   }
 });
 
-app.on("activate", () => {
+app.on("activate", async () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     try {
-      const database = getDatabase();
-      const { needsSetup } = getSetupStatus(database);
+      const { needsSetup } = await getSetupStatus();
       mainWindow = createWindow(needsSetup);
     } catch {
-      // App was never fully initialized
+      mainWindow = createWindow(false);
     }
   }
 });

@@ -1,18 +1,15 @@
-import type Database from "better-sqlite3";
 import { type BrowserWindow, ipcMain } from "electron";
 import { getProvidersList, getSetupStatus, saveModelConfig } from "./database";
 
 export function registerIpcHandlers(
-  database: Database.Database,
   getMainWindow: () => BrowserWindow | null,
-  startServerAgent: () => Promise<void>,
 ): void {
   ipcMain.handle("get-providers", () => {
     return getProvidersList();
   });
 
   ipcMain.handle("get-setup-status", () => {
-    return getSetupStatus(database);
+    return getSetupStatus();
   });
 
   ipcMain.handle(
@@ -27,12 +24,11 @@ export function registerIpcHandlers(
         baseUrl?: string;
       },
     ) => {
-      return saveModelConfig(database, data);
+      return saveModelConfig(data);
     },
   );
 
   ipcMain.handle("complete-setup", async () => {
-    await startServerAgent();
     const win = getMainWindow();
     if (win) {
       win.webContents.send("setup-complete");
