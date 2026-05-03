@@ -46,10 +46,13 @@ function pollForReady(timeoutMs: number): Promise<void> {
         return;
       }
 
-      const req = http.get("http://localhost:3100", (res: http.IncomingMessage) => {
-        res.resume();
-        resolve();
-      });
+      const req = http.get(
+        "http://localhost:3100",
+        (res: http.IncomingMessage) => {
+          res.resume();
+          resolve();
+        },
+      );
       req.on("error", () => {
         setTimeout(poll, 500);
       });
@@ -63,7 +66,11 @@ function pollForReady(timeoutMs: number): Promise<void> {
 }
 
 async function forkServerAgent(): Promise<void> {
-  const serverAgentPath = path.join(process.resourcesPath, "server-agent", "main.js");
+  const serverAgentPath = path.join(
+    process.resourcesPath,
+    "server-agent",
+    "main.js",
+  );
   let restartCount = 0;
 
   return new Promise((resolve, reject) => {
