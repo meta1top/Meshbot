@@ -95,7 +95,7 @@ app.whenReady().then(async () => {
     const database = openDatabase();
     const { needsSetup } = getSetupStatus(database);
 
-    registerIpcHandlers(database, () => mainWindow);
+    registerIpcHandlers(database, () => mainWindow, startServerAgent);
 
     if (!needsSetup) {
       try {

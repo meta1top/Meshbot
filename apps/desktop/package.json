@@ -9,7 +9,7 @@
     "start": "electron dist/main.js",
     "clean": "rm -rf dist",
     "typecheck": "tsc --project tsconfig.json --noEmit",
-    "test": "vitest run src/",
+    "test": "vitest run",
     "pack": "electron-builder --dir",
     "dist": "electron-builder"
   },

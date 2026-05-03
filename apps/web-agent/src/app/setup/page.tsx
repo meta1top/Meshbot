@@ -44,8 +44,8 @@ export default function SetupPage() {
         await api.completeSetup();
         router.push("/");
       }
-    } catch (err: any) {
-      setError(err.message ?? "保存失败，请重试");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "保存失败，请重试");
     } finally {
       setSubmitting(false);
     }

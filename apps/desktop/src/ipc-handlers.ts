@@ -9,6 +9,7 @@ import {
 export function registerIpcHandlers(
   database: Database.Database,
   getMainWindow: () => BrowserWindow | null,
+  startServerAgent: () => Promise<void>,
 ): void {
   ipcMain.handle("get-providers", () => {
     return getProvidersList();
@@ -34,7 +35,8 @@ export function registerIpcHandlers(
     },
   );
 
-  ipcMain.handle("complete-setup", () => {
+  ipcMain.handle("complete-setup", async () => {
+    await startServerAgent();
     const win = getMainWindow();
     if (win) {
       win.webContents.send("setup-complete");
