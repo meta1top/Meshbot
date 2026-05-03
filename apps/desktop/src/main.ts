@@ -112,6 +112,28 @@ function startServerAgent(): Promise<void> {
   });
 }
 
+async function connectToServerAgent(): Promise<void> {
+  while (true) {
+    try {
+      await pollForReady(10000);
+      return;
+    } catch {
+      const { response } = await dialog.showMessageBox({
+        type: "warning",
+        title: "server-agent 未启动",
+        message:
+          "开发模式下需要手动启动 server-agent。\n\n请在终端运行：pnpm dev:server-agent\n然后点击「重试」。",
+        buttons: ["重试", "退出"],
+        defaultId: 0,
+        cancelId: 1,
+      });
+      if (response === 1) {
+        app.quit();
+      }
+    }
+  }
+}
+
 app.whenReady().then(async () => {
   try {
     ensureDirs();
