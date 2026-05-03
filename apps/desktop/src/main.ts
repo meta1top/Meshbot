@@ -13,6 +13,10 @@ function createWindow() {
   });
 
   win.loadURL("http://localhost:3001");
+
+  if (!app.isPackaged) {
+    win.webContents.openDevTools();
+  }
 }
 
 app.whenReady().then(createWindow);
