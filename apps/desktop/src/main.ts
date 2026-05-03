@@ -157,10 +157,13 @@ app.whenReady().then(async () => {
         await startServerAgent();
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
-        dialog.showErrorBox(
-          "Server Agent 启动失败",
-          `无法启动 server-agent：${message}\n\n请检查日志：${getLogDir()}`,
-        );
+        if (app.isPackaged) {
+          dialog.showErrorBox(
+            "Server Agent 启动失败",
+            `无法启动 server-agent：${message}\n\n请检查日志：${getLogDir()}`,
+          );
+          app.quit();
+        }
       }
     }
 
@@ -195,7 +198,12 @@ app.on("activate", () => {
 
 app.on("before-quit", () => {
   if (serverProcess) {
-    serverProcess.kill();
-    serverProcess = null;
+    serverProcess.send("shutdown");
+    setTimeout(() => {
+      if (serverProcess) {
+        serverProcess.kill();
+        serverProcess = null;
+      }
+    }, 3000);
   }
 });
