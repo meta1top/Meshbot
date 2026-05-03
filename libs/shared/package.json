@@ -1,0 +1,20 @@
+{
+  "name": "@anybot/shared",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "dev": "tsc --project tsconfig.json --watch",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --project tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@anybot/types": "workspace:*"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^11",
+    "@nestjs/core": "^11"
+  }
+}
