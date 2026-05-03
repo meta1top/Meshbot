@@ -9,11 +9,14 @@
     "dev:server-agent": "pnpm --filter @anybot/server-agent dev",
     "dev:server-main": "pnpm --filter @anybot/server-main dev",
     "dev:desktop": "pnpm --filter @anybot/desktop dev",
-    "lint": "turbo run lint",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
+    "check": "biome check --write .",
     "typecheck": "turbo run typecheck",
     "clean": "turbo run clean && rm -rf node_modules"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.14",
     "turbo": "^2",
     "typescript": "^5"
   },

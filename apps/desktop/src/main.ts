@@ -1,5 +1,5 @@
-import { app, BrowserWindow } from 'electron';
-import * as path from 'path';
+import * as path from "node:path";
+import { app, BrowserWindow } from "electron";
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -8,22 +8,22 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, "preload.js"),
     },
   });
 
-  win.loadURL('http://localhost:3001');
+  win.loadURL("http://localhost:3001");
 }
 
 app.whenReady().then(createWindow);
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") {
     app.quit();
   }
 });
 
-app.on('activate', () => {
+app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
   }

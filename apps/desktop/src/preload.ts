@@ -1,7 +1,7 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer } from "electron";
 
-contextBridge.exposeInMainWorld('electronAPI', {
-  getServerPort: () => ipcRenderer.invoke('get-server-port'),
+contextBridge.exposeInMainWorld("electronAPI", {
+  getServerPort: () => ipcRenderer.invoke("get-server-port"),
   onServerReady: (callback: () => void) =>
-    ipcRenderer.on('server-ready', () => callback()),
+    ipcRenderer.on("server-ready", () => callback()),
 });
