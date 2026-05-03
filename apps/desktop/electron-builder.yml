@@ -4,6 +4,11 @@ directories:
   output: release
 files:
   - dist/**/*
+extraResources:
+  - from: ../server-agent/dist/
+    to: server-agent/
+    filter:
+      - "**/*"
 mac:
   target:
     - dmg
