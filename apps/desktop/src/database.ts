@@ -131,7 +131,7 @@ export function getSetupStatus(
   return { needsSetup: row.count === 0 };
 }
 
-export function getProvidersList(database?: Database.Database): ProviderDef[] {
+export function getProvidersList(): ProviderDef[] {
   return PROVIDERS;
 }
 

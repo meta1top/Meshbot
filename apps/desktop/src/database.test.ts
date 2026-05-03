@@ -88,4 +88,17 @@ describe("saveModelConfig", () => {
     expect(needsSetup).toBe(false);
     db.close();
   });
+
+  it("throws on unknown provider type", () => {
+    const db = createTestDb();
+    expect(() =>
+      saveModelConfig(db, {
+        providerType: "nonexistent",
+        name: "Bad",
+        model: "gpt-4o",
+        apiKey: "sk-xyz",
+      }),
+    ).toThrow("Unknown provider type: nonexistent");
+    db.close();
+  });
 });
