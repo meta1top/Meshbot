@@ -101,11 +101,11 @@ function syncProviders(database: Database.Database): void {
   const txn = database.transaction(() => {
     for (const p of PROVIDERS) {
       const id = existing.has(p.type)
-        ? (
+        ? ((
             database
               .prepare("SELECT id FROM providers WHERE type = ?")
               .get(p.type) as { id: string } | undefined
-          )?.id ?? randomUUID()
+          )?.id ?? randomUUID())
         : randomUUID();
 
       upsert.run({
@@ -196,13 +196,13 @@ export function getEnabledModels(database: Database.Database): Array<{
        WHERE m.enabled = 1`,
     )
     .all() as Array<{
-      id: string;
-      provider_type: string;
-      provider_name: string;
-      name: string;
-      model: string;
-      api_key: string;
-      base_url: string;
-      default_base_url: string;
-    }>;
+    id: string;
+    provider_type: string;
+    provider_name: string;
+    name: string;
+    model: string;
+    api_key: string;
+    base_url: string;
+    default_base_url: string;
+  }>;
 }
