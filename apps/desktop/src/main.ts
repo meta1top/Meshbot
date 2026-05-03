@@ -62,54 +62,64 @@ function pollForReady(timeoutMs: number): Promise<void> {
   });
 }
 
-function startServerAgent(): Promise<void> {
+async function forkServerAgent(): Promise<void> {
+  const serverAgentPath = path.join(process.resourcesPath, "server-agent", "main.js");
+  let restartCount = 0;
+
   return new Promise((resolve, reject) => {
-    const serverAgentPath = path.join(
-      __dirname,
-      "..",
-      "..",
-      "server-agent",
-      "dist",
-      "main.js",
-    );
+    const doFork = () => {
+      serverProcess = fork(serverAgentPath, [], {
+        stdio: ["pipe", "pipe", "pipe", "ipc"],
+        env: {
+          ...process.env,
+          ANYBOT_DIR: getAnybotDir(),
+        },
+      });
 
-    serverProcess = fork(serverAgentPath, [], {
-      stdio: ["pipe", "pipe", "pipe", "ipc"],
-      env: {
-        ...process.env,
-        ANYBOT_DIR: getAnybotDir(),
-      },
-    });
+      let stderr = "";
 
-    let stderr = "";
-    serverProcess.stderr?.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString();
-    });
+      serverProcess.stderr?.on("data", (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
 
-    const timeout = setTimeout(() => {
-      reject(new Error(`server-agent start timeout (30s)\n${stderr}`));
-    }, 30000);
+      serverProcess.on("error", (err) => {
+        reject(new Error(`server-agent fork failed: ${err.message}`));
+      });
 
-    serverProcess.on("error", (err) => {
-      clearTimeout(timeout);
-      reject(err);
-    });
+      serverProcess.on("exit", (code) => {
+        if (code !== 0 && code !== null && restartCount < 3) {
+          restartCount++;
+          stderr = "";
+          setTimeout(doFork, 2000);
+        } else if (code !== 0 && code !== null) {
+          reject(
+            new Error(
+              `server-agent exited with code ${code} after ${restartCount + 1} attempts\n${stderr}`,
+            ),
+          );
+        }
+      });
 
-    serverProcess.on("exit", (code) => {
-      clearTimeout(timeout);
-      if (code !== 0 && code !== null) {
-        reject(new Error(`server-agent exited with code ${code}\n${stderr}`));
-      }
-    });
+      pollForReady(30000)
+        .then(resolve)
+        .catch((err) => {
+          if (serverProcess) {
+            serverProcess.kill();
+            serverProcess = null;
+          }
+          reject(new Error(`server-agent start timeout (30s)\n${stderr}`));
+        });
+    };
 
-    pollForReady(30000).then(() => {
-      clearTimeout(timeout);
-      resolve();
-    }).catch((err) => {
-      clearTimeout(timeout);
-      reject(err);
-    });
+    doFork();
   });
+}
+
+function startServerAgent(): Promise<void> {
+  if (app.isPackaged) {
+    return forkServerAgent();
+  }
+  return connectToServerAgent();
 }
 
 async function connectToServerAgent(): Promise<void> {
