@@ -103,6 +103,7 @@ export default function SetupPage() {
                 模型配置
               </h2>
               <ModelForm
+                key={selected.type}
                 provider={selected}
                 onSubmit={handleSubmit}
                 submitting={submitting}

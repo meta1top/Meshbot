@@ -48,15 +48,20 @@ function startServerAgent(): Promise<void> {
     );
 
     serverProcess = fork(serverAgentPath, [], {
-      stdio: "pipe",
+      stdio: ["pipe", "pipe", "pipe", "ipc"],
       env: {
         ...process.env,
         ANYBOT_DIR: getAnybotDir(),
       },
     });
 
+    let stderr = "";
+    serverProcess.stderr?.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+
     const timeout = setTimeout(() => {
-      reject(new Error("server-agent start timeout (30s)"));
+      reject(new Error(`server-agent start timeout (30s)\n${stderr}`));
     }, 30000);
 
     serverProcess.on("error", (err) => {
@@ -67,7 +72,7 @@ function startServerAgent(): Promise<void> {
     serverProcess.on("exit", (code) => {
       clearTimeout(timeout);
       if (code !== 0 && code !== null) {
-        reject(new Error(`server-agent exited with code ${code}`));
+        reject(new Error(`server-agent exited with code ${code}\n${stderr}`));
       }
     });
 

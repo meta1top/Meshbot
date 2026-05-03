@@ -9,6 +9,7 @@
     "dev:server-agent": "pnpm --filter @anybot/server-agent dev",
     "dev:server-main": "pnpm --filter @anybot/server-main dev",
     "dev:desktop": "pnpm --filter @anybot/desktop dev",
+    "proxy:deepseek": "pnpm --filter @anybot/cursor-deepseek start",
     "lint": "biome lint .",
     "format": "biome format --write .",
     "check": "biome check --write .",
