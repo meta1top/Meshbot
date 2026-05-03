@@ -36,6 +36,32 @@ function createWindow(setupMode: boolean) {
   return win;
 }
 
+function pollForReady(timeoutMs: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const endTime = Date.now() + timeoutMs;
+
+    const poll = () => {
+      if (Date.now() >= endTime) {
+        reject(new Error(`server-agent start timeout (${timeoutMs / 1000}s)`));
+        return;
+      }
+
+      const req = http.get("http://localhost:3100", (res: http.IncomingMessage) => {
+        res.resume();
+        resolve();
+      });
+      req.on("error", () => {
+        setTimeout(poll, 500);
+      });
+      req.setTimeout(2000, () => {
+        req.destroy();
+        setTimeout(poll, 500);
+      });
+    };
+    setTimeout(poll, 1000);
+  });
+}
+
 function startServerAgent(): Promise<void> {
   return new Promise((resolve, reject) => {
     const serverAgentPath = path.join(
@@ -76,21 +102,13 @@ function startServerAgent(): Promise<void> {
       }
     });
 
-    // Poll for server-agent to be ready
-    const poll = () => {
-      const req = http.get("http://localhost:3100", (res: http.IncomingMessage) => {
-        clearTimeout(timeout);
-        resolve();
-      });
-      req.on("error", () => {
-        setTimeout(poll, 500);
-      });
-      req.setTimeout(2000, () => {
-        req.destroy();
-        setTimeout(poll, 500);
-      });
-    };
-    setTimeout(poll, 1000);
+    pollForReady(30000).then(() => {
+      clearTimeout(timeout);
+      resolve();
+    }).catch((err) => {
+      clearTimeout(timeout);
+      reject(err);
+    });
   });
 }
 
