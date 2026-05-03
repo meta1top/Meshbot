@@ -48,6 +48,9 @@ importers:
 
   apps/server-agent:
     dependencies:
+      '@anybot/common':
+        specifier: workspace:*
+        version: link:../../packages/common
       '@anybot/shared':
         specifier: workspace:*
         version: link:../../libs/shared
@@ -63,6 +66,9 @@ importers:
       '@nestjs/platform-express':
         specifier: ^11
         version: 11.1.19(@nestjs/common@11.1.19(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.19)
+      better-sqlite3:
+        specifier: ^12.9.0
+        version: 12.9.0
       reflect-metadata:
         specifier: ^0.2
         version: 0.2.2
@@ -73,6 +79,9 @@ importers:
       '@nestjs/cli':
         specifier: ^11
         version: 11.0.21(@types/node@22.19.17)
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
       '@types/node':
         specifier: ^22
         version: 22.19.17

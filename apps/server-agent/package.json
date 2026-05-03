@@ -10,16 +10,19 @@
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@anybot/common": "workspace:*",
     "@anybot/shared": "workspace:*",
     "@anybot/types": "workspace:*",
     "@nestjs/common": "^11",
     "@nestjs/core": "^11",
     "@nestjs/platform-express": "^11",
+    "better-sqlite3": "^12.9.0",
     "reflect-metadata": "^0.2",
     "rxjs": "^7"
   },
   "devDependencies": {
     "@nestjs/cli": "^11",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22"
   }
 }
