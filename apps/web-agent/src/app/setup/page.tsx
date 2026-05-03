@@ -88,7 +88,6 @@ export default function SetupPage() {
             {providers.map((p) => (
               <ProviderCard
                 key={p.type}
-                type={p.type}
                 name={p.name}
                 description={p.description}
                 selected={selected?.type === p.type}

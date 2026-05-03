@@ -1,7 +1,6 @@
 "use client";
 
 interface ProviderCardProps {
-  type: string;
   name: string;
   description: string;
   selected: boolean;
