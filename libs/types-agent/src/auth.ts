@@ -17,6 +17,7 @@ export type LoginInput = z.infer<typeof loginSchema>;
 export interface AuthStatus {
   initialized: boolean;
   needsSetup: boolean;
+  step: "register" | "model" | null;
 }
 
 export interface LoginResponse {

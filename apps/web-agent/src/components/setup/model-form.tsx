@@ -19,18 +19,17 @@ import {
   SelectValue,
 } from "@anybot/design";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
-const modelConfigSchema = z.object({
-  name: z.string().optional(),
-  model: z.string().min(1, "请选择或输入模型"),
-  apiKey: z.string().min(1, "请输入 API Key"),
-  baseUrl: z.string().optional(),
-});
-
-type ModelConfigFormValues = z.infer<typeof modelConfigSchema>;
+type ModelConfigFormValues = {
+  name?: string;
+  model: string;
+  apiKey: string;
+  baseUrl?: string;
+};
 
 interface ModelFormProps {
   provider: ProviderDef;
@@ -46,6 +45,13 @@ export default function ModelForm({
   error,
 }: ModelFormProps) {
   const [customModel, setCustomModel] = useState(false);
+  const t = useTranslations("modelForm");
+  const modelConfigSchema = z.object({
+    name: z.string().optional(),
+    model: z.string().min(1, t("validation.modelRequired")),
+    apiKey: z.string().min(1, t("validation.apiKeyRequired")),
+    baseUrl: z.string().optional(),
+  });
 
   const form = useForm<ModelConfigFormValues>({
     resolver: zodResolver(modelConfigSchema),
@@ -81,7 +87,8 @@ export default function ModelForm({
           render={({ field }) => (
             <FormItem>
               <FormLabel>
-                名称 <span className="text-muted-foreground">(可选)</span>
+                {t("name")}{" "}
+                <span className="text-muted-foreground">({t("optional")})</span>
               </FormLabel>
               <FormControl>
                 <Input
@@ -100,18 +107,18 @@ export default function ModelForm({
           render={({ field }) => (
             <FormItem>
               <FormLabel>
-                模型标识 <span className="text-destructive">*</span>
+                {t("model")} <span className="text-destructive">*</span>
               </FormLabel>
               {customModel || provider.models.length === 0 ? (
                 <FormControl>
-                  <Input placeholder="输入模型名，如 gpt-4o" {...field} />
+                  <Input placeholder={t("modelInputPlaceholder")} {...field} />
                 </FormControl>
               ) : (
                 <div className="flex gap-2">
                   <Select value={field.value} onValueChange={field.onChange}>
                     <FormControl>
                       <SelectTrigger className="flex-1">
-                        <SelectValue placeholder="选择模型" />
+                        <SelectValue placeholder={t("selectModel")} />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
@@ -128,7 +135,7 @@ export default function ModelForm({
                     onClick={() => setCustomModel(true)}
                     className="whitespace-nowrap"
                   >
-                    自定义
+                    {t("custom")}
                   </Button>
                 </div>
               )}
@@ -143,7 +150,7 @@ export default function ModelForm({
           render={({ field }) => (
             <FormItem>
               <FormLabel>
-                API Key <span className="text-destructive">*</span>
+                {t("apiKey")} <span className="text-destructive">*</span>
               </FormLabel>
               <FormControl>
                 <Input type="password" placeholder="sk-..." {...field} />
@@ -159,7 +166,8 @@ export default function ModelForm({
           render={({ field }) => (
             <FormItem>
               <FormLabel>
-                API 端点 <span className="text-muted-foreground">(选填)</span>
+                {t("apiEndpoint")}{" "}
+                <span className="text-muted-foreground">({t("optional")})</span>
               </FormLabel>
               <FormControl>
                 <Input placeholder={provider.default_base_url} {...field} />
@@ -176,7 +184,7 @@ export default function ModelForm({
         )}
 
         <Button type="submit" className="mt-2" disabled={submitting}>
-          {submitting ? "保存中..." : "保存并开始"}
+          {submitting ? t("saving") : t("saveAndStart")}
         </Button>
       </form>
     </Form>

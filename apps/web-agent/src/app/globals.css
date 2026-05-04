@@ -4,22 +4,59 @@
 
 @source "../../../../packages/design/src";
 
-.drag-region {
+:root {
+  --titlebar-height: 52px;
+  --mac-controls-safe-left: 92px;
+}
+
+.drag-region,
+.drag-handle {
   -webkit-app-region: drag;
-  height: env(titlebar-area-height, 28px);
-  pointer-events: none;
+}
+
+.drag-region {
+  height: 52px;
+}
+
+.electron-shell.app-shell-mode .drag-region {
+  background: transparent;
+  border-bottom: none;
 }
 
 .drag-region button,
 .drag-region a,
 .drag-region input,
-.drag-region [data-no-drag] {
+.drag-region [data-no-drag],
+.drag-handle button,
+.drag-handle a,
+.drag-handle input,
+.drag-handle [data-no-drag] {
   -webkit-app-region: no-drag;
-  pointer-events: auto;
 }
 
-@media (display-mode: browser) {
-  .drag-region {
-    display: none;
+.electron-shell .titlebar-safe {
+  padding-top: calc(var(--titlebar-height) + 8px);
+}
+
+.electron-shell.mac-shell .mac-controls-safe-left {
+  padding-left: max(1.25rem, var(--mac-controls-safe-left));
+}
+
+.electron-shell.app-shell-mode.mac-shell .app-mac-controls-safe-left {
+  padding-left: max(0.5rem, calc(var(--mac-controls-safe-left) - 0.75rem));
+}
+
+@media (min-width: 1024px) {
+  .electron-shell .titlebar-safe {
+    padding-top: 0;
+  }
+
+  .electron-shell.auth-shell-mode .drag-region {
+    background: transparent;
+    border-bottom: none;
+  }
+
+  .electron-shell.mac-shell .mac-controls-safe-left {
+    padding-left: 0;
   }
 }
