@@ -13,6 +13,9 @@
     "@anybot/common": "workspace:*",
     "@anybot/design": "workspace:*",
     "@anybot/types": "workspace:*",
+    "@anybot/types-agent": "workspace:^",
+    "@tanstack/react-query": "^5.100.9",
+    "axios": "^1.16.0",
     "next": "^15",
     "react": "^19",
     "react-dom": "^19"
