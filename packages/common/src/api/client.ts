@@ -13,9 +13,7 @@ function resolveBaseURL(): string {
   return `http://${hostname}:3100`;
 }
 
-export function createApiClient(
-  baseURL?: string,
-): AxiosInstance {
+export function createApiClient(baseURL?: string): AxiosInstance {
   const client = axios.create({
     baseURL: baseURL ?? resolveBaseURL(),
     timeout: 30000,

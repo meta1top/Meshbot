@@ -21,7 +21,11 @@
   },
   "overrides": [
     {
-      "includes": ["apps/server-agent/**", "apps/server-main/**", "libs/shared/**"],
+      "includes": [
+        "apps/server-agent/**",
+        "apps/server-main/**",
+        "libs/shared/**"
+      ],
       "linter": {
         "rules": {
           "style": {
@@ -37,6 +41,11 @@
     },
     "parser": {
       "unsafeParameterDecoratorsEnabled": true
+    }
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
     }
   },
   "assist": {

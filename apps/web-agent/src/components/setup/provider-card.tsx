@@ -1,5 +1,7 @@
 "use client";
 
+import { cn } from "@anybot/design";
+
 interface ProviderCardProps {
   name: string;
   description: string;
@@ -17,15 +19,15 @@ export default function ProviderCard({
     <button
       type="button"
       onClick={onSelect}
-      className={`flex flex-col gap-2 rounded-xl border-2 p-4 text-left transition-all cursor-pointer
-        ${
-          selected
-            ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500"
-            : "border-gray-200 hover:border-gray-300 bg-white"
-        }`}
+      className={cn(
+        "flex flex-col gap-2 rounded-xl border-2 p-4 text-left transition-all cursor-pointer",
+        selected
+          ? "border-primary bg-primary/5 ring-1 ring-primary"
+          : "border-border hover:border-border/80 bg-card",
+      )}
     >
-      <span className="font-semibold text-gray-900">{name}</span>
-      <span className="text-sm text-gray-500">{description}</span>
+      <span className="font-semibold text-card-foreground">{name}</span>
+      <span className="text-sm text-muted-foreground">{description}</span>
     </button>
   );
 }
