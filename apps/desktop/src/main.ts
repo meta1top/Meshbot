@@ -20,6 +20,15 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
+    titleBarStyle: "hidden",
+    trafficLightPosition: { x: 16, y: 18 },
+    ...(process.platform === "win32" && {
+      titleBarOverlay: {
+        color: "#00000000",
+        symbolColor: "#666666",
+        height: 36,
+      },
+    }),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
