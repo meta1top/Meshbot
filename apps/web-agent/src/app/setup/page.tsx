@@ -25,6 +25,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { BrandLayout } from "@/components/brand-layout";
 import ModelForm from "@/components/setup/model-form";
 import ProviderCard from "@/components/setup/provider-card";
 import { useAuthStatus, useRegister } from "@/rest/auth";
@@ -46,12 +47,15 @@ type SetupStep = "register" | "model";
 export default function SetupPage() {
   const router = useRouter();
 
-  const { data: authStatus, isLoading: statusLoading } = useAuthStatus();
-  const { data: providers = [], isLoading: providersLoading } = useProviders();
+  const { data: authStatus } = useAuthStatus();
+  const { data: providers = [] } = useProviders();
   const registerMutation = useRegister();
   const createModelMutation = useCreateModelConfig();
 
-  const [step, setStep] = useState<SetupStep>("register");
+  const [step, setStep] = useState<SetupStep>(() => {
+    if (authStatus?.initialized && getAccessToken()) return "model";
+    return "register";
+  });
   const [selected, setSelected] = useState<ProviderDef | null>(null);
 
   const form = useForm<SetupRegisterValues>({
@@ -59,23 +63,8 @@ export default function SetupPage() {
     defaultValues: { username: "", password: "", confirmPassword: "" },
   });
 
-  if (statusLoading || providersLoading) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-background">
-        <p className="text-muted-foreground">加载中...</p>
-      </main>
-    );
-  }
-
-  if (authStatus && !authStatus.needsSetup) {
-    router.replace("/");
-    return null;
-  }
-
-  if (authStatus?.initialized && getAccessToken()) {
-    if (step === "register") {
-      setStep("model");
-    }
+  if (authStatus?.initialized && getAccessToken() && step === "register") {
+    setStep("model");
   }
 
   const onSubmit = async ({ username, password }: SetupRegisterValues) => {
@@ -95,8 +84,15 @@ export default function SetupPage() {
   };
 
   return (
-    <main className="min-h-screen bg-background py-10">
-      <div className="mx-auto max-w-lg px-4">
+    <BrandLayout className="justify-start pt-16 lg:pt-24">
+      <div className="w-full max-w-lg">
+        <div className="mb-8 lg:hidden flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-primary flex items-center justify-center">
+            <span className="text-lg font-bold text-primary-foreground">A</span>
+          </div>
+          <span className="text-2xl font-bold tracking-tight">Anybot</span>
+        </div>
+
         <h1 className="mb-2 text-2xl font-bold text-foreground">
           欢迎使用 Anybot
         </h1>
@@ -238,6 +234,6 @@ export default function SetupPage() {
           </Card>
         )}
       </div>
-    </main>
+    </BrandLayout>
   );
 }
