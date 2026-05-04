@@ -1,0 +1,91 @@
+{
+  "common": {
+    "switchToLightTheme": "Switch to light theme",
+    "switchToDarkTheme": "Switch to dark theme"
+  },
+  "login": {
+    "title": "Sign in",
+    "subtitle": "Welcome",
+    "account": "Account",
+    "accountPlaceholder": "Enter your account",
+    "password": "Password",
+    "forgotPassword": "Forgot password?",
+    "loginFailed": "Login failed, please try again.",
+    "signIn": "Sign in",
+    "signingIn": "Signing in..."
+  },
+  "setup": {
+    "getStarted": "GET STARTED",
+    "createAccount": "Create account",
+    "createAccountDescription": "Initialize your account before configuring models.",
+    "username": "Username",
+    "usernamePlaceholder": "Enter username",
+    "password": "Password",
+    "passwordPlaceholder": "At least 6 characters",
+    "confirmPassword": "Confirm password",
+    "confirmPasswordPlaceholder": "Re-enter password",
+    "creating": "Creating...",
+    "createAndContinue": "Create account and continue",
+    "chooseProvider": "Choose provider",
+    "chooseProviderDescription": "Select a model provider and finish configuration.",
+    "provider": "Provider",
+    "chooseProviderPlaceholder": "Please choose a provider",
+    "modelConfig": "Model configuration",
+    "chooseProviderToStart": "Please choose a model provider to start setup.",
+    "registerFailed": "Registration failed, please try again.",
+    "saveFailed": "Save failed, please try again.",
+    "validation": {
+      "confirmPasswordRequired": "Please confirm your password",
+      "passwordNotMatch": "The two passwords do not match"
+    }
+  },
+  "modelForm": {
+    "name": "Name",
+    "optional": "optional",
+    "model": "Model ID",
+    "modelInputPlaceholder": "Enter model name, e.g. gpt-4o",
+    "selectModel": "Select model",
+    "custom": "Custom",
+    "apiKey": "API Key",
+    "apiEndpoint": "API endpoint",
+    "saving": "Saving...",
+    "saveAndStart": "Save and start",
+    "validation": {
+      "modelRequired": "Please select or enter a model",
+      "apiKeyRequired": "Please enter API Key"
+    }
+  },
+  "appShell": {
+    "newSession": "New session",
+    "scheduled": "Scheduled",
+    "customize": "Customize",
+    "more": "More",
+    "pinned": "Pinned",
+    "dragToPin": "Drag to pin",
+    "recents": "Recents",
+    "addMarketplacePlugin": "Add marketplace plugin",
+    "respondToUserGreeting": "Respond to user greeting",
+    "logout": "Logout",
+    "promptPlaceholder": "Describe a task or ask a question",
+    "local": "Local",
+    "modelBadge": "Flash · Medium"
+  },
+  "home": {
+    "title": "What's up next?",
+    "overview": "Overview",
+    "models": "Models",
+    "all": "All",
+    "overviewMetrics": "Overview metrics",
+    "tokenComparison": "You've used ~67x more tokens than The Great Gatsby.",
+    "metrics": {
+      "sessions": "Sessions",
+      "messages": "Messages",
+      "totalTokens": "Total tokens",
+      "activeDays": "Active days",
+      "currentStreak": "Current streak",
+      "longestStreak": "Longest streak",
+      "peakHour": "Peak hour",
+      "favoriteModel": "Favorite model"
+    }
+  }
+}

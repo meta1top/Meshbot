@@ -1,0 +1,186 @@
+"use client";
+
+import { clearAccessToken, useTheme } from "@anybot/common";
+import { cn } from "@anybot/design";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  ChevronDown,
+  Clock,
+  Grip,
+  LogOut,
+  Moon,
+  Pin,
+  Plus,
+  Settings,
+  Sun,
+} from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect } from "react";
+import { DragRegion } from "@/components/drag-region";
+import { LanguageToggle } from "@/components/language-toggle";
+
+interface AppShellLayoutProps {
+  children: React.ReactNode;
+  className?: string;
+}
+
+export function AppShellLayout({ children, className }: AppShellLayoutProps) {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const { theme, toggleTheme } = useTheme();
+  const t = useTranslations("appShell");
+  const commonT = useTranslations("common");
+
+  useEffect(() => {
+    document.body.classList.add("app-shell-mode");
+    return () => {
+      document.body.classList.remove("app-shell-mode");
+    };
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    clearAccessToken();
+    queryClient.invalidateQueries({ queryKey: ["auth", "status"] });
+    router.replace("/login");
+  }, [queryClient, router]);
+
+  return (
+    <main className="titlebar-safe h-screen bg-background text-foreground">
+      <DragRegion />
+      <div className="flex h-full">
+        <aside className="hidden w-[246px] shrink-0 px-1.5 py-1.5 lg:flex lg:flex-col">
+          <div className="flex h-full flex-col rounded-l-[12px] border border-border bg-muted px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+            <div className="app-mac-controls-safe-left mb-2 h-8" />
+            <nav className="space-y-0.5 text-[14px] text-foreground/80">
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-none px-2 py-1.5 text-left hover:bg-accent"
+              >
+                <Plus className="h-4 w-4 text-muted-foreground" />
+                {t("newSession")}
+              </button>
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-none px-2 py-1.5 text-left hover:bg-accent"
+              >
+                <Clock className="h-4 w-4 text-muted-foreground" />
+                {t("scheduled")}
+              </button>
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-none bg-accent px-2 py-1.5 text-left font-medium"
+              >
+                <Settings className="h-4 w-4 text-muted-foreground" />
+                {t("customize")}
+              </button>
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-none px-2 py-1.5 text-left text-muted-foreground hover:bg-accent"
+              >
+                <ChevronDown className="h-4 w-4" />
+                {t("more")}
+              </button>
+            </nav>
+
+            <div className="mt-8 px-2 text-[12px] font-medium text-muted-foreground">
+              {t("pinned")}
+            </div>
+            <div className="mt-1 space-y-0.5 text-[14px] text-muted-foreground">
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-none px-2 py-1.5 text-left hover:bg-accent"
+              >
+                <Pin className="h-3.5 w-3.5" />
+                {t("dragToPin")}
+              </button>
+            </div>
+
+            <div className="mt-5 px-2 text-[12px] font-medium text-muted-foreground">
+              {t("recents")}
+            </div>
+            <div className="mt-1 space-y-0.5 text-[14px] text-foreground/80">
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-none px-2 py-1.5 text-left hover:bg-accent"
+              >
+                <Grip className="h-3.5 w-3.5 text-muted-foreground" />
+                {t("addMarketplacePlugin")}
+              </button>
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-none px-2 py-1.5 text-left hover:bg-accent"
+              >
+                <Grip className="h-3.5 w-3.5 text-muted-foreground" />
+                {t("respondToUserGreeting")}
+              </button>
+            </div>
+
+            <div className="mt-auto flex items-center justify-between px-2">
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="flex items-center gap-2 rounded-md py-1.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                {t("logout")}
+              </button>
+              <div className="flex items-center gap-1.5">
+                <LanguageToggle />
+                <button
+                  type="button"
+                  onClick={toggleTheme}
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                  title={
+                    theme === "dark"
+                      ? commonT("switchToLightTheme")
+                      : commonT("switchToDarkTheme")
+                  }
+                >
+                  {theme === "dark" ? (
+                    <Sun className="h-3.5 w-3.5" />
+                  ) : (
+                    <Moon className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <section className="relative flex min-w-0 flex-1 flex-col">
+          <div className={cn("flex-1 overflow-y-auto", className)}>
+            <div className="mx-auto w-full max-w-[900px] px-5 pt-6 pb-40 lg:px-10">
+              {children}
+            </div>
+          </div>
+
+          <footer className="absolute right-0 bottom-0 left-0 px-4 pb-4 lg:px-8">
+            <div className="mx-auto w-full max-w-[900px]">
+              <div className="rounded-xl border border-border bg-card/96 px-4 py-3 text-[15px] text-muted-foreground shadow-[0_1px_2px_rgba(0,0,0,0.02)] backdrop-blur-sm dark:shadow-[0_1px_2px_rgba(0,0,0,0.15)]">
+                {t("promptPlaceholder")}
+              </div>
+              <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <span className="rounded-md border border-border bg-muted px-2 py-1">
+                    {t("local")}
+                  </span>
+                  <span className="rounded-md border border-border bg-muted px-2 py-1">
+                    anybot
+                  </span>
+                  <span className="rounded-md border border-border bg-muted px-2 py-1">
+                    main
+                  </span>
+                  <span className="rounded-md border border-border bg-muted px-2 py-1">
+                    worktree
+                  </span>
+                </div>
+                <span>{t("modelBadge")}</span>
+              </div>
+            </div>
+          </footer>
+        </section>
+      </div>
+    </main>
+  );
+}

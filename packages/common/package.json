@@ -14,5 +14,16 @@
     "@anybot/types": "workspace:*",
     "axios": "^1.16.0",
     "zod": "^3"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/react": "^19"
   }
 }

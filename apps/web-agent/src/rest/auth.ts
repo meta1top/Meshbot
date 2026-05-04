@@ -8,7 +8,7 @@ import type {
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 export async function fetchAuthStatus(): Promise<AuthStatus> {
-  const { data } = await apiClient.get<AuthStatus>("/api/auth/status");
+  const { data } = await apiClient.get<AuthStatus>("/api/setup-status");
   return data;
 }
 
@@ -34,6 +34,8 @@ export function useAuthStatus() {
   return useQuery({
     queryKey: ["auth", "status"],
     queryFn: fetchAuthStatus,
+    retry: 2,
+    retryDelay: 600,
   });
 }
 

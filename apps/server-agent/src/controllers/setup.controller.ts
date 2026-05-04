@@ -16,13 +16,13 @@ export class SetupController {
   async getSetupStatus() {
     const { initialized } = await this.authService.getStatus();
     if (!initialized) {
-      return { needsSetup: true, step: "register" };
+      return { initialized: false, needsSetup: true, step: "register" };
     }
     const hasModels = await this.modelConfigService.hasEnabledModels();
     if (!hasModels) {
-      return { needsSetup: true, step: "model" };
+      return { initialized: true, needsSetup: true, step: "model" };
     }
-    return { needsSetup: false, step: null };
+    return { initialized: true, needsSetup: false, step: null };
   }
 
   @Public()

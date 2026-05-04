@@ -6,6 +6,7 @@ import {
   Button,
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
   Form,
@@ -18,14 +19,16 @@ import {
 } from "@anybot/design";
 import { type LoginInput, loginSchema } from "@anybot/types-agent";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
-import { BrandLayout } from "@/components/brand-layout";
+import { AuthShellLayout } from "@/components/layouts/auth-shell-layout";
 import { useLogin } from "@/rest/auth";
 
 export default function LoginPage() {
   const router = useRouter();
   const loginMutation = useLogin();
+  const t = useTranslations("login");
 
   const form = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
@@ -42,20 +45,18 @@ export default function LoginPage() {
   };
 
   return (
-    <BrandLayout>
-      <div className="w-full max-w-sm">
-        <div className="mb-8 lg:hidden flex items-center gap-3 justify-center">
-          <div className="h-10 w-10 rounded-xl bg-primary flex items-center justify-center">
-            <span className="text-lg font-bold text-primary-foreground">A</span>
-          </div>
-          <span className="text-2xl font-bold tracking-tight">Anybot</span>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-center text-2xl">登录</CardTitle>
+    <AuthShellLayout>
+      <div className="w-full max-w-[430px] border border-border bg-card shadow-sm">
+        <Card className="border-0 shadow-none">
+          <CardHeader className="space-y-0 pb-4">
+            <CardTitle className="text-left text-[28px] leading-[1.15] font-semibold tracking-tight text-foreground">
+              {t("title")}
+            </CardTitle>
+            <CardDescription className="mt-1 text-left text-[12px] tracking-[0.08em] text-muted-foreground">
+              {t("subtitle")}
+            </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-0">
             <Form {...form}>
               <form
                 onSubmit={form.handleSubmit(onSubmit)}
@@ -66,12 +67,14 @@ export default function LoginPage() {
                   name="username"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>用户名</FormLabel>
+                      <FormLabel className="text-[11px] tracking-[0.08em] uppercase">
+                        {t("account")}
+                      </FormLabel>
                       <FormControl>
                         <Input
                           type="text"
                           autoComplete="username"
-                          placeholder="请输入用户名"
+                          placeholder={t("accountPlaceholder")}
                           {...field}
                         />
                       </FormControl>
@@ -85,12 +88,14 @@ export default function LoginPage() {
                   name="password"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>密码</FormLabel>
+                      <FormLabel className="text-[11px] tracking-[0.08em] uppercase">
+                        {t("password")}
+                      </FormLabel>
                       <FormControl>
                         <Input
                           type="password"
                           autoComplete="current-password"
-                          placeholder="请输入密码"
+                          placeholder="********"
                           {...field}
                         />
                       </FormControl>
@@ -104,23 +109,23 @@ export default function LoginPage() {
                     <AlertDescription>
                       {loginMutation.error instanceof Error
                         ? loginMutation.error.message
-                        : "登录失败，请重试"}
+                        : t("loginFailed")}
                     </AlertDescription>
                   </Alert>
                 )}
 
                 <Button
                   type="submit"
-                  className="mt-2 w-full"
+                  className="mt-2 w-full bg-primary text-primary-foreground hover:bg-primary/90"
                   disabled={loginMutation.isPending}
                 >
-                  {loginMutation.isPending ? "登录中..." : "登录"}
+                  {loginMutation.isPending ? t("signingIn") : t("signIn")}
                 </Button>
               </form>
             </Form>
           </CardContent>
         </Card>
       </div>
-    </BrandLayout>
+    </AuthShellLayout>
   );
 }
