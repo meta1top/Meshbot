@@ -1,25 +1,43 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+import { useAuthStatus } from "@/rest/auth";
+import { getAccessToken } from "@anybot/common";
 
 export default function Home() {
-  const [status, setStatus] = useState<string>("检查中...");
+  const router = useRouter();
+  const { data: authStatus, isLoading } = useAuthStatus();
 
   useEffect(() => {
-    const api = window.electronAPI;
-    if (api) {
-      api.getSetupStatus().then((s) => {
-        setStatus(s.needsSetup ? "需要配置" : "已就绪");
-      });
-    } else {
-      setStatus("浏览器模式（未连接桌面端）");
+    if (isLoading) return;
+
+    if (!getAccessToken()) {
+      if (authStatus?.needsSetup) {
+        router.replace("/setup");
+      } else {
+        router.replace("/login");
+      }
+      return;
     }
-  }, []);
+
+    if (authStatus?.needsSetup) {
+      router.replace("/setup");
+    }
+  }, [authStatus, isLoading, router]);
+
+  if (isLoading) {
+    return (
+      <main className="flex min-h-screen items-center justify-center">
+        <p className="text-gray-400">加载中...</p>
+      </main>
+    );
+  }
 
   return (
     <main className="flex min-h-screen items-center justify-center">
       <h1 className="text-2xl font-bold">Anybot Agent</h1>
-      <p className="ml-4 text-sm text-gray-400">{status}</p>
+      <p className="ml-4 text-sm text-gray-400">已就绪</p>
     </main>
   );
 }

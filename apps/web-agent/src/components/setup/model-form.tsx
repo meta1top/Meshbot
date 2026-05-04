@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import type { ModelConfigData, ProviderInfo } from "@/types/electron";
+import type { ProviderDef, ModelConfigInput } from "@anybot/common";
 
 interface ModelFormProps {
-  provider: ProviderInfo;
-  onSubmit: (data: ModelConfigData) => Promise<void>;
+  provider: ProviderDef;
+  onSubmit: (data: ModelConfigInput) => Promise<void>;
   submitting: boolean;
   error: string | null;
 }
