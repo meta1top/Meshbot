@@ -1,7 +1,36 @@
 "use client";
 
 import type { ModelConfigInput, ProviderDef } from "@anybot/common";
+import {
+  Alert,
+  AlertDescription,
+  Button,
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@anybot/design";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+
+const modelConfigSchema = z.object({
+  name: z.string().optional(),
+  model: z.string().min(1, "请选择或输入模型"),
+  apiKey: z.string().min(1, "请输入 API Key"),
+  baseUrl: z.string().optional(),
+});
+
+type ModelConfigFormValues = z.infer<typeof modelConfigSchema>;
 
 interface ModelFormProps {
   provider: ProviderDef;
@@ -16,130 +45,140 @@ export default function ModelForm({
   submitting,
   error,
 }: ModelFormProps) {
-  const [name, setName] = useState("");
-  const [model, setModel] = useState(provider.models[0] ?? "");
-  const [apiKey, setApiKey] = useState("");
-  const [baseUrl, setBaseUrl] = useState(provider.default_base_url);
   const [customModel, setCustomModel] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const form = useForm<ModelConfigFormValues>({
+    resolver: zodResolver(modelConfigSchema),
+    defaultValues: {
+      name: "",
+      model: provider.models[0] ?? "",
+      apiKey: "",
+      baseUrl: provider.default_base_url,
+    },
+  });
+
+  const watchedModel = form.watch("model");
+
+  const handleFormSubmit = (values: ModelConfigFormValues) => {
     onSubmit({
       providerType: provider.type,
-      name: name || `${provider.name} - ${model}`,
-      model,
-      apiKey,
-      baseUrl: baseUrl || undefined,
+      name: values.name || `${provider.name} - ${values.model}`,
+      model: values.model,
+      apiKey: values.apiKey,
+      baseUrl: values.baseUrl || undefined,
     });
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-      <div>
-        <label
-          htmlFor="model-name"
-          className="block text-sm font-medium text-gray-700 mb-1"
-        >
-          名称 <span className="text-gray-400">(可选)</span>
-        </label>
-        <input
-          id="model-name"
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder={`${provider.name} - ${model || "..."}`}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        />
-      </div>
-
-      <div>
-        <label
-          htmlFor="model-id"
-          className="block text-sm font-medium text-gray-700 mb-1"
-        >
-          模型标识 <span className="text-red-500">*</span>
-        </label>
-        {customModel || provider.models.length === 0 ? (
-          <input
-            id="model-id"
-            type="text"
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            placeholder="输入模型名，如 gpt-4o"
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          />
-        ) : (
-          <div className="flex gap-2">
-            <select
-              id="model-id"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              {provider.models.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={() => setCustomModel(true)}
-              className="text-sm text-blue-600 hover:underline whitespace-nowrap"
-            >
-              自定义
-            </button>
-          </div>
-        )}
-      </div>
-
-      <div>
-        <label
-          htmlFor="model-api-key"
-          className="block text-sm font-medium text-gray-700 mb-1"
-        >
-          API Key <span className="text-red-500">*</span>
-        </label>
-        <input
-          id="model-api-key"
-          type="password"
-          value={apiKey}
-          onChange={(e) => setApiKey(e.target.value)}
-          placeholder="sk-..."
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        />
-      </div>
-
-      <div>
-        <label
-          htmlFor="model-base-url"
-          className="block text-sm font-medium text-gray-700 mb-1"
-        >
-          API 端点 <span className="text-gray-400">(选填)</span>
-        </label>
-        <input
-          id="model-base-url"
-          type="text"
-          value={baseUrl}
-          onChange={(e) => setBaseUrl(e.target.value)}
-          placeholder={provider.default_base_url}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        />
-      </div>
-
-      {error && (
-        <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
-          {error}
-        </div>
-      )}
-
-      <button
-        type="submit"
-        disabled={!model || !apiKey || submitting}
-        className="mt-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+    <Form {...form}>
+      <form
+        onSubmit={form.handleSubmit(handleFormSubmit)}
+        className="flex flex-col gap-4"
       >
-        {submitting ? "保存中..." : "保存并开始"}
-      </button>
-    </form>
+        <FormField
+          control={form.control}
+          name="name"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>
+                名称 <span className="text-muted-foreground">(可选)</span>
+              </FormLabel>
+              <FormControl>
+                <Input
+                  placeholder={`${provider.name} - ${watchedModel || "..."}`}
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="model"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>
+                模型标识 <span className="text-destructive">*</span>
+              </FormLabel>
+              {customModel || provider.models.length === 0 ? (
+                <FormControl>
+                  <Input placeholder="输入模型名，如 gpt-4o" {...field} />
+                </FormControl>
+              ) : (
+                <div className="flex gap-2">
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <FormControl>
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="选择模型" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {provider.models.map((m) => (
+                        <SelectItem key={m} value={m}>
+                          {m}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="link"
+                    onClick={() => setCustomModel(true)}
+                    className="whitespace-nowrap"
+                  >
+                    自定义
+                  </Button>
+                </div>
+              )}
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="apiKey"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>
+                API Key <span className="text-destructive">*</span>
+              </FormLabel>
+              <FormControl>
+                <Input type="password" placeholder="sk-..." {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="baseUrl"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>
+                API 端点 <span className="text-muted-foreground">(选填)</span>
+              </FormLabel>
+              <FormControl>
+                <Input placeholder={provider.default_base_url} {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        <Button type="submit" className="mt-2" disabled={submitting}>
+          {submitting ? "保存中..." : "保存并开始"}
+        </Button>
+      </form>
+    </Form>
   );
 }

@@ -1,6 +1,6 @@
 import { type ChildProcess, fork } from "node:child_process";
-import * as http from "node:http";
 import { mkdirSync } from "node:fs";
+import * as http from "node:http";
 import { homedir } from "node:os";
 import * as path from "node:path";
 import { app, BrowserWindow, dialog } from "electron";
