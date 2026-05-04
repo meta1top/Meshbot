@@ -15,7 +15,8 @@
     "@anybot/types": "workspace:*",
     "next": "^15",
     "react": "^19",
-    "react-dom": "^19"
+    "react-dom": "^19",
+    "tw-animate-css": "^1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
