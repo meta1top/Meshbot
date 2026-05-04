@@ -5,6 +5,7 @@ packages:
 
 onlyBuiltDependencies:
   - '@nestjs/core'
+  - bcrypt
   - better-sqlite3
   - electron
   - sharp

@@ -1,12 +1,16 @@
 import { homedir } from "node:os";
 import path from "node:path";
 import { Module } from "@nestjs/common";
+import { APP_GUARD } from "@nestjs/core";
 import { TypeOrmModule } from "@nestjs/typeorm";
+import { AuthModule } from "./auth.module";
 import { ModelConfigController } from "./controllers/model-config.controller";
 import { SettingController } from "./controllers/setting.controller";
 import { SetupController } from "./controllers/setup.controller";
 import { ModelConfig } from "./entities/model-config.entity";
 import { Setting } from "./entities/setting.entity";
+import { User } from "./entities/user.entity";
+import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { ModelConfigService } from "./services/model-config.service";
 import { SettingService } from "./services/setting.service";
 
@@ -17,12 +21,17 @@ const anybotDir = process.env.ANYBOT_DIR ?? path.join(homedir(), ".anybot");
     TypeOrmModule.forRoot({
       type: "better-sqlite3",
       database: path.join(anybotDir, "agent.db"),
-      entities: [ModelConfig, Setting],
+      entities: [ModelConfig, Setting, User],
       synchronize: true,
     }),
     TypeOrmModule.forFeature([ModelConfig, Setting]),
+    AuthModule,
   ],
   controllers: [ModelConfigController, SettingController, SetupController],
-  providers: [ModelConfigService, SettingService],
+  providers: [
+    ModelConfigService,
+    SettingService,
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+  ],
 })
 export class AppModule {}

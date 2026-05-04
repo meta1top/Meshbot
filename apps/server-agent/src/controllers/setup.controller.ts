@@ -1,17 +1,31 @@
 import { PROVIDERS } from "@anybot/common";
 import { Controller, Get } from "@nestjs/common";
+import { Public } from "../guards/jwt-auth.guard";
+import { AuthService } from "../services/auth.service";
 import { ModelConfigService } from "../services/model-config.service";
 
 @Controller("api")
 export class SetupController {
-  constructor(private readonly modelConfigService: ModelConfigService) {}
+  constructor(
+    private readonly modelConfigService: ModelConfigService,
+    private readonly authService: AuthService,
+  ) {}
 
+  @Public()
   @Get("setup-status")
   async getSetupStatus() {
+    const { initialized } = await this.authService.getStatus();
+    if (!initialized) {
+      return { needsSetup: true, step: "register" };
+    }
     const hasModels = await this.modelConfigService.hasEnabledModels();
-    return { needsSetup: !hasModels };
+    if (!hasModels) {
+      return { needsSetup: true, step: "model" };
+    }
+    return { needsSetup: false, step: null };
   }
 
+  @Public()
   @Get("providers")
   getProviders() {
     return PROVIDERS;
