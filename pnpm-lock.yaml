@@ -206,6 +206,15 @@ importers:
         specifier: ^3
         version: 3.25.76
 
+  libs/types-agent:
+    dependencies:
+      '@anybot/types':
+        specifier: workspace:*
+        version: link:../types
+      zod:
+        specifier: ^3
+        version: 3.25.76
+
   packages/common:
     dependencies:
       '@anybot/types':
