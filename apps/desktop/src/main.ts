@@ -1,15 +1,22 @@
 import { type ChildProcess, fork } from "node:child_process";
 import * as http from "node:http";
+import { mkdirSync } from "node:fs";
+import { homedir } from "node:os";
 import * as path from "node:path";
 import { app, BrowserWindow, dialog } from "electron";
-import { ensureDirs, getAnybotDir, getLogDir, getSetupStatus } from "./database";
 import { registerIpcHandlers } from "./ipc-handlers";
+
+const ANYBOT_DIR = path.join(homedir(), ".anybot");
 
 let mainWindow: BrowserWindow | null = null;
 let serverProcess: ChildProcess | null = null;
 
-function createWindow(setupMode: boolean) {
-  const route = setupMode ? "/setup" : "/";
+function ensureDirs(): void {
+  mkdirSync(ANYBOT_DIR, { recursive: true });
+  mkdirSync(path.join(ANYBOT_DIR, "logs"), { recursive: true });
+}
+
+function createWindow() {
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -20,7 +27,7 @@ function createWindow(setupMode: boolean) {
     },
   });
 
-  win.loadURL(`http://localhost:3001${route}`);
+  win.loadURL("http://localhost:3001");
 
   if (!app.isPackaged) {
     win.webContents.openDevTools();
@@ -72,7 +79,7 @@ async function forkServerAgent(): Promise<void> {
         stdio: ["pipe", "pipe", "pipe", "ipc"],
         env: {
           ...process.env,
-          ANYBOT_DIR: getAnybotDir(),
+          ANYBOT_DIR: ANYBOT_DIR,
         },
       });
 
@@ -151,16 +158,14 @@ app.whenReady().then(async () => {
 
     await startServerAgent();
 
-    const { needsSetup } = await getSetupStatus();
-
     registerIpcHandlers(() => mainWindow);
 
-    mainWindow = createWindow(needsSetup);
+    mainWindow = createWindow();
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     dialog.showErrorBox(
       "启动失败",
-      `无法初始化应用：${message}\n\n请检查 ${getAnybotDir()} 目录权限`,
+      `无法初始化应用：${message}\n\n请检查 ${ANYBOT_DIR} 目录权限`,
     );
     app.quit();
   }
@@ -174,12 +179,7 @@ app.on("window-all-closed", () => {
 
 app.on("activate", async () => {
   if (BrowserWindow.getAllWindows().length === 0) {
-    try {
-      const { needsSetup } = await getSetupStatus();
-      mainWindow = createWindow(needsSetup);
-    } catch {
-      mainWindow = createWindow(false);
-    }
+    mainWindow = createWindow();
   }
 });
 
