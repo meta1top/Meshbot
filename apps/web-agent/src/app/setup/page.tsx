@@ -1,13 +1,13 @@
 "use client";
 
+import type { ModelConfigInput, ProviderDef } from "@anybot/common";
+import { getAccessToken } from "@anybot/common";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import ModelForm from "@/components/setup/model-form";
 import ProviderCard from "@/components/setup/provider-card";
 import { useAuthStatus, useRegister } from "@/rest/auth";
-import { useProviders, useCreateModelConfig } from "@/rest/model-config";
-import { getAccessToken } from "@anybot/common";
-import type { ProviderDef, ModelConfigInput } from "@anybot/common";
+import { useCreateModelConfig, useProviders } from "@/rest/model-config";
 
 type SetupStep = "register" | "model";
 
@@ -59,9 +59,7 @@ export default function SetupPage() {
       await registerMutation.mutateAsync({ username, password });
       setStep("model");
     } catch (err) {
-      setRegisterError(
-        err instanceof Error ? err.message : "注册失败，请重试",
-      );
+      setRegisterError(err instanceof Error ? err.message : "注册失败，请重试");
     }
   };
 
@@ -87,10 +85,14 @@ export default function SetupPage() {
             </h2>
             <form onSubmit={handleRegister} className="flex flex-col gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label
+                  htmlFor="setup-username"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
                   用户名 <span className="text-red-500">*</span>
                 </label>
                 <input
+                  id="setup-username"
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
@@ -99,10 +101,14 @@ export default function SetupPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label
+                  htmlFor="setup-password"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
                   密码 <span className="text-red-500">*</span>
                 </label>
                 <input
+                  id="setup-password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -111,10 +117,14 @@ export default function SetupPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label
+                  htmlFor="setup-confirm-password"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
                   确认密码 <span className="text-red-500">*</span>
                 </label>
                 <input
+                  id="setup-confirm-password"
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}

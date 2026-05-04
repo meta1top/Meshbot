@@ -15,6 +15,7 @@ export default function ProviderCard({
 }: ProviderCardProps) {
   return (
     <button
+      type="button"
       onClick={onSelect}
       className={`flex flex-col gap-2 rounded-xl border-2 p-4 text-left transition-all cursor-pointer
         ${
