@@ -1,7 +1,7 @@
 "use client";
 
+import type { ModelConfigInput, ProviderDef } from "@anybot/common";
 import { useState } from "react";
-import type { ProviderDef, ModelConfigInput } from "@anybot/common";
 
 interface ModelFormProps {
   provider: ProviderDef;
@@ -36,10 +36,14 @@ export default function ModelForm({
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label
+          htmlFor="model-name"
+          className="block text-sm font-medium text-gray-700 mb-1"
+        >
           名称 <span className="text-gray-400">(可选)</span>
         </label>
         <input
+          id="model-name"
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -49,11 +53,15 @@ export default function ModelForm({
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label
+          htmlFor="model-id"
+          className="block text-sm font-medium text-gray-700 mb-1"
+        >
           模型标识 <span className="text-red-500">*</span>
         </label>
         {customModel || provider.models.length === 0 ? (
           <input
+            id="model-id"
             type="text"
             value={model}
             onChange={(e) => setModel(e.target.value)}
@@ -63,6 +71,7 @@ export default function ModelForm({
         ) : (
           <div className="flex gap-2">
             <select
+              id="model-id"
               value={model}
               onChange={(e) => setModel(e.target.value)}
               className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -85,10 +94,14 @@ export default function ModelForm({
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label
+          htmlFor="model-api-key"
+          className="block text-sm font-medium text-gray-700 mb-1"
+        >
           API Key <span className="text-red-500">*</span>
         </label>
         <input
+          id="model-api-key"
           type="password"
           value={apiKey}
           onChange={(e) => setApiKey(e.target.value)}
@@ -98,10 +111,14 @@ export default function ModelForm({
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label
+          htmlFor="model-base-url"
+          className="block text-sm font-medium text-gray-700 mb-1"
+        >
           API 端点 <span className="text-gray-400">(选填)</span>
         </label>
         <input
+          id="model-base-url"
           type="text"
           value={baseUrl}
           onChange={(e) => setBaseUrl(e.target.value)}

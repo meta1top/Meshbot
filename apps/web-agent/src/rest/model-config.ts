@@ -1,6 +1,6 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ModelConfigInput, ProviderDef } from "@anybot/common";
 import { apiClient } from "@anybot/common";
-import type { ProviderDef, ModelConfigInput } from "@anybot/common";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export interface ModelConfig {
   id: string;
@@ -27,7 +27,10 @@ export async function fetchModelConfigs(): Promise<ModelConfig[]> {
 export async function createModelConfig(
   input: ModelConfigInput,
 ): Promise<ModelConfig> {
-  const { data } = await apiClient.post<ModelConfig>("/api/model-configs", input);
+  const { data } = await apiClient.post<ModelConfig>(
+    "/api/model-configs",
+    input,
+  );
   return data;
 }
 

@@ -1,9 +1,9 @@
 "use client";
 
+import { getAccessToken } from "@anybot/common";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useAuthStatus } from "@/rest/auth";
-import { getAccessToken } from "@anybot/common";
 
 export default function Home() {
   const router = useRouter();
