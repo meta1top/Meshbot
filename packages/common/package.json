@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@anybot/types": "workspace:*",
+    "axios": "^1.16.0",
     "zod": "^3"
   }
 }
