@@ -25,10 +25,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
-            pkg: pkg:app
-          - os: ubuntu-latest
-            pkg: pkg:app
+          # 调试 Windows 时暂时关闭；恢复三平台打包时取消下面两行注释。
+          # - os: macos-latest
+          #   pkg: pkg:app
+          # - os: ubuntu-latest
+          #   pkg: pkg:app
           - os: windows-latest
             pkg: pkg:app:win
 
