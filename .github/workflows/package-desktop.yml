@@ -1,0 +1,69 @@
+name: Package desktop
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "apps/desktop/**"
+      - "apps/server-agent/**"
+      - "apps/web-agent/**"
+      - "libs/**"
+      - "packages/**"
+      - "scripts/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/package-desktop.yml"
+
+concurrency:
+  group: package-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            pkg: pkg:app
+          - os: ubuntu-latest
+            pkg: pkg:app
+          - os: windows-latest
+            pkg: pkg:app:win
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install Linux build deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            python3 \
+            libarchive-tools
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Package (${{ matrix.pkg }})
+        run: pnpm run ${{ matrix.pkg }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: anybot-desktop-${{ matrix.os }}
+          path: apps/desktop/release/
+          if-no-files-found: error
