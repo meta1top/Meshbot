@@ -7,6 +7,10 @@ import { pathToFileURL } from "node:url";
 import { app, BrowserWindow, dialog, net, protocol } from "electron";
 import { registerIpcHandlers } from "./ipc-handlers";
 
+if (process.platform === "linux") {
+  app.commandLine.appendSwitch("no-sandbox");
+}
+
 const WEB_PORT = 3001;
 const SERVER_AGENT_PORT = 3100;
 const LOCAL_HOST = "127.0.0.1";
