@@ -2,6 +2,17 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 exports.default = async function afterPack(context) {
+  const resourcesDir = path.join(context.appOutDir, "resources");
+  const serverAgentDest = path.join(resourcesDir, "server-agent", "node_modules");
+
+  if (!fs.existsSync(serverAgentDest)) {
+    const bundleSrc = path.resolve(
+      context.packager.projectDir,
+      "../server-agent/.bundle/node_modules",
+    );
+    fs.cpSync(bundleSrc, serverAgentDest, { recursive: true, dereference: true });
+  }
+
   if (context.electronPlatformName !== "linux") return;
 
   const sandboxPath = path.join(context.appOutDir, "chrome-sandbox");
