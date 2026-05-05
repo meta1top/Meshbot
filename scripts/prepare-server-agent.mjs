@@ -8,7 +8,11 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
 const bundleDir = path.join(repoRoot, "apps", "server-agent", ".bundle");
-const tempDir = path.join(os.tmpdir(), "anybot-server-bundle");
+// Windows: avoid pnpm deploy mixing D:\repo with C:\Temp (breaks workspace symlinks).
+const tempDir =
+  process.platform === "win32"
+    ? path.join(repoRoot, ".anybot-server-bundle-deploy")
+    : path.join(os.tmpdir(), "anybot-server-bundle");
 
 function rmRf(p) {
   fs.rmSync(p, { recursive: true, force: true });

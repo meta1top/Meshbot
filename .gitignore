@@ -50,3 +50,4 @@ coverage/
 *.lance/
 .anybot/
 apps/server-agent/.bundle/
+.anybot-server-bundle-deploy/
