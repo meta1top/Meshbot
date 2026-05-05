@@ -5,12 +5,15 @@ import axios, {
 
 const TOKEN_KEY = "anybot_access_token";
 
+const DEFAULT_API_URL = "http://127.0.0.1:3100";
+
 function resolveBaseURL(): string {
-  if (typeof window === "undefined") {
-    return "http://localhost:3100";
+  if (typeof window === "undefined") return DEFAULT_API_URL;
+  const { protocol, hostname } = window.location;
+  if (protocol === "http:" || protocol === "https:") {
+    return `${protocol}//${hostname}:3100`;
   }
-  const { hostname } = window.location;
-  return `http://${hostname}:3100`;
+  return DEFAULT_API_URL;
 }
 
 export function createApiClient(baseURL?: string): AxiosInstance {
