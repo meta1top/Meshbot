@@ -18,7 +18,7 @@
     "dev:desktop": "pnpm --filter @anybot/desktop dev",
     "pkg:prepare-server-agent": "rm -rf apps/server-agent/.bundle /tmp/anybot-server-bundle && pnpm --filter @anybot/server-agent deploy --legacy --prod /tmp/anybot-server-bundle && find /tmp/anybot-server-bundle -type l ! -exec test -e {} \\; -delete && rsync -a /tmp/anybot-server-bundle/ apps/server-agent/.bundle/ && rm -rf /tmp/anybot-server-bundle",
     "pkg:rebuild-server-agent-native": "pnpm --filter @anybot/desktop exec electron-rebuild -v 41.5.0 -m ../../apps/server-agent/.bundle -o better-sqlite3,bcrypt --build-from-source",
-    "pkg:flatten-server-agent": "cd apps/server-agent/.bundle && find node_modules -type l ! -exec test -e {} \\; -delete && find node_modules -type l -exec sh -c 'target=$(realpath \"$1\") && rm \"$1\" && cp -a \"$target\" \"$1\"' _ {} \\;",
+    "pkg:flatten-server-agent": "cd apps/server-agent/.bundle && find node_modules -type l ! -exec test -e {} \\; -delete && cp -RLf node_modules /tmp/anybot-nm-flat && rm -rf node_modules && mv /tmp/anybot-nm-flat node_modules",
     "pkg:app": "pnpm run build:types && pnpm run build:common && pnpm run build:types-agent && pnpm run build:shared && pnpm run build:web-agent && pnpm run build:server-agent && pnpm run pkg:prepare-server-agent && pnpm run pkg:rebuild-server-agent-native && pnpm run pkg:flatten-server-agent && pnpm run build:desktop && pnpm --filter @anybot/desktop run dist",
     "lint": "biome lint .",
     "format": "biome format --write .",
