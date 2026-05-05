@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
-import { NextIntlClientProvider } from "next-intl";
-import { getLocale, getMessages } from "next-intl/server";
-import Script from "next/script";
 import { ElectronInit } from "@/components/electron-init";
+import { IntlProvider } from "@/components/intl-provider";
 import { Providers } from "@/components/providers";
 import "./globals.css";
 
@@ -11,24 +9,21 @@ export const metadata: Metadata = {
   description: "AnyBOT Agent",
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const locale = await getLocale();
-  const messages = await getMessages();
-
   return (
-    <html lang={locale} suppressHydrationWarning>
+    <html lang="zh" suppressHydrationWarning>
       <head>
-        <Script src="/theme-init.js" strategy="beforeInteractive" />
+        <script src="/theme-init.js" />
       </head>
       <body className="min-h-screen antialiased">
-        <NextIntlClientProvider locale={locale} messages={messages}>
+        <IntlProvider>
           <ElectronInit />
           <Providers>{children}</Providers>
-        </NextIntlClientProvider>
+        </IntlProvider>
       </body>
     </html>
   );

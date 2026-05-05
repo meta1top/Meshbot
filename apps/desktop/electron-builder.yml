@@ -5,8 +5,12 @@ directories:
 files:
   - dist/**/*
 extraResources:
-  - from: ../server-agent/dist/
+  - from: ../server-agent/.bundle/
     to: server-agent/
+    filter:
+      - "**/*"
+  - from: ../web-agent/out/
+    to: web-agent/
     filter:
       - "**/*"
 mac:

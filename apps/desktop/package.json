@@ -17,6 +17,7 @@
     "electron-updater": "^6"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.0.4",
     "@types/node": "^24",
     "electron": "^41",
     "electron-builder": "^25",
