@@ -9,9 +9,11 @@ exports.default = async function afterPack(context) {
     fs.unlinkSync(sandboxPath);
   }
 
-  const execName = context.packager.appInfo.productFilename;
+  const execName = context.packager.executableName;
   const execPath = path.join(context.appOutDir, execName);
   const realExecPath = path.join(context.appOutDir, `${execName}.bin`);
+
+  if (!fs.existsSync(execPath)) return;
 
   fs.renameSync(execPath, realExecPath);
   fs.writeFileSync(
