@@ -23,3 +23,5 @@ win:
 linux:
   target:
     - AppImage
+  files:
+    - "!chrome-sandbox"
