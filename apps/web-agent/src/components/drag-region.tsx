@@ -34,14 +34,14 @@ export function DragRegion({ actions }: DragRegionProps) {
       {actions && (
         <div
           className={`pointer-events-auto absolute top-0 flex h-full items-center gap-1 ${
-            showWindowControls ? "right-[138px]" : "right-3"
+            showWindowControls ? "right-[150px]" : "right-3"
           }`}
         >
           {actions}
         </div>
       )}
       {showWindowControls && (
-        <div className="pointer-events-auto absolute top-0 right-0 flex h-full items-center">
+        <div className="pointer-events-auto absolute top-0 right-2 flex h-full items-center">
           <button
             type="button"
             onClick={() => electronAPI.windowMinimize?.()}
