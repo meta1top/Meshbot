@@ -63,12 +63,13 @@ function runPnpmDeploy(dest) {
     );
   }
 
+  const pnpmBin = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
   return new Promise((resolve, reject) => {
-    const child = spawn("pnpm", args, {
+    const child = spawn(pnpmBin, args, {
       cwd: repoRoot,
       stdio: "inherit",
       env,
-      shell: process.platform === "win32",
+      shell: false,
     });
 
     const heartbeat = setInterval(() => {
