@@ -34,7 +34,7 @@ importers:
         specifier: ^41
         version: 41.5.0
       electron-builder:
-        specifier: ^25
+        specifier: 25.1.8
         version: 25.1.8(electron-builder-squirrel-windows@25.1.8)
       vitest:
         specifier: ^4.1.5
