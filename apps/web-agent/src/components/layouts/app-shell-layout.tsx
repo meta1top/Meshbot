@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { DragRegion } from "@/components/drag-region";
 import { LanguageToggle } from "@/components/language-toggle";
 
@@ -31,9 +31,15 @@ export function AppShellLayout({ children, className }: AppShellLayoutProps) {
   const { theme, toggleTheme } = useTheme();
   const t = useTranslations("appShell");
   const commonT = useTranslations("common");
+  const [isMac, setIsMac] = useState(true);
 
   useEffect(() => {
     document.body.classList.add("app-shell-mode");
+    const api = (window as unknown as { electronAPI?: { platform?: string } })
+      .electronAPI;
+    if (api?.platform && api.platform !== "darwin") {
+      setIsMac(false);
+    }
     return () => {
       document.body.classList.remove("app-shell-mode");
     };
@@ -50,7 +56,7 @@ export function AppShellLayout({ children, className }: AppShellLayoutProps) {
       <DragRegion />
       <div className="flex h-full">
         <aside className="hidden w-[246px] shrink-0 px-1.5 py-1.5 lg:flex lg:flex-col">
-          <div className="flex h-full flex-col rounded-l-[12px] border border-border bg-muted px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+          <div className={cn("flex h-full flex-col border border-border bg-muted px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]", isMac && "rounded-l-[12px]")}>
             <div className="app-mac-controls-safe-left mb-2 h-8" />
             <nav className="space-y-0.5 text-[14px] text-foreground/80">
               <button
