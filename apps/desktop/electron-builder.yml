@@ -16,7 +16,6 @@ extraResources:
 mac:
   target:
     - dmg
-    - zip
 win:
   target:
     - nsis

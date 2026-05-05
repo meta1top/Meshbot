@@ -1,18 +1,14 @@
 #!/usr/bin/env node
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
 const bundleDir = path.join(repoRoot, "apps", "server-agent", ".bundle");
-// Windows: avoid pnpm deploy mixing D:\repo with C:\Temp (breaks workspace symlinks).
-const tempDir =
-  process.platform === "win32"
-    ? path.join(repoRoot, ".anybot-server-bundle-deploy")
-    : path.join(os.tmpdir(), "anybot-server-bundle");
+
+const DEPLOY_HEARTBEAT_MS = Number(process.env.ANYBOT_DEPLOY_HEARTBEAT_MS ?? 90_000);
 
 function rmRf(p) {
   fs.rmSync(p, { recursive: true, force: true });
@@ -47,50 +43,65 @@ function removeBrokenSymlinks(root) {
   walk(root);
 }
 
-function runPnpmDeploy() {
+function runPnpmDeploy(dest) {
   const args = [
     "--filter",
     "@anybot/server-agent",
     "deploy",
     "--legacy",
     "--prod",
-    tempDir,
+    dest,
   ];
   const env = {
     ...process.env,
     PNPM_REPORTER: process.env.PNPM_REPORTER ?? "append-only",
   };
-  const r = spawnSync("pnpm", args, {
-    cwd: repoRoot,
-    stdio: "inherit",
-    env,
-    shell: process.platform === "win32",
-  });
-  if (r.error) {
-    console.error(r.error);
-    process.exit(1);
+
+  if (process.platform === "win32") {
+    console.log(
+      "[prepare-server-agent] pnpm deploy on Windows often stays quiet for several minutes after \"Progress: … done\" while linking/copying files; 5–20 min is normal on CI.",
+    );
   }
-  const code = r.status ?? 1;
-  if (code !== 0) process.exit(code);
+
+  return new Promise((resolve, reject) => {
+    const child = spawn("pnpm", args, {
+      cwd: repoRoot,
+      stdio: "inherit",
+      env,
+      shell: process.platform === "win32",
+    });
+
+    const heartbeat = setInterval(() => {
+      console.log(
+        `[prepare-server-agent] pnpm deploy still running… (${Math.round(DEPLOY_HEARTBEAT_MS / 1000)}s heartbeat)`,
+      );
+    }, DEPLOY_HEARTBEAT_MS);
+
+    child.on("error", (err) => {
+      clearInterval(heartbeat);
+      reject(err);
+    });
+    child.on("close", (code) => {
+      clearInterval(heartbeat);
+      resolve(code ?? 0);
+    });
+  });
 }
 
-function main() {
+async function main() {
   console.log("[prepare-server-agent] repo:", repoRoot);
-  console.log("[prepare-server-agent] bundle:", bundleDir);
-  console.log("[prepare-server-agent] temp:", tempDir);
+  console.log("[prepare-server-agent] deploy ->:", bundleDir);
 
   rmRf(bundleDir);
-  rmRf(tempDir);
 
-  runPnpmDeploy();
+  const code = await runPnpmDeploy(bundleDir);
+  if (code !== 0) process.exit(code);
 
-  removeBrokenSymlinks(tempDir);
-
-  rmRf(bundleDir);
-  fs.cpSync(tempDir, bundleDir, { recursive: true });
-
-  rmRf(tempDir);
+  removeBrokenSymlinks(bundleDir);
   console.log("[prepare-server-agent] done.");
 }
 
-main();
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
