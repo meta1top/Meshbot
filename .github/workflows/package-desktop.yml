@@ -65,7 +65,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p upload
-          find apps/desktop/release -maxdepth 1 -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.AppImage' -o -name '*.appimage' -o -name '*.zip' -o -name '*.blockmap' -o -name 'latest*.yml' \) -exec cp {} upload/ \;
+          find apps/desktop/release -maxdepth 1 -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.AppImage' -o -name '*.appimage' -o -name '*.zip' -o -name '*.blockmap' -o -name 'latest*.yml' \) -exec cp {} upload/ ';'
           if [[ ! "$(find upload -type f | head -1)" ]]; then
             echo "No distributable files staged; listing release/:"
             ls -la apps/desktop/release/ || true
