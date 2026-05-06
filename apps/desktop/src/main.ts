@@ -16,6 +16,8 @@ const SERVER_AGENT_PORT = 3100;
 const LOCAL_HOST = "127.0.0.1";
 const WEB_DEV_URL = `http://${LOCAL_HOST}:${WEB_PORT}`;
 const SERVER_AGENT_HEALTH_URL = `http://${LOCAL_HOST}:${SERVER_AGENT_PORT}/api/setup-status`;
+/** Matches `scripts/prepare-server-agent.mjs` → `.bundle/pack/srv` copied under Resources/server-agent/. */
+const PACKAGED_SERVER_AGENT_SUBDIR = "srv";
 const PROJECT_LOG_DIR = path.join(process.cwd(), ".anybot", "logs");
 const PACKAGED_LOG_DIR = path.join(homedir(), ".anybot", "logs");
 const LOG_FILE_NAME = "desktop-runtime.log";
@@ -146,7 +148,11 @@ function pollHttpReady(
 }
 
 async function forkServerAgent(): Promise<void> {
-  const serverAgentRoot = path.join(process.resourcesPath, "server-agent");
+  const serverAgentRoot = path.join(
+    process.resourcesPath,
+    "server-agent",
+    PACKAGED_SERVER_AGENT_SUBDIR,
+  );
   const serverAgentPath = path.join(serverAgentRoot, "dist", "main.js");
   let restartCount = 0;
   let settled = false;
