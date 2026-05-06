@@ -146,12 +146,8 @@ function pollHttpReady(
 }
 
 async function forkServerAgent(): Promise<void> {
-  const serverAgentPath = path.join(
-    process.resourcesPath,
-    "server-agent",
-    "dist",
-    "main.js",
-  );
+  const serverAgentRoot = path.join(process.resourcesPath, "server-agent");
+  const serverAgentPath = path.join(serverAgentRoot, "dist", "main.js");
   let restartCount = 0;
   let settled = false;
 
@@ -160,6 +156,7 @@ async function forkServerAgent(): Promise<void> {
       if (settled) return;
       writeLog("server-agent", `Forking ${serverAgentPath} (attempt ${restartCount + 1})`);
       serverProcess = fork(serverAgentPath, [], {
+        cwd: serverAgentRoot,
         stdio: ["pipe", "pipe", "pipe", "ipc"],
         env: process.env,
       });
