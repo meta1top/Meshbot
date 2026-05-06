@@ -5,7 +5,8 @@ directories:
 files:
   - dist/**/*
 extraResources:
-  - from: ../server-agent/.bundle/
+  # from must not be the folder that contains `node_modules` at root (app-builder-lib skips it).
+  - from: ../server-agent/.bundle/pack/
     to: server-agent/
     filter:
       - "**/*"

@@ -17,7 +17,7 @@
     "dev:server-main": "pnpm --filter @anybot/server-main dev",
     "dev:desktop": "pnpm --filter @anybot/desktop dev",
     "pkg:prepare-server-agent": "node scripts/prepare-server-agent.mjs",
-    "pkg:rebuild-server-agent-native": "pnpm --filter @anybot/desktop exec electron-rebuild -v 41.5.0 -m ../../apps/server-agent/.bundle -o better-sqlite3,bcrypt --build-from-source",
+    "pkg:rebuild-server-agent-native": "pnpm --filter @anybot/desktop exec electron-rebuild -v 41.5.0 -m ../../apps/server-agent/.bundle/pack/srv -o better-sqlite3,bcrypt --build-from-source",
     "pkg:app": "pnpm run build:types && pnpm run build:common && pnpm run build:types-agent && pnpm run build:shared && pnpm run build:web-agent && pnpm run build:server-agent && pnpm run pkg:prepare-server-agent && pnpm run pkg:rebuild-server-agent-native && pnpm run build:desktop && pnpm --filter @anybot/desktop run dist",
     "lint": "biome lint .",
     "format": "biome format --write .",

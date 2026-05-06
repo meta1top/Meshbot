@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
 const bundleDir = path.join(repoRoot, "apps", "server-agent", ".bundle");
+/** Deploy into a nested dir so electron-builder copies node_modules (it drops a *root* `node_modules/` next to `from`). */
+const bundlePackDir = path.join(bundleDir, "pack", "srv");
 
 const DEPLOY_HEARTBEAT_MS = Number(process.env.ANYBOT_DEPLOY_HEARTBEAT_MS ?? 90_000);
 
@@ -92,11 +94,11 @@ function runPnpmDeploy(dest) {
 
 async function main() {
   console.log("[prepare-server-agent] repo:", repoRoot);
-  console.log("[prepare-server-agent] deploy (hoisted node_modules) ->:", bundleDir);
+  console.log("[prepare-server-agent] deploy (hoisted) ->:", bundlePackDir);
 
   rmRf(bundleDir);
 
-  const code = await runPnpmDeploy(bundleDir);
+  const code = await runPnpmDeploy(bundlePackDir);
   if (code !== 0) process.exit(code);
 
   removeBrokenSymlinks(bundleDir);

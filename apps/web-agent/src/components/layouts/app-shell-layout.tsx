@@ -1,6 +1,7 @@
 "use client";
 
-import { clearAccessToken, useTheme } from "@anybot/common";
+import { clearAccessToken } from "@anybot/common";
+import { useTheme } from "@anybot/common/react";
 import { cn } from "@anybot/design";
 import { useQueryClient } from "@tanstack/react-query";
 import {

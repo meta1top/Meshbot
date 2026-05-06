@@ -1,6 +1,6 @@
 "use client";
 
-import { useTheme } from "@anybot/common";
+import { useTheme } from "@anybot/common/react";
 import { cn } from "@anybot/design";
 import { Moon, Sun } from "lucide-react";
 import { useTranslations } from "next-intl";
