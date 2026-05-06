@@ -19,8 +19,6 @@ mac:
 win:
   target:
     - nsis
-nsis:
-  compression: zlib
 afterPack: ./scripts/after-pack.js
 linux:
   target:
