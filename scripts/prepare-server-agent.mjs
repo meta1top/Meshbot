@@ -50,6 +50,7 @@ function runPnpmDeploy(dest) {
     "deploy",
     "--legacy",
     "--prod",
+    "--config.node-linker=hoisted",
     dest,
   ];
   const env = {
@@ -91,7 +92,7 @@ function runPnpmDeploy(dest) {
 
 async function main() {
   console.log("[prepare-server-agent] repo:", repoRoot);
-  console.log("[prepare-server-agent] deploy ->:", bundleDir);
+  console.log("[prepare-server-agent] deploy (hoisted node_modules) ->:", bundleDir);
 
   rmRf(bundleDir);
 
