@@ -5,7 +5,10 @@ packages:
 
 onlyBuiltDependencies:
   - '@nestjs/core'
+  - '@parcel/watcher'
+  - '@swc/core'
   - bcrypt
   - better-sqlite3
   - electron
+  - electron-winstaller
   - sharp
