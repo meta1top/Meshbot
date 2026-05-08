@@ -10,21 +10,18 @@ async function bootstrap() {
   mkdirSync(anybotDir, { recursive: true });
   mkdirSync(path.join(anybotDir, "logs"), { recursive: true });
 
+  const port = Number(process.env.ANYBOT_PORT ?? 3100);
+  const host = "0.0.0.0";
+
   const app = await NestFactory.create(AppModule);
 
   app.enableCors({
-    origin: [
-      "http://localhost:3001",
-      "http://127.0.0.1:3001",
-      "app://web",
-      /^http:\/\/192\.168\.\d+\.\d+:3001$/,
-      /^http:\/\/10\.\d+\.\d+\.\d+:3001$/,
-      /^http:\/\/172\.(1[6-9]|2\d|3[01])\.\d+\.\d+:3001$/,
-    ],
+    origin: true,
     credentials: true,
   });
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
-  await app.listen(3100, "0.0.0.0");
+  await app.listen(port, host);
+  console.log(`Agent running on http://${host}:${port}`);
 }
 bootstrap();
