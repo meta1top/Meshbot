@@ -6,4 +6,7 @@ export {
   type RegisterInput,
   registerSchema,
   type UserInfo,
+  RegisterDto,
+  LoginDto,
+  AuthResponse,
 } from "./auth";
