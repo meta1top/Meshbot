@@ -7,6 +7,7 @@ import { registerStartCommand } from "./commands/start.js";
 import { registerStopCommand } from "./commands/stop.js";
 import { registerStatusCommand } from "./commands/status.js";
 import { registerServiceCommand } from "./commands/service.js";
+import { registerConfigCommand } from "./commands/config-cmd.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(path.join(__dirname, "..", "package.json"), "utf-8"));
@@ -18,5 +19,6 @@ registerStartCommand(program);
 registerStopCommand(program);
 registerStatusCommand(program);
 registerServiceCommand(program);
+registerConfigCommand(program);
 
 program.parse();
