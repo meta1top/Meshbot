@@ -1,7 +1,13 @@
 {
   "name": "@anybot/server-agent",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.0.1",
+  "private": false,
+  "main": "dist/main.js",
+  "types": "dist/main.d.ts",
+  "files": ["dist"],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "nest build",
     "dev": "nest start --watch",
