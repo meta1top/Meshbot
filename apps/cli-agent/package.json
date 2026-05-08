@@ -1,10 +1,14 @@
 {
   "name": "@anybot/cli-agent",
   "version": "0.0.1",
-  "private": true,
+  "private": false,
   "type": "module",
   "bin": {
     "anybot": "./dist/index.js"
+  },
+  "files": ["dist"],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc --project tsconfig.json",
