@@ -1,0 +1,23 @@
+{
+  "name": "@anybot/cli-agent",
+  "version": "0.0.1",
+  "private": true,
+  "bin": {
+    "anybot": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "dev": "tsc --project tsconfig.json --watch",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@anybot/server-agent": "workspace:*",
+    "commander": "^12.1.0",
+    "chalk": "^5.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "vitest": "^4.1.5"
+  }
+}
