@@ -4,8 +4,6 @@ directories:
   output: release
 files:
   - dist/**/*
-  - from: ../../web-agent/out
-    to: web-agent
 mac:
   target:
     - dmg
