@@ -1,5 +1,5 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "@anybot/design/src/styles/globals.css";
+@import "@meshbot/design/src/styles/globals.css";
 
 @source "../../../../packages/design/src";
