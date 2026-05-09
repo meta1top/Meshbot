@@ -1,11 +1,12 @@
 import { app, BrowserWindow, dialog } from "electron";
 import { registerIpcHandlers } from "./ipc-handlers";
+import path from "node:path";
 
-const DEFAULT_AGENT_URL = "http://localhost:3100";
+const DEV_AGENT_URL = "http://localhost:3001";
 
 let mainWindow: BrowserWindow | null = null;
 
-function createWindow(agentUrl: string) {
+function createWindow() {
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -21,25 +22,23 @@ function createWindow(agentUrl: string) {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: __dirname + "/preload.js",
+      preload: path.join(__dirname, "preload.js"),
     },
   });
 
-  win.loadURL(agentUrl);
+  if (app.isPackaged) {
+    win.loadFile(path.join(__dirname, "web-agent", "index.html"));
+  } else {
+    win.loadURL(DEV_AGENT_URL);
+  }
 
   return win;
 }
 
-async function getAgentUrl(): Promise<string> {
-  // For now, use default. In future, could show setup window.
-  return DEFAULT_AGENT_URL;
-}
-
-app.whenReady().then(async () => {
+app.whenReady().then(() => {
   try {
-    const agentUrl = await getAgentUrl();
     registerIpcHandlers(() => mainWindow);
-    mainWindow = createWindow(agentUrl);
+    mainWindow = createWindow();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     dialog.showErrorBox("启动失败", message);
@@ -53,9 +52,8 @@ app.on("window-all-closed", () => {
   }
 });
 
-app.on("activate", async () => {
+app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) {
-    const agentUrl = await getAgentUrl();
-    mainWindow = createWindow(agentUrl);
+    mainWindow = createWindow();
   }
 });
