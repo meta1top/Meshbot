@@ -9,7 +9,7 @@ function getWebAgentPath(): string {
   if (existsSync(bundled)) return bundled;
 
   // Development: relative to workspace
-  const devPath = join(__dirname, "..", "..", "..", "web-agent", "out");
+  const devPath = join(__dirname, "..", "..", "web-agent", "out");
   if (existsSync(devPath)) return devPath;
 
   throw new Error("web-agent static files not found");
