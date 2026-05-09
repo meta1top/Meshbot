@@ -3,6 +3,7 @@ export {
   clearAccessToken,
   createApiClient,
   getAccessToken,
+  getBrowserApiBaseUrl,
   setAccessToken,
 } from "./api/client";
 export type { ProviderDef } from "./providers";

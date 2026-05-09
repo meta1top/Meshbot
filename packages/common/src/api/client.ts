@@ -11,9 +11,15 @@ function resolveBaseURL(): string {
   if (typeof window === "undefined") return DEFAULT_API_URL;
   const { protocol, hostname } = window.location;
   if (protocol === "http:" || protocol === "https:") {
-    return `${protocol}//${hostname}:3100`;
+    const apiHost =
+      hostname === "localhost" || hostname === "[::1]" ? "127.0.0.1" : hostname;
+    return `${protocol}//${apiHost}:3100`;
   }
   return DEFAULT_API_URL;
+}
+
+export function getBrowserApiBaseUrl(): string {
+  return resolveBaseURL();
 }
 
 export function createApiClient(baseURL?: string): AxiosInstance {

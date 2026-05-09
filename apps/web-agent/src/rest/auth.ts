@@ -1,3 +1,5 @@
+"use client";
+
 import { apiClient, setAccessToken } from "@anybot/common";
 import type {
   AuthStatus,
@@ -6,6 +8,17 @@ import type {
   RegisterInput,
 } from "@anybot/types-agent";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+
+export const authStatusQueryKey = ["auth", "status"] as const;
+
+function useClientMounted(): boolean {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  return mounted;
+}
 
 export async function fetchAuthStatus(): Promise<AuthStatus> {
   const { data } = await apiClient.get<AuthStatus>("/api/setup-status");
@@ -31,11 +44,14 @@ export async function register(input: RegisterInput): Promise<LoginResponse> {
 }
 
 export function useAuthStatus() {
+  const mounted = useClientMounted();
   return useQuery({
-    queryKey: ["auth", "status"],
+    queryKey: authStatusQueryKey,
     queryFn: fetchAuthStatus,
+    enabled: mounted,
     retry: 2,
     retryDelay: 600,
+    networkMode: "always",
   });
 }
 

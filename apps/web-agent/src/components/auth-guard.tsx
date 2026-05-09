@@ -1,50 +1,104 @@
 "use client";
 
-import { getAccessToken } from "@anybot/common";
+import { getAccessToken, getBrowserApiBaseUrl } from "@anybot/common";
+import type { AuthStatus } from "@anybot/types-agent";
+import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
-import { useAuthStatus } from "@/rest/auth";
+import { useEffect, useState } from "react";
+import { authStatusQueryKey } from "@/rest/auth";
 
 const PUBLIC_ROUTES = ["/login", "/setup"];
+
+type AuthBootstrap =
+  | { phase: "loading" }
+  | {
+      phase: "done";
+      authStatus: AuthStatus | undefined;
+      fetchFailed: boolean;
+    };
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { data: authStatus, isLoading, isError } = useAuthStatus();
+  const queryClient = useQueryClient();
+  const [bootstrap, setBootstrap] = useState<AuthBootstrap>({
+    phase: "loading",
+  });
   const [resolved, setResolved] = useState(false);
-  const didRedirect = useRef(false);
 
   useEffect(() => {
-    if (isLoading) return;
+    const base = getBrowserApiBaseUrl();
+    const url = `${base}/api/setup-status`;
+    const headers: Record<string, string> = { Accept: "application/json" };
+    const token = getAccessToken();
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
 
-    if (isError) {
+    let cancelled = false;
+    void fetch(url, { headers })
+      .then(async (res) => {
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        return res.json() as Promise<AuthStatus>;
+      })
+      .then((authStatus) => {
+        if (cancelled) {
+          return;
+        }
+        queryClient.setQueryData(authStatusQueryKey, authStatus);
+        setBootstrap({ phase: "done", authStatus, fetchFailed: false });
+      })
+      .catch(() => {
+        if (cancelled) {
+          return;
+        }
+        queryClient.removeQueries({ queryKey: [...authStatusQueryKey] });
+        setBootstrap({
+          phase: "done",
+          authStatus: undefined,
+          fetchFailed: true,
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [queryClient]);
+
+  useEffect(() => {
+    if (bootstrap.phase === "loading") {
+      return;
+    }
+
+    if (bootstrap.fetchFailed) {
       setResolved(true);
       return;
     }
 
+    const { authStatus } = bootstrap;
+
     if (authStatus?.needsSetup) {
       if (pathname !== "/setup") {
-        didRedirect.current = true;
         router.replace("/setup");
         return;
       }
     } else if (!getAccessToken()) {
       if (pathname !== "/login") {
-        didRedirect.current = true;
         router.replace("/login");
         return;
       }
     } else if (PUBLIC_ROUTES.includes(pathname)) {
-      didRedirect.current = true;
       router.replace("/");
       return;
     }
 
     setResolved(true);
-  }, [authStatus, isLoading, isError, pathname, router]);
+  }, [bootstrap, pathname, router]);
 
-  if (isLoading || !resolved) {
+  if (bootstrap.phase === "loading" || !resolved) {
     return <SplashScreen />;
   }
 
