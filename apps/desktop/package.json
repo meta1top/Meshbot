@@ -4,7 +4,7 @@
   "private": true,
   "main": "dist/main.js",
   "scripts": {
-    "build": "tsc --project tsconfig.json",
+    "build": "tsc --project tsconfig.json && node scripts/copy-web-agent.js",
     "dev": "tsc --project tsconfig.json && electron .",
     "start": "electron dist/main.js",
     "clean": "rm -rf dist",

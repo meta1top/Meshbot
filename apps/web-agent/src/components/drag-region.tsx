@@ -27,7 +27,7 @@ export function DragRegion({ actions }: DragRegionProps) {
 
   if (!electronAPI) return null;
 
-  const showWindowControls = electronAPI.platform !== "darwin";
+  const showWindowControls = electronAPI.platform === "linux";
 
   return (
     <div className="drag-region pointer-events-none fixed top-0 right-0 left-0 z-9999">
