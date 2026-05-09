@@ -1,4 +1,4 @@
-# Anybot
+# Meshbot
 
 一个开源的 AI Agent 平台，将本地强大的 Agent 执行能力与云端协同管理结合在一起。
 
@@ -12,6 +12,7 @@
 
 ```
 apps/
+├── cli-agent/        命令行 Agent 工具
 ├── desktop/          Electron 桌面壳
 ├── server-agent/     NestJS 本地 agent 后端（:3100）
 ├── server-main/      NestJS 云平台后端（:3200）
@@ -19,8 +20,9 @@ apps/
 └── web-main/         Next.js 云平台前端（:3002）
 
 libs/
+├── shared/           NestJS 共享模块
 ├── types/            前后端共享类型（Zod）
-└── shared/           NestJS 共享模块
+└── types-agent/      Agent 端专用共享类型
 
 packages/
 ├── common/           Web 公共逻辑
@@ -51,6 +53,7 @@ pnpm dev:web-main         # Next.js 云平台前端
 pnpm dev:server-agent     # NestJS 本地 agent
 pnpm dev:server-main      # NestJS 云平台后端
 pnpm dev:desktop          # Electron（需先启动 web-agent）
+pnpm dev:cli-agent        # 命令行 Agent
 
 # 全部同时启动
 pnpm dev
