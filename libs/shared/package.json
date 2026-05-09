@@ -1,5 +1,5 @@
 {
-  "name": "@anybot/shared",
+  "name": "@meshbot/shared",
   "version": "0.0.0",
   "private": true,
   "main": "./dist/index.js",
@@ -11,7 +11,7 @@
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@anybot/types": "workspace:*"
+    "@meshbot/types": "workspace:*"
   },
   "peerDependencies": {
     "@nestjs/common": "^11",

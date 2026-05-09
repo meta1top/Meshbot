@@ -1,5 +1,5 @@
 {
-  "name": "@anybot/web-agent",
+  "name": "@meshbot/web-agent",
   "version": "0.0.0",
   "private": true,
   "scripts": {
@@ -10,10 +10,10 @@
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@anybot/common": "workspace:*",
-    "@anybot/design": "workspace:*",
-    "@anybot/types": "workspace:*",
-    "@anybot/types-agent": "workspace:^",
+    "@meshbot/common": "workspace:*",
+    "@meshbot/design": "workspace:*",
+    "@meshbot/types": "workspace:*",
+    "@meshbot/types-agent": "workspace:^",
     "@hookform/resolvers": "^5",
     "@tanstack/react-query": "^5.100.9",
     "axios": "^1.16.0",

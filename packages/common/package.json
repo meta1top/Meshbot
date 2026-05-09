@@ -1,5 +1,5 @@
 {
-  "name": "@anybot/common",
+  "name": "@meshbot/common",
   "version": "0.0.0",
   "private": true,
   "main": "./dist/index.js",
@@ -21,7 +21,7 @@
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@anybot/types": "workspace:*",
+    "@meshbot/types": "workspace:*",
     "axios": "^1.16.0",
     "zod": "^3"
   },

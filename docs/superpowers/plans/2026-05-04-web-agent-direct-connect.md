@@ -81,7 +81,7 @@
 
 ```json
 {
-  "name": "@anybot/types-agent",
+  "name": "@meshbot/types-agent",
   "version": "0.0.0",
   "private": true,
   "main": "./dist/index.js",
@@ -93,7 +93,7 @@
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@anybot/types": "workspace:*",
+    "@meshbot/types": "workspace:*",
     "zod": "^3"
   }
 }
@@ -177,7 +177,7 @@ Expected: 无错误
 
 ```bash
 git add libs/types-agent/
-git commit -m "feat: create @anybot/types-agent package with auth schemas"
+git commit -m "feat: create @meshbot/types-agent package with auth schemas"
 ```
 
 ---
@@ -235,7 +235,7 @@ Expected: 无错误
 
 ```bash
 git add libs/types/
-git commit -m "feat: add ApiResponse and pagination types to @anybot/types"
+git commit -m "feat: add ApiResponse and pagination types to @meshbot/types"
 ```
 
 ---
@@ -250,7 +250,7 @@ git commit -m "feat: add ApiResponse and pagination types to @anybot/types"
 - [ ] **Step 1: 添加 axios 依赖**
 
 ```bash
-cd /Users/grant/Meta1/anybot && pnpm --filter @anybot/common add axios
+cd /Users/grant/Meta1/anybot && pnpm --filter @meshbot/common add axios
 ```
 
 - [ ] **Step 2: 创建 client.ts**
@@ -353,7 +353,7 @@ Expected: 无错误
 
 ```bash
 git add packages/common/
-git commit -m "feat: add axios API client with JWT interceptor to @anybot/common"
+git commit -m "feat: add axios API client with JWT interceptor to @meshbot/common"
 ```
 
 ---
@@ -376,8 +376,8 @@ git commit -m "feat: add axios API client with JWT interceptor to @anybot/common
 - [ ] **Step 1: 安装依赖**
 
 ```bash
-cd /Users/grant/Meta1/anybot && pnpm --filter @anybot/server-agent add @nestjs/jwt @nestjs/passport passport passport-jwt bcrypt
-cd /Users/grant/Meta1/anybot && pnpm --filter @anybot/server-agent add -D @types/passport-jwt @types/bcrypt
+cd /Users/grant/Meta1/anybot && pnpm --filter @meshbot/server-agent add @nestjs/jwt @nestjs/passport passport passport-jwt bcrypt
+cd /Users/grant/Meta1/anybot && pnpm --filter @meshbot/server-agent add -D @types/passport-jwt @types/bcrypt
 ```
 
 - [ ] **Step 2: 创建 User 实体**
@@ -720,7 +720,7 @@ bootstrap();
 将 `apps/server-agent/src/controllers/setup.controller.ts` 替换为：
 
 ```typescript
-import { PROVIDERS } from "@anybot/common";
+import { PROVIDERS } from "@meshbot/common";
 import { Controller, Get } from "@nestjs/common";
 import { Public } from "../guards/jwt-auth.guard";
 import { ModelConfigService } from "../services/model-config.service";
@@ -758,7 +758,7 @@ export class SetupController {
 - [ ] **Step 12: 验证编译**
 
 ```bash
-cd /Users/grant/Meta1/anybot && pnpm --filter @anybot/server-agent typecheck
+cd /Users/grant/Meta1/anybot && pnpm --filter @meshbot/server-agent typecheck
 ```
 
 Expected: 无错误
@@ -783,7 +783,7 @@ git commit -m "feat: add auth module with JWT login, CORS, and 0.0.0.0 binding t
 - [ ] **Step 1: 安装依赖**
 
 ```bash
-cd /Users/grant/Meta1/anybot && pnpm --filter @anybot/web-agent add axios @tanstack/react-query @anybot/types-agent
+cd /Users/grant/Meta1/anybot && pnpm --filter @meshbot/web-agent add axios @tanstack/react-query @meshbot/types-agent
 ```
 
 - [ ] **Step 2: 创建 query-client.ts**
@@ -855,7 +855,7 @@ export default function RootLayout({
 - [ ] **Step 5: 验证类型**
 
 ```bash
-cd /Users/grant/Meta1/anybot && pnpm --filter @anybot/web-agent typecheck
+cd /Users/grant/Meta1/anybot && pnpm --filter @meshbot/web-agent typecheck
 ```
 
 Expected: 无错误
@@ -882,8 +882,8 @@ git commit -m "feat: add TanStack Query and axios to web-agent"
 
 ```typescript
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { apiClient, setAccessToken } from "@anybot/common";
-import type { AuthStatus, LoginInput, LoginResponse, RegisterInput } from "@anybot/types-agent";
+import { apiClient, setAccessToken } from "@meshbot/common";
+import type { AuthStatus, LoginInput, LoginResponse, RegisterInput } from "@meshbot/types-agent";
 
 export async function fetchAuthStatus(): Promise<AuthStatus> {
   const { data } = await apiClient.get<AuthStatus>("/api/auth/status");
@@ -928,8 +928,8 @@ export function useRegister() {
 
 ```typescript
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiClient } from "@anybot/common";
-import type { ProviderDef, ModelConfigInput } from "@anybot/common";
+import { apiClient } from "@meshbot/common";
+import type { ProviderDef, ModelConfigInput } from "@meshbot/common";
 
 export interface ModelConfig {
   id: string;
@@ -1006,7 +1006,7 @@ export {
 - [ ] **Step 4: 验证类型**
 
 ```bash
-cd /Users/grant/Meta1/anybot && pnpm --filter @anybot/web-agent typecheck
+cd /Users/grant/Meta1/anybot && pnpm --filter @meshbot/web-agent typecheck
 ```
 
 Expected: 无错误
@@ -1126,7 +1126,7 @@ export default function LoginPage() {
 - [ ] **Step 2: 验证类型**
 
 ```bash
-cd /Users/grant/Meta1/anybot && pnpm --filter @anybot/web-agent typecheck
+cd /Users/grant/Meta1/anybot && pnpm --filter @meshbot/web-agent typecheck
 ```
 
 Expected: 无错误
@@ -1158,7 +1158,7 @@ git commit -m "feat: add login page to web-agent"
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useAuthStatus } from "@/rest/auth";
-import { getAccessToken } from "@anybot/common";
+import { getAccessToken } from "@meshbot/common";
 
 export default function Home() {
   const router = useRouter();
@@ -1211,8 +1211,8 @@ import ModelForm from "@/components/setup/model-form";
 import ProviderCard from "@/components/setup/provider-card";
 import { useAuthStatus, useRegister } from "@/rest/auth";
 import { useProviders, useCreateModelConfig } from "@/rest/model-config";
-import { getAccessToken } from "@anybot/common";
-import type { ProviderDef, ModelConfigInput } from "@anybot/common";
+import { getAccessToken } from "@meshbot/common";
+import type { ProviderDef, ModelConfigInput } from "@meshbot/common";
 
 type SetupStep = "register" | "model";
 
@@ -1408,7 +1408,7 @@ import type { ModelConfigData, ProviderInfo } from "@/types/electron";
 替换为：
 
 ```typescript
-import type { ProviderDef, ModelConfigInput } from "@anybot/common";
+import type { ProviderDef, ModelConfigInput } from "@meshbot/common";
 ```
 
 同时将 `ModelFormProps` 中的类型对齐：
@@ -1431,7 +1431,7 @@ interface ModelFormProps {
 - [ ] **Step 5: 验证类型**
 
 ```bash
-cd /Users/grant/Meta1/anybot && pnpm --filter @anybot/web-agent typecheck
+cd /Users/grant/Meta1/anybot && pnpm --filter @meshbot/web-agent typecheck
 ```
 
 Expected: 无错误
@@ -1690,7 +1690,7 @@ app.on("before-quit", () => {
 - [ ] **Step 5: 验证类型**
 
 ```bash
-cd /Users/grant/Meta1/anybot && pnpm --filter @anybot/desktop typecheck
+cd /Users/grant/Meta1/anybot && pnpm --filter @meshbot/desktop typecheck
 ```
 
 Expected: 无错误

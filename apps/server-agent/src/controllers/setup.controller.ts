@@ -1,4 +1,4 @@
-import { PROVIDERS } from "@anybot/common";
+import { PROVIDERS } from "@meshbot/common";
 import { Controller, Get } from "@nestjs/common";
 import { Public } from "../guards/jwt-auth.guard";
 import { AuthService } from "../services/auth.service";

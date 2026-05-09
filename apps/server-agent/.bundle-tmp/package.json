@@ -1,5 +1,5 @@
 {
-  "name": "@anybot/server-agent",
+  "name": "@meshbot/server-agent",
   "version": "0.0.0",
   "private": true,
   "scripts": {
@@ -10,9 +10,9 @@
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@anybot/common": "workspace:*",
-    "@anybot/shared": "workspace:*",
-    "@anybot/types": "workspace:*",
+    "@meshbot/common": "workspace:*",
+    "@meshbot/shared": "workspace:*",
+    "@meshbot/types": "workspace:*",
     "@nestjs/common": "^11",
     "@nestjs/core": "^11",
     "@nestjs/jwt": "^11.0.2",

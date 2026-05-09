@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@anybot/design", "@anybot/common"],
+  transpilePackages: ["@meshbot/design", "@meshbot/common"],
 };
 
 export default nextConfig;

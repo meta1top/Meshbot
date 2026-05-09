@@ -1,7 +1,7 @@
 "use client";
 
-import { getAccessToken, getBrowserApiBaseUrl } from "@anybot/common";
-import type { AuthStatus } from "@anybot/types-agent";
+import { getAccessToken, getBrowserApiBaseUrl } from "@meshbot/common";
+import type { AuthStatus } from "@meshbot/types-agent";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";

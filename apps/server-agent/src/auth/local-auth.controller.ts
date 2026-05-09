@@ -1,6 +1,6 @@
 import { Controller, Post, Body, Get } from "@nestjs/common";
 import { LocalAuthService } from "./local-auth.service";
-import { RegisterDto, LoginDto } from "@anybot/types-agent";
+import { RegisterDto, LoginDto } from "@meshbot/types-agent";
 
 @Controller("api/auth")
 export class LocalAuthController {

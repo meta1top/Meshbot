@@ -1,7 +1,7 @@
 "use client";
 
-import { useTheme } from "@anybot/common/react";
-import { cn } from "@anybot/design";
+import { useTheme } from "@meshbot/common/react";
+import { cn } from "@meshbot/design";
 import { Moon, Sun } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";

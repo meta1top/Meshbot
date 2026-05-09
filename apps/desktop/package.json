@@ -1,5 +1,5 @@
 {
-  "name": "@anybot/desktop",
+  "name": "@meshbot/desktop",
   "version": "0.0.0",
   "private": true,
   "main": "dist/main.js",

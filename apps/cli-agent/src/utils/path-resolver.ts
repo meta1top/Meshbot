@@ -23,11 +23,11 @@ export function resolveServerAgentPath(): string {
   // 3. npm resolve
   try {
     const require = createRequire(import.meta.url);
-    const pkgPath = require.resolve("@anybot/server-agent/package.json");
+    const pkgPath = require.resolve("@meshbot/server-agent/package.json");
     return path.dirname(pkgPath);
   } catch {
     throw new Error(
-      "Could not find server-agent. Install with: npm install -g @anybot/cli-agent",
+      "Could not find server-agent. Install with: npm install -g @meshbot/cli-agent",
     );
   }
 }

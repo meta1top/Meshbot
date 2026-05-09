@@ -4,7 +4,7 @@
 
 ## 背景
 
-当前 `packages/design`（`@anybot/design`）是空壳包，已配好 `cva`/`clsx`/`tailwind-merge` 依赖但无组件。所有 UI 页面（login、setup、model-form）使用手写 Tailwind 类名，存在大量重复样式代码。
+当前 `packages/design`（`@meshbot/design`）是空壳包，已配好 `cva`/`clsx`/`tailwind-merge` 依赖但无组件。所有 UI 页面（login、setup、model-form）使用手写 Tailwind 类名，存在大量重复样式代码。
 
 ## 目标
 
@@ -46,12 +46,12 @@ shadcn 在 monorepo 中需要两层 `components.json`：
 - `style`: `"new-york"`
 - `tailwind.config`: `""`（Tailwind v4 无配置文件）
 - `tailwind.css`: `"src/styles/globals.css"`
-- aliases 指向包内路径，使用 `@anybot/design` 作为前缀
+- aliases 指向包内路径，使用 `@meshbot/design` 作为前缀
 
 **`apps/web-agent/components.json`（消费端）：**
 - 相同的 style/baseColor/iconLibrary
 - `tailwind.css` 指向 `../../packages/design/src/styles/globals.css`
-- `ui` alias 指向 `@anybot/design/components`
+- `ui` alias 指向 `@meshbot/design/components`
 
 这样通过 `npx shadcn@latest add <component>` 在 web-agent 目录下运行时，组件自动安装到 `packages/design`。
 
@@ -65,15 +65,15 @@ shadcn 在 monorepo 中需要两层 `components.json`：
 
 各 app 的 `globals.css` 改为 import design 包的样式：
 ```css
-@import "@anybot/design/styles/globals.css";
+@import "@meshbot/design/styles/globals.css";
 ```
 
 ### 消费方式
 
 ```tsx
-import { Button } from "@anybot/design";
-import { Input } from "@anybot/design";
-import { Card, CardHeader, CardContent } from "@anybot/design";
+import { Button } from "@meshbot/design";
+import { Input } from "@meshbot/design";
+import { Card, CardHeader, CardContent } from "@meshbot/design";
 ```
 
 包通过 `transpilePackages` 被 Next.js 直接消费源码（已配好），无需预编译。
@@ -149,5 +149,5 @@ import { Card, CardHeader, CardContent } from "@anybot/design";
 ## 不变的部分
 
 - `packages/design` 继续以源码方式消费（`main: "./src/index.ts"`），不需要编译步骤
-- `next.config.ts` 的 `transpilePackages` 已包含 `@anybot/design`
+- `next.config.ts` 的 `transpilePackages` 已包含 `@meshbot/design`
 - `web-main` 暂不改造页面（它还没有业务页面），但 globals.css 也改为 import design 包样式，为后续做准备
