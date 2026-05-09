@@ -4,6 +4,7 @@ import { APP_GUARD } from "@nestjs/core";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { AuthModule } from "./auth.module";
 import { LocalAuthModule } from "./auth/local-auth.module";
+import { StaticModule } from "./static.module";
 import { ModelConfigController } from "./controllers/model-config.controller";
 import { SettingController } from "./controllers/setting.controller";
 import { SetupController } from "./controllers/setup.controller";
@@ -28,6 +29,7 @@ const anybotDir = resolveAnybotDir();
     TypeOrmModule.forFeature([ModelConfig, Setting]),
     AuthModule,
     LocalAuthModule,
+    StaticModule,
   ],
   controllers: [ModelConfigController, SettingController, SetupController],
   providers: [

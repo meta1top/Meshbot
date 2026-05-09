@@ -4,23 +4,12 @@ directories:
   output: release
 files:
   - dist/**/*
-extraResources:
-  # from must not be the folder that contains `node_modules` at root (app-builder-lib skips it).
-  - from: ../server-agent/.bundle/pack/
-    to: server-agent/
-    filter:
-      - "**/*"
-  - from: ../web-agent/out/
-    to: web-agent/
-    filter:
-      - "**/*"
 mac:
   target:
     - dmg
 win:
   target:
     - nsis
-afterPack: ./scripts/after-pack.js
 linux:
   target:
     - AppImage
