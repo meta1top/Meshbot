@@ -1,10 +1,25 @@
 "use client";
 
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState } from "react";
 import { AuthGuard } from "@/components/auth-guard";
-import { queryClient } from "@/lib/query-client";
+
+function createQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: 1,
+        staleTime: 5 * 60 * 1000,
+        refetchOnWindowFocus: false,
+        networkMode: "always",
+      },
+    },
+  });
+}
 
 export function Providers({ children }: { children: React.ReactNode }) {
+  const [queryClient] = useState(() => createQueryClient());
+
   return (
     <QueryClientProvider client={queryClient}>
       <AuthGuard>{children}</AuthGuard>

@@ -78,9 +78,7 @@ export default function Home() {
             </div>
 
             <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-              <span>
-                {t("tokenComparison")}
-              </span>
+              <span>{t("tokenComparison")}</span>
               <div className="h-8 w-2 rounded bg-accent" />
             </div>
           </CardContent>

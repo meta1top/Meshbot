@@ -32,14 +32,14 @@ export function AppShellLayout({ children, className }: AppShellLayoutProps) {
   const { theme, toggleTheme } = useTheme();
   const t = useTranslations("appShell");
   const commonT = useTranslations("common");
-  const [isMac, setIsMac] = useState(true);
+  const [isMac, setIsMac] = useState(false);
 
   useEffect(() => {
     document.body.classList.add("app-shell-mode");
     const api = (window as unknown as { electronAPI?: { platform?: string } })
       .electronAPI;
-    if (api?.platform && api.platform !== "darwin") {
-      setIsMac(false);
+    if (api?.platform === "darwin") {
+      setIsMac(true);
     }
     return () => {
       document.body.classList.remove("app-shell-mode");
@@ -63,7 +63,7 @@ export function AppShellLayout({ children, className }: AppShellLayoutProps) {
               isMac && "rounded-l-[12px]",
             )}
           >
-            <div className="app-mac-controls-safe-left mb-2 h-8" />
+            {isMac && <div className="app-mac-controls-safe-left mb-2 h-8" />}
             <nav className="space-y-0.5 text-[14px] text-foreground/80">
               <button
                 type="button"
