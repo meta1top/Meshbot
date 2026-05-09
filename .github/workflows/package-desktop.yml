@@ -1,19 +1,9 @@
 name: Package desktop
 
 on:
-  workflow_dispatch:
   push:
-    branches: [main]
-    paths:
-      - "apps/desktop/**"
-      - "apps/server-agent/**"
-      - "apps/web-agent/**"
-      - "libs/**"
-      - "packages/**"
-      - "scripts/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - ".github/workflows/package-desktop.yml"
+    tags:
+      - "app@*"
 
 concurrency:
   group: package-desktop-${{ github.ref }}
@@ -75,6 +65,6 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: anybot-desktop-${{ matrix.os }}
+          name: meshbot-desktop-${{ matrix.os }}
           path: upload/
           if-no-files-found: error
