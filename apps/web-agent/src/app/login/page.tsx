@@ -16,8 +16,8 @@ import {
   FormLabel,
   FormMessage,
   Input,
-} from "@anybot/design";
-import { type LoginInput, loginSchema } from "@anybot/types-agent";
+} from "@meshbot/design";
+import { type LoginInput, loginSchema } from "@meshbot/types-agent";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";

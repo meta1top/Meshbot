@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@anybot/design";
+import { cn } from "@meshbot/design";
 
 interface ProviderCardProps {
   name: string;

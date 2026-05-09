@@ -20,7 +20,7 @@ importers:
 
   apps/cli-agent:
     dependencies:
-      '@anybot/server-agent':
+      '@meshbot/server-agent':
         specifier: workspace:*
         version: link:../server-agent
       chalk:
@@ -61,16 +61,16 @@ importers:
 
   apps/server-agent:
     dependencies:
-      '@anybot/common':
+      '@meshbot/common':
         specifier: workspace:*
         version: link:../../packages/common
-      '@anybot/shared':
+      '@meshbot/shared':
         specifier: workspace:*
         version: link:../../libs/shared
-      '@anybot/types':
+      '@meshbot/types':
         specifier: workspace:*
         version: link:../../libs/types
-      '@anybot/types-agent':
+      '@meshbot/types-agent':
         specifier: workspace:^
         version: link:../../libs/types-agent
       '@nestjs/common':
@@ -146,10 +146,10 @@ importers:
 
   apps/server-main:
     dependencies:
-      '@anybot/shared':
+      '@meshbot/shared':
         specifier: workspace:*
         version: link:../../libs/shared
-      '@anybot/types':
+      '@meshbot/types':
         specifier: workspace:*
         version: link:../../libs/types
       '@nestjs/common':
@@ -177,21 +177,21 @@ importers:
 
   apps/web-agent:
     dependencies:
-      '@anybot/common':
-        specifier: workspace:*
-        version: link:../../packages/common
-      '@anybot/design':
-        specifier: workspace:*
-        version: link:../../packages/design
-      '@anybot/types':
-        specifier: workspace:*
-        version: link:../../libs/types
-      '@anybot/types-agent':
-        specifier: workspace:^
-        version: link:../../libs/types-agent
       '@hookform/resolvers':
         specifier: ^5
         version: 5.2.2(react-hook-form@7.75.0(react@19.2.5))
+      '@meshbot/common':
+        specifier: workspace:*
+        version: link:../../packages/common
+      '@meshbot/design':
+        specifier: workspace:*
+        version: link:../../packages/design
+      '@meshbot/types':
+        specifier: workspace:*
+        version: link:../../libs/types
+      '@meshbot/types-agent':
+        specifier: workspace:^
+        version: link:../../libs/types-agent
       '@tanstack/react-query':
         specifier: ^5.100.9
         version: 5.100.9(react@19.2.5)
@@ -244,13 +244,13 @@ importers:
 
   apps/web-main:
     dependencies:
-      '@anybot/common':
+      '@meshbot/common':
         specifier: workspace:*
         version: link:../../packages/common
-      '@anybot/design':
+      '@meshbot/design':
         specifier: workspace:*
         version: link:../../packages/design
-      '@anybot/types':
+      '@meshbot/types':
         specifier: workspace:*
         version: link:../../libs/types
       next:
@@ -284,7 +284,7 @@ importers:
 
   libs/shared:
     dependencies:
-      '@anybot/types':
+      '@meshbot/types':
         specifier: workspace:*
         version: link:../types
       '@nestjs/common':
@@ -302,7 +302,7 @@ importers:
 
   libs/types-agent:
     dependencies:
-      '@anybot/types':
+      '@meshbot/types':
         specifier: workspace:*
         version: link:../types
       zod:
@@ -311,7 +311,7 @@ importers:
 
   packages/common:
     dependencies:
-      '@anybot/types':
+      '@meshbot/types':
         specifier: workspace:*
         version: link:../../libs/types
       axios:

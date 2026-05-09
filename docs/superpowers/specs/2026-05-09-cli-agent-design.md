@@ -48,7 +48,7 @@ anybot (CLI)           server-agent (NestJS)
 
 | 组件 | 职责 | 部署方式 |
 |------|------|----------|
-| `apps/cli-agent` | 进程管理、系统服务注册、配置文件管理 | `npm install -g @anybot/cli-agent` |
+| `apps/cli-agent` | 进程管理、系统服务注册、配置文件管理 | `npm install -g @meshbot/cli-agent` |
 | `apps/server-agent` | NestJS HTTP 服务：Agent 业务 API、静态 UI 托管、本地用户认证 | `cli-agent` 启动的子进程 |
 | `apps/web-agent` | Next.js 前端，构建为静态文件 | 构建产物被 `server-agent` 内嵌托管 |
 | `apps/desktop` | 远程客户端壳：保存 Agent 连接地址、加载远程 UI | 独立的 Electron 安装包 |
@@ -101,7 +101,7 @@ anybot (CLI)           server-agent (NestJS)
 
 1. 配置文件中显式指定的 `serverAgentPath`
 2. 与 CLI 可执行文件相邻的 `./server-agent` 目录
-3. `require.resolve('@anybot/server-agent/package.json')`
+3. `require.resolve('@meshbot/server-agent/package.json')`
 
 ### `apps/server-agent` —— 改造后的 NestJS 服务
 
@@ -293,7 +293,7 @@ test('start -> health check -> stop', async () => {
 
 ```json
 {
-  "name": "@anybot/server-agent",
+  "name": "@meshbot/server-agent",
   "version": "0.0.1",
   "main": "dist/main.js",
   "files": ["dist"]
@@ -304,30 +304,30 @@ test('start -> health check -> stop', async () => {
 
 ```json
 {
-  "name": "@anybot/cli-agent",
+  "name": "@meshbot/cli-agent",
   "version": "0.0.1",
   "bin": { "anybot": "./dist/cli.js" },
   "files": ["dist"],
   "dependencies": {
-    "@anybot/server-agent": "workspace:*"
+    "@meshbot/server-agent": "workspace:*"
   }
 }
 ```
 
 ### 发布流程
 
-1. 先发布 `@anybot/server-agent`
-2. 再发布 `@anybot/cli-agent`（`workspace:*` 会被 pnpm 自动替换为实际版本号）
+1. 先发布 `@meshbot/server-agent`
+2. 再发布 `@meshbot/cli-agent`（`workspace:*` 会被 pnpm 自动替换为实际版本号）
 
 ```bash
-pnpm --filter @anybot/server-agent publish --access public
-pnpm --filter @anybot/cli-agent publish --access public
+pnpm --filter @meshbot/server-agent publish --access public
+pnpm --filter @meshbot/cli-agent publish --access public
 ```
 
 ### 用户安装
 
 ```bash
-npm install -g @anybot/cli-agent
+npm install -g @meshbot/cli-agent
 
 # npm 自动：
 # 1. 下载 cli-agent

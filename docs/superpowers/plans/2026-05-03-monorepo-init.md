@@ -178,7 +178,7 @@ git commit -m "chore: add root monorepo config files"
 
 ---
 
-### Task 2: libs/types — @anybot/types
+### Task 2: libs/types — @meshbot/types
 
 **Files:**
 - Create: `libs/types/package.json`
@@ -189,7 +189,7 @@ git commit -m "chore: add root monorepo config files"
 
 ```json
 {
-  "name": "@anybot/types",
+  "name": "@meshbot/types",
   "version": "0.0.0",
   "private": true,
   "main": "./dist/index.js",
@@ -229,12 +229,12 @@ export {};
 
 ```bash
 git add libs/types/
-git commit -m "chore: add @anybot/types package skeleton"
+git commit -m "chore: add @meshbot/types package skeleton"
 ```
 
 ---
 
-### Task 3: libs/shared — @anybot/shared
+### Task 3: libs/shared — @meshbot/shared
 
 **Files:**
 - Create: `libs/shared/package.json`
@@ -245,7 +245,7 @@ git commit -m "chore: add @anybot/types package skeleton"
 
 ```json
 {
-  "name": "@anybot/shared",
+  "name": "@meshbot/shared",
   "version": "0.0.0",
   "private": true,
   "main": "./dist/index.js",
@@ -257,7 +257,7 @@ git commit -m "chore: add @anybot/types package skeleton"
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@anybot/types": "workspace:*"
+    "@meshbot/types": "workspace:*"
   },
   "peerDependencies": {
     "@nestjs/common": "^11",
@@ -291,12 +291,12 @@ export {};
 
 ```bash
 git add libs/shared/
-git commit -m "chore: add @anybot/shared package skeleton"
+git commit -m "chore: add @meshbot/shared package skeleton"
 ```
 
 ---
 
-### Task 4: packages/common — @anybot/common
+### Task 4: packages/common — @meshbot/common
 
 **Files:**
 - Create: `packages/common/package.json`
@@ -307,7 +307,7 @@ git commit -m "chore: add @anybot/shared package skeleton"
 
 ```json
 {
-  "name": "@anybot/common",
+  "name": "@meshbot/common",
   "version": "0.0.0",
   "private": true,
   "main": "./dist/index.js",
@@ -319,7 +319,7 @@ git commit -m "chore: add @anybot/shared package skeleton"
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@anybot/types": "workspace:*"
+    "@meshbot/types": "workspace:*"
   }
 }
 ```
@@ -347,12 +347,12 @@ export {};
 
 ```bash
 git add packages/common/
-git commit -m "chore: add @anybot/common package skeleton"
+git commit -m "chore: add @meshbot/common package skeleton"
 ```
 
 ---
 
-### Task 5: packages/design — @anybot/design
+### Task 5: packages/design — @meshbot/design
 
 **Files:**
 - Create: `packages/design/package.json`
@@ -365,7 +365,7 @@ git commit -m "chore: add @anybot/common package skeleton"
 
 ```json
 {
-  "name": "@anybot/design",
+  "name": "@meshbot/design",
   "version": "0.0.0",
   "private": true,
   "main": "./src/index.ts",
@@ -417,12 +417,12 @@ export {};
 
 ```bash
 git add packages/design/
-git commit -m "chore: add @anybot/design package skeleton"
+git commit -m "chore: add @meshbot/design package skeleton"
 ```
 
 ---
 
-### Task 6: apps/server-agent — @anybot/server-agent
+### Task 6: apps/server-agent — @meshbot/server-agent
 
 **Files:**
 - Create: `apps/server-agent/package.json`
@@ -435,7 +435,7 @@ git commit -m "chore: add @anybot/design package skeleton"
 
 ```json
 {
-  "name": "@anybot/server-agent",
+  "name": "@meshbot/server-agent",
   "version": "0.0.0",
   "private": true,
   "scripts": {
@@ -446,8 +446,8 @@ git commit -m "chore: add @anybot/design package skeleton"
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@anybot/shared": "workspace:*",
-    "@anybot/types": "workspace:*",
+    "@meshbot/shared": "workspace:*",
+    "@meshbot/types": "workspace:*",
     "@nestjs/common": "^11",
     "@nestjs/core": "^11",
     "@nestjs/platform-express": "^11",
@@ -518,12 +518,12 @@ bootstrap();
 
 ```bash
 git add apps/server-agent/
-git commit -m "chore: add @anybot/server-agent app skeleton"
+git commit -m "chore: add @meshbot/server-agent app skeleton"
 ```
 
 ---
 
-### Task 7: apps/server-main — @anybot/server-main
+### Task 7: apps/server-main — @meshbot/server-main
 
 **Files:**
 - Create: `apps/server-main/package.json`
@@ -536,7 +536,7 @@ git commit -m "chore: add @anybot/server-agent app skeleton"
 
 ```json
 {
-  "name": "@anybot/server-main",
+  "name": "@meshbot/server-main",
   "version": "0.0.0",
   "private": true,
   "scripts": {
@@ -547,8 +547,8 @@ git commit -m "chore: add @anybot/server-agent app skeleton"
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@anybot/shared": "workspace:*",
-    "@anybot/types": "workspace:*",
+    "@meshbot/shared": "workspace:*",
+    "@meshbot/types": "workspace:*",
     "@nestjs/common": "^11",
     "@nestjs/core": "^11",
     "@nestjs/platform-express": "^11",
@@ -619,12 +619,12 @@ bootstrap();
 
 ```bash
 git add apps/server-main/
-git commit -m "chore: add @anybot/server-main app skeleton"
+git commit -m "chore: add @meshbot/server-main app skeleton"
 ```
 
 ---
 
-### Task 8: apps/web-agent — @anybot/web-agent
+### Task 8: apps/web-agent — @meshbot/web-agent
 
 **Files:**
 - Create: `apps/web-agent/package.json`
@@ -639,7 +639,7 @@ git commit -m "chore: add @anybot/server-main app skeleton"
 
 ```json
 {
-  "name": "@anybot/web-agent",
+  "name": "@meshbot/web-agent",
   "version": "0.0.0",
   "private": true,
   "scripts": {
@@ -650,9 +650,9 @@ git commit -m "chore: add @anybot/server-main app skeleton"
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@anybot/common": "workspace:*",
-    "@anybot/design": "workspace:*",
-    "@anybot/types": "workspace:*",
+    "@meshbot/common": "workspace:*",
+    "@meshbot/design": "workspace:*",
+    "@meshbot/types": "workspace:*",
     "next": "^15",
     "react": "^19",
     "react-dom": "^19"
@@ -693,7 +693,7 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   output: 'export',
-  transpilePackages: ['@anybot/design', '@anybot/common'],
+  transpilePackages: ['@meshbot/design', '@meshbot/common'],
 };
 
 export default nextConfig;
@@ -757,12 +757,12 @@ export default function Home() {
 
 ```bash
 git add apps/web-agent/
-git commit -m "chore: add @anybot/web-agent app skeleton"
+git commit -m "chore: add @meshbot/web-agent app skeleton"
 ```
 
 ---
 
-### Task 9: apps/web-main — @anybot/web-main
+### Task 9: apps/web-main — @meshbot/web-main
 
 **Files:**
 - Create: `apps/web-main/package.json`
@@ -777,7 +777,7 @@ git commit -m "chore: add @anybot/web-agent app skeleton"
 
 ```json
 {
-  "name": "@anybot/web-main",
+  "name": "@meshbot/web-main",
   "version": "0.0.0",
   "private": true,
   "scripts": {
@@ -788,9 +788,9 @@ git commit -m "chore: add @anybot/web-agent app skeleton"
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@anybot/common": "workspace:*",
-    "@anybot/design": "workspace:*",
-    "@anybot/types": "workspace:*",
+    "@meshbot/common": "workspace:*",
+    "@meshbot/design": "workspace:*",
+    "@meshbot/types": "workspace:*",
     "next": "^15",
     "react": "^19",
     "react-dom": "^19"
@@ -832,7 +832,7 @@ git commit -m "chore: add @anybot/web-agent app skeleton"
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  transpilePackages: ['@anybot/design', '@anybot/common'],
+  transpilePackages: ['@meshbot/design', '@meshbot/common'],
 };
 
 export default nextConfig;
@@ -896,12 +896,12 @@ export default function Home() {
 
 ```bash
 git add apps/web-main/
-git commit -m "chore: add @anybot/web-main app skeleton"
+git commit -m "chore: add @meshbot/web-main app skeleton"
 ```
 
 ---
 
-### Task 10: apps/desktop — @anybot/desktop
+### Task 10: apps/desktop — @meshbot/desktop
 
 **Files:**
 - Create: `apps/desktop/package.json`
@@ -914,7 +914,7 @@ git commit -m "chore: add @anybot/web-main app skeleton"
 
 ```json
 {
-  "name": "@anybot/desktop",
+  "name": "@meshbot/desktop",
   "version": "0.0.0",
   "private": true,
   "main": "dist/main.js",
@@ -1024,7 +1024,7 @@ app.on('activate', () => {
 
 ```bash
 git add apps/desktop/
-git commit -m "chore: add @anybot/desktop app skeleton"
+git commit -m "chore: add @meshbot/desktop app skeleton"
 ```
 
 ---
@@ -1045,7 +1045,7 @@ Expected: 依赖全部安装成功，workspace 链接正确建立。
 pnpm build
 ```
 
-Expected: 所有 9 个包构建成功（`@anybot/design` 输出 "no build needed"）。
+Expected: 所有 9 个包构建成功（`@meshbot/design` 输出 "no build needed"）。
 
 - [ ] **Step 3: 如果构建失败，修复问题并重新构建**
 

@@ -1,12 +1,12 @@
 "use client";
 
-import { apiClient, setAccessToken } from "@anybot/common";
+import { apiClient, setAccessToken } from "@meshbot/common";
 import type {
   AuthStatus,
   LoginInput,
   LoginResponse,
   RegisterInput,
-} from "@anybot/types-agent";
+} from "@meshbot/types-agent";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 

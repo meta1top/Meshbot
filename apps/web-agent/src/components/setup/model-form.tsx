@@ -1,6 +1,6 @@
 "use client";
 
-import type { ModelConfigInput, ProviderDef } from "@anybot/common";
+import type { ModelConfigInput, ProviderDef } from "@meshbot/common";
 import {
   Alert,
   AlertDescription,
@@ -17,7 +17,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@anybot/design";
+} from "@meshbot/design";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslations } from "next-intl";
 import { useState } from "react";

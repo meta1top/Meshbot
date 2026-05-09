@@ -1,4 +1,4 @@
-import { themeScript } from "@anybot/common";
+import { themeScript } from "@meshbot/common";
 import type { Metadata } from "next";
 import { ElectronInit } from "@/components/electron-init";
 import { IntlProvider } from "@/components/intl-provider";

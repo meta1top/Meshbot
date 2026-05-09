@@ -2,7 +2,7 @@
 
 ## 目标
 
-让 `@anybot/desktop` 在开发模式下加载 web-agent dev server，在生产模式下加载打包到应用内的 web-agent 静态文件，API 请求始终指向由 CLI 启动的 server-agent（`localhost:3100`）。
+让 `@meshbot/desktop` 在开发模式下加载 web-agent dev server，在生产模式下加载打包到应用内的 web-agent 静态文件，API 请求始终指向由 CLI 启动的 server-agent（`localhost:3100`）。
 
 ## 背景
 
@@ -10,7 +10,7 @@
 - 开发时需要 server-agent 提供 web-agent 的静态文件服务
 - 生产时 desktop 只是一个空壳，无法独立运行
 
-web-agent 已配置 `output: "export"`，`next build` 会生成纯静态文件到 `apps/web-agent/out/`。`@anybot/common` 中的 `apiClient` 已处理 `file://` 协议场景：当页面从本地文件加载时，base URL 自动回退到 `http://127.0.0.1:3100`。
+web-agent 已配置 `output: "export"`，`next build` 会生成纯静态文件到 `apps/web-agent/out/`。`@meshbot/common` 中的 `apiClient` 已处理 `file://` 协议场景：当页面从本地文件加载时，base URL 自动回退到 `http://127.0.0.1:3100`。
 
 ## 方案选择：方案 B
 

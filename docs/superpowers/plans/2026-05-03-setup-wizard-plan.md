@@ -143,11 +143,11 @@ export type { ModelConfigInput } from "./providers/schema";
 
 - [ ] **Step 4: Install Zod dependency in packages/common**
 
-Run: `pnpm --filter @anybot/common add zod`
+Run: `pnpm --filter @meshbot/common add zod`
 
 - [ ] **Step 5: Build and verify**
 
-Run: `pnpm --filter @anybot/common build`
+Run: `pnpm --filter @meshbot/common build`
 Expected: Compiles without errors.
 
 - [ ] **Step 6: Commit**
@@ -164,12 +164,12 @@ git commit -m "feat: add provider definitions and model config schema to common 
 **Files:**
 - Modify: `apps/desktop/package.json`
 
-- [ ] **Step 1: Add better-sqlite3 and @anybot/common**
+- [ ] **Step 1: Add better-sqlite3 and @meshbot/common**
 
 Run:
 ```bash
-pnpm --filter @anybot/desktop add better-sqlite3 @anybot/common
-pnpm --filter @anybot/desktop add -D @types/better-sqlite3
+pnpm --filter @meshbot/desktop add better-sqlite3 @meshbot/common
+pnpm --filter @meshbot/desktop add -D @types/better-sqlite3
 ```
 
 - [ ] **Step 2: Verify deps installed**
@@ -177,7 +177,7 @@ pnpm --filter @anybot/desktop add -D @types/better-sqlite3
 Check `apps/desktop/package.json` now includes:
 ```json
 "dependencies": {
-  "@anybot/common": "workspace:*",
+  "@meshbot/common": "workspace:*",
   "better-sqlite3": "^...",
   "electron-updater": "^6"
 },
@@ -191,7 +191,7 @@ Check `apps/desktop/package.json` now includes:
 
 ```bash
 git add apps/desktop/package.json pnpm-lock.yaml
-git commit -m "chore: add better-sqlite3 and @anybot/common to desktop deps"
+git commit -m "chore: add better-sqlite3 and @meshbot/common to desktop deps"
 ```
 
 ---
@@ -212,8 +212,8 @@ import { mkdirSync } from "fs";
 import { homedir } from "os";
 import path from "path";
 import Database from "better-sqlite3";
-import { PROVIDERS } from "@anybot/common";
-import type { ProviderDef } from "@anybot/common";
+import { PROVIDERS } from "@meshbot/common";
+import type { ProviderDef } from "@meshbot/common";
 
 const ANYBOT_DIR = path.join(homedir(), ".anybot");
 const DB_PATH = path.join(ANYBOT_DIR, "agent.db");
@@ -508,14 +508,14 @@ describe("saveModelConfig", () => {
 
 - [ ] **Step 3: Run tests to verify they fail (no vitest config yet)**
 
-Run: `pnpm --filter @anybot/desktop vitest run`
+Run: `pnpm --filter @meshbot/desktop vitest run`
 Expected: Should run and pass the database tests.
 
-Note: If vitest is not yet available, first run `pnpm --filter @anybot/desktop add -D vitest` and add `"test": "vitest run"` to desktop/package.json scripts.
+Note: If vitest is not yet available, first run `pnpm --filter @meshbot/desktop add -D vitest` and add `"test": "vitest run"` to desktop/package.json scripts.
 
 - [ ] **Step 4: Build desktop to verify compilation**
 
-Run: `pnpm --filter @anybot/desktop build`
+Run: `pnpm --filter @meshbot/desktop build`
 Expected: Compiles without errors.
 
 - [ ] **Step 5: Commit**
@@ -634,7 +634,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
 - [ ] **Step 3: Build to verify**
 
-Run: `pnpm --filter @anybot/desktop build`
+Run: `pnpm --filter @meshbot/desktop build`
 Expected: Compiles without errors.
 
 - [ ] **Step 4: Commit**
@@ -800,7 +800,7 @@ app.on("before-quit", () => {
 
 - [ ] **Step 2: Build to verify**
 
-Run: `pnpm --filter @anybot/desktop build`
+Run: `pnpm --filter @meshbot/desktop build`
 Expected: Compiles without errors.
 
 - [ ] **Step 3: Commit**
@@ -1190,7 +1190,7 @@ export default function Home() {
 
 - [ ] **Step 6: Build web-agent to verify**
 
-Run: `pnpm --filter @anybot/web-agent build`
+Run: `pnpm --filter @meshbot/web-agent build`
 Expected: Compiles without errors.
 
 - [ ] **Step 7: Commit**
@@ -1208,12 +1208,12 @@ git commit -m "feat: add setup page with provider selection and model configurat
 - Modify: `apps/server-agent/src/app.module.ts`
 - Modify: `apps/server-agent/package.json`
 
-- [ ] **Step 1: Add better-sqlite3 and @anybot/common deps**
+- [ ] **Step 1: Add better-sqlite3 and @meshbot/common deps**
 
 Run:
 ```bash
-pnpm --filter @anybot/server-agent add better-sqlite3 @anybot/common
-pnpm --filter @anybot/server-agent add -D @types/better-sqlite3
+pnpm --filter @meshbot/server-agent add better-sqlite3 @meshbot/common
+pnpm --filter @meshbot/server-agent add -D @types/better-sqlite3
 ```
 
 - [ ] **Step 2: Update AppModule to load config on startup**
@@ -1269,7 +1269,7 @@ export class AppModule implements OnModuleInit {
 
 - [ ] **Step 3: Build server-agent to verify**
 
-Run: `pnpm --filter @anybot/server-agent build`
+Run: `pnpm --filter @meshbot/server-agent build`
 Expected: Compiles without errors.
 
 - [ ] **Step 4: Commit**
@@ -1290,7 +1290,7 @@ Expected: All packages and apps compile without errors.
 
 - [ ] **Step 2: Run all tests**
 
-Run: `pnpm --filter @anybot/desktop test`
+Run: `pnpm --filter @meshbot/desktop test`
 Expected: All database tests pass.
 
 - [ ] **Step 3: Dry-run the startup flow**

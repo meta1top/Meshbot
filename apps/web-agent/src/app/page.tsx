@@ -1,6 +1,6 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@anybot/design";
+import { Card, CardContent, CardHeader, CardTitle } from "@meshbot/design";
 import { useTranslations } from "next-intl";
 import { AppShellLayout } from "@/components/layouts/app-shell-layout";
 

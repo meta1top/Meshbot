@@ -1,8 +1,8 @@
 "use client";
 
-import { clearAccessToken } from "@anybot/common";
-import { useTheme } from "@anybot/common/react";
-import { cn } from "@anybot/design";
+import { clearAccessToken } from "@meshbot/common";
+import { useTheme } from "@meshbot/common/react";
+import { cn } from "@meshbot/design";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDown,

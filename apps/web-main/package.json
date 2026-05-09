@@ -1,5 +1,5 @@
 {
-  "name": "@anybot/web-main",
+  "name": "@meshbot/web-main",
   "version": "0.0.0",
   "private": true,
   "scripts": {
@@ -10,9 +10,9 @@
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@anybot/common": "workspace:*",
-    "@anybot/design": "workspace:*",
-    "@anybot/types": "workspace:*",
+    "@meshbot/common": "workspace:*",
+    "@meshbot/design": "workspace:*",
+    "@meshbot/types": "workspace:*",
     "next": "^16.2.4",
     "react": "^19",
     "react-dom": "^19",

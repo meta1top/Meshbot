@@ -9,21 +9,21 @@
 │          桌面端 (Electron)          │           云平台 (Browser)              │
 │                                    │                                        │
 │  ┌──────────────────────────────┐  │  ┌──────────────────────────────────┐  │
-│  │       @anybot/desktop        │  │  │        @anybot/web-main          │  │
+│  │       @meshbot/desktop        │  │  │        @meshbot/web-main          │  │
 │  │    Electron 主进程 + 壳       │  │  │     Next.js 云平台前端 (SSR)      │  │
 │  │  · 窗口管理 / 系统托盘        │  │  │  · Agent 统一管理界面              │  │
 │  │  · fork() 启动 server-agent  │  │  │  · 浏览器直接访问                  │  │
 │  └──────────┬───────────────────┘  │  └──────────────┬───────────────────┘  │
 │             │ load URL              │                 │ HTTP/WS              │
 │  ┌──────────▼───────────────────┐  │  ┌──────────────▼───────────────────┐  │
-│  │      @anybot/web-agent       │  │  │       @anybot/server-main        │  │
+│  │      @meshbot/web-agent       │  │  │       @meshbot/server-main        │  │
 │  │  Next.js 桌面端 UI (静态导出) │  │  │     NestJS 云平台后端             │  │
 │  │  · 对话界面 / 工具管理        │  │  │  · Agent 注册 / 发现              │  │
 │  │  · output: 'export' → HTML   │  │  │  · 用户认证                       │  │
 │  └──────────┬───────────────────┘  │  │  · 多 Agent 管理                  │  │
 │             │ HTTP API              │  └──────────────────────────────────┘  │
 │  ┌──────────▼───────────────────┐  │                                        │
-│  │    @anybot/server-agent      │  │                                        │
+│  │    @meshbot/server-agent      │  │                                        │
 │  │    NestJS 本地 Agent 后端     │  │                                        │
 │  │  · LangGraph 进程管理         │  │                                        │
 │  │  · 会话 / 工具 / MCP / 提示词 │  │                                        │
@@ -36,13 +36,13 @@
 
 ```
                         ┌───────────────────┐
-                        │  @anybot/types    │  ← 全栈最底层依赖
+                        │  @meshbot/types    │  ← 全栈最底层依赖
                         │  Zod schema 定义   │
                         └─────────┬─────────┘
                   ┌───────────────┼───────────────┐
                   │               │               │
           ┌───────▼──────┐ ┌─────▼──────┐ ┌──────▼──────┐
-          │@anybot/shared│ │@anybot/    │ │@anybot/     │
+          │@meshbot/shared│ │@meshbot/    │ │@meshbot/     │
           │NestJS 共享   │ │common      │ │design       │
           │Guard/拦截器   │ │HTTP/工具    │ │UI 组件库    │
           └───────┬──────┘ └─────┬──────┘ └──────┬──────┘
@@ -120,9 +120,9 @@ anybot/
 ## 构建顺序 (Turborepo 拓扑)
 
 ```
-第 1 层 (无依赖):    @anybot/types
+第 1 层 (无依赖):    @meshbot/types
                           │
-第 2 层 (依赖 types): @anybot/shared    @anybot/common    @anybot/design
+第 2 层 (依赖 types): @meshbot/shared    @meshbot/common    @meshbot/design
                           │                   │                 │
 第 3 层 (应用层):    server-agent       web-agent          web-main
                      server-main            └─────────────────┘
