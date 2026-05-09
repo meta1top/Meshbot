@@ -1,12 +1,9 @@
 name: Publish CLI
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Version bump (patch/minor/major)"
-        required: true
-        default: "patch"
+  push:
+    tags:
+      - "cli@*"
 
 jobs:
   publish:
@@ -22,10 +19,17 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
 
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/cli@}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Publishing version: $VERSION"
+
       - name: Publish server-agent
         run: |
           cd apps/server-agent
-          npm version ${{ github.event.inputs.version }}
+          npm version ${{ steps.version.outputs.version }} --no-git-tag-version
           pnpm publish --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -33,9 +37,7 @@ jobs:
       - name: Publish cli-agent
         run: |
           cd apps/cli-agent
-          npm version ${{ github.event.inputs.version }}
+          npm version ${{ steps.version.outputs.version }} --no-git-tag-version
           pnpm publish --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - run: git push --follow-tags

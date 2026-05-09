@@ -1,5 +1,5 @@
-appId: com.anybot.desktop
-productName: Anybot
+appId: com.meshbot.desktop
+productName: Meshbot
 directories:
   output: release
 files:

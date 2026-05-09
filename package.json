@@ -18,8 +18,6 @@
     "dev:server-main": "pnpm --filter @meshbot/server-main dev",
     "dev:desktop": "pnpm --filter @meshbot/desktop dev",
     "dev:cli-agent": "turbo run dev --filter=@meshbot/cli-agent",
-    "pkg:prepare-server-agent": "node scripts/prepare-server-agent.mjs",
-    "pkg:rebuild-server-agent-native": "pnpm --filter @meshbot/desktop exec electron-rebuild -v 41.5.0 -m ../../apps/server-agent/.bundle/pack/srv -o better-sqlite3,bcrypt --build-from-source",
     "pkg:app": "pnpm run build:types && pnpm run build:common && pnpm run build:types-agent && pnpm run build:shared && pnpm run build:web-agent && pnpm run build:desktop && pnpm --filter @meshbot/desktop run dist",
     "lint": "biome lint .",
     "format": "biome format --write .",

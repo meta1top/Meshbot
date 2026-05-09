@@ -4,7 +4,7 @@
   "private": false,
   "type": "module",
   "bin": {
-    "anybot": "./dist/index.js"
+    "meshbot": "./dist/index.js"
   },
   "files": ["dist"],
   "publishConfig": {
