@@ -1,5 +1,6 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Alert,
   AlertDescription,
@@ -18,9 +19,8 @@ import {
   Input,
 } from "@meshbot/design";
 import { type LoginInput, loginSchema } from "@meshbot/types-agent";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useForm } from "react-hook-form";
 import { AuthShellLayout } from "@/components/layouts/auth-shell-layout";
 import { useLogin } from "@/rest/auth";
