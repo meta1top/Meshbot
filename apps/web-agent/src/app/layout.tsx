@@ -6,8 +6,8 @@ import { Providers } from "@/components/providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AnyBOT",
-  description: "AnyBOT Agent",
+  title: "MeshBot",
+  description: "MeshBot Agent",
 };
 
 export default function RootLayout({
