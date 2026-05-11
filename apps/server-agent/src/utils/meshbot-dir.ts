@@ -21,13 +21,13 @@ function isPackaged(): boolean {
   return __dirname.includes(".app/Contents/Resources");
 }
 
-export function resolveAnybotDir(): string {
+export function resolveMeshbotDir(): string {
   if (isPackaged()) {
-    return path.join(homedir(), ".anybot");
+    return path.join(homedir(), ".meshbot");
   }
   const repoRoot = findRepoRoot(process.cwd()) ?? findRepoRoot(__dirname);
   if (repoRoot) {
-    return path.join(repoRoot, ".anybot");
+    return path.join(repoRoot, ".meshbot");
   }
-  return path.join(homedir(), ".anybot");
+  return path.join(homedir(), ".meshbot");
 }

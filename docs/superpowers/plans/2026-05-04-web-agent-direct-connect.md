@@ -167,7 +167,7 @@ export {
 - [ ] **Step 5: 安装依赖并验证类型**
 
 ```bash
-cd /Users/grant/Meta1/anybot && pnpm install
+cd /Users/grant/Meta1/meshbot && pnpm install
 cd libs/types-agent && pnpm typecheck
 ```
 
@@ -226,7 +226,7 @@ export type {
 - [ ] **Step 3: 验证类型**
 
 ```bash
-cd /Users/grant/Meta1/anybot/libs/types && pnpm typecheck
+cd /Users/grant/Meta1/meshbot/libs/types && pnpm typecheck
 ```
 
 Expected: 无错误
@@ -250,7 +250,7 @@ git commit -m "feat: add ApiResponse and pagination types to @meshbot/types"
 - [ ] **Step 1: 添加 axios 依赖**
 
 ```bash
-cd /Users/grant/Meta1/anybot && pnpm --filter @meshbot/common add axios
+cd /Users/grant/Meta1/meshbot && pnpm --filter @meshbot/common add axios
 ```
 
 - [ ] **Step 2: 创建 client.ts**
@@ -264,7 +264,7 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from "axios";
 
-const TOKEN_KEY = "anybot_access_token";
+const TOKEN_KEY = "meshbot_access_token";
 
 function resolveBaseURL(): string {
   if (typeof window === "undefined") {
@@ -344,7 +344,7 @@ export {
 - [ ] **Step 4: 验证类型**
 
 ```bash
-cd /Users/grant/Meta1/anybot/packages/common && pnpm typecheck
+cd /Users/grant/Meta1/meshbot/packages/common && pnpm typecheck
 ```
 
 Expected: 无错误
@@ -376,8 +376,8 @@ git commit -m "feat: add axios API client with JWT interceptor to @meshbot/commo
 - [ ] **Step 1: 安装依赖**
 
 ```bash
-cd /Users/grant/Meta1/anybot && pnpm --filter @meshbot/server-agent add @nestjs/jwt @nestjs/passport passport passport-jwt bcrypt
-cd /Users/grant/Meta1/anybot && pnpm --filter @meshbot/server-agent add -D @types/passport-jwt @types/bcrypt
+cd /Users/grant/Meta1/meshbot && pnpm --filter @meshbot/server-agent add @nestjs/jwt @nestjs/passport passport passport-jwt bcrypt
+cd /Users/grant/Meta1/meshbot && pnpm --filter @meshbot/server-agent add -D @types/passport-jwt @types/bcrypt
 ```
 
 - [ ] **Step 2: 创建 User 实体**
@@ -522,7 +522,7 @@ import { PassportStrategy } from "@nestjs/passport";
 import { ExtractJwt, Strategy } from "passport-jwt";
 
 export const JWT_SECRET =
-  process.env.ANYBOT_JWT_SECRET ?? "anybot-local-jwt-secret-key";
+  process.env.MESHBOT_JWT_SECRET ?? "meshbot-local-jwt-secret-key";
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -657,13 +657,13 @@ import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { ModelConfigService } from "./services/model-config.service";
 import { SettingService } from "./services/setting.service";
 
-const anybotDir = process.env.ANYBOT_DIR ?? path.join(homedir(), ".anybot");
+const meshbotDir = process.env.MESHBOT_DIR ?? path.join(homedir(), ".meshbot");
 
 @Module({
   imports: [
     TypeOrmModule.forRoot({
       type: "better-sqlite3",
-      database: path.join(anybotDir, "agent.db"),
+      database: path.join(meshbotDir, "agent.db"),
       entities: [ModelConfig, Setting, User],
       synchronize: true,
     }),
@@ -693,9 +693,9 @@ import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
 
 async function bootstrap() {
-  const anybotDir = process.env.ANYBOT_DIR ?? path.join(homedir(), ".anybot");
-  mkdirSync(anybotDir, { recursive: true });
-  mkdirSync(path.join(anybotDir, "logs"), { recursive: true });
+  const meshbotDir = process.env.MESHBOT_DIR ?? path.join(homedir(), ".meshbot");
+  mkdirSync(meshbotDir, { recursive: true });
+  mkdirSync(path.join(meshbotDir, "logs"), { recursive: true });
 
   const app = await NestFactory.create(AppModule);
 
@@ -758,7 +758,7 @@ export class SetupController {
 - [ ] **Step 12: 验证编译**
 
 ```bash
-cd /Users/grant/Meta1/anybot && pnpm --filter @meshbot/server-agent typecheck
+cd /Users/grant/Meta1/meshbot && pnpm --filter @meshbot/server-agent typecheck
 ```
 
 Expected: 无错误
@@ -783,7 +783,7 @@ git commit -m "feat: add auth module with JWT login, CORS, and 0.0.0.0 binding t
 - [ ] **Step 1: 安装依赖**
 
 ```bash
-cd /Users/grant/Meta1/anybot && pnpm --filter @meshbot/web-agent add axios @tanstack/react-query @meshbot/types-agent
+cd /Users/grant/Meta1/meshbot && pnpm --filter @meshbot/web-agent add axios @tanstack/react-query @meshbot/types-agent
 ```
 
 - [ ] **Step 2: 创建 query-client.ts**
@@ -833,8 +833,8 @@ import { Providers } from "@/components/providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Anybot",
-  description: "Anybot Agent",
+  title: "MeshBot",
+  description: "MeshBot Agent",
 };
 
 export default function RootLayout({
@@ -855,7 +855,7 @@ export default function RootLayout({
 - [ ] **Step 5: 验证类型**
 
 ```bash
-cd /Users/grant/Meta1/anybot && pnpm --filter @meshbot/web-agent typecheck
+cd /Users/grant/Meta1/meshbot && pnpm --filter @meshbot/web-agent typecheck
 ```
 
 Expected: 无错误
@@ -1006,7 +1006,7 @@ export {
 - [ ] **Step 4: 验证类型**
 
 ```bash
-cd /Users/grant/Meta1/anybot && pnpm --filter @meshbot/web-agent typecheck
+cd /Users/grant/Meta1/meshbot && pnpm --filter @meshbot/web-agent typecheck
 ```
 
 Expected: 无错误
@@ -1071,7 +1071,7 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center bg-gray-50">
       <div className="w-full max-w-sm rounded-xl bg-white p-8 shadow-sm">
         <h1 className="mb-6 text-center text-2xl font-bold text-gray-900">
-          登录 Anybot
+          登录 MeshBot
         </h1>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -1126,7 +1126,7 @@ export default function LoginPage() {
 - [ ] **Step 2: 验证类型**
 
 ```bash
-cd /Users/grant/Meta1/anybot && pnpm --filter @meshbot/web-agent typecheck
+cd /Users/grant/Meta1/meshbot && pnpm --filter @meshbot/web-agent typecheck
 ```
 
 Expected: 无错误
@@ -1191,7 +1191,7 @@ export default function Home() {
 
   return (
     <main className="flex min-h-screen items-center justify-center">
-      <h1 className="text-2xl font-bold">Anybot Agent</h1>
+      <h1 className="text-2xl font-bold">MeshBot Agent</h1>
       <p className="ml-4 text-sm text-gray-400">已就绪</p>
     </main>
   );
@@ -1279,7 +1279,7 @@ export default function SetupPage() {
     <main className="min-h-screen bg-gray-50 py-10">
       <div className="mx-auto max-w-lg px-4">
         <h1 className="mb-2 text-2xl font-bold text-gray-900">
-          欢迎使用 Anybot
+          欢迎使用 MeshBot
         </h1>
         <p className="mb-8 text-gray-500">
           {step === "register" ? "创建账号以开始使用" : "请配置模型以开始使用"}
@@ -1431,7 +1431,7 @@ interface ModelFormProps {
 - [ ] **Step 5: 验证类型**
 
 ```bash
-cd /Users/grant/Meta1/anybot && pnpm --filter @meshbot/web-agent typecheck
+cd /Users/grant/Meta1/meshbot && pnpm --filter @meshbot/web-agent typecheck
 ```
 
 Expected: 无错误
@@ -1497,14 +1497,14 @@ import * as path from "node:path";
 import { app, BrowserWindow, dialog } from "electron";
 import { registerIpcHandlers } from "./ipc-handlers";
 
-const ANYBOT_DIR = path.join(homedir(), ".anybot");
+const MESHBOT_DIR = path.join(homedir(), ".meshbot");
 
 let mainWindow: BrowserWindow | null = null;
 let serverProcess: ChildProcess | null = null;
 
 function ensureDirs(): void {
-  mkdirSync(ANYBOT_DIR, { recursive: true });
-  mkdirSync(path.join(ANYBOT_DIR, "logs"), { recursive: true });
+  mkdirSync(MESHBOT_DIR, { recursive: true });
+  mkdirSync(path.join(MESHBOT_DIR, "logs"), { recursive: true });
 }
 
 function createWindow() {
@@ -1570,7 +1570,7 @@ async function forkServerAgent(): Promise<void> {
         stdio: ["pipe", "pipe", "pipe", "ipc"],
         env: {
           ...process.env,
-          ANYBOT_DIR: ANYBOT_DIR,
+          MESHBOT_DIR: MESHBOT_DIR,
         },
       });
 
@@ -1656,7 +1656,7 @@ app.whenReady().then(async () => {
     const message = err instanceof Error ? err.message : String(err);
     dialog.showErrorBox(
       "启动失败",
-      `无法初始化应用：${message}\n\n请检查 ${ANYBOT_DIR} 目录权限`,
+      `无法初始化应用：${message}\n\n请检查 ${MESHBOT_DIR} 目录权限`,
     );
     app.quit();
   }
@@ -1690,7 +1690,7 @@ app.on("before-quit", () => {
 - [ ] **Step 5: 验证类型**
 
 ```bash
-cd /Users/grant/Meta1/anybot && pnpm --filter @meshbot/desktop typecheck
+cd /Users/grant/Meta1/meshbot && pnpm --filter @meshbot/desktop typecheck
 ```
 
 Expected: 无错误
@@ -1709,7 +1709,7 @@ git commit -m "refactor: remove API proxy from desktop, keep only window managem
 - [ ] **Step 1: 全量类型检查**
 
 ```bash
-cd /Users/grant/Meta1/anybot && pnpm typecheck
+cd /Users/grant/Meta1/meshbot && pnpm typecheck
 ```
 
 Expected: 所有包无错误
@@ -1717,7 +1717,7 @@ Expected: 所有包无错误
 - [ ] **Step 2: 格式检查与修复**
 
 ```bash
-cd /Users/grant/Meta1/anybot && pnpm check
+cd /Users/grant/Meta1/meshbot && pnpm check
 ```
 
 Expected: 无格式错误（biome 自动修复）
@@ -1725,7 +1725,7 @@ Expected: 无格式错误（biome 自动修复）
 - [ ] **Step 3: 构建验证**
 
 ```bash
-cd /Users/grant/Meta1/anybot && pnpm build
+cd /Users/grant/Meta1/meshbot && pnpm build
 ```
 
 Expected: 所有包构建成功

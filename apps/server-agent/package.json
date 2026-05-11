@@ -4,7 +4,9 @@
   "private": false,
   "main": "dist/main.js",
   "types": "dist/main.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "publishConfig": {
     "access": "public"
   },

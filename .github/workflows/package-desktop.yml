@@ -50,7 +50,7 @@ jobs:
       - name: Package (${{ matrix.pkg }})
         run: pnpm run ${{ matrix.pkg }}
 
-      - name: Stage distributables (exclude unpacked */Anybot.app etc.)
+      - name: Stage distributables (exclude unpacked */MeshBot.app etc.)
         shell: bash
         run: |
           set -euo pipefail

@@ -1,14 +1,21 @@
-import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { writePid, readPid, clearPid, getRunningPid, isProcessRunning, __setPidDirForTesting } from "../../src/utils/pid-file.js";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  __setPidDirForTesting,
+  clearPid,
+  getRunningPid,
+  isProcessRunning,
+  readPid,
+  writePid,
+} from "../../src/utils/pid-file.js";
 
 describe("pid-file", () => {
   let testDir: string;
 
   beforeEach(() => {
-    testDir = mkdtempSync(path.join(tmpdir(), "anybot-pid-test-"));
+    testDir = mkdtempSync(path.join(tmpdir(), "meshbot-pid-test-"));
     __setPidDirForTesting(testDir);
   });
 

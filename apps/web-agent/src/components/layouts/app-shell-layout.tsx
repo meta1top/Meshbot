@@ -178,7 +178,7 @@ export function AppShellLayout({ children, className }: AppShellLayoutProps) {
                     {t("local")}
                   </span>
                   <span className="rounded-md border border-border bg-muted px-2 py-1">
-                    anybot
+                    meshbot
                   </span>
                   <span className="rounded-md border border-border bg-muted px-2 py-1">
                     main

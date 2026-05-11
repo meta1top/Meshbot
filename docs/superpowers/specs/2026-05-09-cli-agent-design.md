@@ -2,7 +2,7 @@
 
 ## 背景与目标
 
-当前 Anybot 的桌面端（Electron）通过 `fork()` 内嵌启动 `server-agent`，三者（desktop + web-agent + server-agent）打包为一个安装包。这导致：
+当前 MeshBot 的桌面端（Electron）通过 `fork()` 内嵌启动 `server-agent`，三者（desktop + web-agent + server-agent）打包为一个安装包。这导致：
 
 - Agent 无法在无 GUI 的服务器上独立运行
 - 桌面端和 Agent 必须同步更新
@@ -33,7 +33,7 @@ Electron Desktop
 **目标（解耦分离）**：
 
 ```
-anybot (CLI)           server-agent (NestJS)
+meshbot (CLI)           server-agent (NestJS)
   ├── start ──fork──→  ├── API (Agent 业务)
   ├── stop            ├── 静态文件服务 (web-agent)
   ├── status          ├── 本地用户认证
@@ -65,32 +65,32 @@ anybot (CLI)           server-agent (NestJS)
 
 | 命令 | 行为 |
 |------|------|
-| `anybot start [--port] [--data-dir] [--daemon]` | 检查运行状态 → spawn server-agent → 写入 PID → health check |
-| `anybot stop` | 读取 PID → SIGTERM → 等待退出 → 清理 PID |
-| `anybot status` | 检查 PID → 显示进程状态、内存、端口、运行时长 |
-| `anybot service install [--user]` | 按平台生成并注册系统服务文件 |
-| `anybot service uninstall` | 移除系统服务文件 |
-| `anybot config set <key> <value>` | 修改配置文件 |
-| `anybot config get <key>` | 读取配置项 |
+| `meshbot start [--port] [--data-dir] [--daemon]` | 检查运行状态 → spawn server-agent → 写入 PID → health check |
+| `meshbot stop` | 读取 PID → SIGTERM → 等待退出 → 清理 PID |
+| `meshbot status` | 检查 PID → 显示进程状态、内存、端口、运行时长 |
+| `meshbot service install [--user]` | 按平台生成并注册系统服务文件 |
+| `meshbot service uninstall` | 移除系统服务文件 |
+| `meshbot config set <key> <value>` | 修改配置文件 |
+| `meshbot config get <key>` | 读取配置项 |
 
 **进程守护**：
 
 - `start` 默认前台运行，`--daemon` 后台运行
 - 子进程异常退出且退出码非 0，自动重试最多 3 次
-- 标准输出/错误重定向到 `~/.anybot/logs/agent.log`
+- 标准输出/错误重定向到 `~/.meshbot/logs/agent.log`
 
 **跨平台服务注册**：
 
-- **macOS**：`~/Library/LaunchAgents/com.anybot.agent.plist`
-- **Linux**：`~/.config/systemd/user/anybot-agent.service`（用户级服务，无需 root）
+- **macOS**：`~/Library/LaunchAgents/com.meshbot.agent.plist`
+- **Linux**：`~/.config/systemd/user/meshbot-agent.service`（用户级服务，无需 root）
 - **Windows**：`node-windows` 库生成 Windows Service
 
-**配置文件**（`~/.anybot/cli-config.json`）：
+**配置文件**（`~/.meshbot/cli-config.json`）：
 
 ```json
 {
   "port": 3100,
-  "dataDir": "~/.anybot",
+  "dataDir": "~/.meshbot",
   "serverAgentPath": null,
   "logLevel": "info",
   "autoStart": false
@@ -154,19 +154,19 @@ anybot (CLI)           server-agent (NestJS)
 
 ## 数据流
 
-### 1. Agent 启动流程（`anybot start`）
+### 1. Agent 启动流程（`meshbot start`）
 
 ```
-用户: anybot start
+用户: meshbot start
 
 cli-agent
-  ├── 读取 ~/.anybot/cli-config.json
+  ├── 读取 ~/.meshbot/cli-config.json
   ├── 检查 PID 文件是否存在
   │     └── 存在 → 检查进程是否存活
   │           ├── 存活 → 输出 "Agent already running on port 3100"
   │           └── 已死 → 清理旧 PID 文件，继续
   ├── 解析 server-agent 路径（配置 / 相邻目录 / npm resolve）
-  ├── spawn('node', [serverAgentPath], { env: { ANYBOT_PORT, ANYBOT_DATA_DIR } })
+  ├── spawn('node', [serverAgentPath], { env: { MESHBOT_PORT, MESHBOT_DATA_DIR } })
   ├── 写入 PID 文件
   ├── 等待 health check（GET /api/setup-status）
   │     └── 超时 30s → 输出日志，exit 1
@@ -231,7 +231,7 @@ cli-agent
 | 场景 | 处理 |
 |------|------|
 | PID 文件存在但进程已死 | 自动清理，视为未运行 |
-| `start` 时端口被占用 | 检查是否有其他 anybot 实例 → 提示"Agent already running" / 提示端口冲突 |
+| `start` 时端口被占用 | 检查是否有其他 meshbot 实例 → 提示"Agent already running" / 提示端口冲突 |
 | `stop` 时无 PID 文件 | 输出 "Agent is not running"，exit 0 |
 | `stop` 时 SIGTERM 超时 | 5 秒后发送 SIGKILL，然后清理 PID 文件 |
 | server-agent 启动超时 | 30s health check 失败 → 输出 agent stdout/stderr 日志 → exit 1 |
@@ -306,7 +306,7 @@ test('start -> health check -> stop', async () => {
 {
   "name": "@meshbot/cli-agent",
   "version": "0.0.1",
-  "bin": { "anybot": "./dist/cli.js" },
+  "bin": { "meshbot": "./dist/cli.js" },
   "files": ["dist"],
   "dependencies": {
     "@meshbot/server-agent": "workspace:*"
@@ -333,10 +333,10 @@ npm install -g @meshbot/cli-agent
 # 1. 下载 cli-agent
 # 2. 下载 server-agent（作为依赖）
 # 3. 下载 better-sqlite3 等原生模块（postinstall 下载预编译二进制）
-# 4. 链接 anybot 到全局 PATH
+# 4. 链接 meshbot 到全局 PATH
 
-anybot --version
-anybot start
+meshbot --version
+meshbot start
 ```
 
 ### CI 自动发布
@@ -348,12 +348,12 @@ anybot start
 ## 命令参考
 
 ```
-anybot <command> [options]
+meshbot <command> [options]
 
 Commands:
   start [options]     启动 Agent 服务
     --port <number>   指定端口 (默认: 3100)
-    --data-dir <path> 指定数据目录 (默认: ~/.anybot)
+    --data-dir <path> 指定数据目录 (默认: ~/.meshbot)
     --daemon          后台运行
 
   stop                停止 Agent 服务

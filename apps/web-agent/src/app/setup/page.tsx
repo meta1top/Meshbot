@@ -1,5 +1,6 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
 import type { ModelConfigInput, ProviderDef } from "@meshbot/common";
 import {
   Alert,
@@ -24,10 +25,9 @@ import {
   SelectTrigger,
 } from "@meshbot/design";
 import { registerSchema } from "@meshbot/types-agent";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import {
@@ -114,7 +114,9 @@ export default function SetupPage() {
   const [selected, setSelected] = useState<ProviderDef | null>(null);
   const setupRegisterSchema = registerSchema
     .extend({
-      confirmPassword: z.string().min(1, t("validation.confirmPasswordRequired")),
+      confirmPassword: z
+        .string()
+        .min(1, t("validation.confirmPasswordRequired")),
     })
     .refine((data) => data.password === data.confirmPassword, {
       message: t("validation.passwordNotMatch"),
@@ -259,7 +261,9 @@ export default function SetupPage() {
             <Card>
               <CardHeader className="space-y-1">
                 <CardTitle>{t("chooseProvider")}</CardTitle>
-                <CardDescription>{t("chooseProviderDescription")}</CardDescription>
+                <CardDescription>
+                  {t("chooseProviderDescription")}
+                </CardDescription>
               </CardHeader>
               <CardContent className="pt-3">
                 <div className="space-y-4">

@@ -14,7 +14,7 @@
 ## 工程结构
 
 ```
-anybot/
+meshbot/
 ├── apps/
 │   ├── desktop/          # Electron 桌面壳
 │   ├── server-agent/     # NestJS 本地 agent

@@ -1,13 +1,13 @@
-# Anybot Monorepo 初始化设计
+# MeshBot Monorepo 初始化设计
 
 ## 概述
 
-初始化 Anybot 单体仓库（monorepo），包含 5 个可部署应用、2 个后端共享库、2 个前端共享包。使用 pnpm workspace + Turborepo 管理依赖和构建。
+初始化 MeshBot 单体仓库（monorepo），包含 5 个可部署应用、2 个后端共享库、2 个前端共享包。使用 pnpm workspace + Turborepo 管理依赖和构建。
 
 ## 目录结构
 
 ```
-anybot/
+meshbot/
 ├── apps/
 │   ├── desktop/            # @meshbot/desktop — Electron 主进程
 │   ├── server-agent/       # @meshbot/server-agent — NestJS 本地 agent

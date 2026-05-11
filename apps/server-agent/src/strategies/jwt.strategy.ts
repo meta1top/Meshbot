@@ -3,7 +3,7 @@ import { PassportStrategy } from "@nestjs/passport";
 import { ExtractJwt, Strategy } from "passport-jwt";
 
 export const JWT_SECRET =
-  process.env.ANYBOT_JWT_SECRET ?? "anybot-local-jwt-secret-key";
+  process.env.MESHBOT_JWT_SECRET ?? "meshbot-local-jwt-secret-key";
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {

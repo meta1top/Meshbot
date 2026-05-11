@@ -8,7 +8,7 @@ type: project
 
 ## Background
 
-The project recently rebranded from `@anybot` to `@meshbot`. Desktop app no longer depends on `server-agent` (it now serves `web-agent` via an embedded static server). The current workflows use branch-push and manual dispatch triggers.
+The project recently rebranded from `@meshbot` to `@meshbot`. Desktop app no longer depends on `server-agent` (it now serves `web-agent` via an embedded static server). The current workflows use branch-push and manual dispatch triggers.
 
 ## Goals
 
@@ -23,7 +23,7 @@ The project recently rebranded from `@anybot` to `@meshbot`. Desktop app no long
 
 - **Trigger**: `push: tags: ['app@*']`
 - **Paths**: Remove `apps/server-agent/**`
-- **Artifact name**: `anybot-desktop-*` → `meshbot-desktop-*`
+- **Artifact name**: `meshbot-desktop-*` → `meshbot-desktop-*`
 
 ### `publish-cli.yml`
 
@@ -41,5 +41,5 @@ The project recently rebranded from `@anybot` to `@meshbot`. Desktop app no long
 ### Other rebrand fixes
 
 - `apps/desktop/electron-builder.yml`: `appId: com.meshbot.desktop`, `productName: Meshbot`
-- `apps/cli-agent/package.json`: `bin.meshbot` instead of `bin.anybot`
+- `apps/cli-agent/package.json`: `bin.meshbot` instead of `bin.meshbot`
 - Delete `scripts/prepare-server-agent.mjs` (no longer referenced)

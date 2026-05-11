@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createRequire } from "node:module";
 import { readConfig } from "./config.js";
 
 export function resolveServerAgentPath(): string {

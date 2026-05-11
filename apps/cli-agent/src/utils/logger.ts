@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 
 function getLogDir(): string {
-  return path.join(homedir(), ".anybot", "logs");
+  return path.join(homedir(), ".meshbot", "logs");
 }
 
 function ensureLogDir(): void {

@@ -1,12 +1,13 @@
+import path from "node:path";
 import { app, BrowserWindow, dialog } from "electron";
 import { registerIpcHandlers } from "./ipc-handlers";
 import { startStaticServer } from "./static-server";
-import path from "node:path";
 
 const DEV_AGENT_URL = "http://localhost:3001";
 
 let mainWindow: BrowserWindow | null = null;
-let staticServer: { server: import("node:http").Server; port: number } | null = null;
+let staticServer: { server: import("node:http").Server; port: number } | null =
+  null;
 
 function createWindow(agentUrl: string) {
   const win = new BrowserWindow({

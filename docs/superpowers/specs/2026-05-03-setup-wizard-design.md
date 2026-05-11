@@ -8,7 +8,7 @@
 
 ## 一、数据模型
 
-SQLite 数据库：`~/.anybot/agent.db`
+SQLite 数据库：`~/.meshbot/agent.db`
 
 ### `providers` 供应商表
 
@@ -56,8 +56,8 @@ SQLite 数据库：`~/.anybot/agent.db`
 
 ```
 Desktop 启动 (app.whenReady)
-  → 确保 ~/.anybot/ 目录存在
-  → 打开 ~/.anybot/agent.db
+  → 确保 ~/.meshbot/ 目录存在
+  → 打开 ~/.meshbot/agent.db
   → 供应商同步 upsert（从代码配置源）
   → SELECT enabled models count
     ├── count > 0
@@ -148,7 +148,7 @@ interface ProviderDef {
 
 | 场景 | 处理 |
 |---|---|
-| `~/.anybot/` 创建失败 | 原生错误对话框，提示检查权限，app 退出 |
+| `~/.meshbot/` 创建失败 | 原生错误对话框，提示检查权限，app 退出 |
 | SQLite 读写失败 | 错误提示 + 重试按钮 |
 | 供应商同步失败 | 日志记录，使用已有数据继续 |
 | API Key 为空 | 表单校验拦截，不提交 |

@@ -1,5 +1,5 @@
-import { createServer, type Server } from "node:http";
 import { readFileSync } from "node:fs";
+import { createServer, type Server } from "node:http";
 import path from "node:path";
 
 const STATIC_PORT = 3101;
@@ -37,10 +37,9 @@ function killPortOccupier(port: number): void {
   try {
     const { execSync } = require("node:child_process");
     if (process.platform === "win32") {
-      const output = execSync(
-        `netstat -ano | findstr :${port}`,
-        { encoding: "utf8" },
-      );
+      const output = execSync(`netstat -ano | findstr :${port}`, {
+        encoding: "utf8",
+      });
       const pid = output.trim().split(/\s+/).pop();
       if (pid) execSync(`taskkill /PID ${pid} /F`);
     } else {

@@ -48,5 +48,5 @@ coverage/
 *.sqlite
 *.sqlite-journal
 *.lance/
-.anybot/
+.meshbot/
 apps/server-agent/.bundle/

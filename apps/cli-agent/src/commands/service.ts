@@ -1,8 +1,13 @@
-import { Command } from "commander";
-import { installService, uninstallService } from "../utils/service-installer.js";
+import type { Command } from "commander";
+import {
+  installService,
+  uninstallService,
+} from "../utils/service-installer.js";
 
 export function registerServiceCommand(program: Command): void {
-  const serviceCmd = program.command("service").description("Manage system service");
+  const serviceCmd = program
+    .command("service")
+    .description("Manage system service");
 
   serviceCmd
     .command("install")

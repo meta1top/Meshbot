@@ -3,14 +3,14 @@ import path from "node:path";
 import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
-import { resolveAnybotDir } from "./utils/anybot-dir";
+import { resolveMeshbotDir } from "./utils/meshbot-dir";
 
 async function bootstrap() {
-  const anybotDir = resolveAnybotDir();
-  mkdirSync(anybotDir, { recursive: true });
-  mkdirSync(path.join(anybotDir, "logs"), { recursive: true });
+  const meshbotDir = resolveMeshbotDir();
+  mkdirSync(meshbotDir, { recursive: true });
+  mkdirSync(path.join(meshbotDir, "logs"), { recursive: true });
 
-  const port = Number(process.env.ANYBOT_PORT ?? 3100);
+  const port = Number(process.env.MESHBOT_PORT ?? 3100);
   const host = "0.0.0.0";
 
   const app = await NestFactory.create(AppModule);

@@ -1,8 +1,16 @@
 import { spawn } from "node:child_process";
-import { getServerAgentMainPath, resolveServerAgentPath } from "./path-resolver.js";
-import { getRunningPid, writePid, clearPid, isProcessRunning } from "./pid-file.js";
 import { readConfig } from "./config.js";
 import { log } from "./logger.js";
+import {
+  getServerAgentMainPath,
+  resolveServerAgentPath,
+} from "./path-resolver.js";
+import {
+  clearPid,
+  getRunningPid,
+  isProcessRunning,
+  writePid,
+} from "./pid-file.js";
 
 export interface StartOptions {
   port?: number;
@@ -42,7 +50,9 @@ export async function startAgent(options: StartOptions = {}): Promise<void> {
   const runningPid = getRunningPid();
   if (runningPid !== null) {
     const config = readConfig();
-    console.log(`Agent already running on port ${config.port} (PID: ${runningPid})`);
+    console.log(
+      `Agent already running on port ${config.port} (PID: ${runningPid})`,
+    );
     return;
   }
 
@@ -52,20 +62,26 @@ export async function startAgent(options: StartOptions = {}): Promise<void> {
   const serverAgentRoot = resolveServerAgentPath();
   const serverAgentMain = getServerAgentMainPath();
 
-  log("cli", `Starting server-agent: ${serverAgentMain} (port=${port}, dataDir=${dataDir})`);
+  log(
+    "cli",
+    `Starting server-agent: ${serverAgentMain} (port=${port}, dataDir=${dataDir})`,
+  );
 
   const child = spawn("node", [serverAgentMain], {
     cwd: serverAgentRoot,
     stdio: options.daemon ? "ignore" : "inherit",
     env: {
       ...process.env,
-      ANYBOT_PORT: String(port),
-      ANYBOT_DATA_DIR: dataDir,
+      MESHBOT_PORT: String(port),
+      MESHBOT_DATA_DIR: dataDir,
     },
     detached: options.daemon ?? false,
   });
 
-  writePid(child.pid!);
+  if (child.pid === undefined || child.pid === null) {
+    throw new Error("Failed to spawn server-agent process");
+  }
+  writePid(child.pid);
 
   if (options.daemon) {
     child.unref();
@@ -78,7 +94,9 @@ export async function startAgent(options: StartOptions = {}): Promise<void> {
   } catch (err) {
     clearPid();
     if (child.kill) child.kill();
-    throw new Error(`Agent failed to start: ${err instanceof Error ? err.message : String(err)}`);
+    throw new Error(
+      `Agent failed to start: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 }
 
@@ -93,7 +111,9 @@ export function stopAgent(): void {
   try {
     process.kill(pid, "SIGTERM");
   } catch (err) {
-    console.error(`Failed to send SIGTERM: ${err instanceof Error ? err.message : String(err)}`);
+    console.error(
+      `Failed to send SIGTERM: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 
   // Wait up to 5s for graceful shutdown

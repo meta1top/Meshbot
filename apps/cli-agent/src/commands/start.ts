@@ -1,4 +1,4 @@
-import { Command } from "commander";
+import type { Command } from "commander";
 import { startAgent } from "../utils/process-manager.js";
 
 export function registerStartCommand(program: Command): void {

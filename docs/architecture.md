@@ -1,4 +1,4 @@
-# Anybot 架构图
+# MeshBot 架构图
 
 ## 整体架构
 
@@ -61,7 +61,7 @@
 ## 目录结构
 
 ```
-anybot/
+meshbot/
 ├── apps/                          # 可部署应用
 │   ├── desktop/                   # Electron 桌面壳
 │   ├── server-agent/              # NestJS 本地 Agent (port 3100)

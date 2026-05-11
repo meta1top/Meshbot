@@ -4,7 +4,7 @@
 
 **Goal:** Desktop 首次启动时检测 SQLite 中是否有模型配置，若无则引导用户完成供应商选择 + 模型配置。
 
-**Architecture:** Desktop 主进程通过 better-sqlite3 直接读写 `~/.anybot/agent.db`，web-agent 通过 IPC 与主进程通信。供应商元数据定义在 `packages/common` 中作为静态配置源。server-agent 启动时从 agent.db 加载模型配置。
+**Architecture:** Desktop 主进程通过 better-sqlite3 直接读写 `~/.meshbot/agent.db`，web-agent 通过 IPC 与主进程通信。供应商元数据定义在 `packages/common` 中作为静态配置源。server-agent 启动时从 agent.db 加载模型配置。
 
 **Tech Stack:** better-sqlite3, Electron IPC (contextBridge + ipcMain.handle), Next.js 15 App Router, React 19, Tailwind CSS v4, Zod, NestJS 11
 
@@ -215,14 +215,14 @@ import Database from "better-sqlite3";
 import { PROVIDERS } from "@meshbot/common";
 import type { ProviderDef } from "@meshbot/common";
 
-const ANYBOT_DIR = path.join(homedir(), ".anybot");
-const DB_PATH = path.join(ANYBOT_DIR, "agent.db");
-const LOG_DIR = path.join(ANYBOT_DIR, "logs");
+const MESHBOT_DIR = path.join(homedir(), ".meshbot");
+const DB_PATH = path.join(MESHBOT_DIR, "agent.db");
+const LOG_DIR = path.join(MESHBOT_DIR, "logs");
 
 let db: Database.Database | null = null;
 
-export function getAnybotDir(): string {
-  return ANYBOT_DIR;
+export function getMeshBotDir(): string {
+  return MESHBOT_DIR;
 }
 
 export function getLogDir(): string {
@@ -230,7 +230,7 @@ export function getLogDir(): string {
 }
 
 export function ensureDirs(): void {
-  mkdirSync(ANYBOT_DIR, { recursive: true });
+  mkdirSync(MESHBOT_DIR, { recursive: true });
   mkdirSync(LOG_DIR, { recursive: true });
 }
 
@@ -664,7 +664,7 @@ import {
   openDatabase,
   getSetupStatus,
   getDatabase,
-  getAnybotDir,
+  getMeshBotDir,
   getLogDir,
 } from "./database";
 import { registerIpcHandlers } from "./ipc-handlers";
@@ -708,7 +708,7 @@ function startServerAgent(): Promise<void> {
       stdio: "pipe",
       env: {
         ...process.env,
-        ANYBOT_DIR: getAnybotDir(),
+        MESHBOT_DIR: getMeshBotDir(),
       },
     });
 
@@ -770,7 +770,7 @@ app.whenReady().then(async () => {
   } catch (err: any) {
     dialog.showErrorBox(
       "启动失败",
-      `无法初始化应用：${err.message}\n\n请检查 ${getAnybotDir()} 目录权限`,
+      `无法初始化应用：${err.message}\n\n请检查 ${getMeshBotDir()} 目录权限`,
     );
     app.quit();
   }
@@ -1102,7 +1102,7 @@ export default function SetupPage() {
       <main className="flex min-h-screen items-center justify-center bg-gray-50">
         <div className="rounded-xl bg-white p-8 shadow-sm max-w-md text-center">
           <p className="text-gray-500">
-            请在 Anybot Desktop 应用中完成初始化配置。
+            请在 MeshBot Desktop 应用中完成初始化配置。
           </p>
         </div>
       </main>
@@ -1113,7 +1113,7 @@ export default function SetupPage() {
     <main className="min-h-screen bg-gray-50 py-10">
       <div className="mx-auto max-w-lg px-4">
         <h1 className="mb-2 text-2xl font-bold text-gray-900">
-          欢迎使用 Anybot
+          欢迎使用 MeshBot
         </h1>
         <p className="mb-8 text-gray-500">请先配置模型以开始使用</p>
 
@@ -1181,7 +1181,7 @@ export default function Home() {
 
   return (
     <main className="flex min-h-screen items-center justify-center">
-      <h1 className="text-2xl font-bold">Anybot Agent</h1>
+      <h1 className="text-2xl font-bold">MeshBot Agent</h1>
       <p className="ml-4 text-sm text-gray-400">{status}</p>
     </main>
   );
@@ -1227,8 +1227,8 @@ import { homedir } from "os";
 import path from "path";
 
 function loadConfig() {
-  const anybotDir = process.env.ANYBOT_DIR ?? path.join(homedir(), ".anybot");
-  const dbPath = path.join(anybotDir, "agent.db");
+  const meshbotDir = process.env.MESHBOT_DIR ?? path.join(homedir(), ".meshbot");
+  const dbPath = path.join(meshbotDir, "agent.db");
 
   const db = new Database(dbPath, { readonly: true });
   db.pragma("journal_mode = WAL");
@@ -1295,7 +1295,7 @@ Expected: All database tests pass.
 
 - [ ] **Step 3: Dry-run the startup flow**
 
-1. Delete `~/.anybot/agent.db` if it exists
+1. Delete `~/.meshbot/agent.db` if it exists
 2. Start web-agent: `pnpm dev:web-agent`
 3. Start desktop: `pnpm dev:desktop`
 4. Verify: Electron window opens and loads `/setup` page

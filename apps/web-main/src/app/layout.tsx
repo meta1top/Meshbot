@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Anybot Platform",
-  description: "Anybot Agent Management Platform",
+  title: "MeshBot Platform",
+  description: "MeshBot Agent Management Platform",
 };
 
 export default function RootLayout({

@@ -19,7 +19,8 @@ export function DragRegion({ actions }: DragRegionProps) {
   const [electronAPI, setElectronAPI] = useState<ElectronAPI | null>(null);
 
   useEffect(() => {
-    const api = (window as unknown as { electronAPI?: ElectronAPI }).electronAPI;
+    const api = (window as unknown as { electronAPI?: ElectronAPI })
+      .electronAPI;
     if (api?.isElectron) {
       setElectronAPI(api);
     }
