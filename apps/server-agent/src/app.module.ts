@@ -15,6 +15,7 @@ import { ModelConfigService } from "./services/model-config.service";
 import { SettingService } from "./services/setting.service";
 import { StaticModule } from "./static.module";
 import { resolveMeshbotDir } from "./utils/meshbot-dir";
+import { AgentModule } from "@meshbot/agent";
 
 const meshbotDir = resolveMeshbotDir();
 
@@ -27,6 +28,7 @@ const meshbotDir = resolveMeshbotDir();
       synchronize: true,
     }),
     TypeOrmModule.forFeature([ModelConfig, Setting]),
+    AgentModule,
     AuthModule,
     LocalAuthModule,
     StaticModule,
