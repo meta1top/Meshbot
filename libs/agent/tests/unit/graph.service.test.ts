@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -14,7 +14,7 @@ describe("GraphService", () => {
     testDir = mkdtempSync(path.join(tmpdir(), "meshbot-graph-test-"));
     mkdirSync(path.join(testDir, "prompt"), { recursive: true });
     const configService = new MeshbotConfigService();
-    (configService as any).meshbotDir = testDir;
+    (configService as unknown as Record<string, string>).meshbotDir = testDir;
     const promptService = new PromptService(testDir);
     graphService = new GraphService(configService, promptService);
   });
