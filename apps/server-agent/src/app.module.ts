@@ -1,4 +1,5 @@
 import path from "node:path";
+import { AgentModule } from "@meshbot/agent";
 import { Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 import { TypeOrmModule } from "@nestjs/typeorm";
@@ -15,7 +16,6 @@ import { ModelConfigService } from "./services/model-config.service";
 import { SettingService } from "./services/setting.service";
 import { StaticModule } from "./static.module";
 import { resolveMeshbotDir } from "./utils/meshbot-dir";
-import { AgentModule } from "@meshbot/agent";
 
 const meshbotDir = resolveMeshbotDir();
 
