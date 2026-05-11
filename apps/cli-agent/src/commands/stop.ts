@@ -1,4 +1,4 @@
-import { Command } from "commander";
+import type { Command } from "commander";
 import { stopAgent } from "../utils/process-manager.js";
 
 export function registerStopCommand(program: Command): void {

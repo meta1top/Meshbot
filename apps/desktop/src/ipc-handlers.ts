@@ -1,6 +1,6 @@
-import { app, type BrowserWindow, ipcMain } from "electron";
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { app, type BrowserWindow, ipcMain } from "electron";
 
 interface ConnectionConfig {
   url: string;
@@ -30,7 +30,9 @@ function writeConnectionConfig(config: ConnectionConfig): void {
   writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
 }
 
-export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): void {
+export function registerIpcHandlers(
+  getMainWindow: () => BrowserWindow | null,
+): void {
   ipcMain.handle("is-electron", () => true);
 
   ipcMain.handle("window-minimize", () => {
@@ -55,8 +57,11 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
     return readConnectionConfig();
   });
 
-  ipcMain.handle("set-connection-config", (_event, config: ConnectionConfig) => {
-    writeConnectionConfig(config);
-    return true;
-  });
+  ipcMain.handle(
+    "set-connection-config",
+    (_event, config: ConnectionConfig) => {
+      writeConnectionConfig(config);
+      return true;
+    },
+  );
 }

@@ -1,14 +1,20 @@
-import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { readConfig, writeConfig, setConfigValue, getConfigValue, __setConfigDirForTesting } from "../../src/utils/config.js";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  __setConfigDirForTesting,
+  getConfigValue,
+  readConfig,
+  setConfigValue,
+  writeConfig,
+} from "../../src/utils/config.js";
 
 describe("config", () => {
   let testDir: string;
 
   beforeEach(() => {
-    testDir = mkdtempSync(path.join(tmpdir(), "anybot-cli-test-"));
+    testDir = mkdtempSync(path.join(tmpdir(), "meshbot-cli-test-"));
     __setConfigDirForTesting(testDir);
   });
 

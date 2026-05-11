@@ -1,2 +1,2 @@
-export const THEME_STORAGE_KEY = "anybot-theme";
+export const THEME_STORAGE_KEY = "meshbot-theme";
 export type Theme = "light" | "dark" | "system";

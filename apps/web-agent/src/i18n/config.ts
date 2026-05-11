@@ -6,6 +6,8 @@ export const defaultLocale: AppLocale = "zh";
 
 export const localeCookieName = "locale";
 
-export function isAppLocale(value: string | undefined | null): value is AppLocale {
+export function isAppLocale(
+  value: string | undefined | null,
+): value is AppLocale {
   return Boolean(value && locales.includes(value as AppLocale));
 }

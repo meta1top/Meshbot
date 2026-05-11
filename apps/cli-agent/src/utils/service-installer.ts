@@ -1,7 +1,7 @@
-import { existsSync, mkdirSync, writeFileSync, unlinkSync } from "node:fs";
+import { execSync } from "node:child_process";
+import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
-import { execSync } from "node:child_process";
 
 function getCliPath(): string {
   return process.argv[1];
@@ -17,14 +17,14 @@ export function installService(userOnly = true): void {
   if (process.platform === "darwin") {
     const plistDir = path.join(homedir(), "Library", "LaunchAgents");
     ensureDir(plistDir);
-    const plistPath = path.join(plistDir, "com.anybot.agent.plist");
+    const plistPath = path.join(plistDir, "com.meshbot.agent.plist");
 
     const plist = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.anybot.agent</string>
+  <string>com.meshbot.agent</string>
   <key>ProgramArguments</key>
   <array>
     <string>${cliPath}</string>
@@ -36,25 +36,26 @@ export function installService(userOnly = true): void {
   <key>KeepAlive</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>${path.join(homedir(), ".anybot", "logs", "agent.stdout.log")}</string>
+  <string>${path.join(homedir(), ".meshbot", "logs", "agent.stdout.log")}</string>
   <key>StandardErrorPath</key>
-  <string>${path.join(homedir(), ".anybot", "logs", "agent.stderr.log")}</string>
+  <string>${path.join(homedir(), ".meshbot", "logs", "agent.stderr.log")}</string>
 </dict>
 </plist>`;
 
     writeFileSync(plistPath, plist, "utf8");
     execSync(`launchctl load ${plistPath}`);
-    console.log("Service installed. Use `launchctl start com.anybot.agent` to start.");
-
+    console.log(
+      "Service installed. Use `launchctl start com.meshbot.agent` to start.",
+    );
   } else if (process.platform === "linux") {
     const systemdDir = userOnly
       ? path.join(homedir(), ".config", "systemd", "user")
       : "/etc/systemd/system";
     ensureDir(systemdDir);
-    const servicePath = path.join(systemdDir, "anybot-agent.service");
+    const servicePath = path.join(systemdDir, "meshbot-agent.service");
 
     const service = `[Unit]
-Description=Anybot Agent
+Description=MeshBot Agent
 After=network.target
 
 [Service]
@@ -69,17 +70,23 @@ WantedBy=default.target`;
     writeFileSync(servicePath, service, "utf8");
     const scope = userOnly ? "--user" : "";
     execSync(`systemctl ${scope} daemon-reload`);
-    execSync(`systemctl ${scope} enable anybot-agent`);
-    console.log("Service installed. Use `systemctl --user start anybot-agent` to start.");
-
+    execSync(`systemctl ${scope} enable meshbot-agent`);
+    console.log(
+      "Service installed. Use `systemctl --user start meshbot-agent` to start.",
+    );
   } else if (process.platform === "win32") {
     try {
-      execSync(`sc create AnybotAgent binPath= "${cliPath} start --daemon" start= auto`, {
-        stdio: "inherit",
-      });
-      console.log("Service installed. Use `sc start AnybotAgent` to start.");
+      execSync(
+        `sc create MeshBotAgent binPath= "${cliPath} start --daemon" start= auto`,
+        {
+          stdio: "inherit",
+        },
+      );
+      console.log("Service installed. Use `sc start MeshBotAgent` to start.");
     } catch (err) {
-      console.error("Failed to install Windows service. Try running as Administrator.");
+      console.error(
+        "Failed to install Windows service. Try running as Administrator.",
+      );
       throw err;
     }
   }
@@ -87,22 +94,26 @@ WantedBy=default.target`;
 
 export function uninstallService(userOnly = true): void {
   if (process.platform === "darwin") {
-    const plistPath = path.join(homedir(), "Library", "LaunchAgents", "com.anybot.agent.plist");
+    const plistPath = path.join(
+      homedir(),
+      "Library",
+      "LaunchAgents",
+      "com.meshbot.agent.plist",
+    );
     if (existsSync(plistPath)) {
       execSync(`launchctl unload ${plistPath}`);
       unlinkSync(plistPath);
     }
     console.log("Service uninstalled.");
-
   } else if (process.platform === "linux") {
     const systemdDir = userOnly
       ? path.join(homedir(), ".config", "systemd", "user")
       : "/etc/systemd/system";
-    const servicePath = path.join(systemdDir, "anybot-agent.service");
+    const servicePath = path.join(systemdDir, "meshbot-agent.service");
     const scope = userOnly ? "--user" : "";
     try {
-      execSync(`systemctl ${scope} disable anybot-agent`);
-      execSync(`systemctl ${scope} stop anybot-agent`);
+      execSync(`systemctl ${scope} disable meshbot-agent`);
+      execSync(`systemctl ${scope} stop meshbot-agent`);
     } catch {
       // ignore
     }
@@ -111,11 +122,10 @@ export function uninstallService(userOnly = true): void {
     }
     execSync(`systemctl ${scope} daemon-reload`);
     console.log("Service uninstalled.");
-
   } else if (process.platform === "win32") {
     try {
-      execSync(`sc stop AnybotAgent`, { stdio: "ignore" });
-      execSync(`sc delete AnybotAgent`, { stdio: "inherit" });
+      execSync(`sc stop MeshBotAgent`, { stdio: "ignore" });
+      execSync(`sc delete MeshBotAgent`, { stdio: "inherit" });
       console.log("Service uninstalled.");
     } catch (err) {
       console.error("Failed to uninstall Windows service.");

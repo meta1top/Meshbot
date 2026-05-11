@@ -67,7 +67,7 @@ function startServerAgent(): Promise<void> {
       stdio: ["pipe", "pipe", "pipe", "ipc"],
       env: {
         ...process.env,
-        ANYBOT_DIR: getAnybotDir(),
+        MESHBOT_DIR: getMeshBotDir(),
       },
     });
 
@@ -106,7 +106,7 @@ function startServerAgent(): Promise<void> {
 - [ ] **Step 3: 验证编译通过**
 
 ```bash
-cd /Users/grant/Meta1/anybot/apps/desktop && npx tsc --project tsconfig.json --noEmit
+cd /Users/grant/Meta1/meshbot/apps/desktop && npx tsc --project tsconfig.json --noEmit
 ```
 
 Expected: 无类型错误
@@ -156,7 +156,7 @@ async function connectToServerAgent(): Promise<void> {
 - [ ] **Step 2: 验证编译通过**
 
 ```bash
-cd /Users/grant/Meta1/anybot/apps/desktop && npx tsc --project tsconfig.json --noEmit
+cd /Users/grant/Meta1/meshbot/apps/desktop && npx tsc --project tsconfig.json --noEmit
 ```
 
 Expected: 无类型错误
@@ -190,7 +190,7 @@ async function forkServerAgent(): Promise<void> {
         stdio: ["pipe", "pipe", "pipe", "ipc"],
         env: {
           ...process.env,
-          ANYBOT_DIR: getAnybotDir(),
+          MESHBOT_DIR: getMeshBotDir(),
         },
       });
 
@@ -248,7 +248,7 @@ function startServerAgent(): Promise<void> {
 - [ ] **Step 3: 验证编译通过**
 
 ```bash
-cd /Users/grant/Meta1/anybot/apps/desktop && npx tsc --project tsconfig.json --noEmit
+cd /Users/grant/Meta1/meshbot/apps/desktop && npx tsc --project tsconfig.json --noEmit
 ```
 
 Expected: 无类型错误
@@ -300,8 +300,8 @@ git commit -m "feat(desktop): graceful shutdown with IPC message before kill"
 - [ ] **Step 1: 添加 extraResources 配置**
 
 ```yaml
-appId: com.anybot.desktop
-productName: Anybot
+appId: com.meshbot.desktop
+productName: MeshBot
 directories:
   output: release
 files:
@@ -362,7 +362,7 @@ if (!needsSetup) {
 - [ ] **Step 2: 验证编译通过**
 
 ```bash
-cd /Users/grant/Meta1/anybot/apps/desktop && npx tsc --project tsconfig.json --noEmit
+cd /Users/grant/Meta1/meshbot/apps/desktop && npx tsc --project tsconfig.json --noEmit
 ```
 
 Expected: 无类型错误
@@ -381,7 +381,7 @@ git commit -m "fix(desktop): dev mode startup failure shows retry dialog, prod m
 - [ ] **Step 1: 验证 dev 模式编译和类型检查**
 
 ```bash
-cd /Users/grant/Meta1/anybot/apps/desktop && npx tsc --project tsconfig.json
+cd /Users/grant/Meta1/meshbot/apps/desktop && npx tsc --project tsconfig.json
 ```
 
 Expected: 编译成功，生成 `dist/main.js` 等文件
@@ -389,7 +389,7 @@ Expected: 编译成功，生成 `dist/main.js` 等文件
 - [ ] **Step 2: 验证 server-agent 编译**
 
 ```bash
-cd /Users/grant/Meta1/anybot/apps/server-agent && pnpm build
+cd /Users/grant/Meta1/meshbot/apps/server-agent && pnpm build
 ```
 
 Expected: NestJS 编译成功，生成 `dist/main.js`
@@ -397,7 +397,7 @@ Expected: NestJS 编译成功，生成 `dist/main.js`
 - [ ] **Step 3: 验证 git 状态干净**
 
 ```bash
-cd /Users/grant/Meta1/anybot && git status
+cd /Users/grant/Meta1/meshbot && git status
 ```
 
 Expected: 无未提交的更改

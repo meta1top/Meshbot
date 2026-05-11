@@ -8,7 +8,10 @@ export function __setPidDirForTesting(dir: string | null): void {
 }
 
 function getPidFilePath(): string {
-  return path.join(_pidDirOverride ?? path.join(homedir(), ".anybot"), "agent.pid");
+  return path.join(
+    _pidDirOverride ?? path.join(homedir(), ".meshbot"),
+    "agent.pid",
+  );
 }
 
 export function writePid(pid: number): void {

@@ -28,7 +28,7 @@ main.ts: startServerAgent()
 ### 打包模式
 
 ```
-用户双击 Anybot.app
+用户双击 MeshBot.app
                 ↓
 main.ts: startServerAgent()
   → app.isPackaged === true
@@ -88,7 +88,7 @@ async function forkServerAgent(): Promise<void> {
     const doFork = () => {
       serverProcess = fork(serverAgentPath, [], {
         stdio: ["pipe", "pipe", "pipe", "ipc"],
-        env: { ...process.env, ANYBOT_DIR: getAnybotDir() },
+        env: { ...process.env, MESHBOT_DIR: getMeshBotDir() },
       });
 
       serverProcess.on("exit", (code) => {

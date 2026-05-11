@@ -43,7 +43,7 @@ files:
 ### 3. 无改动项
 
 - **web-agent**：`apiClient` 已兼容 `file://` 协议，无需修改。
-- **server-agent**：不内嵌到 desktop，继续由 CLI `anybot start` 独立启动。
+- **server-agent**：不内嵌到 desktop，继续由 CLI `meshbot start` 独立启动。
 - **desktop build 脚本**：不需要额外复制步骤。
 
 ## 数据流

@@ -51,7 +51,7 @@ libs/{module}/dto/{module}.dto.ts 示例：
 ```typescript
 import { createZodDto } from "nestjs-zod";
 
-import { CreateSessionSchema } from "@meta-1/anybot-types";
+import { CreateSessionSchema } from "@meta-1/meshbot-types";
 
 export class CreateSessionDto extends createZodDto(CreateSessionSchema) {}
 ```
@@ -98,7 +98,7 @@ export class SessionController {
 
 apps/web/src/rest/{module}.ts 示例：
 ```typescript
-import type { CreateSessionData, Session } from "@meta-1/anybot-types";
+import type { CreateSessionData, Session } from "@meta-1/meshbot-types";
 import { get, post } from "@/utils/rest";
 
 export const createSession = (data: CreateSessionData) => post<Session, CreateSessionData>("@api/session/create", data);

@@ -12,7 +12,7 @@ export interface CliConfig {
 
 const DEFAULT_CONFIG: CliConfig = {
   port: 3100,
-  dataDir: path.join(homedir(), ".anybot"),
+  dataDir: path.join(homedir(), ".meshbot"),
   serverAgentPath: null,
   logLevel: "info",
   autoStart: false,
@@ -25,7 +25,7 @@ export function __setConfigDirForTesting(dir: string | null): void {
 }
 
 function getConfigDir(): string {
-  return _configDirOverride ?? path.join(homedir(), ".anybot");
+  return _configDirOverride ?? path.join(homedir(), ".meshbot");
 }
 
 function getConfigPath(): string {
@@ -55,10 +55,15 @@ export function writeConfig(config: Partial<CliConfig>): void {
   writeFileSync(configPath, JSON.stringify(next, null, 2), "utf8");
 }
 
-export function setConfigValue<K extends keyof CliConfig>(key: K, value: CliConfig[K]): void {
+export function setConfigValue<K extends keyof CliConfig>(
+  key: K,
+  value: CliConfig[K],
+): void {
   writeConfig({ [key]: value });
 }
 
-export function getConfigValue<K extends keyof CliConfig>(key: K): CliConfig[K] {
+export function getConfigValue<K extends keyof CliConfig>(
+  key: K,
+): CliConfig[K] {
   return readConfig()[key];
 }

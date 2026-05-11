@@ -3,11 +3,11 @@ description: Agent 架构与模块设计规范
 alwaysApply: true
 ---
 
-# Anybot Agent 架构
+# MeshBot Agent 架构
 
 ## 项目定位
 
-Anybot 是一个 AI Agent 平台，包含桌面端和云服务。
+MeshBot 是一个 AI Agent 平台，包含桌面端和云服务。
 - 桌面端：Electron 壳 + NestJS 本地 agent + Next.js UI
 - 云服务：NestJS 云平台后端 + Next.js 云平台前端
 - 所有 agent 注册到云平台，用户可统一管理多个 agent

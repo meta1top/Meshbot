@@ -1,5 +1,5 @@
 {
-  "name": "anybot",
+  "name": "meshbot",
   "private": true,
   "scripts": {
     "build": "turbo run build",

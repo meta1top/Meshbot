@@ -1,8 +1,8 @@
-# Anybot Monorepo 初始化实现计划
+# MeshBot Monorepo 初始化实现计划
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 初始化 Anybot monorepo 骨架，包含 5 个应用、2 个后端库、2 个前端包，能通过 `pnpm install && pnpm build`。
+**Goal:** 初始化 MeshBot monorepo 骨架，包含 5 个应用、2 个后端库、2 个前端包，能通过 `pnpm install && pnpm build`。
 
 **Architecture:** pnpm workspace 管理 9 个子包，Turborepo 编排构建。底层库（types）先构建，上层应用依赖它们。各 NestJS 应用作为独立 standalone 项目，不使用 NestJS 内置 monorepo 模式。
 
@@ -13,7 +13,7 @@
 ## 文件结构总览
 
 ```
-anybot/
+meshbot/
 ├── package.json                          # 根级配置
 ├── pnpm-workspace.yaml                   # workspace 声明
 ├── turbo.json                            # Turborepo pipeline
@@ -93,7 +93,7 @@ anybot/
 
 ```json
 {
-  "name": "anybot",
+  "name": "meshbot",
   "private": true,
   "scripts": {
     "build": "turbo run build",
@@ -724,8 +724,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Anybot',
-  description: 'Anybot Agent',
+  title: 'MeshBot',
+  description: 'MeshBot Agent',
 };
 
 export default function RootLayout({
@@ -747,7 +747,7 @@ export default function RootLayout({
 export default function Home() {
   return (
     <main className="flex min-h-screen items-center justify-center">
-      <h1 className="text-2xl font-bold">Anybot Agent</h1>
+      <h1 className="text-2xl font-bold">MeshBot Agent</h1>
     </main>
   );
 }
@@ -863,8 +863,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Anybot Platform',
-  description: 'Anybot Agent Management Platform',
+  title: 'MeshBot Platform',
+  description: 'MeshBot Agent Management Platform',
 };
 
 export default function RootLayout({
@@ -886,7 +886,7 @@ export default function RootLayout({
 export default function Home() {
   return (
     <main className="flex min-h-screen items-center justify-center">
-      <h1 className="text-2xl font-bold">Anybot Platform</h1>
+      <h1 className="text-2xl font-bold">MeshBot Platform</h1>
     </main>
   );
 }
@@ -953,8 +953,8 @@ git commit -m "chore: add @meshbot/web-main app skeleton"
 - [ ] **Step 3: 创建 `apps/desktop/electron-builder.yml`**
 
 ```yaml
-appId: com.anybot.desktop
-productName: Anybot
+appId: com.meshbot.desktop
+productName: MeshBot
 directories:
   output: release
 files:
@@ -1075,7 +1075,7 @@ git commit -m "chore: add pnpm lockfile after initial install"
 将原来的：
 
 ```
-anybot/
+meshbot/
 ├── apps/
 │   ├── server/
 │   ├── web/
@@ -1091,7 +1091,7 @@ anybot/
 替换为：
 
 ```
-anybot/
+meshbot/
 ├── apps/
 │   ├── desktop/          # Electron 桌面壳
 │   ├── server-agent/     # NestJS 本地 agent

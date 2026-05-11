@@ -275,13 +275,13 @@ Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>"
 **Files:**
 - Modify: `apps/cli-agent/package.json`
 
-- [ ] **Step 1: Rename bin from anybot to meshbot**
+- [ ] **Step 1: Rename bin from meshbot to meshbot**
 
 Change:
 
 ```json
   "bin": {
-    "anybot": "./dist/index.js"
+    "meshbot": "./dist/index.js"
   },
 ```
 
@@ -297,7 +297,7 @@ to:
 
 ```bash
 git add apps/cli-agent/package.json
-git commit -m "chore(cli-agent): rename binary from anybot to meshbot
+git commit -m "chore(cli-agent): rename binary from meshbot to meshbot
 
 Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>"
 ```

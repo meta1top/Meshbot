@@ -3,7 +3,8 @@ import { PassportStrategy } from "@nestjs/passport";
 import { ExtractJwt, Strategy } from "passport-jwt";
 import { LocalAuthService } from "./local-auth.service";
 
-const JWT_SECRET = process.env.ANYBOT_JWT_SECRET ?? "anybot-default-secret-change-in-prod";
+const JWT_SECRET =
+  process.env.MESHBOT_JWT_SECRET ?? "meshbot-default-secret-change-in-prod";
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {

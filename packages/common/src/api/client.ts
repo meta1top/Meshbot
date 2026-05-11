@@ -3,7 +3,7 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from "axios";
 
-const TOKEN_KEY = "anybot_access_token";
+const TOKEN_KEY = "meshbot_access_token";
 
 const DEFAULT_API_URL = "http://127.0.0.1:3100";
 

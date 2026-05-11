@@ -1,12 +1,12 @@
 export {
+  AuthResponse,
   type AuthStatus,
+  LoginDto,
   type LoginInput,
   type LoginResponse,
   loginSchema,
+  RegisterDto,
   type RegisterInput,
   registerSchema,
   type UserInfo,
-  RegisterDto,
-  LoginDto,
-  AuthResponse,
 } from "./auth";
