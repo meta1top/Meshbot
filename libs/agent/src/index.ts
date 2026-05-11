@@ -8,3 +8,4 @@ export type {
 } from "./graph/graph.service";
 export { GraphService } from "./graph/graph.service";
 export { PromptService } from "./prompt/prompt.service";
+export { ToolRegistry } from "./tools/tool-registry";
