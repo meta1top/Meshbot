@@ -18,6 +18,7 @@
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@meshbot/agent": "workspace:^",
     "@meshbot/common": "workspace:*",
     "@meshbot/shared": "workspace:*",
     "@meshbot/types": "workspace:*",

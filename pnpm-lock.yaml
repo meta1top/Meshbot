@@ -61,6 +61,9 @@ importers:
 
   apps/server-agent:
     dependencies:
+      '@meshbot/agent':
+        specifier: workspace:^
+        version: link:../../libs/agent
       '@meshbot/common':
         specifier: workspace:*
         version: link:../../packages/common
