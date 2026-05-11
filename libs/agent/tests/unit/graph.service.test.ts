@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -34,5 +34,12 @@ describe("GraphService", () => {
     const response = await graphService.sendMessage(threadId, "Hello");
     expect(response.threadId).toBe(threadId);
     expect(typeof response.content).toBe("string");
+  });
+
+  it("returns history after messages", async () => {
+    const threadId = await graphService.startSession({ model: "gpt-4" });
+    await graphService.sendMessage(threadId, "Hello");
+    const history = await graphService.getHistory(threadId);
+    expect(Array.isArray(history)).toBe(true);
   });
 });

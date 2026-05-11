@@ -1,19 +1,29 @@
-import { Annotation, StateGraph } from "@langchain/langgraph";
+import type { BaseMessage } from "@langchain/core/messages";
+import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import type { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import { supervisorNode } from "./nodes/supervisor.node";
 
-const StateAnnotation = Annotation.Root({
-  messages: Annotation<any[]>({
-    reducer: (x, y) => x.concat(y),
+export interface GraphState {
+  messages: BaseMessage[];
+}
+
+export const StateAnnotation = Annotation.Root({
+  messages: Annotation<BaseMessage[]>({
+    reducer: (left: BaseMessage[], right: BaseMessage | BaseMessage[]) => {
+      if (Array.isArray(right)) {
+        return left.concat(right);
+      }
+      return left.concat([right]);
+    },
     default: () => [],
   }),
 });
 
 export function buildSupervisorGraph(checkpointer: SqliteSaver) {
-  const workflow = new StateGraph(StateAnnotation)
+  const graph = new StateGraph(StateAnnotation)
     .addNode("supervisor", supervisorNode)
-    .addEdge("__start__", "supervisor")
-    .addEdge("supervisor", "__end__");
+    .addEdge(START, "supervisor")
+    .addEdge("supervisor", END);
 
-  return workflow.compile({ checkpointer });
+  return graph.compile({ checkpointer });
 }

@@ -1,16 +1,12 @@
-export async function supervisorNode(state: { messages: any[] }) {
-  const lastMessage = state.messages[state.messages.length - 1];
+import type { BaseMessage } from "@langchain/core/messages";
 
-  if (lastMessage?.role === "user") {
-    return {
-      messages: [
-        {
-          role: "assistant",
-          content: `Supervisor received: ${lastMessage.content}`,
-        },
-      ],
-    };
-  }
+export interface SupervisorState {
+  messages: BaseMessage[];
+}
 
-  return { messages: [] };
+export async function supervisorNode(
+  state: SupervisorState,
+): Promise<Partial<SupervisorState>> {
+  // Phase 1: Placeholder - will integrate LLM in Phase 2
+  return { messages: state.messages };
 }
