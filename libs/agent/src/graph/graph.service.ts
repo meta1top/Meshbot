@@ -1,8 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { BaseMessage } from "@langchain/core/messages";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
-import type { CompiledStateGraph } from "@langchain/langgraph";
-import type { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import { Injectable } from "@nestjs/common";
 import { createSqliteCheckpointer } from "../checkpoint/sqlite-checkpointer";
 import { MeshbotConfigService } from "../config/meshbot-config.service";
@@ -33,15 +31,8 @@ export interface Message {
 
 @Injectable()
 export class GraphService {
-  private checkpointer: SqliteSaver;
-  private graph: CompiledStateGraph<
-    typeof import("./graph.builder").StateAnnotation.State,
-    Partial<typeof import("./graph.builder").StateAnnotation.State>,
-    "supervisor" | "__start__",
-    Record<string, unknown>,
-    typeof import("./graph.builder").StateAnnotation.State,
-    typeof import("./graph.builder").StateAnnotation.State
-  >;
+  private checkpointer: ReturnType<typeof createSqliteCheckpointer>;
+  private graph: ReturnType<typeof buildSupervisorGraph>;
 
   constructor(
     private configService: MeshbotConfigService,
