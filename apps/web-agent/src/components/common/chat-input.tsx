@@ -82,7 +82,7 @@ export function ChatInput({
           placeholder={placeholder}
           rows={1}
           className={cn(
-            "min-h-[24px] max-h-[200px] w-full resize-none bg-transparent py-1 text-sm text-foreground outline-none placeholder:text-muted-foreground",
+            "min-h-[24px] max-h-[200px] w-full resize-none bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground",
           )}
           style={{ height: "auto" }}
         />
@@ -91,7 +91,7 @@ export function ChatInput({
           <button
             type="button"
             onClick={handleInterrupt}
-            className="flex h-8 w-8 shrink-0 items-center justify-center text-destructive transition-colors hover:text-destructive/80"
+            className="flex h-6 w-6 shrink-0 items-center justify-center text-destructive transition-colors hover:text-destructive/80"
             title="Stop generating"
           >
             <Square className="h-4 w-4 fill-current" />
