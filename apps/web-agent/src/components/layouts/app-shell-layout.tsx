@@ -5,19 +5,19 @@ import { useTheme } from "@meshbot/common/react";
 import { cn } from "@meshbot/design";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  ChevronDown,
   Clock,
   Grip,
   LogOut,
   Moon,
+  MoreHorizontal,
   Pin,
   Plus,
-  Settings,
   Sun,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
+import { SidebarNavItem } from "@/components/common/sidebar-nav-item";
 import { DragRegion } from "@/components/drag-region";
 import { LanguageToggle } from "@/components/language-toggle";
 
@@ -32,6 +32,9 @@ export function AppShellLayout({ children, className }: AppShellLayoutProps) {
   const { theme, toggleTheme } = useTheme();
   const t = useTranslations("appShell");
   const commonT = useTranslations("common");
+  const pathname = usePathname();
+  const isNewSessionActive = pathname === "/session/new";
+  const isScheduledActive = pathname === "/schedule";
   const [isMac, setIsMac] = useState(false);
 
   useEffect(() => {
@@ -64,67 +67,68 @@ export function AppShellLayout({ children, className }: AppShellLayoutProps) {
             )}
           >
             {isMac && <div className="app-mac-controls-safe-left mb-2 h-8" />}
-            <nav className="space-y-0.5 text-[14px] text-foreground/80">
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded-none px-2 py-1.5 text-left hover:bg-accent"
+            <nav className="space-y-0.5">
+              <SidebarNavItem
+                icon={<Plus className="h-4 w-4" />}
+                active={isNewSessionActive}
+                onClick={() => router.push("/session/new")}
               >
-                <Plus className="h-4 w-4 text-muted-foreground" />
                 {t("newSession")}
-              </button>
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded-none px-2 py-1.5 text-left hover:bg-accent"
+              </SidebarNavItem>
+              <SidebarNavItem
+                icon={<Clock className="h-4 w-4" />}
+                active={isScheduledActive}
+                onClick={() => router.push("/schedule")}
               >
-                <Clock className="h-4 w-4 text-muted-foreground" />
                 {t("scheduled")}
-              </button>
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded-none bg-accent px-2 py-1.5 text-left font-medium"
-              >
-                <Settings className="h-4 w-4 text-muted-foreground" />
-                {t("customize")}
-              </button>
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded-none px-2 py-1.5 text-left text-muted-foreground hover:bg-accent"
-              >
-                <ChevronDown className="h-4 w-4" />
-                {t("more")}
-              </button>
+              </SidebarNavItem>
             </nav>
 
             <div className="mt-8 px-2 text-[12px] font-medium text-muted-foreground">
               {t("pinned")}
             </div>
-            <div className="mt-1 space-y-0.5 text-[14px] text-muted-foreground">
+            <div className="mt-1 space-y-0.5 text-[14px]">
               <button
                 type="button"
-                className="flex w-full items-center gap-2 rounded-none px-2 py-1.5 text-left hover:bg-accent"
+                className="group flex w-full items-center justify-between rounded-none px-2 py-1.5 text-left text-muted-foreground hover:bg-accent hover:text-white"
               >
-                <Pin className="h-3.5 w-3.5" />
-                {t("dragToPin")}
+                <div className="flex items-center gap-2">
+                  <Pin className="h-3.5 w-3.5 text-muted-foreground group-hover:text-white" />
+                  <span>{t("dragToPin")}</span>
+                </div>
+                <span className="opacity-0 transition-opacity group-hover:opacity-100">
+                  <MoreHorizontal className="h-3.5 w-3.5" />
+                </span>
               </button>
             </div>
 
             <div className="mt-5 px-2 text-[12px] font-medium text-muted-foreground">
               {t("recents")}
             </div>
-            <div className="mt-1 space-y-0.5 text-[14px] text-foreground/80">
+            <div className="mt-1 space-y-0.5 text-[14px]">
               <button
                 type="button"
-                className="flex w-full items-center gap-2 rounded-none px-2 py-1.5 text-left hover:bg-accent"
+                className="group flex w-full items-center justify-between rounded-none px-2 py-1.5 text-left text-foreground/80 hover:bg-accent hover:text-white"
               >
-                <Grip className="h-3.5 w-3.5 text-muted-foreground" />
-                {t("addMarketplacePlugin")}
+                <div className="flex items-center gap-2">
+                  <Grip className="h-3.5 w-3.5 text-muted-foreground group-hover:text-white" />
+                  <span>{t("addMarketplacePlugin")}</span>
+                </div>
+                <span className="opacity-0 transition-opacity group-hover:opacity-100">
+                  <MoreHorizontal className="h-3.5 w-3.5" />
+                </span>
               </button>
               <button
                 type="button"
-                className="flex w-full items-center gap-2 rounded-none px-2 py-1.5 text-left hover:bg-accent"
+                className="group flex w-full items-center justify-between rounded-none px-2 py-1.5 text-left text-foreground/80 hover:bg-accent hover:text-white"
               >
-                <Grip className="h-3.5 w-3.5 text-muted-foreground" />
-                {t("respondToUserGreeting")}
+                <div className="flex items-center gap-2">
+                  <Grip className="h-3.5 w-3.5 text-muted-foreground group-hover:text-white" />
+                  <span>{t("respondToUserGreeting")}</span>
+                </div>
+                <span className="opacity-0 transition-opacity group-hover:opacity-100">
+                  <MoreHorizontal className="h-3.5 w-3.5" />
+                </span>
               </button>
             </div>
 
