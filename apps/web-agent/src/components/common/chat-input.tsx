@@ -9,7 +9,6 @@ interface ChatInputProps {
   onInterrupt?: () => void;
   isLoading?: boolean;
   placeholder?: string;
-  modelName?: string;
   tokenUsage?: { current: number; max: number };
 }
 
@@ -18,7 +17,6 @@ export function ChatInput({
   onInterrupt,
   isLoading = false,
   placeholder = "Describe a task or ask a question",
-  modelName,
   tokenUsage,
 }: ChatInputProps) {
   const [value, setValue] = useState("");
@@ -123,7 +121,13 @@ export function ChatInput({
       </div>
 
       <div className="flex items-center justify-between border-t border-border px-3 py-1.5">
-        <div className="text-xs text-muted-foreground">{modelName || ""}</div>
+        <button
+          type="button"
+          className="flex h-5 w-5 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+          title="Attach file"
+        >
+          <Paperclip className="h-3.5 w-3.5" />
+        </button>
 
         {tokenUsage && (
           <div className="flex items-center gap-2">
