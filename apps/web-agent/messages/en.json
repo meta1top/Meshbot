@@ -80,7 +80,6 @@
     "models": "Models",
     "all": "All",
     "overviewMetrics": "Overview metrics",
-    "tokenComparison": "You've used ~67x more tokens than The Great Gatsby.",
     "metrics": {
       "sessions": "Sessions",
       "messages": "Messages",
