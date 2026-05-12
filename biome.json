@@ -33,6 +33,13 @@
             "useImportType": "off"
           }
         }
+      },
+      "assist": {
+        "actions": {
+          "source": {
+            "organizeImports": "off"
+          }
+        }
       }
     }
   ],

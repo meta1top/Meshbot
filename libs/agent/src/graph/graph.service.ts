@@ -3,8 +3,8 @@ import type { BaseMessage } from "@langchain/core/messages";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { Injectable } from "@nestjs/common";
 import { createSqliteCheckpointer } from "../checkpoint/sqlite-checkpointer";
-import type { MeshbotConfigService } from "../config/meshbot-config.service";
-import type { PromptService } from "../prompt/prompt.service";
+import { MeshbotConfigService } from "../config/meshbot-config.service";
+import { PromptService } from "../prompt/prompt.service";
 import type { GraphState } from "./graph.builder";
 import { buildSupervisorGraph } from "./graph.builder";
 
