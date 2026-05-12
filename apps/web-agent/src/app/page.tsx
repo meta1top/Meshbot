@@ -22,7 +22,7 @@ export default function Home() {
 
   return (
     <AppShellLayout>
-      <div className="mx-auto w-full max-w-[620px]">
+      <div className="mx-auto w-full max-w-[620px] flex-1">
         <div className="mb-4 flex items-center gap-2 text-[38px] leading-none">
           <span className="text-[20px] text-[#d97745]">✺</span>
           <h1 className="text-[38px] leading-none font-medium tracking-[-0.015em] text-foreground">
@@ -85,7 +85,7 @@ export default function Home() {
           </CardContent>
         </Card>
       </div>
-      <div className="mt-8">
+      <div className="sticky bottom-0 mt-auto bg-background pt-4">
         <ChatInput
           onSend={(msg) => console.log("send:", msg)}
           modelName="Flash · Medium"
