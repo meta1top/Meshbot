@@ -85,6 +85,7 @@ export function ChatInput({
           data-1p-ignore
           data-lpignore="true"
           data-form-type="other"
+          name="chat-message"
           className={cn(
             "min-h-[24px] max-h-[200px] w-full resize-none bg-transparent py-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground",
           )}
