@@ -2,6 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@meshbot/design";
 import { useTranslations } from "next-intl";
+import { ChatInput } from "@/components/common/chat-input";
 import { AppShellLayout } from "@/components/layouts/app-shell-layout";
 
 const heatmapCells = Array.from({ length: 96 }, (_, index) => index);
@@ -83,6 +84,13 @@ export default function Home() {
             </div>
           </CardContent>
         </Card>
+      </div>
+      <div className="mt-8">
+        <ChatInput
+          onSend={(msg) => console.log("send:", msg)}
+          modelName="Flash · Medium"
+          tokenUsage={{ current: 12, max: 128 }}
+        />
       </div>
     </AppShellLayout>
   );
