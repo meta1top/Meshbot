@@ -50,6 +50,7 @@ export {
 } from "./components/ui/form";
 export { Input as UiInput } from "./components/ui/input";
 export { Label } from "./components/ui/label";
+export { Progress } from "./components/ui/progress";
 export {
   Select as UiSelect,
   SelectContent as UiSelectContent,
@@ -62,5 +63,11 @@ export {
   SelectTrigger as UiSelectTrigger,
   SelectValue as UiSelectValue,
 } from "./components/ui/select";
+export {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "./components/ui/tooltip";
 
 export { cn } from "./lib/utils";
