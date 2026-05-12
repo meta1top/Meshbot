@@ -88,6 +88,7 @@ export default function Home() {
       <div className="mt-8">
         <ChatInput
           onSend={(msg) => console.log("send:", msg)}
+          modelName="Flash · Medium"
           tokenUsage={{ current: 12, max: 128 }}
         />
       </div>
