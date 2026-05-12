@@ -80,7 +80,6 @@
     "models": "模型",
     "all": "全部",
     "overviewMetrics": "概览指标",
-    "tokenComparison": "你使用的 Token 约是《了不起的盖茨比》的 67 倍。",
     "metrics": {
       "sessions": "会话数",
       "messages": "消息数",
