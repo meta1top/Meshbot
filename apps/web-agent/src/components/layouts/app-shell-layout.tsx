@@ -171,7 +171,7 @@ export function AppShellLayout({ children, className }: AppShellLayoutProps) {
               className,
             )}
           >
-            <div className="mx-auto flex w-full max-w-[900px] flex-1 flex-col px-5 pt-6 pb-6 lg:px-10">
+            <div className="mx-auto flex w-full max-w-[900px] flex-1 flex-col p-4 lg:px-10">
               {children}
             </div>
           </div>
