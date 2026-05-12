@@ -117,7 +117,7 @@ interface SidebarNavItemProps {
 - [ ] 实现基于路由的选中状态判断
 - [ ] 统一选中态和 hover 态样式（白色文字+图标）
 - [ ] 预留对话项操作区按钮位置
-- [ ] 清理 `appShell.more` i18n key
+- [ ] 清理 `appShell.more` 和 `appShell.customize` i18n key
 
 ### 后续迭代
 - [ ] 对话项下拉菜单功能（修改标题、删除、固定/取消固定）
