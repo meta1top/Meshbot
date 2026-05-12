@@ -9,6 +9,7 @@ interface ChatInputProps {
   onInterrupt?: () => void;
   isLoading?: boolean;
   placeholder?: string;
+  modelName?: string;
   tokenUsage?: { current: number; max: number };
 }
 
@@ -17,6 +18,7 @@ export function ChatInput({
   onInterrupt,
   isLoading = false,
   placeholder = "Describe a task or ask a question",
+  modelName,
   tokenUsage,
 }: ChatInputProps) {
   const [value, setValue] = useState("");
@@ -72,14 +74,6 @@ export function ChatInput({
   return (
     <div className="rounded-none border border-border bg-card">
       <div className="flex items-end gap-2 px-3 py-2">
-        <button
-          type="button"
-          className="flex h-8 w-8 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-          title="Attach file"
-        >
-          <Paperclip className="h-4 w-4" />
-        </button>
-
         <textarea
           ref={textareaRef}
           value={value}
@@ -121,26 +115,49 @@ export function ChatInput({
       </div>
 
       <div className="flex items-center justify-between border-t border-border px-3 py-1.5">
-        <button
-          type="button"
-          className="flex h-5 w-5 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-          title="Attach file"
-        >
-          <Paperclip className="h-3.5 w-3.5" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="flex h-5 w-5 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+            title="添加附件"
+          >
+            <Paperclip className="h-3.5 w-3.5" />
+          </button>
+          {modelName && (
+            <span className="text-xs text-muted-foreground">{modelName}</span>
+          )}
+        </div>
 
         {tokenUsage && (
-          <div className="flex items-center gap-2">
-            <div className="h-1.5 w-16 overflow-hidden bg-border">
-              <div
-                className="h-full bg-accent transition-all"
-                style={{ width: `${tokenPercent}%` }}
-              />
+          <div className="group relative flex items-center gap-2">
+            <div className="h-4 w-4 rounded-full border-2 border-border">
+              <svg
+                className="h-full w-full -rotate-90"
+                viewBox="0 0 36 36"
+                role="img"
+                aria-label="Token usage"
+              >
+                <path
+                  className="text-border"
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="text-accent transition-all"
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeDasharray={`${tokenPercent}, 100`}
+                  strokeWidth="4"
+                />
+              </svg>
             </div>
-            <span className="text-xs text-muted-foreground">
+            <div className="pointer-events-none absolute bottom-full right-0 mb-1 rounded-none border border-border bg-card px-2 py-1 text-xs text-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
               {tokenUsage.current.toLocaleString()} /{" "}
               {tokenUsage.max.toLocaleString()}
-            </span>
+            </div>
           </div>
         )}
       </div>
