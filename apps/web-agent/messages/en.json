@@ -68,6 +68,12 @@
     "local": "Local",
     "modelBadge": "Flash · Medium"
   },
+  "chatInput": {
+    "placeholder": "Describe a task or ask a question",
+    "send": "Send",
+    "interrupt": "Interrupt",
+    "attachment": "Add attachment"
+  },
   "home": {
     "title": "What's up next?",
     "overview": "Overview",

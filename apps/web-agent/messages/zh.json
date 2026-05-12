@@ -68,6 +68,12 @@
     "local": "本地",
     "modelBadge": "Flash · Medium"
   },
+  "chatInput": {
+    "placeholder": "描述一个任务或提出一个问题",
+    "send": "发送",
+    "interrupt": "中断",
+    "attachment": "添加附件"
+  },
   "home": {
     "title": "接下来做什么？",
     "overview": "概览",
