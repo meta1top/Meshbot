@@ -1,4 +1,5 @@
 import { themeScript } from "@meshbot/common";
+import { TooltipProvider } from "@meshbot/design";
 import type { Metadata } from "next";
 import { ElectronInit } from "@/components/electron-init";
 import { IntlProvider } from "@/components/intl-provider";
@@ -28,7 +29,9 @@ export default function RootLayout({
       <body className="min-h-screen antialiased">
         <IntlProvider>
           <ElectronInit />
-          <Providers>{children}</Providers>
+          <TooltipProvider>
+            <Providers>{children}</Providers>
+          </TooltipProvider>
         </IntlProvider>
       </body>
     </html>
