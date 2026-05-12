@@ -2,10 +2,13 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@meshbot/design";
 import { useTranslations } from "next-intl";
+import { ActivityHeatmap } from "@/components/common/activity-heatmap";
 import { ChatInput } from "@/components/common/chat-input";
 import { AppShellLayout } from "@/components/layouts/app-shell-layout";
 
-const heatmapCells = Array.from({ length: 96 }, (_, index) => index);
+const heatmapData = Array.from({ length: 96 }, (_, index) =>
+  index === 79 ? 100 : index % 5 === 0 ? 50 : 0,
+);
 
 export default function Home() {
   const t = useTranslations("home");
@@ -22,7 +25,7 @@ export default function Home() {
 
   return (
     <AppShellLayout>
-      <div className="mx-auto w-full max-w-[620px] flex-1">
+      <div className="w-full max-w-[620px] flex-1">
         <div className="mb-4 flex items-center gap-2 text-[38px] leading-none">
           <span className="text-[20px] text-[#d97745]">✺</span>
           <h1 className="text-[38px] leading-none font-medium tracking-[-0.015em] text-foreground">
@@ -32,13 +35,7 @@ export default function Home() {
 
         <Card className="overflow-hidden border-border bg-muted shadow-none">
           <CardHeader className="space-y-3 pb-2">
-            <div className="flex items-center justify-between text-[12px] text-foreground/70">
-              <div className="flex items-center gap-2">
-                <span className="rounded-md bg-accent px-2 py-1 font-medium text-foreground">
-                  {t("overview")}
-                </span>
-                <span>{t("models")}</span>
-              </div>
+            <div className="flex items-center justify-end text-[12px] text-foreground/70">
               <div className="flex items-center gap-3">
                 <span className="rounded-md bg-accent px-2 py-1 font-medium text-foreground">
                   {t("all")}
@@ -56,7 +53,7 @@ export default function Home() {
                   key={item.label}
                   className="rounded-[6px] bg-accent px-2.5 py-2 text-foreground"
                 >
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-[11px] text-card-foreground">
                     {item.label}
                   </p>
                   <p className="mt-1 text-[30px] leading-[0.95] font-medium tracking-tight">
@@ -66,26 +63,11 @@ export default function Home() {
               ))}
             </div>
 
-            <div className="grid grid-cols-16 gap-1">
-              {heatmapCells.map((cell) => (
-                <span
-                  key={cell}
-                  className="h-5 rounded-[3px] bg-accent"
-                  style={
-                    cell === 79 ? { backgroundColor: "#3b82f6" } : undefined
-                  }
-                />
-              ))}
-            </div>
-
-            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-              <span>{t("tokenComparison")}</span>
-              <div className="h-8 w-2 rounded bg-accent" />
-            </div>
+            <ActivityHeatmap data={heatmapData} maxValue={100} />
           </CardContent>
         </Card>
       </div>
-      <div className="sticky bottom-0 mt-auto bg-background pt-4">
+      <div className="sticky bottom-4 mt-auto bg-background pt-4">
         <ChatInput
           onSend={(msg) => console.log("send:", msg)}
           modelName="Flash · Medium"
