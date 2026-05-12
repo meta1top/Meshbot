@@ -27,7 +27,6 @@ export default function Home() {
     <AppShellLayout>
       <div className="w-full max-w-[620px] flex-1">
         <div className="mb-4 flex items-center gap-2 text-[38px] leading-none">
-          <span className="text-[20px] text-[#d97745]">✺</span>
           <h1 className="text-[38px] leading-none font-medium tracking-[-0.015em] text-foreground">
             {t("title")}
           </h1>
