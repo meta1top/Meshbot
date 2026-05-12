@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@meshbot/design";
+import { cn, Tooltip, TooltipContent, TooltipTrigger } from "@meshbot/design";
 import { Paperclip, Send, Square } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 
@@ -124,38 +124,42 @@ export function ChatInput({
         </button>
 
         {tokenUsage && (
-          <div className="group relative flex items-center gap-2">
+          <div className="flex items-center gap-2">
             {modelName && (
               <span className="text-xs text-muted-foreground">{modelName}</span>
             )}
-            <div className="h-4 w-4">
-              <svg
-                className="h-full w-full -rotate-90"
-                viewBox="0 0 36 36"
-                role="img"
-                aria-label="Token usage"
-              >
-                <path
-                  className="text-border"
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                />
-                <path
-                  className="text-accent transition-all"
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeDasharray={`${tokenPercent}, 100`}
-                  strokeWidth="4"
-                />
-              </svg>
-            </div>
-            <div className="pointer-events-none absolute bottom-full right-0 mb-1 rounded-none border border-border bg-card px-2 py-1 text-xs text-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-              {tokenUsage.current.toLocaleString()} /{" "}
-              {tokenUsage.max.toLocaleString()}
-            </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="h-4 w-4 cursor-pointer">
+                  <svg
+                    className="h-full w-full -rotate-90"
+                    viewBox="0 0 36 36"
+                    role="img"
+                    aria-label="Token usage"
+                  >
+                    <path
+                      className="text-border"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="text-accent transition-all"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeDasharray={`${tokenPercent}, 100`}
+                      strokeWidth="4"
+                    />
+                  </svg>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                {tokenUsage.current.toLocaleString()} /{" "}
+                {tokenUsage.max.toLocaleString()}
+              </TooltipContent>
+            </Tooltip>
           </div>
         )}
       </div>
