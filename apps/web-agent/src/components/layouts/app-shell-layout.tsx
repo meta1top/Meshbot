@@ -33,7 +33,7 @@ export function AppShellLayout({ children, className }: AppShellLayoutProps) {
   const t = useTranslations("appShell");
   const commonT = useTranslations("common");
   const pathname = usePathname();
-  const isNewSessionActive = pathname === "/session/new";
+  const isNewSessionActive = pathname === "/";
   const isScheduledActive = pathname === "/schedule";
   const [isMac, setIsMac] = useState(false);
 
@@ -71,7 +71,7 @@ export function AppShellLayout({ children, className }: AppShellLayoutProps) {
               <SidebarNavItem
                 icon={<Plus className="h-4 w-4" />}
                 active={isNewSessionActive}
-                onClick={() => router.push("/session/new")}
+                onClick={() => router.push("/")}
               >
                 {t("newSession")}
               </SidebarNavItem>
@@ -166,35 +166,10 @@ export function AppShellLayout({ children, className }: AppShellLayoutProps) {
 
         <section className="relative flex min-w-0 flex-1 flex-col">
           <div className={cn("flex-1 overflow-y-auto", className)}>
-            <div className="mx-auto w-full max-w-[900px] px-5 pt-6 pb-40 lg:px-10">
+            <div className="mx-auto w-full max-w-[900px] px-5 pt-6 pb-6 lg:px-10">
               {children}
             </div>
           </div>
-
-          <footer className="absolute right-0 bottom-0 left-0 px-4 pb-4 lg:px-8">
-            <div className="mx-auto w-full max-w-[900px]">
-              <div className="rounded-xl border border-border bg-card/96 px-4 py-3 text-[15px] text-muted-foreground shadow-[0_1px_2px_rgba(0,0,0,0.02)] backdrop-blur-sm dark:shadow-[0_1px_2px_rgba(0,0,0,0.15)]">
-                {t("promptPlaceholder")}
-              </div>
-              <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <span className="rounded-md border border-border bg-muted px-2 py-1">
-                    {t("local")}
-                  </span>
-                  <span className="rounded-md border border-border bg-muted px-2 py-1">
-                    meshbot
-                  </span>
-                  <span className="rounded-md border border-border bg-muted px-2 py-1">
-                    main
-                  </span>
-                  <span className="rounded-md border border-border bg-muted px-2 py-1">
-                    worktree
-                  </span>
-                </div>
-                <span>{t("modelBadge")}</span>
-              </div>
-            </div>
-          </footer>
         </section>
       </div>
     </main>
