@@ -165,8 +165,13 @@ export function AppShellLayout({ children, className }: AppShellLayoutProps) {
         </aside>
 
         <section className="relative flex min-w-0 flex-1 flex-col">
-          <div className={cn("flex-1 overflow-y-auto", className)}>
-            <div className="mx-auto w-full max-w-[900px] px-5 pt-6 pb-6 lg:px-10">
+          <div
+            className={cn(
+              "flex min-h-0 flex-1 flex-col overflow-y-auto",
+              className,
+            )}
+          >
+            <div className="mx-auto flex w-full max-w-[900px] flex-1 flex-col px-5 pt-6 pb-6 lg:px-10">
               {children}
             </div>
           </div>
