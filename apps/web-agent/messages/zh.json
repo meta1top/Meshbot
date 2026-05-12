@@ -58,8 +58,6 @@
   "appShell": {
     "newSession": "新会话",
     "scheduled": "计划任务",
-    "customize": "个性化",
-    "more": "更多",
     "pinned": "已固定",
     "dragToPin": "拖拽以固定",
     "recents": "最近",

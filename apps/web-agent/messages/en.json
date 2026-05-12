@@ -58,8 +58,6 @@
   "appShell": {
     "newSession": "New session",
     "scheduled": "Scheduled",
-    "customize": "Customize",
-    "more": "More",
     "pinned": "Pinned",
     "dragToPin": "Drag to pin",
     "recents": "Recents",
