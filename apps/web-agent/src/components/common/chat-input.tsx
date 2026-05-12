@@ -22,37 +22,28 @@ export function ChatInput({
   tokenUsage,
 }: ChatInputProps) {
   const [value, setValue] = useState("");
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
 
-  const adjustHeight = useCallback(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    textarea.style.height = "auto";
-    const newHeight = Math.min(Math.max(textarea.scrollHeight, 24), 200);
-    textarea.style.height = `${newHeight}px`;
+  const handleInput = useCallback(() => {
+    const el = editorRef.current;
+    if (!el) return;
+    const text = el.innerText;
+    setValue(text);
   }, []);
-
-  const handleChange = useCallback(
-    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      setValue(e.target.value);
-      adjustHeight();
-    },
-    [adjustHeight],
-  );
 
   const handleSend = useCallback(() => {
     const trimmed = value.trim();
     if (!trimmed || isLoading) return;
     onSend?.(trimmed);
     setValue("");
-    const textarea = textareaRef.current;
-    if (textarea) {
-      textarea.style.height = "auto";
+    const el = editorRef.current;
+    if (el) {
+      el.innerText = "";
     }
   }, [value, isLoading, onSend]);
 
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         handleSend();
@@ -74,23 +65,26 @@ export function ChatInput({
   return (
     <div className="rounded-none border border-border bg-card">
       <div className="flex items-center gap-2 px-3 py-2">
-        <textarea
-          ref={textareaRef}
-          value={value}
-          onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          rows={1}
-          autoComplete="off"
-          data-1p-ignore
-          data-lpignore="true"
-          data-form-type="other"
-          name="chat-message"
-          className={cn(
-            "min-h-[24px] max-h-[200px] w-full resize-none bg-transparent py-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground",
+        <div className="relative w-full">
+          {!hasContent && (
+            <div className="pointer-events-none absolute left-0 top-0 py-1.5 text-sm text-muted-foreground">
+              {placeholder}
+            </div>
           )}
-          style={{ height: "auto" }}
-        />
+          <div
+            ref={editorRef}
+            role="textbox"
+            aria-multiline="true"
+            tabIndex={0}
+            contentEditable
+            onInput={handleInput}
+            onKeyDown={handleKeyDown}
+            className={cn(
+              "min-h-[24px] max-h-[200px] w-full overflow-y-auto bg-transparent py-1.5 text-sm text-foreground outline-none empty:before:text-muted-foreground",
+            )}
+            style={{ wordBreak: "break-word" }}
+          />
+        </div>
 
         {isLoading ? (
           <button
