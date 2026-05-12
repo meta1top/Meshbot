@@ -115,22 +115,20 @@ export function ChatInput({
       </div>
 
       <div className="flex items-center justify-between border-t border-border px-3 py-1.5">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="flex h-5 w-5 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-            title="添加附件"
-          >
-            <Paperclip className="h-3.5 w-3.5" />
-          </button>
-          {modelName && (
-            <span className="text-xs text-muted-foreground">{modelName}</span>
-          )}
-        </div>
+        <button
+          type="button"
+          className="flex h-5 w-5 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+          title="添加附件"
+        >
+          <Paperclip className="h-3.5 w-3.5" />
+        </button>
 
         {tokenUsage && (
           <div className="group relative flex items-center gap-2">
-            <div className="h-4 w-4 rounded-full border-2 border-border">
+            {modelName && (
+              <span className="text-xs text-muted-foreground">{modelName}</span>
+            )}
+            <div className="h-4 w-4">
               <svg
                 className="h-full w-full -rotate-90"
                 viewBox="0 0 36 36"
