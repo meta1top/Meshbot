@@ -50,19 +50,17 @@ interface SidebarNavItemProps {
 
 #### 3.1 顶部导航区
 
-保留三个菜单项，移除"更多"：
+保留两个菜单项，移除"更多"和"个性化"：
 
 | 菜单项 | 路由 | 图标 |
 |--------|------|------|
 | 新会话 | `/session/new` | `Plus` |
 | 计划任务 | `/schedule` | `Clock` |
-| 个性化 | `/settings` 或 `/customize` | `Settings` |
 
 **选中状态判断逻辑**：
 - 首页 `/`：无任何菜单项选中
 - `/session/new`：新会话选中
 - `/schedule`：计划任务选中
-- `/settings` 或 `/customize`：个性化选中
 - `/session/{sessionId}`：对应的会话项在"已固定"或"最近"区域中高亮
 
 #### 3.2 "已固定"和"最近"区域
@@ -102,19 +100,20 @@ interface SidebarNavItemProps {
 无需新增 i18n key，沿用现有：
 - `appShell.newSession`
 - `appShell.scheduled`
-- `appShell.customize`
 - `appShell.pinned`
 - `appShell.dragToPin`
 - `appShell.recents`
 
-移除 `appShell.more` key（从 zh.json 和 en.json 中清理）。
+移除以下 key（从 zh.json 和 en.json 中清理）：
+- `appShell.more`
+- `appShell.customize`
 
 ## 实现范围
 
 ### 本次实现
 - [ ] 创建 `SidebarNavItem` 组件
 - [ ] 修改 `AppShellLayout` 使用新组件
-- [ ] 移除"更多"按钮
+- [ ] 移除"更多"和"个性化"按钮
 - [ ] 实现基于路由的选中状态判断
 - [ ] 统一选中态和 hover 态样式（白色文字+图标）
 - [ ] 预留对话项操作区按钮位置
@@ -130,5 +129,5 @@ interface SidebarNavItemProps {
 |------|------|------|
 | `apps/web-agent/src/components/common/sidebar-nav-item.tsx` | 新增 | 可复用导航项组件 |
 | `apps/web-agent/src/components/layouts/app-shell-layout.tsx` | 修改 | 接入新组件和路由判断 |
-| `apps/web-agent/messages/zh.json` | 修改 | 移除 `appShell.more` |
-| `apps/web-agent/messages/en.json` | 修改 | 移除 `appShell.more` |
+| `apps/web-agent/messages/zh.json` | 修改 | 移除 `appShell.more`、`appShell.customize` |
+| `apps/web-agent/messages/en.json` | 修改 | 移除 `appShell.more`、`appShell.customize` |
