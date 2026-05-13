@@ -41,5 +41,19 @@ export function createZodDto<TSchema extends ZodTypeAny>(schema: TSchema) {
       };
     }
   }
-  return ZodDto as unknown as new () => ZInfer<TSchema>;
+  return ZodDto as unknown as ZodDtoClass<TSchema>;
 }
+
+/**
+ * createZodDto 返回类型 —— 既是构造函数（供 NestJS reflect / Swagger 使用），
+ * 又携带静态校验工具（schema / validate / pipe）。
+ *
+ * 用 unknown 中转的双重 cast 是必要的：TypeScript 无法从局部类的 static
+ * 字段反推泛型 TSchema，所以这里显式声明完整形态。
+ */
+export type ZodDtoClass<TSchema extends ZodTypeAny> = {
+  new (): ZInfer<TSchema>;
+  schema: TSchema;
+  validate(value: unknown): ZInfer<TSchema>;
+  pipe(): PipeTransform;
+};
