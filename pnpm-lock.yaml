@@ -367,6 +367,9 @@ importers:
       typeorm:
         specifier: ^0.3
         version: 0.3.28(better-sqlite3@12.9.0)
+      zod:
+        specifier: ^3
+        version: 3.25.76
 
   libs/shared:
     dependencies:
@@ -387,6 +390,15 @@ importers:
         version: 3.25.76
 
   libs/types-agent:
+    dependencies:
+      '@meshbot/types':
+        specifier: workspace:*
+        version: link:../types
+      zod:
+        specifier: ^3
+        version: 3.25.76
+
+  libs/types-main:
     dependencies:
       '@meshbot/types':
         specifier: workspace:*
