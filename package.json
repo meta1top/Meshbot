@@ -21,7 +21,12 @@
     "pkg:app": "pnpm run build:types && pnpm run build:common && pnpm run build:types-agent && pnpm run build:shared && pnpm run build:web-agent && pnpm run build:desktop && pnpm --filter @meshbot/desktop run dist",
     "lint": "biome lint .",
     "format": "biome format --write .",
-    "check": "biome check --write .",
+    "check:biome": "biome check --write .",
+    "check:tx": "tsx scripts/check-transactional.ts",
+    "check:naming": "tsx scripts/check-method-naming.ts",
+    "check:lock-tx": "tsx scripts/check-lock-tx.ts",
+    "check:repo": "tsx scripts/check-repo-access.ts",
+    "check": "pnpm check:tx && pnpm check:naming && pnpm check:lock-tx && pnpm check:repo",
     "typecheck": "turbo run typecheck",
     "clean": "turbo run clean && rm -rf node_modules"
   },
