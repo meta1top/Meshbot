@@ -1,0 +1,24 @@
+{
+  "generatedAt": "2026-05-13T16:10:31.079Z",
+  "paths": [
+    "libs",
+    "apps"
+  ],
+  "fileCount": 105,
+  "filterTypes": null,
+  "strict": false,
+  "total": 1,
+  "issues": [
+    {
+      "type": "REDUNDANT",
+      "file": "/Users/grant/Meta1/meshbot/apps/server-agent/src/services/auth.service.ts",
+      "line": 21,
+      "className": "AuthService",
+      "methodName": "register",
+      "details": "挂了 @Transactional() 但仅 1 处写动作（事务无意义）",
+      "evidence": [
+        "33: this.userRepo.save(...)"
+      ]
+    }
+  ]
+}

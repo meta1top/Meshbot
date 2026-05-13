@@ -1,0 +1,27 @@
+{
+  "name": "@meshbot/common",
+  "version": "0.0.1",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "dev": "tsc --project tsconfig.json --watch",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "test": "jest --config ../../jest.config.ts --roots libs/common"
+  },
+  "dependencies": {
+    "@meshbot/types": "workspace:*",
+    "async-mutex": "^0.5.0",
+    "lru-cache": "^11.0.0",
+    "zod": "^3"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^11",
+    "@nestjs/core": "^11",
+    "@nestjs/typeorm": "^11",
+    "reflect-metadata": "*",
+    "typeorm": "^0.3"
+  }
+}
