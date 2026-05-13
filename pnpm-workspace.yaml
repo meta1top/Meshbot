@@ -11,4 +11,14 @@ onlyBuiltDependencies:
   - better-sqlite3
   - electron
   - electron-winstaller
+  - esbuild
   - sharp
+
+peerDependencyRules:
+  ignoreMissing:
+    - dotenv
+  allowedVersions:
+    "@nestjs/core": "11"
+    "@nestjs/common": "11"
+    "@nestjs/typeorm": "11"
+    "reflect-metadata": "*"

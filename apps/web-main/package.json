@@ -10,7 +10,7 @@
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@meshbot/common": "workspace:*",
+    "@meshbot/web-common": "workspace:*",
     "@meshbot/design": "workspace:*",
     "@meshbot/types": "workspace:*",
     "next": "^16.2.4",

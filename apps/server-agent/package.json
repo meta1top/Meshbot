@@ -20,6 +20,7 @@
   "dependencies": {
     "@meshbot/agent": "workspace:^",
     "@meshbot/common": "workspace:*",
+    "@meshbot/web-common": "workspace:*",
     "@meshbot/shared": "workspace:*",
     "@meshbot/types": "workspace:*",
     "@meshbot/types-agent": "workspace:^",

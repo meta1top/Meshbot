@@ -1,5 +1,6 @@
 import path from "node:path";
 import { AgentModule } from "@meshbot/agent";
+import { CommonModule, TxTypeOrmModule } from "@meshbot/common";
 import { Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 import { TypeOrmModule } from "@nestjs/typeorm";
@@ -21,13 +22,22 @@ const meshbotDir = resolveMeshbotDir();
 
 @Module({
   imports: [
+    CommonModule.forRoot(),
     TypeOrmModule.forRoot({
       type: "better-sqlite3",
       database: path.join(meshbotDir, "agent.db"),
       entities: [ModelConfig, Setting, User],
       synchronize: true,
+      // SQLite 并发优化（spec 第 5.1 节风险 R1）：
+      // - journal_mode=WAL 提升并发读写表现
+      // - busy_timeout=5000 让阻塞写在 5s 内重试，避免立即抛 SQLITE_BUSY
+      // 必须用 prepareDatabase 回调，better-sqlite3 driver 的 extra.pragma 不被消费。
+      prepareDatabase: (db: import("better-sqlite3").Database) => {
+        db.pragma("journal_mode = WAL");
+        db.pragma("busy_timeout = 5000");
+      },
     }),
-    TypeOrmModule.forFeature([ModelConfig, Setting]),
+    TxTypeOrmModule.forFeature([ModelConfig, Setting]),
     AgentModule,
     AuthModule,
     LocalAuthModule,

@@ -1,6 +1,6 @@
 "use client";
 
-import { apiClient, setAccessToken } from "@meshbot/common";
+import { apiClient, setAccessToken } from "@meshbot/web-common";
 import type {
   AuthStatus,
   LoginInput,
