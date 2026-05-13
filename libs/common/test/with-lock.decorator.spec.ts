@@ -37,6 +37,11 @@ describe("@WithLock with MemoryLockProvider", () => {
   it("不同 key 并发", async () => {
     await Promise.all([svc.run("X", "a"), svc.run("Y", "b")]);
     // 两个 key 不同，交错执行；排序后必须都包含 4 个标记
-    expect(svc.log.slice().sort()).toEqual(["a-end", "a-start", "b-end", "b-start"]);
+    expect(svc.log.slice().sort()).toEqual([
+      "a-end",
+      "a-start",
+      "b-end",
+      "b-start",
+    ]);
   });
 });

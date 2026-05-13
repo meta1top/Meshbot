@@ -48,15 +48,21 @@ export function WithLock(options: WithLockOptions): MethodDecorator {
       }
 
       const generated = generateKey(options.key, args);
-      const lockKey = generated.startsWith("lock:") ? generated : `lock:${generated}`;
+      const lockKey = generated.startsWith("lock:")
+        ? generated
+        : `lock:${generated}`;
       const ttl = options.ttl ?? 30000;
       const waitTimeout = options.waitTimeout ?? 5000;
 
       logger.debug(`Acquiring lock: ${lockKey}`);
-      const release = await provider.acquire(lockKey, ttl, waitTimeout).catch((_err) => {
-        logger.warn(`Failed to acquire lock: ${lockKey}`);
-        throw new Error(options.errorMessage ?? `操作正在处理中，请稍后重试 (${lockKey})`);
-      });
+      const release = await provider
+        .acquire(lockKey, ttl, waitTimeout)
+        .catch((_err) => {
+          logger.warn(`Failed to acquire lock: ${lockKey}`);
+          throw new Error(
+            options.errorMessage ?? `操作正在处理中，请稍后重试 (${lockKey})`,
+          );
+        });
 
       try {
         return await originalMethod.apply(this, args);

@@ -13,5 +13,6 @@ export const txStorage = new AsyncLocalStorage<TransactionStore>();
  * 适用于非装饰器场景下需要手动参与当前事务的情况。
  */
 export const TransactionContext = {
-  getQueryRunner: (): QueryRunner | undefined => txStorage.getStore()?.queryRunner,
+  getQueryRunner: (): QueryRunner | undefined =>
+    txStorage.getStore()?.queryRunner,
 };

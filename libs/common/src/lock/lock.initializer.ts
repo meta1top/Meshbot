@@ -1,7 +1,10 @@
-import { Inject, Injectable, Logger, OnModuleInit } from "@nestjs/common";
-import { DiscoveryService } from "@nestjs/core";
+import { Inject, Injectable, Logger, type OnModuleInit } from "@nestjs/common";
+import type { DiscoveryService } from "@nestjs/core";
 
-import { injectLockProvider, WITH_LOCK_MARKER } from "../decorators/with-lock.decorator";
+import {
+  injectLockProvider,
+  WITH_LOCK_MARKER,
+} from "../decorators/with-lock.decorator";
 import { LOCK_PROVIDER, type LockProvider } from "./lock.provider";
 
 @Injectable()
@@ -21,7 +24,10 @@ export class LockInitializer implements OnModuleInit {
       const { instance } = wrapper;
       if (!instance || typeof instance !== "object") return;
 
-      const hasLock = Reflect.getMetadata(WITH_LOCK_MARKER, instance.constructor);
+      const hasLock = Reflect.getMetadata(
+        WITH_LOCK_MARKER,
+        instance.constructor,
+      );
       if (hasLock) {
         injectLockProvider(instance, this.provider);
         count++;

@@ -1,12 +1,16 @@
 import "reflect-metadata";
-import { DataSource } from "typeorm";
+import { Injectable } from "@nestjs/common";
+import { Test } from "@nestjs/testing";
+import { InjectRepository, TypeOrmModule } from "@nestjs/typeorm";
+import {
+  Column,
+  DataSource,
+  Entity,
+  PrimaryGeneratedColumn,
+  type Repository,
+} from "typeorm";
 import { Transactional } from "../src/decorators";
 import { TxTypeOrmModule } from "../src/typeorm";
-import { Test } from "@nestjs/testing";
-import { Column, Entity, PrimaryGeneratedColumn } from "typeorm";
-import { InjectRepository, TypeOrmModule } from "@nestjs/typeorm";
-import { Injectable } from "@nestjs/common";
-import { Repository } from "typeorm";
 
 @Entity()
 class Foo {
@@ -67,7 +71,9 @@ describe("@Transactional", () => {
   });
 
   it("失败时事务回滚，不应留下数据", async () => {
-    await expect(service.createAndFailInTx("alpha")).rejects.toThrow("rollback me");
+    await expect(service.createAndFailInTx("alpha")).rejects.toThrow(
+      "rollback me",
+    );
     const all = await service.findAll();
     expect(all.find((f) => f.name === "alpha")).toBeUndefined();
   });
