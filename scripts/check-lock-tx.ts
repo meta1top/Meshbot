@@ -2,7 +2,7 @@
 /**
  * Lock-Tx Inversion Fence v0 — 静态围栏检测「事务-锁倒置」漏洞
  *
- * 与 .cursor/rules/service-layer-cache-tx-lock.mdc 「严禁：在 @Transactional 方法内嵌套调用 @WithLock」章节对齐。
+ * 严禁：在 @Transactional 方法内嵌套调用 @WithLock。
  *
  * 检查 2 类问题：
  *   A. LOCK_INSIDE_TX_DECORATOR — 同方法装饰器顺序倒置：@Transactional 在源码上方（外层），@WithLock 在下方（内层）
@@ -93,13 +93,11 @@ const DEFAULT_PATHS = ["libs", "apps"];
 const DEFAULT_REPORT_DIR = "docs/audits/lock-tx-fence";
 
 const HINT_DECORATOR =
-  "@Transactional 在源码上方（外层）= 事务先开。同方法上 @WithLock 必须严格在 @Transactional 之上。\n" +
-  "      详见 .cursor/rules/service-layer-cache-tx-lock.mdc 「严禁事务-锁倒置」章节。";
+  "@Transactional 在源码上方（外层）= 事务先开。同方法上 @WithLock 必须严格在 @Transactional 之上。";
 
 const HINT_CALL =
   "@Transactional 方法体内调用 @WithLock 方法 → 锁的临界区 ⊊ 事务的临界区 → 锁释放时事务未 COMMIT → 唯一性/幂等保护被静默绕过。\n" +
-  "      修复：把 @WithLock 提升到外层（覆盖整个事务），或把被调用的方法拆成「无锁版本（事务内可调）+ 加锁版本（独立入口）」。\n" +
-  "      详见 .cursor/rules/service-layer-cache-tx-lock.mdc 「严禁事务-锁倒置」章节中的「正确写法」三种模式。";
+  "      修复：把 @WithLock 提升到外层（覆盖整个事务），或把被调用的方法拆成「无锁版本（事务内可调）+ 加锁版本（独立入口）」。";
 
 function parseArgs(argv: string[]): CliOptions {
   const opts: CliOptions = {
@@ -542,8 +540,6 @@ function buildMarkdownReport(issues: Issue[], meta: ReportMeta): string {
   lines.push("7. 此时另一个并发请求拿到同把锁，做相同的「查询 → 校验 → 写入」");
   lines.push("8. 它的查询同样看不到第一个事务的未提交数据 → 校验通过 → 也插入一条");
   lines.push("9. 两个事务先后 COMMIT → **唯一性约束失效 / 幂等保护失效**");
-  lines.push("");
-  lines.push("详见 `.cursor/rules/service-layer-cache-tx-lock.mdc` 「严禁事务-锁倒置」章节。");
   lines.push("");
 
   lines.push("## 摘要");

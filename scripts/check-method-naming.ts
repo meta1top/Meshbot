@@ -2,7 +2,6 @@
 /**
  * Method Naming Fence v0 — 静态围栏检查 Service 层"事务方法命名"是否合规
  *
- * 与 .cursor/rules/service-layer-cache-tx-lock.mdc 「事务方法命名约定」章节对齐，
  * 与 scripts/check-transactional.ts 形成闭环：
  *   - tx-check  → 验证「该挂事务的方法是否挂了」
  *   - naming-check → 验证「方法命名与 @Transactional() 装饰器是否一致」
@@ -19,7 +18,7 @@
  *   pnpm check:naming                          全仓扫描，stdout + 增量写报告
  *   pnpm check:naming -- --json                stdout 改为 JSON 格式
  *   pnpm check:naming -- --strict              发现问题时 exit 1（CI 用）
- *   pnpm check:naming -- --paths libs/rag      仅扫描指定路径（逗号分隔，启用过滤即不写报告）
+ *   pnpm check:naming -- --paths libs/common   仅扫描指定路径（逗号分隔，启用过滤即不写报告）
  *   pnpm check:naming -- --types PRIVATE_TX_NAMING   仅展示指定类别（逗号分隔，启用过滤即不写报告）
  *   pnpm check:naming -- --no-report           强制跳过报告文件写入
  *   pnpm check:naming -- --force-report        强制写报告（无视增量判定，刷 baseline 用）
@@ -137,7 +136,7 @@ Method Naming Fence v0
   pnpm check:naming                                全仓扫描，stdout + 增量写报告
   pnpm check:naming -- --json                      stdout 改为 JSON 格式
   pnpm check:naming -- --strict                    有问题时 exit 1（CI 用）
-  pnpm check:naming -- --paths libs/rag            仅扫指定路径（逗号分隔，启用过滤即不写报告）
+  pnpm check:naming -- --paths libs/common         仅扫指定路径（逗号分隔，启用过滤即不写报告）
   pnpm check:naming -- --types PRIVATE_TX_NAMING   仅展示指定类别（逗号分隔，启用过滤即不写报告）
   pnpm check:naming -- --no-report                 强制跳过报告文件写入（仅 stdout）
   pnpm check:naming -- --force-report              强制写报告（无视增量判定，刷 baseline 用）

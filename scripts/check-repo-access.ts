@@ -2,8 +2,6 @@
 /**
  * Repo Access Fence v0 — 静态围栏检查 Repository 注入是否合规
  *
- * 与 .cursor/rules/service-layer-repo-access.mdc 对齐。
- *
  * 检查 3 类问题：
  *   A. DUP_OWNER         — 同一 Entity 在 2+ 个 Service 中出现 @InjectRepository（违反"唯一归属"）
  *   B. NON_SERVICE_INJECT — Controller / Processor / Gateway / Resolver / Tool 中出现 @InjectRepository
@@ -171,7 +169,7 @@ Repo Access Fence v0
   pnpm check:repo -- --force-report        强制写报告（无视增量判定，刷 baseline 用）
   pnpm check:repo -- --out-dir <path>      覆盖报告输出目录（默认 ${DEFAULT_REPORT_DIR}）
 
-检查规则（与 .cursor/rules/service-layer-repo-access.mdc 对齐）:
+检查规则:
   DUP_OWNER          同一 Entity 在多个 Service 中被 @InjectRepository
   NON_SERVICE_INJECT Controller/Processor/Gateway/Resolver/Tool 中出现 @InjectRepository
   CROSS_LIB_INJECT   Service 跨 libs/<domain> 注入其他模块的 Entity Repository

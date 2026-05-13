@@ -2,18 +2,16 @@
 /**
  * Transactional Fence v0 — 静态围栏检查事务装饰器使用是否合规
  *
- * 与 .cursor/rules/service-layer-cache-tx-lock.mdc 对齐。
- *
  * 检查 3 类问题：
  *   A. MISSING       — 方法体内 ≥2 处写动作但未挂 @Transactional()
- *   B. WRONG_IMPORT  — @Transactional 导入来源 ≠ @meshbot/nest-common
+ *   B. WRONG_IMPORT  — @Transactional 导入来源 ≠ @meshbot/common
  *   D. REDUNDANT     — 挂了 @Transactional() 但写动作 ≤1（事务无意义）
  *
  * 用法：
  *   pnpm check:tx                          全仓扫描，stdout + 增量写报告
  *   pnpm check:tx -- --json                stdout 改为 JSON 格式
  *   pnpm check:tx -- --strict              发现问题时 exit 1（CI 用）
- *   pnpm check:tx -- --paths libs/rag      仅扫描指定路径（逗号分隔，启用过滤即不写报告）
+ *   pnpm check:tx -- --paths libs/common   仅扫描指定路径（逗号分隔，启用过滤即不写报告）
  *   pnpm check:tx -- --types MISSING       仅展示指定类别（逗号分隔，启用过滤即不写报告）
  *   pnpm check:tx -- --no-report           强制跳过报告文件写入
  *   pnpm check:tx -- --force-report        强制写报告（无视增量判定，刷 baseline 用）
@@ -254,7 +252,7 @@ Transactional Fence v0
   pnpm check:tx                            全仓扫描，stdout + 增量写报告
   pnpm check:tx -- --json                  stdout 改为 JSON 格式
   pnpm check:tx -- --strict                有问题时 exit 1（CI 用）
-  pnpm check:tx -- --paths libs/rag        仅扫指定路径（逗号分隔，启用过滤即不写报告）
+  pnpm check:tx -- --paths libs/common     仅扫指定路径（逗号分隔，启用过滤即不写报告）
   pnpm check:tx -- --types MISSING         仅展示指定类别（逗号分隔，启用过滤即不写报告）
   pnpm check:tx -- --no-report             强制跳过报告文件写入（仅 stdout）
   pnpm check:tx -- --force-report          强制写报告（无视增量判定，刷 baseline 用）
