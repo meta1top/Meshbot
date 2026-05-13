@@ -104,6 +104,9 @@ importers:
       '@meshbot/types-agent':
         specifier: workspace:^
         version: link:../../libs/types-agent
+      '@meshbot/web-common':
+        specifier: workspace:*
+        version: link:../../packages/web-common
       '@nestjs/common':
         specifier: ^11
         version: 11.1.19(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -205,9 +208,6 @@ importers:
       '@hookform/resolvers':
         specifier: ^5
         version: 5.2.2(react-hook-form@7.75.0(react@19.2.5))
-      '@meshbot/common':
-        specifier: workspace:*
-        version: link:../../libs/common
       '@meshbot/design':
         specifier: workspace:*
         version: link:../../packages/design
@@ -217,6 +217,9 @@ importers:
       '@meshbot/types-agent':
         specifier: workspace:^
         version: link:../../libs/types-agent
+      '@meshbot/web-common':
+        specifier: workspace:*
+        version: link:../../packages/web-common
       '@tanstack/react-query':
         specifier: ^5.100.9
         version: 5.100.9(react@19.2.5)
@@ -269,15 +272,15 @@ importers:
 
   apps/web-main:
     dependencies:
-      '@meshbot/common':
-        specifier: workspace:*
-        version: link:../../libs/common
       '@meshbot/design':
         specifier: workspace:*
         version: link:../../packages/design
       '@meshbot/types':
         specifier: workspace:*
         version: link:../../libs/types
+      '@meshbot/web-common':
+        specifier: workspace:*
+        version: link:../../packages/web-common
       next:
         specifier: ^16.2.4
         version: 16.2.4(@babel/core@7.29.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -392,25 +395,6 @@ importers:
         specifier: ^3
         version: 3.25.76
 
-  packages/common:
-    dependencies:
-      '@meshbot/types':
-        specifier: workspace:*
-        version: link:../../libs/types
-      axios:
-        specifier: ^1.16.0
-        version: 1.16.0
-      react:
-        specifier: '>=18'
-        version: 19.2.5
-      zod:
-        specifier: ^3
-        version: 3.25.76
-    devDependencies:
-      '@types/react':
-        specifier: ^19
-        version: 19.2.14
-
   packages/design:
     dependencies:
       '@hookform/resolvers':
@@ -462,6 +446,25 @@ importers:
       tailwindcss:
         specifier: ^4
         version: 4.2.4
+
+  packages/web-common:
+    dependencies:
+      '@meshbot/types':
+        specifier: workspace:*
+        version: link:../../libs/types
+      axios:
+        specifier: ^1.16.0
+        version: 1.16.0
+      react:
+        specifier: '>=18'
+        version: 19.2.5
+      zod:
+        specifier: ^3
+        version: 3.25.76
+    devDependencies:
+      '@types/react':
+        specifier: ^19
+        version: 19.2.14
 
 packages:
 

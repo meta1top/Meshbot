@@ -1,6 +1,6 @@
 "use client";
 
-import { getAccessToken, getBrowserApiBaseUrl } from "@meshbot/common";
+import { getAccessToken, getBrowserApiBaseUrl } from "@meshbot/web-common";
 import type { AuthStatus } from "@meshbot/types-agent";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";

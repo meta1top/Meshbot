@@ -1,5 +1,5 @@
-import type { ModelConfigInput, ProviderDef } from "@meshbot/common";
-import { apiClient } from "@meshbot/common";
+import type { ModelConfigInput, ProviderDef } from "@meshbot/web-common";
+import { apiClient } from "@meshbot/web-common";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export interface ModelConfig {

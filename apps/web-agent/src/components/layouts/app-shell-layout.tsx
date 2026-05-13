@@ -1,7 +1,7 @@
 "use client";
 
-import { clearAccessToken } from "@meshbot/common";
-import { useTheme } from "@meshbot/common/react";
+import { clearAccessToken } from "@meshbot/web-common";
+import { useTheme } from "@meshbot/web-common/react";
 import { cn } from "@meshbot/design";
 import { useQueryClient } from "@tanstack/react-query";
 import {
