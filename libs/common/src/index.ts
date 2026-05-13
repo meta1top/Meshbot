@@ -1,3 +1,5 @@
 export * from "./decorators";
+export * from "./lock";
 export * from "./typeorm";
-export { CommonModule } from "./common.module";
+export * from "./utils";
+export { CommonModule, type CommonModuleOptions } from "./common.module";

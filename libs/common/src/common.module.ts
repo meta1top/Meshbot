@@ -1,11 +1,30 @@
-import { Module } from "@nestjs/common";
+import { type DynamicModule, Module } from "@nestjs/common";
+import { DiscoveryModule } from "@nestjs/core";
 
-/**
- * meshbot 通用模块。
- * 提供：装饰器（Transactional / WithLock / Cacheable）+ TxTypeOrmModule。
- *
- * Phase 1 默认本地实现（内存锁 + 内存缓存）；
- * Phase 3 云端轨可通过 forRoot 切换为 Redis 实现。
- */
+import { LockInitializer } from "./lock/lock.initializer";
+import { LOCK_PROVIDER, type LockProvider } from "./lock/lock.provider";
+import { MemoryLockProvider } from "./lock/memory-lock.provider";
+
+export interface CommonModuleOptions {
+  /** 锁提供者：默认 "memory"（进程内互斥） */
+  lock?: "memory" | LockProvider;
+}
+
 @Module({})
-export class CommonModule {}
+export class CommonModule {
+  static forRoot(options: CommonModuleOptions = {}): DynamicModule {
+    const lockChoice = options.lock ?? "memory";
+    const lockProvider =
+      lockChoice === "memory"
+        ? { provide: LOCK_PROVIDER, useClass: MemoryLockProvider }
+        : { provide: LOCK_PROVIDER, useValue: lockChoice };
+
+    return {
+      module: CommonModule,
+      imports: [DiscoveryModule],
+      providers: [lockProvider, LockInitializer, MemoryLockProvider],
+      exports: [LOCK_PROVIDER],
+      global: true,
+    };
+  }
+}
