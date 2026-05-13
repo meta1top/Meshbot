@@ -1,6 +1,16 @@
 import { type DynamicModule, Module } from "@nestjs/common";
-import { getDataSourceToken, getRepositoryToken, TypeOrmModule } from "@nestjs/typeorm";
-import { DataSource, type EntitySchema, type EntityTarget, type ObjectLiteral, Repository } from "typeorm";
+import {
+  getDataSourceToken,
+  getRepositoryToken,
+  TypeOrmModule,
+} from "@nestjs/typeorm";
+import type {
+  DataSource,
+  EntitySchema,
+  EntityTarget,
+  ObjectLiteral,
+  Repository,
+} from "typeorm";
 
 import { txStorage } from "./transaction-context";
 
@@ -14,12 +24,16 @@ type EntityClassOrSchema = Function | EntitySchema;
  * 所有属性/方法访问自动委托到事务作用域的 Repository；
  * 否则使用原始 Repository。
  */
-function createTxAwareProxy<T extends ObjectLiteral>(repo: Repository<T>): Repository<T> {
+function createTxAwareProxy<T extends ObjectLiteral>(
+  repo: Repository<T>,
+): Repository<T> {
   return new Proxy(repo, {
     get(target, prop, _receiver) {
       const ctx = txStorage.getStore();
       const effective: Repository<T> = ctx
-        ? ctx.queryRunner.manager.getRepository(target.target as EntityTarget<T>)
+        ? ctx.queryRunner.manager.getRepository(
+            target.target as EntityTarget<T>,
+          )
         : target;
 
       const value = Reflect.get(effective, prop, effective);
@@ -41,7 +55,10 @@ function createTxAwareProxy<T extends ObjectLiteral>(repo: Repository<T>): Repos
  */
 @Module({})
 export class TxTypeOrmModule {
-  static forFeature(entities: EntityClassOrSchema[], dataSourceName?: string): DynamicModule {
+  static forFeature(
+    entities: EntityClassOrSchema[],
+    dataSourceName?: string,
+  ): DynamicModule {
     const providers = entities.map((entity) => ({
       provide: getRepositoryToken(entity, dataSourceName),
       inject: [getDataSourceToken(dataSourceName)],

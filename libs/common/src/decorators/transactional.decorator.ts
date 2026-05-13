@@ -10,7 +10,9 @@ type ServiceWithRepository = Record<string, any>;
 
 const logger = new Logger("Transactional");
 
-function findDataSource(service: ServiceWithRepository): DataSource | undefined {
+function findDataSource(
+  service: ServiceWithRepository,
+): DataSource | undefined {
   for (const key of Object.keys(service)) {
     // biome-ignore lint/suspicious/noExplicitAny: 需要访问动态属性
     const value = (service as any)[key];
@@ -34,14 +36,21 @@ function findDataSource(service: ServiceWithRepository): DataSource | undefined 
  * 注意：root 路径要求 service 中至少注入一个 Repository（用于获取 DataSource）。
  */
 export function Transactional() {
-  return (_target: unknown, _propertyKey: string, descriptor: PropertyDescriptor) => {
+  return (
+    _target: unknown,
+    _propertyKey: string,
+    descriptor: PropertyDescriptor,
+  ) => {
     const originalMethod = descriptor.value as (
       // biome-ignore lint/suspicious/noExplicitAny: 装饰器参数类型未知
       ...args: any[]
     ) => Promise<unknown>;
 
     // biome-ignore lint/suspicious/noExplicitAny: 装饰器实现需要动态 this 上下文
-    descriptor.value = async function (this: ServiceWithRepository, ...args: any[]) {
+    descriptor.value = async function (
+      this: ServiceWithRepository,
+      ...args: any[]
+    ) {
       const existingCtx = txStorage.getStore();
 
       if (existingCtx) {

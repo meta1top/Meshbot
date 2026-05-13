@@ -1,5 +1,11 @@
 import { Injectable } from "@nestjs/common";
-import { E_ALREADY_LOCKED, E_TIMEOUT, Mutex, tryAcquire, withTimeout } from "async-mutex";
+import {
+  E_ALREADY_LOCKED,
+  E_TIMEOUT,
+  Mutex,
+  tryAcquire,
+  withTimeout,
+} from "async-mutex";
 
 import type { LockProvider, LockRelease } from "./lock.provider";
 
@@ -15,7 +21,11 @@ import type { LockProvider, LockRelease } from "./lock.provider";
 export class MemoryLockProvider implements LockProvider {
   private readonly mutexes = new Map<string, Mutex>();
 
-  async acquire(key: string, _ttlMs: number, waitMs: number): Promise<LockRelease> {
+  async acquire(
+    key: string,
+    _ttlMs: number,
+    waitMs: number,
+  ): Promise<LockRelease> {
     let mutex = this.mutexes.get(key);
     if (!mutex) {
       mutex = new Mutex();

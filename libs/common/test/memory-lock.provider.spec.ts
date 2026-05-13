@@ -36,7 +36,9 @@ describe("MemoryLockProvider", () => {
 
   it("waitTimeout=0 立即失败时抛 LockAcquireFailed", async () => {
     const r1 = await provider.acquire("k", 5000, 5000);
-    await expect(provider.acquire("k", 5000, 0)).rejects.toThrow(/LOCK_ACQUIRE_FAILED/);
+    await expect(provider.acquire("k", 5000, 0)).rejects.toThrow(
+      /LOCK_ACQUIRE_FAILED/,
+    );
     await r1();
   });
 });
