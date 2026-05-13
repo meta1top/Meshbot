@@ -1,1 +1,1 @@
-export { createZodDto } from "./create-zod-dto";
+export { createZodDto, type ZodDtoClass } from "./create-zod-dto";
