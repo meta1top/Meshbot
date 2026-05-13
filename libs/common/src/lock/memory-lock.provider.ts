@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { E_TIMEOUT, Mutex, withTimeout } from "async-mutex";
+import { E_ALREADY_LOCKED, E_TIMEOUT, Mutex, tryAcquire, withTimeout } from "async-mutex";
 
 import type { LockProvider, LockRelease } from "./lock.provider";
 
@@ -23,11 +23,19 @@ export class MemoryLockProvider implements LockProvider {
     }
 
     if (waitMs === 0) {
-      if (mutex.isLocked()) {
-        throw new Error(`LOCK_ACQUIRE_FAILED: ${key}`);
+      // 使用 async-mutex 的 tryAcquire 进行原子非阻塞获取，
+      // 避免 isLocked() + acquire() 之间的 TOCTOU 竞态。
+      // tryAcquire 内部即 withTimeout(mutex, 0, E_ALREADY_LOCKED)，
+      // 若锁被占用会立即抛出 E_ALREADY_LOCKED 而不会进入等待队列。
+      try {
+        const release = await tryAcquire(mutex).acquire();
+        return makeIdempotentRelease(release);
+      } catch (e) {
+        if (e === E_ALREADY_LOCKED) {
+          throw new Error(`LOCK_ACQUIRE_FAILED: ${key}`);
+        }
+        throw e;
       }
-      const release = await mutex.acquire();
-      return makeIdempotentRelease(release);
     }
 
     try {
