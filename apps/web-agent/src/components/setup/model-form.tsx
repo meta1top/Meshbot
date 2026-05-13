@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { ModelConfigInput, ProviderDef } from "@meshbot/common";
+import type { ModelConfigInput, ProviderDef } from "@meshbot/web-common";
 import {
   Alert,
   AlertDescription,

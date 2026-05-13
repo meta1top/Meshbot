@@ -1,4 +1,4 @@
-import { themeScript } from "@meshbot/common";
+import { themeScript } from "@meshbot/web-common";
 import { TooltipProvider } from "@meshbot/design";
 import type { Metadata } from "next";
 import { ElectronInit } from "@/components/electron-init";
