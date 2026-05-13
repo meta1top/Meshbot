@@ -1,5 +1,6 @@
 import path from "node:path";
 import { AgentModule } from "@meshbot/agent";
+import { CommonModule, TxTypeOrmModule } from "@meshbot/common";
 import { Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 import { TypeOrmModule } from "@nestjs/typeorm";
@@ -21,13 +22,22 @@ const meshbotDir = resolveMeshbotDir();
 
 @Module({
   imports: [
+    CommonModule.forRoot(),
     TypeOrmModule.forRoot({
       type: "better-sqlite3",
       database: path.join(meshbotDir, "agent.db"),
       entities: [ModelConfig, Setting, User],
       synchronize: true,
+      // SQLite 并发优化：WAL 模式 + 5s 锁等待
+      // 详见 spec 第 5.1 节风险 R1
+      extra: {
+        pragma: {
+          journal_mode: "WAL",
+          busy_timeout: 5000,
+        },
+      },
     }),
-    TypeOrmModule.forFeature([ModelConfig, Setting]),
+    TxTypeOrmModule.forFeature([ModelConfig, Setting]),
     AgentModule,
     AuthModule,
     LocalAuthModule,

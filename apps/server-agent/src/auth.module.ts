@@ -1,7 +1,7 @@
+import { TxTypeOrmModule } from "@meshbot/common";
 import { Module } from "@nestjs/common";
 import { JwtModule } from "@nestjs/jwt";
 import { PassportModule } from "@nestjs/passport";
-import { TypeOrmModule } from "@nestjs/typeorm";
 import { AuthController } from "./controllers/auth.controller";
 import { User } from "./entities/user.entity";
 import { AuthService } from "./services/auth.service";
@@ -9,7 +9,7 @@ import { JWT_SECRET, JwtStrategy } from "./strategies/jwt.strategy";
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User]),
+    TxTypeOrmModule.forFeature([User]),
     PassportModule,
     JwtModule.register({
       secret: JWT_SECRET,
