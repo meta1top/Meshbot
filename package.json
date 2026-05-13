@@ -27,6 +27,9 @@
     "check:lock-tx": "tsx scripts/check-lock-tx.ts",
     "check:repo": "tsx scripts/check-repo-access.ts",
     "check": "pnpm check:tx && pnpm check:naming && pnpm check:lock-tx && pnpm check:repo",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:cov": "jest --coverage",
     "typecheck": "turbo run typecheck",
     "clean": "turbo run clean && rm -rf node_modules"
   },
