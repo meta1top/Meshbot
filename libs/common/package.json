@@ -14,7 +14,8 @@
   "dependencies": {
     "@meshbot/types": "workspace:*",
     "async-mutex": "^0.5.0",
-    "lru-cache": "^11.0.0"
+    "lru-cache": "^11.0.0",
+    "zod": "^3"
   },
   "peerDependencies": {
     "@nestjs/common": "^11",
