@@ -28,13 +28,13 @@ const meshbotDir = resolveMeshbotDir();
       database: path.join(meshbotDir, "agent.db"),
       entities: [ModelConfig, Setting, User],
       synchronize: true,
-      // SQLite 并发优化：WAL 模式 + 5s 锁等待
-      // 详见 spec 第 5.1 节风险 R1
-      extra: {
-        pragma: {
-          journal_mode: "WAL",
-          busy_timeout: 5000,
-        },
+      // SQLite 并发优化（spec 第 5.1 节风险 R1）：
+      // - journal_mode=WAL 提升并发读写表现
+      // - busy_timeout=5000 让阻塞写在 5s 内重试，避免立即抛 SQLITE_BUSY
+      // 必须用 prepareDatabase 回调，better-sqlite3 driver 的 extra.pragma 不被消费。
+      prepareDatabase: (db: import("better-sqlite3").Database) => {
+        db.pragma("journal_mode = WAL");
+        db.pragma("busy_timeout = 5000");
       },
     }),
     TxTypeOrmModule.forFeature([ModelConfig, Setting]),
