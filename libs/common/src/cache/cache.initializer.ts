@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger, type OnModuleInit } from "@nestjs/common";
-import type { DiscoveryService } from "@nestjs/core";
+// biome-ignore lint/style/useImportType: DiscoveryService 必须为值导入，否则 NestJS 构造器 DI 在运行时取不到类引用
+import { DiscoveryService } from "@nestjs/core";
 
 import {
   CACHEABLE_MARKER,
