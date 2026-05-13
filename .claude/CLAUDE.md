@@ -127,3 +127,43 @@ Phase 1 暂未引入 Form/FormItem 封装；现阶段写表单允许直接用 sh
 |------|--------|-------------|
 | server-agent | `agent.db`（SQLite，~/.meshbot/） | `User` / `Setting` / `ModelConfig` |
 | server-main | Postgres（Phase 3） | `User` / `Organization` / `AgentRegistration` / `Device` |
+
+## Phase 进度
+
+### Phase 1（地基）✅ 已完成
+
+- `libs/common` 装饰器与基础设施（@Transactional / @WithLock / @Cacheable / TxTypeOrmModule / LockProvider / CacheProvider）
+- 4 个静态围栏（check:tx / check:naming / check:lock-tx / check:repo）
+- `libs/types-main` 骨架 + `createZodDto`（无 i18n 版）
+- Jest 配置 + 装饰器单测（12 通过）
+- Turbo / pnpm 配置对齐（peer dep 锁 NestJS 11）
+- `server-agent` 接入 `TxTypeOrmModule` + `@Transactional`
+- SQLite WAL pragma 通过 `prepareDatabase` 回调启用
+
+### Phase 2（工程化 harness）待办
+
+- 搬运 .claude/skills（参考 platform）
+- `check:dead-exports` 围栏
+- `packages/design` 补 `Form`/`FormItem` + `useSchema`
+- husky / lefthook + pre-commit 跑围栏
+- `post-build.js`（Next standalone）
+- i18n 决策（是否上 nestjs-i18n + next-intl）
+
+### Phase 3（云端轨）待办
+
+- `server-main` 起步（Postgres + Redis + 迁移）
+- `@WithLock` / `@Cacheable` 接入 Redis provider
+- migrations-ddl 规范（脱 `synchronize:true`）
+- Dockerfile + docker-compose
+- 版本号策略（changesets）
+- cli-agent 发布形态
+
+### Phase 4（CI/CD）待办
+
+- GitHub Actions（lint + check + test + build matrix）
+- electron-builder release
+- npm publish for cli-agent
+- 自动 changelog
+- 监控接入
+
+详见 `docs/superpowers/specs/2026-05-13-meshbot-borrow--design.md`。
