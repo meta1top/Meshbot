@@ -10,7 +10,6 @@
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@meshbot/shared": "workspace:*",
     "@meshbot/types": "workspace:*",
     "@nestjs/common": "^11",
     "@nestjs/core": "^11",
