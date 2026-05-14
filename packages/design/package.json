@@ -4,6 +4,20 @@
   "private": true,
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./form": {
+      "types": "./src/components/form/index.ts",
+      "default": "./src/components/form/index.ts"
+    },
+    "./hooks": {
+      "types": "./src/hooks/index.ts",
+      "default": "./src/hooks/index.ts"
+    }
+  },
   "scripts": {
     "build": "echo 'no build needed — consumed as source'",
     "clean": "echo 'nothing to clean'",
@@ -23,12 +37,18 @@
     "tw-animate-css": "^1"
   },
   "peerDependencies": {
+    "@hookform/resolvers": "^5",
+    "next-intl": "^4",
     "react": "^19",
-    "react-dom": "^19"
+    "react-dom": "^19",
+    "react-hook-form": "^7",
+    "zod": "^3"
   },
   "devDependencies": {
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "tailwindcss": "^4"
+    "next-intl": "^4",
+    "tailwindcss": "^4",
+    "zod": "^3"
   }
 }
