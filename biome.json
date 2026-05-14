@@ -27,7 +27,6 @@
       "includes": [
         "apps/server-agent/**",
         "apps/server-main/**",
-        "libs/shared/**",
         "libs/agent/**"
       ],
       "linter": {
