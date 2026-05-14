@@ -35,6 +35,8 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "jsonwebtoken": "^9.0.3",
+    "nestjs-i18n": "^10.5.1",
+    "nestjs-zod": "^4.3.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2",
