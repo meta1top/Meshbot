@@ -12,7 +12,6 @@ import {
   I18nModule,
   QueryResolver,
 } from "nestjs-i18n";
-import { LocalAuthModule } from "./auth/local-auth.module";
 import { AuthModule } from "./auth.module";
 import { ModelConfigController } from "./controllers/model-config.controller";
 import { SettingController } from "./controllers/setting.controller";
@@ -62,7 +61,6 @@ const meshbotDir = resolveMeshbotDir();
     TxTypeOrmModule.forFeature([ModelConfig, Setting]),
     AgentModule,
     AuthModule,
-    LocalAuthModule,
     StaticModule,
   ],
   controllers: [ModelConfigController, SettingController, SetupController],
