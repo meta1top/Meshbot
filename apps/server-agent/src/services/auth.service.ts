@@ -7,6 +7,7 @@ import {
 import { JwtService } from "@nestjs/jwt";
 import { InjectRepository } from "@nestjs/typeorm";
 import * as bcrypt from "bcrypt";
+import { I18nService } from "nestjs-i18n";
 import { Repository } from "typeorm";
 import { User } from "../entities/user.entity";
 
@@ -16,6 +17,7 @@ export class AuthService {
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
     private readonly jwtService: JwtService,
+    private readonly i18n: I18nService,
   ) {}
 
   @Transactional()
@@ -25,7 +27,9 @@ export class AuthService {
   ): Promise<{ access_token: string }> {
     const existingUser = await this.userRepo.count();
     if (existingUser > 0) {
-      throw new ConflictException("已存在注册用户，不允许重复注册");
+      throw new ConflictException(
+        await this.i18n.translate("auth.alreadyRegistered"),
+      );
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
@@ -41,12 +45,16 @@ export class AuthService {
   ): Promise<{ access_token: string }> {
     const user = await this.userRepo.findOneBy({ username });
     if (!user) {
-      throw new UnauthorizedException("用户名或密码错误");
+      throw new UnauthorizedException(
+        await this.i18n.translate("auth.invalidCredentials"),
+      );
     }
 
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) {
-      throw new UnauthorizedException("用户名或密码错误");
+      throw new UnauthorizedException(
+        await this.i18n.translate("auth.invalidCredentials"),
+      );
     }
 
     return this.signToken(user);
