@@ -16,7 +16,9 @@
     "./hooks": {
       "types": "./src/hooks/index.ts",
       "default": "./src/hooks/index.ts"
-    }
+    },
+    "./src/styles/*": "./src/styles/*",
+    "./src/*": "./src/*"
   },
   "scripts": {
     "build": "echo 'no build needed — consumed as source'",
