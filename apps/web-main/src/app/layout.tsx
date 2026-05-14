@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { IntlProvider } from "@/components/intl-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -13,7 +14,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="zh-CN">
-      <body>{children}</body>
+      <body>
+        <IntlProvider>{children}</IntlProvider>
+      </body>
     </html>
   );
 }
