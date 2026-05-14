@@ -22,6 +22,7 @@
     "@nestjs/core": "^11",
     "@nestjs/typeorm": "^11",
     "reflect-metadata": "*",
-    "typeorm": "^0.3"
+    "typeorm": "^0.3",
+    "nestjs-zod": "^4"
   }
 }
