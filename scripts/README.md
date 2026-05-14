@@ -16,8 +16,16 @@
 | `check-method-naming.ts` | `pnpm check:naming` | 校验事务方法命名约定（`*InDb` / `*InTx` / `persist*`） |
 | `check-lock-tx.ts` | `pnpm check:lock-tx` | 校验事务-锁倒置漏洞（`@WithLock` 不可在 `@Transactional` 内） |
 | `check-repo-access.ts` | `pnpm check:repo` | 校验 Entity 唯一归属 + 跨 libs 注入 Repository 限制 |
+| `sync-locales.ts` | `pnpm sync:locales` | 扫描前后端 t() 调用对齐 locale JSON（missing/orphan/asymmetric）|
 
 一键全跑：`pnpm check`
+
+### sync-locales 模式
+
+- 默认：只报告，exit 0
+- `--check`：报告 + 不一致时 exit 1（用于 pre-commit）
+- `--write`：把 missing 在 zh/en 文件中补占位空字符串
+- `--prune`：删除 orphan（**危险**，PR 评审后再用）
 
 ## 适用范围
 
