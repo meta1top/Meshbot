@@ -17,6 +17,24 @@ export interface CommonModuleOptions {
 
 @Module({})
 export class CommonModule {
+  /**
+   * 配置 meshbot 通用基础设施（LockProvider / CacheProvider + Discovery 装配器）。
+   *
+   * **只能在根模块（AppModule）调一次**。返回的 DynamicModule 标记
+   * `global: true`，子模块 / 子 app 无需重复 import。多次调用会创建
+   * 多份 LockProvider / CacheProvider 实例，导致不同代码路径取到
+   * 不同的内部状态（内存 Map / LRUCache），破坏锁与缓存的全局一致性
+   * （例如 @WithLock 取到的锁实例与 @Cacheable 写入的缓存实例不在同一进程域内）。
+   *
+   * @example
+   * \@Module({
+   *   imports: [
+   *     CommonModule.forRoot(),  // 只在 AppModule 调一次
+   *     // ... 其它业务模块直接用 @WithLock / @Cacheable 即可
+   *   ],
+   * })
+   * export class AppModule {}
+   */
   static forRoot(options: CommonModuleOptions = {}): DynamicModule {
     const lockChoice = options.lock ?? "memory";
     const cacheChoice = options.cache ?? "memory";

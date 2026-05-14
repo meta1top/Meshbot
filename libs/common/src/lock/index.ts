@@ -1,4 +1,3 @@
-export { LockInitializer } from "./lock.initializer";
 export {
   LOCK_PROVIDER,
   type LockProvider,

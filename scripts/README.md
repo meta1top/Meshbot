@@ -45,3 +45,34 @@
 - `apps/desktop/**` —— Electron 桌面壳，非 NestJS
 - `apps/web-*/**` —— 前端 Next.js 应用
 - `packages/**` —— 前端共享包
+
+## 增量基线模式
+
+五个 `check:*` 脚本（`tx` / `naming` / `lock-tx` / `repo` / `dead`）都支持**增量模式**。
+运行时读取 `docs/audits/<fence-name>/` 下最新的 baseline JSON 报告，
+仅在以下情况输出新报告：
+
+- 新增 finding（baseline 里没有、本次发现的）
+- 已有 finding 内容变化（同 `file:line` 但 issue 类别 / 描述变更）
+
+**默认行为**：若本次扫描与 baseline 完全一致 → 打印 `无新增 finding`，
+不写新 JSON，exit 0。CI / pre-commit 默认走这条路径。
+
+### 强制刷新基线 `--force-report`
+
+当你**合法地修改了围栏覆盖的代码**（例如新增一个 `@Transactional` 方法、
+迁移 Entity 归属、删除老的死导出符号）后，希望基线"接受"这次变化：
+
+```bash
+pnpm check:tx -- --force-report
+pnpm check:naming -- --force-report
+pnpm check:lock-tx -- --force-report
+pnpm check:repo -- --force-report
+pnpm check:dead -- --force-report
+```
+
+会强制把本次完整结果写一份新 JSON 到
+`docs/audits/<fence-name>/<timestamp>.json`，下次跑就以新文件为新 baseline。
+新生成的 JSON 应当随业务代码一起 commit，作为"已审计过"的证据。
+
+> 注意：`--force-report` 只刷新报告，不放过新增的违规。如果本次发现违规仍会 exit 1。
