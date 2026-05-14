@@ -12,7 +12,11 @@
     "forgotPassword": "Forgot password?",
     "loginFailed": "Login failed, please try again.",
     "signIn": "Sign in",
-    "signingIn": "Signing in..."
+    "signingIn": "Signing in...",
+    "validation": {
+      "usernameRequired": "Please enter your account",
+      "passwordRequired": "Please enter your password"
+    }
   },
   "setup": {
     "getStarted": "GET STARTED",
