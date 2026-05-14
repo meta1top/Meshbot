@@ -9,6 +9,8 @@
     "build:common": "pnpm --filter @meshbot/common build",
     "build:web-agent": "pnpm --filter @meshbot/web-agent build",
     "build:server-agent": "pnpm --filter @meshbot/server-agent build",
+    "build:server-main": "pnpm --filter @meshbot/server-main build",
+    "start:server-main": "pnpm --filter @meshbot/server-main start",
     "build:desktop": "pnpm --filter @meshbot/desktop build",
     "build:cli-agent": "turbo run build --filter=@meshbot/cli-agent",
     "dev": "turbo run dev",
