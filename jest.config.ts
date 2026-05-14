@@ -20,7 +20,6 @@ const config: Config = {
     "^@meshbot/types$": "<rootDir>/libs/types/src",
     "^@meshbot/types-agent$": "<rootDir>/libs/types-agent/src",
     "^@meshbot/types-main$": "<rootDir>/libs/types-main/src",
-    "^@meshbot/shared$": "<rootDir>/libs/shared/src",
   },
   transform: {
     "^.+\\.ts$": [

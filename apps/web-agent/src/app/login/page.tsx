@@ -1,6 +1,5 @@
 "use client";
 
-import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Alert,
   AlertDescription,
@@ -10,18 +9,13 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
   Input,
 } from "@meshbot/design";
+import { Form, FormItem } from "@meshbot/design/form";
+import { useSchema } from "@meshbot/design/hooks";
 import { type LoginInput, loginSchema } from "@meshbot/types-agent";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useForm } from "react-hook-form";
 import { AuthShellLayout } from "@/components/layouts/auth-shell-layout";
 import { useLogin } from "@/rest/auth";
 
@@ -29,11 +23,7 @@ export default function LoginPage() {
   const router = useRouter();
   const loginMutation = useLogin();
   const t = useTranslations("login");
-
-  const form = useForm<LoginInput>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: { username: "", password: "" },
-  });
+  const schema = useSchema(loginSchema);
 
   const onSubmit = async (values: LoginInput) => {
     try {
@@ -57,71 +47,59 @@ export default function LoginPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-0">
-            <Form {...form}>
-              <form
-                onSubmit={form.handleSubmit(onSubmit)}
-                className="flex flex-col gap-4"
+            <Form
+              schema={schema}
+              defaultValues={{ username: "", password: "" }}
+              onSubmit={onSubmit}
+              className="flex flex-col gap-4"
+            >
+              <FormItem
+                name="username"
+                label={
+                  <span className="text-[11px] tracking-[0.08em] uppercase">
+                    {t("account")}
+                  </span>
+                }
               >
-                <FormField
-                  control={form.control}
-                  name="username"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-[11px] tracking-[0.08em] uppercase">
-                        {t("account")}
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          type="text"
-                          autoComplete="username"
-                          placeholder={t("accountPlaceholder")}
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+                <Input
+                  type="text"
+                  autoComplete="username"
+                  placeholder={t("accountPlaceholder")}
                 />
+              </FormItem>
 
-                <FormField
-                  control={form.control}
-                  name="password"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-[11px] tracking-[0.08em] uppercase">
-                        {t("password")}
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          type="password"
-                          autoComplete="current-password"
-                          placeholder="********"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+              <FormItem
+                name="password"
+                label={
+                  <span className="text-[11px] tracking-[0.08em] uppercase">
+                    {t("password")}
+                  </span>
+                }
+              >
+                <Input
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder="********"
                 />
+              </FormItem>
 
-                {loginMutation.error && (
-                  <Alert variant="destructive">
-                    <AlertDescription>
-                      {loginMutation.error instanceof Error
-                        ? loginMutation.error.message
-                        : t("loginFailed")}
-                    </AlertDescription>
-                  </Alert>
-                )}
+              {loginMutation.error && (
+                <Alert variant="destructive">
+                  <AlertDescription>
+                    {loginMutation.error instanceof Error
+                      ? loginMutation.error.message
+                      : t("loginFailed")}
+                  </AlertDescription>
+                </Alert>
+              )}
 
-                <Button
-                  type="submit"
-                  className="mt-2 w-full bg-primary text-primary-foreground hover:bg-primary/90"
-                  disabled={loginMutation.isPending}
-                >
-                  {loginMutation.isPending ? t("signingIn") : t("signIn")}
-                </Button>
-              </form>
+              <Button
+                type="submit"
+                className="mt-2 w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                disabled={loginMutation.isPending}
+              >
+                {loginMutation.isPending ? t("signingIn") : t("signIn")}
+              </Button>
             </Form>
           </CardContent>
         </Card>

@@ -5,10 +5,11 @@
     "build": "turbo run build",
     "build:types": "pnpm --filter @meshbot/types build",
     "build:types-agent": "pnpm --filter @meshbot/types-agent build",
-    "build:shared": "pnpm --filter @meshbot/shared build",
     "build:common": "pnpm --filter @meshbot/common build",
     "build:web-agent": "pnpm --filter @meshbot/web-agent build",
     "build:server-agent": "pnpm --filter @meshbot/server-agent build",
+    "build:server-main": "pnpm --filter @meshbot/server-main build",
+    "start:server-main": "pnpm --filter @meshbot/server-main start",
     "build:desktop": "pnpm --filter @meshbot/desktop build",
     "build:cli-agent": "turbo run build --filter=@meshbot/cli-agent",
     "dev": "turbo run dev",
@@ -18,7 +19,7 @@
     "dev:server-main": "pnpm --filter @meshbot/server-main dev",
     "dev:desktop": "pnpm --filter @meshbot/desktop dev",
     "dev:cli-agent": "turbo run dev --filter=@meshbot/cli-agent",
-    "pkg:app": "pnpm run build:types && pnpm run build:common && pnpm run build:types-agent && pnpm run build:shared && pnpm run build:web-agent && pnpm run build:desktop && pnpm --filter @meshbot/desktop run dist",
+    "pkg:app": "pnpm run build:types && pnpm run build:common && pnpm run build:types-agent && pnpm run build:web-agent && pnpm run build:desktop && pnpm --filter @meshbot/desktop run dist",
     "lint": "biome lint .",
     "format": "biome format --write .",
     "check:format": "biome check --write .",
@@ -26,19 +27,27 @@
     "check:naming": "tsx scripts/check-method-naming.ts",
     "check:lock-tx": "tsx scripts/check-lock-tx.ts",
     "check:repo": "tsx scripts/check-repo-access.ts",
-    "check": "pnpm check:tx && pnpm check:naming && pnpm check:lock-tx && pnpm check:repo",
+    "check:dead": "tsx scripts/check-dead-exports.ts",
+    "check": "pnpm check:tx && pnpm check:naming && pnpm check:lock-tx && pnpm check:repo && pnpm check:dead",
+    "sync:locales": "tsx scripts/sync-locales.ts",
+    "sync:skills": "tsx scripts/sync-skills.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "typecheck": "turbo run typecheck",
-    "clean": "turbo run clean && rm -rf node_modules"
+    "clean": "turbo run clean && rm -rf node_modules",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.14",
     "@types/better-sqlite3": "^7.6.13",
     "@types/jest": "^30.0.0",
+    "@types/supertest": "^7.2.0",
     "better-sqlite3": "^12.9.0",
+    "husky": "^9.1.7",
     "jest": "^30.4.2",
+    "lint-staged": "^17.0.4",
+    "supertest": "^7.2.2",
     "ts-jest": "^29.4.9",
     "ts-morph": "^28.0.0",
     "tsx": "^4.21.0",
@@ -49,5 +58,10 @@
   "dependencies": {
     "async-mutex": "^0.5.0",
     "lru-cache": "^11.3.6"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,json}": [
+      "biome check --write --no-errors-on-unmatched"
+    ]
   }
 }

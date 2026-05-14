@@ -1,0 +1,7 @@
+{
+  "required": "Required field",
+  "stringTooShort": "Must be at least {min} characters",
+  "stringTooLong": "Must be at most {max} characters",
+  "invalidUuid": "Invalid format",
+  "invalidEmail": "Invalid email"
+}

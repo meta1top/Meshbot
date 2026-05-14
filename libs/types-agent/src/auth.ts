@@ -8,8 +8,8 @@ export const registerSchema = z.object({
 export type RegisterInput = z.infer<typeof registerSchema>;
 
 export const loginSchema = z.object({
-  username: z.string().min(1),
-  password: z.string().min(1),
+  username: z.string().min(1, "login.validation.usernameRequired"),
+  password: z.string().min(1, "login.validation.passwordRequired"),
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;
