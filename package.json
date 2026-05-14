@@ -30,6 +30,7 @@
     "check:repo": "tsx scripts/check-repo-access.ts",
     "check": "pnpm check:tx && pnpm check:naming && pnpm check:lock-tx && pnpm check:repo",
     "sync:locales": "tsx scripts/sync-locales.ts",
+    "sync:skills": "tsx scripts/sync-skills.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
