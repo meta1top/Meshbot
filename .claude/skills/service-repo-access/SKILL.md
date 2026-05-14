@@ -1,0 +1,175 @@
+---
+name: service-repo-access
+description: "Service 层 Repository 封装规范 — Entity 唯一归属 Service、Controller/ Processor/Gateway/Resolver/Tool 禁止注入 Repository、跨 libs 边界禁止注入、 分层架构 + check:repo 静态围栏。Use when adding/moving Entity classes, modifying @InjectRepository injections in services or non-services (controllers/processors/gateways), or auditing repository access patterns before commit."
+---
+
+# Service 层 Repository 封装规范
+
+## 核心原则
+
+**每个 TypeORM Entity 有且仅有一个归属 Service**（即唯一持有 `@InjectRepository(X)` 的类）。所有其他组件（Controller / Processor / Gateway / Resolver / Tool / 其他 Service）**必须通过归属 Service 的公开方法**访问数据。
+
+## 如何确定 Entity 的归属 Service
+
+**归属由代码现状定义，不再维护静态映射表**。判定规则：
+
+> Entity X 的归属 Service ＝ 项目中唯一持有 `@InjectRepository(X)` 的 Service 类。
+
+### 查找方法
+
+```bash
+# 方法 1：grep 搜索特定 Entity 的注入位置
+grep -rn "@InjectRepository(FooEntity)" libs/
+
+# 方法 2：调用校验脚本输出完整映射
+pnpm check:repo -- --map
+```
+
+`pnpm check:repo -- --map` 会扫描全部 `libs/**`，按 `Entity → 归属 Service → 所属 lib` 输出当前真实归属。
+
+## 自动化校验
+
+项目内置 `pnpm check:repo` 静态围栏（脚本：`scripts/check-repo-access.ts`，配套 skill：`.claude/skills/check-repo-access/SKILL.md`），与本规则一一对齐：
+
+| 检查项 | 含义 |
+|---|---|
+| `DUP_OWNER` | 同一 Entity 在 2+ 个 Service 中出现 `@InjectRepository`（违反唯一归属） |
+| `NON_SERVICE_INJECT` | Controller / Processor / Gateway / Resolver / Tool 中出现 `@InjectRepository` |
+| `CROSS_LIB_INJECT` | Service 跨 `libs/<domain>` 边界注入其他模块的 Entity Repository |
+
+### 常用命令
+
+```bash
+pnpm check:repo                          # 全仓扫描，stdout + 增量写报告
+pnpm check:repo -- --map                 # 仅打印 Entity → Service 归属映射
+pnpm check:repo -- --types DUP_OWNER     # 仅展示指定类别的问题
+pnpm check:repo -- --strict              # 有问题时 exit 1（CI 用）
+pnpm check:repo -- --json                # JSON 输出
+pnpm check:repo -- --force-report        # 无视增量直接写报告（修复后刷 baseline 用）
+```
+
+### 推荐流程
+
+- 新增 Entity 时：先在归属 Service 中加 `@InjectRepository(X)`，写完跑 `pnpm check:repo -- --map` 确认归属正确
+- 提交前：跑 `pnpm check:repo` 确保无新增违规
+- 历史遗留违规：以 `docs/audits/repo-fence/` 下首份 baseline 报告为准，新代码不得引入新增违规
+
+## 禁止规则
+
+### 1. Controller 禁止注入 Repository（NON_SERVICE_INJECT）
+
+```ts
+// ❌ 错误
+@Controller()
+export class FooController {
+  constructor(
+    @InjectRepository(FooEntity)
+    private readonly fooRepo: Repository<FooEntity>,
+  ) {}
+}
+
+// ✅ 正确
+@Controller()
+export class FooController {
+  constructor(private readonly fooService: FooService) {}
+}
+```
+
+### 2. Processor 禁止注入 Repository（NON_SERVICE_INJECT）
+
+```ts
+// ❌ 错误
+@Processor('queue')
+export class FooProcessor extends WorkerHost {
+  constructor(
+    @InjectRepository(FooEntity)
+    private readonly fooRepo: Repository<FooEntity>,
+  ) { super(); }
+}
+
+// ✅ 正确
+@Processor('queue')
+export class FooProcessor extends WorkerHost {
+  constructor(private readonly fooService: FooService) { super(); }
+}
+```
+
+> Gateway（`@WebSocketGateway`）、Resolver（`@Resolver`）、Tool（`*.tool.ts`）同样禁止注入 Repository。
+
+### 3. 跨模块 Service 禁止注入其他模块的 Repository（CROSS_LIB_INJECT）
+
+```ts
+// ❌ 错误：agent 模块的 Service 直接注入 schedule 模块的 Repo
+@Injectable()
+export class AgentRunService {
+  constructor(
+    @InjectRepository(ScheduleExecutionEntity)
+    private readonly scheduleExecutionRepo: Repository<ScheduleExecutionEntity>,
+  ) {}
+}
+
+// ✅ 正确：通过 schedule 模块的 Service 访问
+@Injectable()
+export class AgentRunService {
+  constructor(
+    private readonly scheduleExecutionService: ScheduleExecutionService,
+  ) {}
+}
+```
+
+> "跨模块"以 `libs/<domain>/` 为边界。
+
+### 4. 同模块非归属 Service 禁止注入 Repository（DUP_OWNER）
+
+```ts
+// ❌ 错误：AgentGraphService 直接注入 AgentInstanceEntity Repo
+@Injectable()
+export class AgentGraphService {
+  constructor(
+    @InjectRepository(AgentInstanceEntity)
+    private readonly instanceRepo: Repository<AgentInstanceEntity>,
+  ) {}
+}
+
+// ✅ 正确：通过归属 Service 访问
+@Injectable()
+export class AgentGraphService {
+  constructor(
+    private readonly instanceService: AgentInstanceService,
+  ) {}
+}
+```
+
+## 分层架构
+
+```
+Controller / Processor / Gateway / Resolver / Tool
+         ↓ (仅调用 Service 方法)
+      Service Layer（缓存 / 锁 / 事务在此生效）
+         ↓ (仅归属 Service 可操作)
+      Repository（TypeORM）
+```
+
+## Service 间调用规则
+
+- 保持**单向依赖**，避免循环调用
+- 如确需双向依赖，使用 `@Inject(forwardRef(() => XxxService))`
+- 公共查询逻辑放在数据源头的归属 Service 中，不在消费方重复实现
+
+## 基础设施豁免
+
+以下文件是事务/Proxy/Store 等底层基础设施，被允许直接注入或通过 DataSource 访问 Repository：
+
+- `libs/common/src/typeorm/tx-typeorm.module.ts`
+- `libs/common/src/decorators/transactional.decorator.ts`
+
+如需新增豁免，在 `scripts/check-repo-access.ts` 的 `INFRA_WHITELIST` 中加入路径，并在此处同步登记。
+
+## 新增 Entity Checklist
+
+1. 在合适的 `libs/<domain>/src/.../entity/` 下创建 `*.entity.ts`
+2. 选定归属 Service（同子域已有 Service 优先，否则新建 `<Entity>Service`）
+3. 在归属 Service 中加 `@InjectRepository(XEntity)` 注入 Repository
+4. 在所属 Module 用 `TxTypeOrmModule.forFeature([XEntity])` 注册（参考 `.claude/skills/service-tx-lock-cache/SKILL.md`）
+5. 跑 `pnpm check:repo -- --map` 确认归属正确显示
+
