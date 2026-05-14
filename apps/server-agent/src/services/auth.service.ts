@@ -28,7 +28,7 @@ export class AuthService {
     const existingUser = await this.userRepo.count();
     if (existingUser > 0) {
       throw new ConflictException(
-        await this.i18n.translate("auth.alreadyRegistered"),
+        this.i18n.translate("auth.alreadyRegistered"),
       );
     }
 
@@ -46,14 +46,14 @@ export class AuthService {
     const user = await this.userRepo.findOneBy({ username });
     if (!user) {
       throw new UnauthorizedException(
-        await this.i18n.translate("auth.invalidCredentials"),
+        this.i18n.translate("auth.invalidCredentials"),
       );
     }
 
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) {
       throw new UnauthorizedException(
-        await this.i18n.translate("auth.invalidCredentials"),
+        this.i18n.translate("auth.invalidCredentials"),
       );
     }
 

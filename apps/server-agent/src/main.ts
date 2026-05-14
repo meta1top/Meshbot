@@ -1,6 +1,5 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { I18nValidationExceptionFilter, I18nValidationPipe } from "nestjs-i18n";
 import { AppModule } from "./app.module";
@@ -21,8 +20,9 @@ async function bootstrap() {
     credentials: true,
   });
 
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
-  app.useGlobalPipes(new I18nValidationPipe());
+  app.useGlobalPipes(
+    new I18nValidationPipe({ whitelist: true, transform: true }),
+  );
   app.useGlobalFilters(
     new I18nValidationExceptionFilter({ detailedErrors: false }),
   );

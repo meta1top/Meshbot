@@ -35,8 +35,8 @@ const meshbotDir = resolveMeshbotDir();
       fallbackLanguage: "zh",
       loader: I18nJsonLoader,
       loaderOptions: {
-        path: path.join(__dirname, "..", "i18n"),
-        watch: process.env.NODE_ENV === "development",
+        path: path.join(__dirname, "i18n"),
+        watch: process.env.NODE_ENV !== "production",
       },
       resolvers: [
         new CookieResolver(["locale"]),
