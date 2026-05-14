@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@meshbot/types": "workspace:*",
+    "@meshbot/types-agent": "workspace:*",
     "axios": "^1.16.0",
     "zod": "^3"
   },

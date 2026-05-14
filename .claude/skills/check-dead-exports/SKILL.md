@@ -1,0 +1,28 @@
+---
+name: check-dead-exports
+description: "运行死导出围栏脚本 `pnpm check:dead` 验证 named export 没人引用的清单，commit 前检查 Use when files matching libs/**/*.ts,apps/**/src/**/*.ts change, or when explicitly invoked."
+---
+
+# check:dead 静态围栏
+
+`pnpm check:dead` 扫描 `libs/**` 与 `apps/server-*/src/**` 中的 named export，
+对照仓库其他 import 检查是否有 "已导出但无人使用" 的死代码。
+
+## 触发条件
+
+- 提交前发现 named export 列表变化
+- 删除一个 feature 后想找出残留 dead code
+- 大型重构后整理 export surface
+
+## 使用
+
+```bash
+pnpm check:dead              # 默认增量模式（与 docs/audits/dead-fence/ baseline 对比）
+pnpm check:dead -- --force-report   # 强制刷新 baseline
+```
+
+## 配套围栏
+
+`scripts/check-dead-exports.ts`（ts-morph 静态分析）。
+配合 `pnpm check`（五围栏聚合）使用。
+

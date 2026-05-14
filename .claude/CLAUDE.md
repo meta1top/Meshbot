@@ -48,7 +48,6 @@ apps/
 
 libs/
 ├── common/         NestJS 基础设施（装饰器 / TxTypeOrmModule / Lock / Cache / Dto）
-├── shared/         （历史空壳，保留）
 ├── agent/          Agent 域 LangGraph 编排
 ├── types/          跨域 Zod schema + TS 类型
 ├── types-agent/    Agent 域 schema
@@ -140,23 +139,37 @@ Phase 1 暂未引入 Form/FormItem 封装；现阶段写表单允许直接用 sh
 - `server-agent` 接入 `TxTypeOrmModule` + `@Transactional`
 - SQLite WAL pragma 通过 `prepareDatabase` 回调启用
 
-### Phase 2（工程化 harness）待办
+### Phase 2（工程化 harness）✅ 已完成
 
-- 搬运 .claude/skills（参考 platform）
-- `check:dead-exports` 围栏
-- `packages/design` 补 `Form`/`FormItem` + `useSchema`
-- husky / lefthook + pre-commit 跑围栏
-- `post-build.js`（Next standalone）
-- i18n 决策（是否上 nestjs-i18n + next-intl）
+- i18n 全栈接入（server-agent + server-main 后端 nestjs-i18n；web-main 前端 next-intl 镜像；web-agent 已有）
+- `libs/common`: 新增 `createI18nZodDto`（基于 nestjs-zod）；隐藏 `LockInitializer` / `CacheInitializer`
+- `packages/design`: 新增 `useSchema` hook（递归翻译 Zod schema）+ `Form`/`FormItem` 高层封装（子路径 `@meshbot/design/{form,hooks}`）
+- 13 条规约 `.cursor/rules/` 与 `.claude/skills/` 双套（`sync-skills.ts` 单向派生）
+- 第 5 个静态围栏：`check:dead-exports`（`pnpm check` 现 5 项联跑）
+- husky pre-commit：biome (lint-staged) + `pnpm check` + `pnpm sync:skills -- --check` + 软告警 `sync:locales`
+- `scripts/sync-locales.ts`：扫描 t() 调用对齐 locale JSON（missing/orphan/asymmetric）
+- `post-build.js`：web-agent + web-main 的 Next standalone 兼容
+- Phase 1 final review backlog 全部清空：删 zombie auth / 删 libs/shared / 移 PROVIDERS / 隐藏 Initializer / forRoot JSDoc / scripts/README.md --force-report 文档 / e2e 集成测
+
+### Phase 2 已知缺口（Phase 3 必修）
+
+- `I18nValidationPipe`（nestjs-i18n）不识别 Zod DTO，所以 `createI18nZodDto` 派生的 DTO 在 production 当前**不会触发校验**。Phase 3 引入第一个使用 `createI18nZodDto` 的 controller 之前，必须：
+  - 全局安装 `ZodValidationPipe`（from `nestjs-zod`）
+  - 编写 `I18nZodValidationFilter`（或自定义 pipe）把 `ZodValidationException.issues[].message` 视作 i18n key，通过 `I18nService.translate()` 翻译后重新抛出
+  - 把 `apps/server-agent/test/e2e/dto-i18n.spec.ts` 中容忍 raw-key 的正则改为强制翻译断言
+- 60 个 web-agent 既有 i18n missing key 待补齐；Phase 3 burn-down 后把 pre-commit `sync:locales --check` 从软告警改为硬失败
 
 ### Phase 3（云端轨）待办
 
-- `server-main` 起步（Postgres + Redis + 迁移）
+- **优先项**：上述 i18n bridge + 60 missing keys
+- `server-main` 起业务（User / Organization / AgentRegistration / Device）+ Postgres + 迁移
 - `@WithLock` / `@Cacheable` 接入 Redis provider
-- migrations-ddl 规范（脱 `synchronize:true`）
+- migrations-ddl 规范落地（脱 `synchronize:true`）
 - Dockerfile + docker-compose
 - 版本号策略（changesets）
 - cli-agent 发布形态
+- `ts-jest isolatedModules` 配置迁移
+- pre-commit 运行时调优（如果 ~15s 不能接受）
 
 ### Phase 4（CI/CD）待办
 

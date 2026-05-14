@@ -1,0 +1,221 @@
+---
+name: bypass-mode-safety
+description: "bypassPermissions 模式下的风险操作护栏 — git 救不回来的副作用 （数据库写入、生产网络请求、对象存储 / MQ 写入、gitignored 路径 / 仓库外文件、强制 git 重写、远程脚本管道执行）必须先 dryrun 或 显式向用户确认。 Use when about to run any Bash that touches: DROP / TRUNCATE / DELETE / UPDATE without WHERE / typeorm migration:run / psql / redis-cli FLUSH / curl|wget POST·PUT·DELETE·PATCH to non-localhost / aws s3 / mc / oss / rabbitmqadmin / gh pr merge / git push --force / git rebase -i / git filter-branch / `rm` on untracked or gitignored paths / `find -delete` / `xargs rm` / modifying ~/.ssh ~/.aws /etc system paths / curl ... | sh. Also use at session start when bypassPermissions defaultMode is active in .claude/settings.local.json."
+---
+
+# bypassPermissions 风险护栏
+
+> 项目当前在 [.claude/settings.local.json](../../settings.local.json) 配置了 `permissions.defaultMode: bypassPermissions`，所有工具调用默认放行。**git 能救代码层面的事故，但救不了"已经发生的副作用"**。本 skill 列出 Claude 在该模式下必须主动设防的操作类别与具体安全模式。
+
+## 0. 总原则
+
+**git 兜底 = 安全** 的前提是：操作只影响 **被 git 追踪的、仓库内的、还没 push 的** 状态。任何超出这个边界的操作，都不享受 git 的兜底，必须按本文档单独设防。
+
+- ✅ 改文件、新增文件、`git restore`、`git reset` —— git 兜底
+- ❌ 数据库写入、网络请求副作用、对象存储、MQ、`rm`/`mv` gitignored 文件、改仓库外文件、`git push --force` —— git 救不了
+
+**Claude 在 bypassPermissions 模式下，遇到任何 ❌ 类操作时，必须先按本文相应章节"加保险"再执行，或者主动停下来要求用户确认。**
+
+## 1. 开工前的基线快照（每个新会话第一件事）
+
+进入会话、或开始一段非 trivial 的工作前：
+
+```bash
+git status --short && git log -1 --oneline
+```
+
+把当前工作区的"干净度"作为基线。后续如果 Claude 怀疑误操作，对照这个基线就知道偏离了多少。
+
+如果基线是 **dirty 状态**（有未提交修改），并且接下来要做重构 / 大范围改动，**主动建议用户**：
+
+```bash
+git stash push -u -m "claude-baseline-<task-name>"
+# 或
+git add -A && git commit -m "wip: claude-baseline-<task-name>"
+```
+
+理由：未 stage 的新文件不在 git 追踪里，被覆盖或删除就没了。
+
+## 2. 数据库写入（最高风险）
+
+项目使用 PostgreSQL（云端 server-main）与本地 SQLite（server-agent / desktop），以及 Redis（BullMQ，Phase 3 引入）。git 完全不知道数据库状态。
+
+### 2.1 触发条件
+
+- `psql ... -c '...'` 包含 `INSERT` / `UPDATE` / `DELETE` / `DROP` / `TRUNCATE` / `ALTER`
+- `pnpm typeorm migration:run` / `migration:revert`
+- `redis-cli` 包含 `FLUSHDB` / `FLUSHALL` / `DEL`
+- 通过 Service 层的 Repository 直接写库（虽然走代码但同样要小心）
+- 运行新写的 migration `*.sql`
+
+### 2.2 必做安全模式
+
+| 场景 | 安全模式 |
+|------|---------|
+| `UPDATE` / `DELETE` | **先用同 WHERE 跑 `SELECT count(*)`** 确认影响行数；通过 `BEGIN; ... ROLLBACK;` 验证 |
+| 新写 migration SQL | 先 `cat` 完整文件让用户过目；确认幂等 (`IF NOT EXISTS` / `IF EXISTS`)、索引用 `CONCURRENTLY`、列名 snake_case；首次 `migration:run` 前主动询问 |
+| `DROP TABLE` / `DROP COLUMN` | **必须**先备份：`pg_dump -t <table> ... > /tmp/backup.sql`；操作前显式向用户确认 |
+| `TRUNCATE` | 视同 DROP；额外检查关联逻辑外键的影响 |
+| Redis `DEL` / `FLUSH` | 先 `KEYS pattern` / `SCAN` 列出影响范围 |
+| 修改 production / staging 数据库 | **不允许在 bypassPermissions 下静默执行**，必须停下询问用户 |
+
+### 2.3 生产连接识别
+
+任何包含以下任一模式的 DB 连接串都视为 **生产/共享环境**，必须停下询问用户：
+
+- 域名包含 `prod` / `production` / `live` / `master`
+- 端口 `5432` 但 host 不是 `localhost` / `127.0.0.1` / `*.local` / Docker 内网段
+- Nacos 配置拉下来的 DB host（项目用 Nacos 远程配置，不要假设是本地）
+
+## 3. 外部网络请求（POST / PUT / DELETE / PATCH）
+
+### 3.1 触发条件
+
+- `curl` / `wget` / `httpie` 加 `-X POST` / `-X PUT` / `-X DELETE` / `-X PATCH`，或带 `-d` / `--data` / `-T`
+- `gh api` 用 `-X POST/PUT/DELETE/PATCH` 或 `--method`
+- `gh pr merge` / `gh pr close` / `gh issue close` / `gh release create`
+- 调用项目 webhook、Slack / 飞书 / 钉钉 incoming webhook
+- 调 Nacos 写接口 (`/nacos/v1/cs/configs` 的 POST/DELETE)
+- 调对外 SMS / 邮件接口（AWS SES / 阿里云）
+
+### 3.2 必做安全模式
+
+1. **先打印将发送的内容**，让用户能在终端里看见：
+
+   ```bash
+   echo "TARGET: <method> <url>"
+   echo "BODY: <body>"
+   ```
+
+2. **GET 请求随便发；非 GET 默认要求显式确认**，除非：
+   - 目标是 `localhost` / `127.0.0.1` / `0.0.0.0` 或本机的 dev 端口（`3720` / `3730` / `7700-7703`）
+   - 用户在当前会话里已经明确让你"调一下这个接口"
+
+3. **`gh pr merge` / `gh pr close` / `gh release create`** 这类对协作有可见影响的 GitHub 操作：永远先询问，不要自动执行。
+
+4. **生产 webhook / 通知接口** 永远先询问。
+
+## 4. 对象存储 / 消息队列 / 缓存
+
+项目接入了 MinIO / OSS / S3（`libs/assets`）、RabbitMQ（`libs/messaging`）、Redis（BullMQ）。这些写入都是 **git 完全管不到的副作用**。
+
+| 操作 | 安全模式 |
+|------|---------|
+| `aws s3 rm` / `mc rm` / `ossutil rm` | 先 `ls` 列出受影响对象；`--recursive` 必须先询问 |
+| `aws s3 cp` / `mc cp` 覆盖目标 | 先 `ls` 看目标是否已存在；存在就询问 |
+| `rabbitmqadmin publish` | 先打印 routing key + payload；生产 vhost 必须询问 |
+| Redis `KEYS *` 后批量 `DEL` | 用 `SCAN` 替代 `KEYS`；`DEL` 前列出 key 列表 |
+| BullMQ 队列 `obliterate` / `drain` | 永远先询问 |
+
+## 5. 文件系统操作
+
+### 5.1 仓库内文件
+
+- **`rm` / `mv` 前先 `git status -- <path>`** 确认它是否被 git 追踪
+  - tracked & committed → ✅ 可以放心执行（`git restore` 能救）
+  - tracked & 未 commit → ⚠️ 提醒用户，建议先 commit/stash
+  - untracked → ❌ git 救不回来，先询问
+- 永远不要 `find ... -delete` 或 `xargs rm`（一次性影响太大）；要批量删除就 `git rm` 让 git 知情
+- `git ls-files --others --ignored --exclude-standard` 能列出所有 gitignored 文件，操作前心里有数
+
+### 5.2 仓库外文件
+
+绝对路径以以下前缀开头的，**视同生产基础设施**，永远不要静默写入或删除：
+
+- `~/.ssh/` `~/.aws/` `~/.gnupg/` `~/.config/`
+- `/etc/` `/usr/` `/var/` `/opt/`
+- `~/Library/` `/System/` `/Applications/`（macOS）
+
+只读访问 OK；写 / 删必须先询问。
+
+### 5.3 gitignored 路径
+
+`.gitignore` 命中的路径（项目里包括 `node_modules`、`.next/`、`dist/`、`apps/*/i18n/`、`.env*`、`/firecrawl`、`apps/server/app.yaml` 等）：
+
+- `rm -rf node_modules/` / `rm -rf .next/` / `rm -rf dist/` —— 公认安全，可以执行
+- 其他 gitignored 路径删除前先问，特别是：
+  - `.env*` 系列（用户可能本地有未 commit 的密钥）
+  - `apps/*/i18n/`（项目使用，运行时生成）
+  - `/firecrawl`（本地克隆的源码仓库）
+
+## 6. Git 重写历史 / 强制操作
+
+| 操作 | 风险 | 处置 |
+|------|------|------|
+| `git push --force` / `-f` | 远程历史被覆盖；同事的本地分支会冲突 | settings.json 已 deny；额外坚持永远不 bypass |
+| `git push --force-with-lease` | 比 `--force` 安全但仍能覆盖 | 询问后才能执行 |
+| `git rebase -i` / `git rebase --onto` | 丢提交（reflog 90 天内可救） | 先 `git stash` 或 `git branch backup-<timestamp>` 备份 |
+| `git filter-branch` / `git filter-repo` | 重写整段历史 | 永远先询问；先做 backup branch |
+| `git reset --hard <ref>` | settings.json 已 deny | 不绕开 |
+| `git branch -D <branch>` | 删未合并分支 | 先 `git branch -v` 看是否合并；未合并必须询问 |
+| `git clean -fdx` | 清掉 gitignored 内容（可能含未提交 `.env`） | settings.json 已 deny；不绕开 |
+
+## 7. 远程脚本管道执行
+
+`curl ... | sh` / `curl ... | bash` / `wget ... | sh` 已在 `deny` 里。
+
+如果遇到 README 推荐这种安装方式（如 `curl -fsSL https://... | bash`），**绕开方式是分两步：先 `curl -o /tmp/install.sh`，让用户审视脚本，再 `bash /tmp/install.sh`**，永远不要直接管道执行。
+
+## 8. 装包 / 构建工具
+
+`pnpm install <pkg>` / `pnpm add <pkg>` 本身不是 deny 的，但要注意：
+
+- **新加依赖前**，主动建议用户检查包名是否拼对（防 typosquatting）；可疑包先 `npm view <pkg>` 看 maintainer 和下载量
+- `pnpm install --force` / `--no-frozen-lockfile`：会改 lockfile，先询问
+- 全局安装 `pnpm add -g` / `npm i -g`：写到用户 home，先询问
+
+## 9. CI / CD / 部署相关
+
+修改以下文件视同 **影响生产部署**，即使本地修改也要主动告知用户：
+
+- `.github/workflows/*.yml`
+- `Dockerfile` / `docker-compose*.yml`
+- `nginx*.conf`
+- `apps/server/app.yaml`（已 gitignored，本地配置）
+- E2B 模板：`build:e2b` 相关
+
+修改完后 **不要主动 push**，让用户 review 后自己 push。
+
+## 10. 会话末尾自检
+
+每轮工作结束、特别是涉及 ✅ 之外操作时，主动跑一遍：
+
+```bash
+git status --short
+```
+
+把变更总结清楚告诉用户。如果有 untracked 新文件，明确点出"以下文件未被 git 追踪，请确认是否要保留"。
+
+## 11. 何时 **必须** 停下询问用户（即使在 bypassPermissions）
+
+以下场景，无论 settings.json 怎么放行，Claude 都必须停下来等用户回复，不允许静默执行：
+
+1. 检测到生产 / 共享数据库连接（参见 §2.3）
+2. 任何 `gh pr merge` / `gh release create` / `gh pr close --comment`
+3. 写入对象存储 / 发送 MQ 消息到 production vhost
+4. `rm` / `mv` 一个 untracked 或 gitignored（除 node_modules / dist / .next 外）的路径
+5. 修改 `~/.ssh` / `~/.aws` / `/etc` / `/usr` / `/var`
+6. `git push --force-with-lease` / `git rebase -i` / `git filter-*` / `git branch -D <未合并分支>`
+7. 全局安装包（`-g`）或修改 `package.json` 的 dependencies/scripts 后立刻执行
+8. 任何 README 让你 `curl ... | bash` 的安装步骤
+9. 用户上一句话明确说 "我先看看" / "先停一下" / "review 一下" / "等我确认"
+
+询问的格式：清楚说明 **要做什么、影响什么、怎么回滚**，不要含糊带过。
+
+## 12. 触发本 skill 的关键词清单（给自己用）
+
+如果即将运行的命令命中以下任一关键词，**先把本 skill 重读一遍再下手**：
+
+```
+DROP, TRUNCATE, DELETE FROM, UPDATE ... SET, INSERT INTO,
+migration:run, migration:revert, FLUSHDB, FLUSHALL,
+curl -X POST, curl -X PUT, curl -X DELETE, curl -X PATCH,
+gh pr merge, gh pr close, gh release create, gh api -X,
+aws s3 rm, mc rm, ossutil rm, rabbitmqadmin publish,
+git push --force, git push -f, git push --force-with-lease,
+git rebase -i, git filter-branch, git branch -D,
+rm -rf, find ... -delete, xargs rm,
+~/.ssh, ~/.aws, /etc/, /usr/, /var/,
+pnpm install -g, npm i -g, | sh, | bash
+```
+

@@ -1,6 +1,6 @@
 {
   "name": "@meshbot/server-main",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "private": true,
   "scripts": {
     "build": "nest build",
@@ -10,11 +10,11 @@
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@meshbot/shared": "workspace:*",
     "@meshbot/types": "workspace:*",
     "@nestjs/common": "^11",
     "@nestjs/core": "^11",
     "@nestjs/platform-express": "^11",
+    "nestjs-i18n": "^10.5.1",
     "reflect-metadata": "^0.2",
     "rxjs": "^7"
   },

@@ -4,7 +4,14 @@ import { CommonModule, TxTypeOrmModule } from "@meshbot/common";
 import { Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 import { TypeOrmModule } from "@nestjs/typeorm";
-import { LocalAuthModule } from "./auth/local-auth.module";
+import {
+  AcceptLanguageResolver,
+  CookieResolver,
+  HeaderResolver,
+  I18nJsonLoader,
+  I18nModule,
+  QueryResolver,
+} from "nestjs-i18n";
 import { AuthModule } from "./auth.module";
 import { ModelConfigController } from "./controllers/model-config.controller";
 import { SettingController } from "./controllers/setting.controller";
@@ -23,6 +30,20 @@ const meshbotDir = resolveMeshbotDir();
 @Module({
   imports: [
     CommonModule.forRoot(),
+    I18nModule.forRoot({
+      fallbackLanguage: "zh",
+      loader: I18nJsonLoader,
+      loaderOptions: {
+        path: path.join(__dirname, "i18n"),
+        watch: process.env.NODE_ENV !== "production",
+      },
+      resolvers: [
+        new CookieResolver(["locale"]),
+        new HeaderResolver(["x-lang"]),
+        new AcceptLanguageResolver(),
+        new QueryResolver(["lang"]),
+      ],
+    }),
     TypeOrmModule.forRoot({
       type: "better-sqlite3",
       database: path.join(meshbotDir, "agent.db"),
@@ -40,7 +61,6 @@ const meshbotDir = resolveMeshbotDir();
     TxTypeOrmModule.forFeature([ModelConfig, Setting]),
     AgentModule,
     AuthModule,
-    LocalAuthModule,
     StaticModule,
   ],
   controllers: [ModelConfigController, SettingController, SetupController],

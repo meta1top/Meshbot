@@ -12,7 +12,11 @@
     "forgotPassword": "忘记密码？",
     "loginFailed": "登录失败，请重试",
     "signIn": "登录",
-    "signingIn": "登录中..."
+    "signingIn": "登录中...",
+    "validation": {
+      "usernameRequired": "请输入账号",
+      "passwordRequired": "请输入密码"
+    }
   },
   "setup": {
     "getStarted": "开始配置",
