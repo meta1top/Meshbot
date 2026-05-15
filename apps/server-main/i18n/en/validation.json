@@ -1,0 +1,10 @@
+{
+  "required": "Required field",
+  "stringTooShort": "Value is too short",
+  "stringTooLong": "Value is too long",
+  "invalidEmail": "Invalid email format",
+  "invalidUuid": "Invalid UUID format",
+  "invalidUrl": "Invalid URL format",
+  "invalidSlug": "Invalid slug (lowercase letters / digits / hyphens only, 3-63 chars)",
+  "passwordTooShort": "Password must be at least 8 characters"
+}

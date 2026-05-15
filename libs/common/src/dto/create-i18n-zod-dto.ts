@@ -7,7 +7,7 @@ import type { ZodDtoClass } from "./create-zod-dto";
  * i18n 感知 DTO。
  *
  * Zod schema 的 message 写 i18n key（如 `"validation.stringTooShort"`），
- * 由全局 `I18nValidationPipe` 在 request 时翻译为当前 locale 的文案。
+ * 由全局 `I18nZodValidationPipe` 在 request 时翻译为当前 locale 的文案。
  *
  * 用法：
  * ```ts
@@ -23,14 +23,10 @@ import type { ZodDtoClass } from "./create-zod-dto";
  * 注：与 Phase 1 的 `createZodDto`（无 i18n 简化版）共存。
  * 返回类型复用 Phase 1 的 `ZodDtoClass<TSchema>`，保持 API 一致。
  *
- * ⚠️ Phase 2 已知缺口：当前 nestjs-i18n 的 `I18nValidationPipe` 不识别 Zod DTO，
- * 用 `createI18nZodDto` 派生的 DTO **在 production 当前不会触发校验**。Phase 3
- * 会引入 `I18nZodValidationPipe` 桥接（让 Zod 报错也走 i18n 翻译路径）。
- * 在桥接落地前，新 controller 请**继续使用 `createZodDto`**（Phase 1，无 i18n 但
- * 校验确实生效）；切换到 `createI18nZodDto` 等 Phase 3 桥接到位后统一迁移。
- *
- * 集成测试见 `apps/server-agent/test/e2e/dto-i18n.spec.ts`（含 Phase 2 行为
- * 与 Phase 3 期望的对照）。
+ * Phase 3 起配合 `I18nZodValidationPipe`（`apps/server-*` 全局 pipe）生效：
+ * 校验失败时把 `issue.message`（i18n key）通过 `I18nService.translate` 翻译为
+ * 当前请求 lang 的文案。集成测试见
+ * `apps/server-agent/test/e2e/dto-i18n.spec.ts`。
  */
 export function createI18nZodDto<TSchema extends ZodTypeAny>(schema: TSchema) {
   return createZodDtoBase(schema) as unknown as ZodDtoClass<TSchema>;

@@ -10,5 +10,5 @@ pnpm check
 echo "[pre-commit] checking skill <-> rule sync..."
 pnpm sync:skills -- --check
 
-echo "[pre-commit] checking i18n key alignment (soft)..."
-pnpm sync:locales -- --check || echo "[warn] sync:locales reports gaps; run 'pnpm sync:locales -- --write' to fill placeholders"
+echo "[pre-commit] enforcing i18n key alignment..."
+pnpm sync:locales -- --check

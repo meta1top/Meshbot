@@ -19,6 +19,10 @@
     "dev:server-main": "pnpm --filter @meshbot/server-main dev",
     "dev:desktop": "pnpm --filter @meshbot/desktop dev",
     "dev:cli-agent": "turbo run dev --filter=@meshbot/cli-agent",
+    "dev:db:up": "docker compose -f infra/dev/docker-compose.dev.yml up -d",
+    "dev:db:down": "docker compose -f infra/dev/docker-compose.dev.yml down",
+    "dev:db:reset": "docker compose -f infra/dev/docker-compose.dev.yml down -v && docker compose -f infra/dev/docker-compose.dev.yml up -d",
+    "dev:db:logs": "docker compose -f infra/dev/docker-compose.dev.yml logs -f postgres",
     "pkg:app": "pnpm run build:types && pnpm run build:common && pnpm run build:types-agent && pnpm run build:web-agent && pnpm run build:desktop && pnpm --filter @meshbot/desktop run dist",
     "lint": "biome lint .",
     "format": "biome format --write .",
@@ -31,6 +35,16 @@
     "check": "pnpm check:tx && pnpm check:naming && pnpm check:lock-tx && pnpm check:repo && pnpm check:dead",
     "sync:locales": "tsx scripts/sync-locales.ts",
     "sync:skills": "tsx scripts/sync-skills.ts",
+    "migration:generate:main": "TS_NODE_COMPILER_OPTIONS='{\"experimentalDecorators\":true,\"emitDecoratorMetadata\":true,\"target\":\"ES2022\",\"module\":\"commonjs\",\"moduleResolution\":\"node\",\"esModuleInterop\":true}' typeorm-ts-node-commonjs migration:generate -d apps/server-main/src/data-source.cli.ts",
+    "migration:run:main": "TS_NODE_COMPILER_OPTIONS='{\"experimentalDecorators\":true,\"emitDecoratorMetadata\":true,\"target\":\"ES2022\",\"module\":\"commonjs\",\"moduleResolution\":\"node\",\"esModuleInterop\":true}' typeorm-ts-node-commonjs migration:run -d apps/server-main/src/data-source.cli.ts",
+    "migration:revert:main": "TS_NODE_COMPILER_OPTIONS='{\"experimentalDecorators\":true,\"emitDecoratorMetadata\":true,\"target\":\"ES2022\",\"module\":\"commonjs\",\"moduleResolution\":\"node\",\"esModuleInterop\":true}' typeorm-ts-node-commonjs migration:revert -d apps/server-main/src/data-source.cli.ts",
+    "migration:show:main": "TS_NODE_COMPILER_OPTIONS='{\"experimentalDecorators\":true,\"emitDecoratorMetadata\":true,\"target\":\"ES2022\",\"module\":\"commonjs\",\"moduleResolution\":\"node\",\"esModuleInterop\":true}' typeorm-ts-node-commonjs migration:show -d apps/server-main/src/data-source.cli.ts",
+    "migration:generate:agent": "TS_NODE_COMPILER_OPTIONS='{\"experimentalDecorators\":true,\"emitDecoratorMetadata\":true,\"target\":\"ES2022\",\"module\":\"commonjs\",\"moduleResolution\":\"node\",\"esModuleInterop\":true}' typeorm-ts-node-commonjs migration:generate -d apps/server-agent/src/data-source.cli.ts",
+    "migration:run:agent": "TS_NODE_COMPILER_OPTIONS='{\"experimentalDecorators\":true,\"emitDecoratorMetadata\":true,\"target\":\"ES2022\",\"module\":\"commonjs\",\"moduleResolution\":\"node\",\"esModuleInterop\":true}' typeorm-ts-node-commonjs migration:run -d apps/server-agent/src/data-source.cli.ts",
+    "migration:revert:agent": "TS_NODE_COMPILER_OPTIONS='{\"experimentalDecorators\":true,\"emitDecoratorMetadata\":true,\"target\":\"ES2022\",\"module\":\"commonjs\",\"moduleResolution\":\"node\",\"esModuleInterop\":true}' typeorm-ts-node-commonjs migration:revert -d apps/server-agent/src/data-source.cli.ts",
+    "migration:show:agent": "TS_NODE_COMPILER_OPTIONS='{\"experimentalDecorators\":true,\"emitDecoratorMetadata\":true,\"target\":\"ES2022\",\"module\":\"commonjs\",\"moduleResolution\":\"node\",\"esModuleInterop\":true}' typeorm-ts-node-commonjs migration:show -d apps/server-agent/src/data-source.cli.ts",
+    "migration:archive:main": "tsx scripts/archive-migrations.ts apps/server-main",
+    "migration:archive:agent": "tsx scripts/archive-migrations.ts apps/server-agent",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
@@ -50,8 +64,11 @@
     "supertest": "^7.2.2",
     "ts-jest": "^29.4.9",
     "ts-morph": "^28.0.0",
+    "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
     "turbo": "^2.9.12",
+    "typeorm": "^0.3.28",
+    "typeorm-naming-strategies": "^4.1.0",
     "typescript": "^5"
   },
   "packageManager": "pnpm@10.8.1",
@@ -63,5 +80,10 @@
     "*.{ts,tsx,js,jsx,json}": [
       "biome check --write --no-errors-on-unmatched"
     ]
+  },
+  "pnpm": {
+    "overrides": {
+      "@types/node": "^22"
+    }
   }
 }

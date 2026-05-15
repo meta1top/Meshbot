@@ -10,16 +10,35 @@
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@meshbot/common": "workspace:*",
+    "@meshbot/main": "workspace:^",
     "@meshbot/types": "workspace:*",
+    "@meshbot/types-main": "workspace:^",
     "@nestjs/common": "^11",
+    "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11",
+    "@nestjs/jwt": "^11.0.2",
+    "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11",
+    "@nestjs/typeorm": "^11.0.1",
+    "bcrypt": "^6.0.0",
+    "dotenv": "^17.4.2",
+    "nanoid": "^5",
     "nestjs-i18n": "^10.5.1",
+    "nestjs-zod": "^4",
+    "passport": "^0.7.0",
+    "passport-jwt": "^4.0.1",
+    "pg": "^8.20.0",
     "reflect-metadata": "^0.2",
-    "rxjs": "^7"
+    "rxjs": "^7",
+    "typeorm": "^0.3.28",
+    "typeorm-naming-strategies": "^4.1.0",
+    "zod": "^3"
   },
   "devDependencies": {
     "@nestjs/cli": "^11",
-    "@types/node": "^22"
+    "@types/bcrypt": "^6.0.0",
+    "@types/node": "^22",
+    "@types/passport-jwt": "^4.0.1"
   }
 }

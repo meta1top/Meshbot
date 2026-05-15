@@ -20,6 +20,9 @@ release/
 .env
 .env.local
 .env.*.local
+.env.development
+.env.production
+!.env.*.example
 
 # editor
 .vscode/*

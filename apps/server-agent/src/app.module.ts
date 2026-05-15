@@ -48,7 +48,9 @@ const meshbotDir = resolveMeshbotDir();
       type: "better-sqlite3",
       database: path.join(meshbotDir, "agent.db"),
       entities: [ModelConfig, Setting, User],
-      synchronize: true,
+      migrations: [path.join(__dirname, "migrations", "*.{js,ts}")],
+      synchronize: false,
+      migrationsRun: true,
       // SQLite 并发优化（spec 第 5.1 节风险 R1）：
       // - journal_mode=WAL 提升并发读写表现
       // - busy_timeout=5000 让阻塞写在 5s 内重试，避免立即抛 SQLITE_BUSY
