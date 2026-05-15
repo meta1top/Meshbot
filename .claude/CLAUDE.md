@@ -122,10 +122,10 @@ Phase 1 暂未引入 Form/FormItem 封装；现阶段写表单允许直接用 sh
 
 ## 表归属
 
-| 应用 | 数据库 | Entity 示例 |
+| 应用 | 数据库 | 当前 Entity |
 |------|--------|-------------|
-| server-agent | `agent.db`（SQLite，~/.meshbot/） | `User` / `Setting` / `ModelConfig` |
-| server-main | Postgres（Phase 3） | `User` / `Organization` / `AgentRegistration` / `Device` |
+| server-agent | `agent.db`（SQLite，`~/.meshbot/`，TypeORM 迁移管理） | `User` / `Setting` / `ModelConfig` |
+| server-main | Postgres（Phase 3，TypeORM 迁移管理） | `AppUser`（注册 / 登录框架基线；真实业务由 meshbot 自行扩展） |
 
 ## Phase 进度
 
@@ -178,7 +178,7 @@ Phase 1 暂未引入 Form/FormItem 封装；现阶段写表单允许直接用 sh
 
 ### Phase 4 待办（按优先级）
 
-- **业务迭代**：meshbot 真业务接入 server-main（Organization / Agent / 协同元数据等，由 meshbot 自定义）
+- **业务迭代**：meshbot 自行定义云端协同业务模型并接入 server-main（参考但不照搬其它项目；新增实体走 `service-repo-access` + `service-tx-lock-cache` + `swagger-api-declaration` 规约 + 新增 TypeORM 迁移）
 - **Redis**：`@WithLock` / `@Cacheable` 切 RedisProvider（Phase 3 仍是 MemoryProvider）
 - **Dockerfile**：server-main / server-agent / cli-agent / desktop 各自 production 镜像 + docker-compose 编排
 - **CI/CD**：GitHub Actions（lint + check + test + build matrix）

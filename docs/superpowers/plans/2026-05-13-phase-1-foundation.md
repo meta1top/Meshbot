@@ -1,5 +1,7 @@
 # meshbot Phase 1 地基 Implementation Plan
 
+> **Status (2026-05-16)**：已完成，本文件保留为历史存档。后文中若出现"User / Organization / AgentRegistration / Device"等领域举例，是 Phase 1 时对 Phase 3 业务范围的预测；实施期已决定**不照搬  业务**，Phase 3 实际只落了 `AppUser`（注册 / 登录框架基线），真实业务由 meshbot 自行迭代。详见 `.claude/CLAUDE.md` Phase 3 章节。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 为 meshbot 建立工程地基：装饰器（@Transactional / @WithLock / @Cacheable）+ TxTypeOrmModule + LockProvider/CacheProvider 抽象（本地内存实现）+ 4 个静态围栏 + libs/types-main 骨架 + Entity-Schema 分离规约 + 纪律规约（CLAUDE.md）+ Jest 配置 + Turbo 任务扩展 + pnpm 收口 + server-agent 合规扫描修补。

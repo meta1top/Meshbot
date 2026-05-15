@@ -93,16 +93,19 @@ pnpm check:repo -- --map
 输出形如：
 
 ```
-[repo-check v0] Entity → Service 归属映射 (共 56 个 Entity)
+[repo-check v0] Entity → Service 归属映射 (共 N 个 Entity)
 ────────────────────────────────────────────────────────────
 Entity                      归属 Service                lib
 ────────────────────────────────────────────────────────────
-AgentInstanceEntity         ⚠ 5 个归属:                  agent
-                              - RagProvisionService (libs/agent/src/rag-client/...)
-                              - AgentGroupService (libs/agent/src/service/...)
-                              ...
-ApiKeyEntity                ApiKeyService              agent
+AppUser                     UserService                main
+ModelConfig                 ModelConfigService         <unknown>
+Setting                     SettingService             <unknown>
 ...
+
+# 若出现 DUP_OWNER 违规：
+ExampleEntity               ⚠ 2 个归属:                  main
+                              - ExampleAService (libs/main/src/...)
+                              - ExampleBService (libs/main/src/...)
 ```
 
 `⚠` 标记意味着该 Entity 存在 `DUP_OWNER` 违规。新增 Entity 后跑 `--map` 立即可看到归属是否唯一、所属 lib 是否正确。
@@ -150,17 +153,9 @@ ApiKeyEntity                ApiKeyService              agent
 
 ### 历史代码债（baseline）
 
-首份 baseline：`docs/audits/repo-fence/2026-04-21-1711.md`（共 15 条 `DUP_OWNER`，集中在 5 个 Entity）：
+meshbot 当前没有 `DUP_OWNER` 存量（参见 `docs/audits/repo-fence/<最新>.md`）。
 
-| Entity | 重复归属数 | 涉及 Service |
-|---|---:|---|
-| `AgentInstanceEntity` | 5 | `RagProvisionService` / `AgentGroupService` / `AgentInstanceMemoryService` / `AgentInstanceRagService` / `AgentInstanceService` |
-| `RagUserEntity` | 4 | `RagApiKeyService` / `RagAuthService` / `RagTenantService` / `RagUserService` |
-| `AgentGroupEntity` | 2 | `AgentGroupRagService` / `AgentGroupService` |
-| `RagTenantEntity` | 2 | `KnowledgeBaseService` / `RagTenantService` |
-| `RagApiKeyEntity` | 2 | `RagApiKeyService` / `RagTenantService` |
-
-处理原则：
+处理原则（一旦未来出现存量违规）：
 
 - 新代码**不得**引入新增违规（CI 用 `--strict` 阻断；增量模式确保新增 finding 触发新报告，便于代码审查时一眼看出）
 - 存量按业务节奏分批治理，**不要在不相关的 PR 里顺手改**（影响面大）

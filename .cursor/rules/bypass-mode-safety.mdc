@@ -65,7 +65,7 @@ git add -A && git commit -m "wip: claude-baseline-<task-name>"
 
 - 域名包含 `prod` / `production` / `live` / `master`
 - 端口 `5432` 但 host 不是 `localhost` / `127.0.0.1` / `*.local` / Docker 内网段
-- Nacos 配置拉下来的 DB host（项目用 Nacos 远程配置，不要假设是本地）
+- 从 env / 远程配置中心读出的 DB host（不要假设是本地，要先确认来源）
 
 ## 3. 外部网络请求（POST / PUT / DELETE / PATCH）
 
@@ -75,7 +75,7 @@ git add -A && git commit -m "wip: claude-baseline-<task-name>"
 - `gh api` 用 `-X POST/PUT/DELETE/PATCH` 或 `--method`
 - `gh pr merge` / `gh pr close` / `gh issue close` / `gh release create`
 - 调用项目 webhook、Slack / 飞书 / 钉钉 incoming webhook
-- 调 Nacos 写接口 (`/nacos/v1/cs/configs` 的 POST/DELETE)
+- 调远程配置中心 / Secret Manager 的写接口（如 Nacos / Vault / Consul / Parameter Store）
 - 调对外 SMS / 邮件接口（AWS SES / 阿里云）
 
 ### 3.2 必做安全模式
@@ -130,13 +130,13 @@ git add -A && git commit -m "wip: claude-baseline-<task-name>"
 
 ### 5.3 gitignored 路径
 
-`.gitignore` 命中的路径（项目里包括 `node_modules`、`.next/`、`dist/`、`apps/*/i18n/`、`.env*`、`/firecrawl`、`apps/server/app.yaml` 等）：
+`.gitignore` 命中的路径（meshbot 包括 `node_modules`、`.next/`、`dist/`、`.env*`、`~/.meshbot/`、`release/` 等）：
 
-- `rm -rf node_modules/` / `rm -rf .next/` / `rm -rf dist/` —— 公认安全，可以执行
+- `rm -rf node_modules/` / `rm -rf .next/` / `rm -rf dist/` / `rm -rf .turbo/` —— 公认安全，可以执行
 - 其他 gitignored 路径删除前先问，特别是：
   - `.env*` 系列（用户可能本地有未 commit 的密钥）
-  - `apps/*/i18n/`（项目使用，运行时生成）
-  - `/firecrawl`（本地克隆的源码仓库）
+  - `~/.meshbot/`（server-agent SQLite + 日志，本地持久数据）
+  - 本地克隆的外部源码仓库（如果有）
 
 ## 6. Git 重写历史 / 强制操作
 
@@ -169,10 +169,10 @@ git add -A && git commit -m "wip: claude-baseline-<task-name>"
 修改以下文件视同 **影响生产部署**，即使本地修改也要主动告知用户：
 
 - `.github/workflows/*.yml`
-- `Dockerfile` / `docker-compose*.yml`
+- `Dockerfile` / `docker-compose*.yml`（含 `infra/dev/docker-compose.dev.yml`）
 - `nginx*.conf`
-- `apps/server/app.yaml`（已 gitignored，本地配置）
-- E2B 模板：`build:e2b` 相关
+- 本地配置文件（已 gitignored 的 `.env.*` / `apps/*/app.yaml` / `apps/*/config.local.*` 之类）
+- electron-builder / cli-agent 发布脚本与配置
 
 修改完后 **不要主动 push**，让用户 review 后自己 push。
 
