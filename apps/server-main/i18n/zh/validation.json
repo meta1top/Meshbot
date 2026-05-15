@@ -1,0 +1,10 @@
+{
+  "required": "必填字段",
+  "stringTooShort": "长度不足",
+  "stringTooLong": "长度超出限制",
+  "invalidEmail": "邮箱格式不正确",
+  "invalidUuid": "ID 格式不正确",
+  "invalidUrl": "URL 格式不正确",
+  "invalidSlug": "slug 格式不正确（仅小写字母 / 数字 / 连字符，3-63 字符）",
+  "passwordTooShort": "密码至少 8 位"
+}

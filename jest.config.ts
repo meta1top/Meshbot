@@ -17,9 +17,19 @@ const config: Config = {
   moduleNameMapper: {
     "^@meshbot/common$": "<rootDir>/libs/common/src",
     "^@meshbot/common/(.*)$": "<rootDir>/libs/common/src/$1",
+    "^@meshbot/main$": "<rootDir>/libs/main/src",
+    "^@meshbot/main/(.*)$": "<rootDir>/libs/main/src/$1",
     "^@meshbot/types$": "<rootDir>/libs/types/src",
     "^@meshbot/types-agent$": "<rootDir>/libs/types-agent/src",
     "^@meshbot/types-main$": "<rootDir>/libs/types-main/src",
+    // 强制 framework 包从单一物理路径解析，避免 pnpm 多 peer dep 树
+    // 产生多份 @nestjs/typeorm 实例（同 token 不同 identity → Nest DI 解析失败）。
+    "^@nestjs/typeorm$":
+      "<rootDir>/apps/server-main/node_modules/@nestjs/typeorm",
+    "^@nestjs/typeorm/(.*)$":
+      "<rootDir>/apps/server-main/node_modules/@nestjs/typeorm/$1",
+    "^typeorm$": "<rootDir>/apps/server-main/node_modules/typeorm",
+    "^typeorm/(.*)$": "<rootDir>/apps/server-main/node_modules/typeorm/$1",
   },
   transform: {
     "^.+\\.ts$": [

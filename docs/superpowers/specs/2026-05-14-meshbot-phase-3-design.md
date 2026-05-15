@@ -4,6 +4,8 @@
 - 范围：meshbot Phase 3（继 Phase 2 工程化 harness 之后）
 - 形态：一份大 spec，内部 3 个轨道；后续单份 plan 拆 ~14 个 task
 
+> **实施期变更（2026-05-16）**：用户在实施 B7 期间明确「不照搬  业务」。原 §2 / §4 中的 Organization / Membership / Invite / AgentRegistration 全部从 libs/main 剥离，server-main 业务收敛到**仅注册 / 登录示范**（AppUser 唯一实体，2 endpoint：register / login）。框架要素（TypeORM + TxTypeOrmModule + I18nZodValidationPipe + I18nExceptionFilter + JWT + 迁移文件 + 静态围栏）全部保留。真实业务由 meshbot 自行迭代。后文章节为原设计存档，实施落地见 [`2026-05-14-meshbot-phase-3-plan.md`](../plans/2026-05-14-meshbot-phase-3-plan.md) 顶部「实施差异」与 `.claude/CLAUDE.md` Phase 3 章节。
+
 ---
 
 ## 1. 总体目标与范围

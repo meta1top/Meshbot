@@ -151,32 +151,39 @@ Phase 1 暂未引入 Form/FormItem 封装；现阶段写表单允许直接用 sh
 - `post-build.js`：web-agent + web-main 的 Next standalone 兼容
 - Phase 1 final review backlog 全部清空：删 zombie auth / 删 libs/shared / 移 PROVIDERS / 隐藏 Initializer / forRoot JSDoc / scripts/README.md --force-report 文档 / e2e 集成测
 
-### Phase 2 已知缺口（Phase 3 必修）
+### Phase 3（云端轨框架基线）✅ 已完成
 
-- `I18nValidationPipe`（nestjs-i18n）不识别 Zod DTO，所以 `createI18nZodDto` 派生的 DTO 在 production 当前**不会触发校验**。Phase 3 引入第一个使用 `createI18nZodDto` 的 controller 之前，必须：
-  - 全局安装 `ZodValidationPipe`（from `nestjs-zod`）
-  - 编写 `I18nZodValidationFilter`（或自定义 pipe）把 `ZodValidationException.issues[].message` 视作 i18n key，通过 `I18nService.translate()` 翻译后重新抛出
-  - 把 `apps/server-agent/test/e2e/dto-i18n.spec.ts` 中容忍 raw-key 的正则改为强制翻译断言
-- 60 个 web-agent 既有 i18n missing key 待补齐；Phase 3 burn-down 后把 pre-commit `sync:locales --check` 从软告警改为硬失败
+> 范围调整：实施期间用户明确「不照搬  业务」。原 spec 的 Membership / Invite / Organization 业务全部从 libs/main 剥离；只留**最小注册 / 登录示范**作为 server-main 框架基线。真实业务由 meshbot 自行迭代。
 
-### Phase 3（云端轨）待办
+- **A1**：`libs/common/src/dto/i18n-zod-validation.pipe.ts` 桥接 nestjs-zod ↔ nestjs-i18n（拦截 ZodIssue → 翻译 → 抛 400）；`I18nExceptionFilter` 翻译 service 层抛出的 i18n-key HttpException；server-agent / server-main 全局注册；e2e 强制翻译断言（中英）
+- **B1**：`infra/dev/docker-compose.dev.yml`（Postgres 16-alpine）+ `pnpm dev:db:{up,down,reset,logs}` + `apps/server-main/.env.development.example`
+- **B2**：server-main 接入 `TypeOrmModule.forRootAsync` + `SnakeNamingStrategy` + `migrationsRun:true`（dev）+ `apps/server-main/src/data-source.cli.ts`（CLI 用）
+- **B3**：`libs/types-main` schema（仅 `register-user` + `login`）
+- **B4**：`libs/main` 框架基线 —— `AppUser` 唯一归属 `UserService`，注册 / 登录 + bcrypt；`MainErrorKeys` + `throwMainError`；class+interface 声明合并暴露 zod-inferred 字段（绕过 TS `extends createZodDto(...)` instance type 丢失）
+- **B5**：`apps/server-main/src/auth/` 独立 JWT chain（strategy 名 `jwt-main` vs server-agent 的 `jwt`）+ `@Public` / `@CurrentUser` + 全局 `JwtAuthGuard`；`rest/auth.controller.ts`（register / login）
+- **B6**：`apps/server-main/src/migrations/1778869010469-InitialSchema.ts` 仅建 `app_user` 表 + 唯一索引 + pgcrypto
+- **B7**：e2e 套 `test/e2e/auth-flow.spec.ts`（7 case 全绿）+ 隔离 schema 工具 `test/setup/test-db.ts`
+- **B8**：server-main i18n 资源（auth / validation / common，zh+en）
+- **C1**：server-agent 脱 `synchronize:true` —— `migrations/1778900000000-InitialSchemaSqlite.ts`（users / settings / model_configs）+ `data-source.cli.ts` + `migrationsRun:true`
+- **C2**：根 `pnpm migration:{generate,run,revert,show,archive}:{main,agent}` 脚本（`TS_NODE_COMPILER_OPTIONS` 注入 decorators metadata）+ `scripts/archive-migrations.ts`
+- **A2**：60 个 web-agent missing i18n key 全部 burn down（zh / en 双语，无空占位）
+- **A3**：husky `.husky/pre-commit` `sync:locales --check` 软告警 → 硬失败
 
-- **优先项**：上述 i18n bridge + 60 missing keys
-- `server-main` 起业务（User / Organization / AgentRegistration / Device）+ Postgres + 迁移
-- `@WithLock` / `@Cacheable` 接入 Redis provider
-- migrations-ddl 规范落地（脱 `synchronize:true`）
-- Dockerfile + docker-compose
-- 版本号策略（changesets）
-- cli-agent 发布形态
-- `ts-jest isolatedModules` 配置迁移
-- pre-commit 运行时调优（如果 ~15s 不能接受）
+### Phase 3 期间踩的坑（仅记可复用经验，不复述配置细节）
 
-### Phase 4（CI/CD）待办
+- **pnpm 多实例同名 token**：libs/main 与 apps/server-main 的 `@nestjs/typeorm` 因 `@types/node` 版本不同被 pnpm split 成两份物理副本 → NestJS DI 解析 DataSource token 失败。修复：根 `package.json` 加 `pnpm.overrides.@types/node` + jest moduleNameMapper 强制 framework 包从单一物理路径解析
+- **TypeORM 多 schema 测试**：`DataSource.schema` 仅设置 search_path 影响读，迁移 DDL 仍可能落 public。修复：测试 dataSource `extra.options: "-c search_path=<schema>"` 强制所有连接默认在测试 schema 内
+- **TS `class X extends createZodDto(S) {}` 实例字段丢失**：用 class + interface 声明合并补字段类型（biome `noUnsafeDeclarationMerging` 逐个 ignore）
+- **NodeNext + typeorm CLI 冲突**：`__dirname` 在 ESM 上下文失效。修复：data-source.cli.ts 用 `process.cwd()` 算 repo root，并通过 `TS_NODE_COMPILER_OPTIONS` 强制 commonjs 编译
 
-- GitHub Actions（lint + check + test + build matrix）
-- electron-builder release
-- npm publish for cli-agent
-- 自动 changelog
-- 监控接入
+### Phase 4 待办（按优先级）
 
-详见 `docs/superpowers/specs/2026-05-13-meshbot-borrow--design.md`。
+- **业务迭代**：meshbot 真业务接入 server-main（Organization / Agent / 协同元数据等，由 meshbot 自定义）
+- **Redis**：`@WithLock` / `@Cacheable` 切 RedisProvider（Phase 3 仍是 MemoryProvider）
+- **Dockerfile**：server-main / server-agent / cli-agent / desktop 各自 production 镜像 + docker-compose 编排
+- **CI/CD**：GitHub Actions（lint + check + test + build matrix）
+- **发布工具链**：版本号策略（changesets）/ electron-builder release / cli-agent npm publish / 自动 changelog
+- **监控接入**：Sentry / OTel
+- **小琐事**：`ts-jest isolatedModules` 配置迁移 / pre-commit 运行时调优
+
+设计依据：`docs/superpowers/specs/2026-05-13-meshbot-borrow--design.md` + `docs/superpowers/specs/2026-05-14-meshbot-phase-3-design.md`。
