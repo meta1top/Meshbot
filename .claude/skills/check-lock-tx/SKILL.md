@@ -150,10 +150,10 @@ async outerWorkflow() {
 
 ```ts
 // ✅ 没有外层事务，两步分别保证幂等
-async createGroupWithProvision(userId, data) {
-  const entity = await this.groupService.create(userId, data);   // @WithLock + 内部小事务
-  await this.ensureGroupRag(entity.id);                           // @WithLock + 幂等
-  return entity;
+async provisionAgent(userId, data) {
+  const agent = await this.agentService.createWithLock(userId, data);  // @WithLock + 内部小事务
+  await this.ensureAgentBindings(agent.id);                            // @WithLock + 幂等
+  return agent;
 }
 ```
 

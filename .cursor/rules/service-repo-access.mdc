@@ -99,21 +99,19 @@ export class FooProcessor extends WorkerHost {
 ### 3. 跨模块 Service 禁止注入其他模块的 Repository（CROSS_LIB_INJECT）
 
 ```ts
-// ❌ 错误：agent 模块的 Service 直接注入 schedule 模块的 Repo
+// ❌ 错误：libs/agent 的 Service 直接注入 libs/main 模块的 Repo
 @Injectable()
 export class AgentRunService {
   constructor(
-    @InjectRepository(ScheduleExecutionEntity)
-    private readonly scheduleExecutionRepo: Repository<ScheduleExecutionEntity>,
+    @InjectRepository(AppUser)
+    private readonly userRepo: Repository<AppUser>,
   ) {}
 }
 
-// ✅ 正确：通过 schedule 模块的 Service 访问
+// ✅ 正确：通过 libs/main 暴露的 Service 访问
 @Injectable()
 export class AgentRunService {
-  constructor(
-    private readonly scheduleExecutionService: ScheduleExecutionService,
-  ) {}
+  constructor(private readonly userService: UserService) {}
 }
 ```
 
@@ -122,21 +120,19 @@ export class AgentRunService {
 ### 4. 同模块非归属 Service 禁止注入 Repository（DUP_OWNER）
 
 ```ts
-// ❌ 错误：AgentGraphService 直接注入 AgentInstanceEntity Repo
+// ❌ 错误：同模块的另一个 Service 直接注入了 AppUser Repository
 @Injectable()
-export class AgentGraphService {
+export class SessionService {
   constructor(
-    @InjectRepository(AgentInstanceEntity)
-    private readonly instanceRepo: Repository<AgentInstanceEntity>,
+    @InjectRepository(AppUser)
+    private readonly userRepo: Repository<AppUser>,  // ← AppUser 已属于 UserService
   ) {}
 }
 
 // ✅ 正确：通过归属 Service 访问
 @Injectable()
-export class AgentGraphService {
-  constructor(
-    private readonly instanceService: AgentInstanceService,
-  ) {}
+export class SessionService {
+  constructor(private readonly userService: UserService) {}
 }
 ```
 

@@ -5,6 +5,17 @@
 - 参考：platform（云端多租户 AI Agent 平台）
 - 形态：全景规划 spec + 分阶段独立 brainstorm/plan（本 spec 是路线图，后续每个 Phase 单独走 brainstorm → writing-plans → 实施）
 
+> **2026-05-16 修订（重要）**：原 spec 在 Phase 3 草图中列了"User / Organization / Membership / AgentRegistration / Device / AuditLog"作为第一批领域。实施期间用户明确「**不照搬  业务**」——meshbot 自有业务模型由后续自行迭代，本 spec 的"借鉴"严格限定在：
+> - **架构**：依赖方向（apps → libs/domain → libs/types-domain → libs/common）、双轨切分（本地 / 云端）
+> - **Harness**：5 个静态围栏（tx / naming / lock-tx / repo / dead-exports）、pre-commit 链
+> - **装饰器抽象**：`@Transactional` / `@WithLock` / `@Cacheable` + `TxTypeOrmModule`（AsyncLocalStorage 事务传播）
+> - **i18n 全栈**：`createI18nZodDto` + `I18nZodValidationPipe` + `I18nExceptionFilter` 桥接
+> - **共享数据模型**：`libs/types` + `libs/types-<domain>` + Zod schema 单源
+> - **TypeORM 迁移规约**：snake_case + 逻辑外键 + 幂等 SQL + pgcrypto
+> - **编码习惯**：controller-thin / service-tx-lock-cache / swagger-api-declaration / 私有 tx 方法命名约定
+>
+> **不借鉴**： 的领域设计（Organization / Membership / Channel / Hired Agent / RAG / Crawl / Knowledge Base / Company Profile / Invite / Notification / Panel 等），及其 OAuth / 邮件验证码登录、Nacos 远程配置、E2B 沙箱等基建选型。原 spec 中相关章节为路线图存档，不作为实施依据。
+
 ---
 
 ## 1. 目标与范围
@@ -373,10 +384,11 @@ Phase 4 CI/CD ── 依赖 Phase 3 产物形态确定
 
 **server-main 起步**：
 - `apps/server-main/src/` 实质实现
-- 第一批领域：`libs/main/` + `libs/types-main/` 扩展 — User / Organization / Membership / AgentRegistration / Device / AuditLog
-- 数据库：Postgres + 迁移文件（`apps/server-main/migrations/`）
-- Redis 接入 `LockProvider` / `CacheProvider`
-- JWT auth（与 server-agent 的本地 auth 分开）
+- ~~第一批领域：`libs/main/` + `libs/types-main/` 扩展 — User / Organization / Membership / AgentRegistration / Device / AuditLog~~
+  → **2026-05-16 修订**：实施期决定不照搬  业务。Phase 3 实际只落了 `AppUser`（注册 / 登录框架示范），真实业务模型由 meshbot 自行迭代。借鉴范围严格限定在框架 / harness / 规则 / 装饰器 / 迁移规约层，不包含领域设计。
+- 数据库：Postgres + TypeORM 迁移文件（`apps/server-main/src/migrations/`，实施时移入 `src/` 内便于编译）
+- Redis 接入 `LockProvider` / `CacheProvider`（Phase 3 仍是 MemoryProvider，Phase 4 切 Redis）
+- JWT auth（与 server-agent 的本地 auth 分开，Passport strategy 名 `jwt-main` vs `jwt`）
 
 **migrations-ddl 全规范**：
 - 幂等 SQL / `CONCURRENTLY` 索引 / 逻辑外键 / snake_case / `SnakeNamingStrategy`

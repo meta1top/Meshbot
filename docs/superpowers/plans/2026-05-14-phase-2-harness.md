@@ -1,5 +1,7 @@
 # meshbot Phase 2 Implementation Plan
 
+> **Status (2026-05-16)**：已完成，本文件保留为历史存档。底部"Phase 3 待办"中"User / Organization / AgentRegistration / Device"等领域举例是 Phase 2 时对 Phase 3 的预测；实施期已决定**不照搬  业务**，Phase 3 实际只落了 `AppUser`（注册 / 登录框架基线）。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 把 Phase 1 地基转化为日常开发流的工程化体验：i18n 全栈接入 + 前端表单层（useSchema + Form/FormItem）+ 13 条规约 .claude/.cursor 双套 harness + check:dead 围栏 + pre-commit + Phase 1 cleanup backlog 全清空。
