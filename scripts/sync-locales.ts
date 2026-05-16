@@ -1,4 +1,6 @@
 #!/usr/bin/env tsx
+import fs from "node:fs";
+import path from "node:path";
 /**
  * sync-locales —— 扫描前后端所有 t() / i18n.translate() 调用，
  * 对比 locale JSON 文件，输出 missing / orphan / asymmetric。
@@ -10,8 +12,6 @@
  *   pnpm sync:locales -- --prune   # 删 orphan（危险，需 PR 评审）
  */
 import { Project, SyntaxKind } from "ts-morph";
-import fs from "node:fs";
-import path from "node:path";
 
 const ROOT = path.resolve(__dirname, "..");
 const WEB_APPS = ["web-agent", "web-main"];
@@ -56,7 +56,9 @@ function loadWebMessages(app: string): LocaleSet | null {
   for (const file of fs.readdirSync(dir)) {
     if (!file.endsWith(".json")) continue;
     const lang = file.replace(".json", "");
-    set.locales[lang] = flatten(JSON.parse(fs.readFileSync(path.join(dir, file), "utf-8")));
+    set.locales[lang] = flatten(
+      JSON.parse(fs.readFileSync(path.join(dir, file), "utf-8")),
+    );
   }
   return set;
 }
@@ -72,7 +74,9 @@ function loadServerI18n(app: string): LocaleSet | null {
     for (const file of fs.readdirSync(langDir)) {
       if (!file.endsWith(".json")) continue;
       const ns = file.replace(".json", "");
-      const flat = flatten(JSON.parse(fs.readFileSync(path.join(langDir, file), "utf-8")));
+      const flat = flatten(
+        JSON.parse(fs.readFileSync(path.join(langDir, file), "utf-8")),
+      );
       for (const [k, v] of Object.entries(flat)) {
         set.locales[lang][`${ns}.${k}`] = v;
       }
@@ -86,7 +90,12 @@ function scanKeys(app: string, kind: "web" | "server"): Set<string> {
     tsConfigFilePath: path.join(ROOT, "tsconfig.base.json"),
     skipAddingFilesFromTsConfig: true,
   });
-  const glob = path.join(ROOT, "apps", app, kind === "web" ? "src/**/*.{ts,tsx}" : "src/**/*.ts");
+  const glob = path.join(
+    ROOT,
+    "apps",
+    app,
+    kind === "web" ? "src/**/*.{ts,tsx}" : "src/**/*.ts",
+  );
   project.addSourceFilesAtPaths(glob);
 
   const keys = new Set<string>();
@@ -121,7 +130,9 @@ function scanKeys(app: string, kind: "web" | "server"): Set<string> {
 function diff(set: LocaleSet, usedKeys: Set<string>) {
   const langs = Object.keys(set.locales);
   const allDefined = new Set<string>();
-  for (const l of langs) Object.keys(set.locales[l]).forEach((k) => allDefined.add(k));
+  for (const l of langs) {
+    for (const k of Object.keys(set.locales[l])) allDefined.add(k);
+  }
 
   // 注意：useTranslations(namespace) 模式 — 收集到的"key"既可能是
   //   - 顶层 namespace 名（useTranslations("login")）
@@ -146,7 +157,10 @@ function diff(set: LocaleSet, usedKeys: Set<string>) {
 
   const asymmetric: string[] = [];
   if (langs.length >= 2) {
-    for (const k of new Set([...Object.keys(set.locales[langs[0]]), ...Object.keys(set.locales[langs[1]])])) {
+    for (const k of new Set([
+      ...Object.keys(set.locales[langs[0]]),
+      ...Object.keys(set.locales[langs[1]]),
+    ])) {
       const inA = k in set.locales[langs[0]];
       const inB = k in set.locales[langs[1]];
       if (inA !== inB) asymmetric.push(k);
@@ -170,11 +184,23 @@ for (const app of WEB_APPS) {
   const { missing, orphan, asymmetric } = diff(set, used);
 
   console.log(`\n=== web/${app} ===`);
-  const definedCount = Object.keys(set.locales[Object.keys(set.locales)[0]] || {}).length;
+  const definedCount = Object.keys(
+    set.locales[Object.keys(set.locales)[0]] || {},
+  ).length;
   console.log(`  used: ${used.size}, defined: ${definedCount}`);
-  if (missing.length) console.log(`  MISSING (${missing.length}):`, missing.slice(0, 10), missing.length > 10 ? `... +${missing.length - 10} more` : "");
-  if (orphan.length) console.log(`  ORPHAN (${orphan.length}):`, orphan.slice(0, 10));
-  if (asymmetric.length) console.log(`  ASYMMETRIC (${asymmetric.length}):`, asymmetric.slice(0, 10));
+  if (missing.length)
+    console.log(
+      `  MISSING (${missing.length}):`,
+      missing.slice(0, 10),
+      missing.length > 10 ? `... +${missing.length - 10} more` : "",
+    );
+  if (orphan.length)
+    console.log(`  ORPHAN (${orphan.length}):`, orphan.slice(0, 10));
+  if (asymmetric.length)
+    console.log(
+      `  ASYMMETRIC (${asymmetric.length}):`,
+      asymmetric.slice(0, 10),
+    );
 
   totalMissing += missing.length;
   totalAsymmetric += asymmetric.length;
@@ -185,7 +211,11 @@ for (const app of WEB_APPS) {
         if (!(k in set.locales[lang])) set.locales[lang][k] = "";
       }
       const file = path.join(ROOT, "apps", app, "messages", `${lang}.json`);
-      fs.writeFileSync(file, JSON.stringify(unflatten(set.locales[lang]), null, 2) + "\n", "utf-8");
+      fs.writeFileSync(
+        file,
+        JSON.stringify(unflatten(set.locales[lang]), null, 2) + "\n",
+        "utf-8",
+      );
       console.log(`  wrote: ${file}`);
     }
   }
@@ -193,7 +223,11 @@ for (const app of WEB_APPS) {
     for (const lang of Object.keys(set.locales)) {
       for (const k of orphan) delete set.locales[lang][k];
       const file = path.join(ROOT, "apps", app, "messages", `${lang}.json`);
-      fs.writeFileSync(file, JSON.stringify(unflatten(set.locales[lang]), null, 2) + "\n", "utf-8");
+      fs.writeFileSync(
+        file,
+        JSON.stringify(unflatten(set.locales[lang]), null, 2) + "\n",
+        "utf-8",
+      );
       console.log(`  pruned: ${file}`);
     }
   }
@@ -206,15 +240,23 @@ for (const app of SERVER_APPS) {
   const { missing, orphan, asymmetric } = diff(set, used);
   console.log(`\n=== server/${app} ===`);
   console.log(`  used: ${used.size}`);
-  if (missing.length) console.log(`  MISSING (${missing.length}):`, missing.slice(0, 10));
-  if (orphan.length) console.log(`  ORPHAN (${orphan.length}):`, orphan.slice(0, 10));
-  if (asymmetric.length) console.log(`  ASYMMETRIC (${asymmetric.length}):`, asymmetric.slice(0, 10));
+  if (missing.length)
+    console.log(`  MISSING (${missing.length}):`, missing.slice(0, 10));
+  if (orphan.length)
+    console.log(`  ORPHAN (${orphan.length}):`, orphan.slice(0, 10));
+  if (asymmetric.length)
+    console.log(
+      `  ASYMMETRIC (${asymmetric.length}):`,
+      asymmetric.slice(0, 10),
+    );
   totalMissing += missing.length;
   totalAsymmetric += asymmetric.length;
 }
 
 if (check && (totalMissing > 0 || totalAsymmetric > 0)) {
-  console.error(`\n[FAIL] missing=${totalMissing} asymmetric=${totalAsymmetric}; run \`pnpm sync:locales -- --write\` to fix`);
+  console.error(
+    `\n[FAIL] missing=${totalMissing} asymmetric=${totalAsymmetric}; run \`pnpm sync:locales -- --write\` to fix`,
+  );
   process.exit(1);
 }
 

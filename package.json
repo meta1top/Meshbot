@@ -33,6 +33,7 @@
     "check:repo": "tsx scripts/check-repo-access.ts",
     "check:dead": "tsx scripts/check-dead-exports.ts",
     "check": "pnpm check:tx && pnpm check:naming && pnpm check:lock-tx && pnpm check:repo && pnpm check:dead",
+    "check:strict": "pnpm check:tx -- --strict && pnpm check:naming -- --strict && pnpm check:lock-tx -- --strict && pnpm check:repo -- --strict && pnpm check:dead -- --strict",
     "sync:locales": "tsx scripts/sync-locales.ts",
     "sync:skills": "tsx scripts/sync-skills.ts",
     "migration:generate:main": "TS_NODE_COMPILER_OPTIONS='{\"experimentalDecorators\":true,\"emitDecoratorMetadata\":true,\"target\":\"ES2022\",\"module\":\"commonjs\",\"moduleResolution\":\"node\",\"esModuleInterop\":true}' typeorm-ts-node-commonjs migration:generate -d apps/server-main/src/data-source.cli.ts",
@@ -72,6 +73,10 @@
     "typescript": "^5"
   },
   "packageManager": "pnpm@10.8.1",
+  "engines": {
+    "node": ">=22 <23",
+    "pnpm": ">=10"
+  },
   "dependencies": {
     "async-mutex": "^0.5.0",
     "lru-cache": "^11.3.6"

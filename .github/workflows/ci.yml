@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: meshbot
+          POSTGRES_PASSWORD: meshbot
+          POSTGRES_DB: meshbot_main
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U meshbot -d meshbot_main"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://meshbot:meshbot@localhost:5432/meshbot_main
+      # JWT_SECRET 由测试代码本地 mock，无需 GitHub secret
+      NODE_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Static fences (5, strict)
+        # strict 模式：任意 finding ≥ 1 即 exit 1，不靠 baseline 增量
+        run: pnpm check:strict
+
+      - name: Skills sync check
+        run: pnpm sync:skills -- --check
+
+      - name: Locales sync check
+        run: pnpm sync:locales -- --check
+
+      - name: Test (含 e2e；用 service Postgres)
+        run: pnpm test
+
+      - name: Build (turbo run build)
+        run: pnpm build
