@@ -1,4 +1,4 @@
-import { CommonModule, TxTypeOrmModule } from "@meshbot/common";
+import { TxTypeOrmModule } from "@meshbot/common";
 import { Module } from "@nestjs/common";
 
 import { AppUser } from "./entities/app-user.entity";
@@ -17,11 +17,12 @@ import { UserService } from "./services/user.service";
  * `TxTypeOrmModule.forFeature` 替代原生 `TypeOrmModule.forFeature`，
  * Repository 会自动感知 `@Transactional()` 上下文。
  *
- * `CommonModule.forRoot()` 提供 LockProvider / CacheProvider —— `@WithLock` 装饰器依赖之。
- * 本地轨 / Phase 3 用 MemoryProvider；Phase 4 切 Redis。
+ * **不在此处 `import CommonModule.forRoot()`**：CommonModule 必须由根 AppModule
+ * 唯一注册（`global: true`），否则 `@WithLock` 装饰器可能拿到不同的 LockProvider
+ * 实例。本地 Memory 模式与云端 Redis 模式都由 AppModule 决定。
  */
 @Module({
-  imports: [CommonModule.forRoot(), TxTypeOrmModule.forFeature([AppUser])],
+  imports: [TxTypeOrmModule.forFeature([AppUser])],
   providers: [UserService],
   exports: [UserService],
 })
