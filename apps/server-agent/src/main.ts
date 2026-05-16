@@ -9,6 +9,7 @@ import {
 import { NestFactory, Reflector } from "@nestjs/core";
 import { I18nService } from "nestjs-i18n";
 import { AppModule } from "./app.module";
+import { setupSwagger } from "./app.swagger";
 import { resolveMeshbotDir } from "./utils/meshbot-dir";
 
 async function bootstrap() {
@@ -37,6 +38,11 @@ async function bootstrap() {
   app.useGlobalPipes(new I18nZodValidationPipe(i18n));
   app.useGlobalInterceptors(new ResponseInterceptor(reflector));
   app.useGlobalFilters(new ErrorsFilter(i18n));
+
+  // Phase 5 Track C4：dev 模式挂载 Swagger UI（/api/docs）
+  if (process.env.NODE_ENV !== "production") {
+    setupSwagger(app);
+  }
 
   await app.listen(port, host);
   console.log(`Agent running on http://${host}:${port}`);

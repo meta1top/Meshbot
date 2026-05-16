@@ -84,3 +84,39 @@
 - `docs/superpowers/specs/2026-05-14-meshbot-phase-3-design.md` —— Phase 3 设计
 - `docs/superpowers/specs/2026-05-16-meshbot-phase-4-design.md` —— Phase 4 设计
 - `docs/superpowers/plans/` —— 各 Phase 实施 plan
+
+---
+
+## Phase 5（错误 / 响应 / Gateway / Ops 框架抽屉）✅ 已完成
+
+> 借鉴  的框架细节，server-agent + server-main 双端落地。监控 / 业务模型 / BullMQ 队列 / Idempotency / Nacos / RBAC 推迟到未来。
+
+- **Track A（错误 + 响应基石）**：
+  - `libs/common/src/errors/` —— `ErrorCode` 接口 + `defineErrorCode` + `AppError` + `CommonErrorCode`（0 + 1-6 + 999）+ `ErrorsFilter`（合并 Phase 3 的 I18nExceptionFilter）
+  - `libs/common/src/interceptors/response.interceptor.ts` —— 成功响应统一 envelope；`@SkipResponseEnvelope()` 跳过装饰器
+  - 范围划分：common 0-999 / main 2000-2999 / agent 3000-3999；业务错误默认 HTTP 200 + envelope `success:false`
+  - 迁移 `libs/main/MainErrorCode` + 新建 `apps/server-agent/src/errors/AgentErrorCode`；删 `throwMainError` + 旧 `I18nExceptionFilter`
+  - server-agent / server-main main.ts 全局：pipe → interceptor → filter
+- **Track B（Gateway 必备）**：
+  - `libs/types/src/common/page.schema.ts`（PageRequestSchema z.coerce + PageData<T> + Envelope<T>）+ `libs/common/src/dto/page.dto.ts`（PageRequestDto + pageify）
+  - `libs/common/src/middlewares/trace-id.middleware.ts` —— `x-trace-id` 透传 / 自动 UUID；req.traceId 流入 envelope；e2e 2 case
+  - `libs/common/src/guards/proxy-throttler.guard.ts` —— proxy-aware（`x-forwarded-for` 首段）+ ThrottlerModule 三档桶（server-main） / 两档（server-agent）+ register 5/min、login 10/min
+- **Track C（Ops 打磨）**：
+  - `libs/common/src/utils/plain-text.logger.ts` —— TypeORM 纯文本 logger（生产启用，dev 保留 colored）+ slow-query 标记
+  - server-main TypeORM `extra: { options: "-c timezone=UTC" }` 强制 UTC（生产）
+  - `libs/common/src/health/redis-health.indicator.ts` —— 通过 LockProvider 探活；Terminus HealthController（server-agent /api/health + server-main /api/health 返回 DB + Redis 分组）
+  - `apps/server-*/src/app.swagger.ts` —— Bearer auth 安全方案；dev 模式 `/api/docs`
+- **Track D（Snowflake ID）**：
+  - `libs/common/src/utils/snowflake.ts` —— 41bit 时间戳 + 10bit nodeId + 12bit 序列；EPOCH 2026-01-01；MESHBOT_NODE_ID env；6 单测
+  - `.cursor/rules/shared-data-model.mdc` 加「主键策略」节：本地用 UUID，云端多实例 / 时间序业务用 Snowflake；多实例部署需配 NODE_ID
+- **Track E（小琐事）**：
+  - `scripts/check-error-code.ts` —— 第 6 个静态围栏；3 类 finding（DUPLICATE_CODE / OUT_OF_RANGE / GAP）；接入 pnpm check / check:strict / check:parallel / pre-commit
+  - `.cursor/rules/service-repo-access.mdc` 加「软删除模式」节：`@DeleteDateColumn` + 部分唯一索引（`WHERE deleted_at IS NULL`）+ Service 行为约定 + 迁移 DDL 模式
+
+### Phase 5 期间踩的坑（仅记可复用经验）
+
+- **TypeORM v0.3 Logger 接口**：自定义 logger 必须实现 7 个方法（含 `log` / `logSchemaBuild` / `logMigration`），简化版用 NestLogger 转发输出
+- **Terminus type inference**：`HealthCheckService.check` 返回类型 `Promise<HealthCheckResult>`，自动推断会引用 `@nestjs/terminus/dist` 的内部路径（不可移植），必须显式标注返回类型
+- **AppError envelope HTTP 状态码语义**：业务错误（邮箱重复 / 密码错）走 HTTP 200 + envelope code，避免污染 4xx/5xx（这些留给框架级问题：限流 429 / 鉴权 401 / 未找到 404 等）。客户端按 `success` / `code` 判定
+- **Throttle decorator 在测试模块下静默失效**：tests 不 import ThrottlerModule / ProxyThrottlerGuard 时，`@Throttle()` 的 metadata 仅设置但无 guard 读取，所以单元测试不受限流影响（测试代码无需额外 mock）
+- **Snowflake 时钟回拨**：本实现选择「等回到 lastMs」而非抛错；NTP 大幅回拨时仍可能错乱，多实例部署额外依赖 NODE_ID 唯一性来避免冲突

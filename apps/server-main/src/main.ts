@@ -7,6 +7,7 @@ import {
 import { NestFactory, Reflector } from "@nestjs/core";
 import { I18nService } from "nestjs-i18n";
 import { AppModule } from "./app.module";
+import { setupSwagger } from "./app.swagger";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -24,6 +25,12 @@ async function bootstrap() {
   app.useGlobalFilters(new ErrorsFilter(i18n));
 
   app.setGlobalPrefix("api");
+
+  // Phase 5 Track C4：dev 模式挂载 Swagger UI（/api/docs）
+  if (process.env.NODE_ENV !== "production") {
+    setupSwagger(app);
+  }
+
   const port = process.env.PORT ?? 3200;
   await app.listen(port);
   console.log(`server-main running on http://localhost:${port}`);

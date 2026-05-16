@@ -26,11 +26,14 @@
 ### 静态围栏（写完代码必跑）
 
 ```bash
-pnpm check   # 一键跑下面 4 个
+pnpm check          # 串行跑下面 6 个；pnpm check:parallel 并行
 pnpm check:tx
 pnpm check:naming
 pnpm check:lock-tx
 pnpm check:repo
+pnpm check:dead
+pnpm check:error-code
+pnpm check:strict   # CI 用，所有围栏 strict 模式
 ```
 
 ## 项目架构
@@ -129,6 +132,6 @@ Phase 1 暂未引入 Form/FormItem 封装；现阶段写表单允许直接用 sh
 
 ## Phase 进度
 
-Phase 1（地基）✅ / Phase 2（工程化 harness）✅ / Phase 3（云端轨框架基线）✅ / Phase 4（CI/CD + Redis + Docker + 发布工具链）✅
+Phase 1（地基）✅ / Phase 2（工程化 harness）✅ / Phase 3（云端轨框架基线）✅ / Phase 4（CI/CD + Redis + Docker + 发布工具链）✅ / Phase 5（错误码 + 响应 envelope + Trace ID + 限流 + Health + Swagger + Snowflake + 软删除）✅
 
 各 Phase 已完成范围、踩坑、设计依据见 [`docs/PHASE_HISTORY.md`](../docs/PHASE_HISTORY.md)。
