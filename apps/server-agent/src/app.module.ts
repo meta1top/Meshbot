@@ -63,7 +63,7 @@ const meshbotDir = resolveMeshbotDir();
     TxTypeOrmModule.forFeature([ModelConfig, Setting]),
     AgentModule,
     AuthModule,
-    StaticModule,
+    StaticModule.forRoot(),
   ],
   controllers: [ModelConfigController, SettingController, SetupController],
   providers: [
