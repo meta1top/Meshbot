@@ -1,4 +1,3 @@
-import { Transactional } from "@meshbot/common";
 import {
   ConflictException,
   Injectable,
@@ -20,7 +19,6 @@ export class AuthService {
     private readonly i18n: I18nService,
   ) {}
 
-  @Transactional()
   async register(
     username: string,
     password: string,

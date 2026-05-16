@@ -12,6 +12,7 @@
     "declarationMap": true,
     "sourceMap": true,
     "moduleResolution": "NodeNext",
+    "isolatedModules": true,
     "incremental": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true

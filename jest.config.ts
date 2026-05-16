@@ -36,7 +36,8 @@ const config: Config = {
       "ts-jest",
       {
         tsconfig: "<rootDir>/tsconfig.base.json",
-        isolatedModules: true,
+        // isolatedModules: true 已迁移到 tsconfig.base.json
+        // （ts-jest v30 起从 transformer options 弃用此项）
       },
     ],
   },
