@@ -21,6 +21,7 @@
   "peerDependencies": {
     "@nestjs/common": "^11",
     "@nestjs/core": "^11",
+    "@nestjs/throttler": "^6",
     "@nestjs/typeorm": "^11",
     "nestjs-i18n": "^10",
     "nestjs-zod": "^4",

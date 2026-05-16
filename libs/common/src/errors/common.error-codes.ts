@@ -11,6 +11,8 @@ import { defineErrorCode } from "./error-code";
  * 业务错误（如「邮箱已注册」「设备已绑定」）从 lib 业务范围申请，**不**走 CommonErrorCode。
  *
  * 这些 i18n key 必须在 server-* `i18n/{zh,en}/common.json` 中存在。
+ *
+ * @skip-gap 999 (INTERNAL_ERROR) 故意跳号 —— 保留 7-998 给未来 common 级新错误
  */
 export const CommonErrorCode = defineErrorCode({
   /** 成功哨兵；ResponseInterceptor 包装成功响应时使用 */
