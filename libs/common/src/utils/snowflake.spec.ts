@@ -1,6 +1,10 @@
 import "reflect-metadata";
 
-import { generateSnowflakeId, SnowflakeIdGenerator } from "./snowflake";
+import {
+  deriveNodeId,
+  generateSnowflakeId,
+  SnowflakeIdGenerator,
+} from "./snowflake";
 
 describe("SnowflakeIdGenerator", () => {
   it("生成数字字符串", () => {
@@ -50,5 +54,62 @@ describe("SnowflakeIdGenerator", () => {
     const gen = new SnowflakeIdGenerator(-1);
     const id = gen.next();
     expect(id).toMatch(/^\d+$/);
+  });
+});
+
+describe("deriveNodeId (Phase 6 C1)", () => {
+  const originalEnv = process.env.MESHBOT_NODE_ID;
+
+  afterEach(() => {
+    if (originalEnv === undefined) {
+      delete process.env.MESHBOT_NODE_ID;
+    } else {
+      process.env.MESHBOT_NODE_ID = originalEnv;
+    }
+  });
+
+  it("MESHBOT_NODE_ID env 显式配置时直接采用", () => {
+    process.env.MESHBOT_NODE_ID = "42";
+    expect(deriveNodeId()).toBe(42);
+  });
+
+  it("env > 1023 时取低 10bit", () => {
+    process.env.MESHBOT_NODE_ID = "2000";
+    expect(deriveNodeId()).toBe(2000 & 0x3ff);
+  });
+
+  it("env 0 直接采用", () => {
+    process.env.MESHBOT_NODE_ID = "0";
+    expect(deriveNodeId()).toBe(0);
+  });
+
+  it("env 缺失 → 走 hostname 派生，结果在 [0,1023]", () => {
+    delete process.env.MESHBOT_NODE_ID;
+    const id = deriveNodeId();
+    expect(id).toBeGreaterThanOrEqual(0);
+    expect(id).toBeLessThanOrEqual(1023);
+    // 确定性：同主机两次调用应一致
+    expect(deriveNodeId()).toBe(id);
+  });
+
+  it("env 为空字符串视作未配置 → 走 hostname", () => {
+    process.env.MESHBOT_NODE_ID = "";
+    const id = deriveNodeId();
+    expect(id).toBeGreaterThanOrEqual(0);
+    expect(id).toBeLessThanOrEqual(1023);
+  });
+
+  it("env 非数字时回退 hostname", () => {
+    process.env.MESHBOT_NODE_ID = "not-a-number";
+    const id = deriveNodeId();
+    expect(id).toBeGreaterThanOrEqual(0);
+    expect(id).toBeLessThanOrEqual(1023);
+  });
+
+  it("env 负数视作非法 → 回退 hostname", () => {
+    process.env.MESHBOT_NODE_ID = "-1";
+    const id = deriveNodeId();
+    expect(id).toBeGreaterThanOrEqual(0);
+    expect(id).toBeLessThanOrEqual(1023);
   });
 });
