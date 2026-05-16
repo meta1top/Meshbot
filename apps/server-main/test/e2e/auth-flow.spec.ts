@@ -3,15 +3,16 @@ import path from "node:path";
 import {
   CommonModule,
   type CommonModuleOptions,
-  I18nExceptionFilter,
+  ErrorsFilter,
   I18nZodValidationPipe,
   RedisCacheProvider,
   RedisLockProvider,
+  ResponseInterceptor,
 } from "@meshbot/common";
 import { MainModule } from "@meshbot/main";
 import type { INestApplication } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
-import { APP_GUARD } from "@nestjs/core";
+import { APP_GUARD, Reflector } from "@nestjs/core";
 import { JwtModule } from "@nestjs/jwt";
 import { PassportModule } from "@nestjs/passport";
 import { Test } from "@nestjs/testing";
@@ -141,8 +142,10 @@ describe.each<[Mode]>([
     app = moduleRef.createNestApplication();
     app.setGlobalPrefix("api");
     const i18n = app.get(I18nService);
+    const reflector = app.get(Reflector);
     app.useGlobalPipes(new I18nZodValidationPipe(i18n));
-    app.useGlobalFilters(new I18nExceptionFilter(i18n));
+    app.useGlobalInterceptors(new ResponseInterceptor(reflector));
+    app.useGlobalFilters(new ErrorsFilter(i18n));
     await app.init();
   }, 30_000);
 
@@ -166,68 +169,97 @@ describe.each<[Mode]>([
     displayName: "Alice",
   };
 
-  it("POST /auth/register — 注册成功返回 token + user", async () => {
+  it("POST /auth/register — 注册成功返回 envelope + token + user", async () => {
     if (maybeSkip()) return;
     const res = await request(app.getHttpServer())
       .post("/api/auth/register")
       .send(ALICE);
     expect(res.status).toBe(201);
-    expect(res.body.token).toBeTruthy();
-    expect(res.body.user).toMatchObject({
+    expect(res.body).toMatchObject({
+      success: true,
+      code: 0,
+      message: "success",
+    });
+    expect(res.body.data.token).toBeTruthy();
+    expect(res.body.data.user).toMatchObject({
       email: ALICE.email,
       displayName: ALICE.displayName,
     });
-    expect(res.body.user.id).toBeTruthy();
+    expect(res.body.data.user.id).toBeTruthy();
   });
 
-  it("POST /auth/register — 同 email 二次注册抛 409 + 中文 i18n", async () => {
+  it("POST /auth/register — 同 email 二次注册业务错误（200 + AppError envelope）", async () => {
     if (maybeSkip()) return;
     const res = await request(app.getHttpServer())
       .post("/api/auth/register")
       .send(ALICE);
-    expect(res.status).toBe(409);
-    expect(res.body.message).toBe("邮箱已被注册");
+    // AppError 默认 httpStatus=200，业务错误不污染 HTTP 语义
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      success: false,
+      code: 2001, // MainErrorCode.AUTH_EMAIL_EXISTS
+      message: "邮箱已被注册",
+    });
   });
 
-  it("POST /auth/login — 正确密码返回 token", async () => {
+  it("POST /auth/login — 正确密码返回 envelope + token", async () => {
     if (maybeSkip()) return;
     const res = await request(app.getHttpServer())
       .post("/api/auth/login")
       .send({ email: ALICE.email, password: ALICE.password });
     expect(res.status).toBe(200);
-    expect(res.body.token).toBeTruthy();
+    expect(res.body).toMatchObject({ success: true, code: 0 });
+    expect(res.body.data.token).toBeTruthy();
   });
 
-  it("POST /auth/login — 错误密码抛 401 + 英文 i18n", async () => {
+  it("POST /auth/login — 错误密码业务错误（200 + AppError + 英文 i18n）", async () => {
     if (maybeSkip()) return;
     const res = await request(app.getHttpServer())
       .post("/api/auth/login")
       .set("Accept-Language", "en")
       .send({ email: ALICE.email, password: "wrong" });
-    expect(res.status).toBe(401);
-    expect(res.body.message).toBe("Invalid email or password");
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      success: false,
+      code: 2002, // MainErrorCode.AUTH_INVALID_CREDENTIALS
+      message: "Invalid email or password",
+    });
   });
 
-  it("POST /auth/register — 非法 DTO 中文报错走 i18n 翻译", async () => {
+  it("POST /auth/register — 非法 DTO 中文报错走 i18n 翻译 + envelope", async () => {
     if (maybeSkip()) return;
     const res = await request(app.getHttpServer())
       .post("/api/auth/register")
       .send({ email: "not-an-email", password: "short", displayName: "" });
     expect(res.status).toBe(400);
-    const messages = res.body.errors.map((e: { message: string }) => e.message);
+    expect(res.body).toMatchObject({
+      success: false,
+      code: 1, // CommonErrorCode.VALIDATION_FAILED
+      message: "请求参数校验失败",
+    });
+    const messages = res.body.data.errors.map(
+      (e: { message: string }) => e.message,
+    );
     expect(messages).toEqual(
       expect.arrayContaining(["邮箱格式不正确", "密码至少 8 位", "必填字段"]),
     );
   });
 
-  it("POST /auth/register — 非法 DTO 英文报错走 i18n 翻译", async () => {
+  it("POST /auth/register — 非法 DTO 英文报错走 i18n 翻译 + envelope", async () => {
     if (maybeSkip()) return;
     const res = await request(app.getHttpServer())
       .post("/api/auth/register")
       .set("Accept-Language", "en")
       .send({ email: "not-an-email", password: "short", displayName: "" });
     expect(res.status).toBe(400);
-    const messages = res.body.errors.map((e: { message: string }) => e.message);
+    expect(res.body).toMatchObject({
+      success: false,
+      code: 1,
+      message: "Request validation failed",
+    });
+    const messages = res.body.data.errors.map(
+      (e: { message: string }) => e.message,
+    );
     expect(messages).toEqual(
       expect.arrayContaining([
         "Invalid email format",

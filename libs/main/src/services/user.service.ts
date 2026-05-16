@@ -1,3 +1,4 @@
+import { AppError } from "@meshbot/common";
 import type { LoginInput, RegisterUserInput } from "@meshbot/types-main";
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -5,7 +6,7 @@ import * as bcrypt from "bcrypt";
 import type { Repository } from "typeorm";
 
 import { AppUser } from "../entities/app-user.entity";
-import { throwMainError } from "../errors/main.error-codes";
+import { MainErrorCode } from "../errors/main.error-codes";
 
 const BCRYPT_COST = 12;
 
@@ -25,7 +26,7 @@ export class UserService {
     const existing = await this.userRepo.findOne({
       where: { email: input.email },
     });
-    if (existing) throwMainError("emailAlreadyExists");
+    if (existing) throw new AppError(MainErrorCode.AUTH_EMAIL_EXISTS);
 
     const passwordHash = await bcrypt.hash(input.password, BCRYPT_COST);
     const user = this.userRepo.create({
@@ -40,9 +41,9 @@ export class UserService {
     const user = await this.userRepo.findOne({
       where: { email: input.email },
     });
-    if (!user) throwMainError("invalidCredentials");
+    if (!user) throw new AppError(MainErrorCode.AUTH_INVALID_CREDENTIALS);
     const ok = await bcrypt.compare(input.password, user.passwordHash);
-    if (!ok) throwMainError("invalidCredentials");
+    if (!ok) throw new AppError(MainErrorCode.AUTH_INVALID_CREDENTIALS);
     return user;
   }
 
