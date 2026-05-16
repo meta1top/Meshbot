@@ -7,26 +7,18 @@ import {
   TypeOrmHealthIndicator,
 } from "@nestjs/terminus";
 
-import { Public } from "./auth/public.decorator";
+import { Public } from "../guards/jwt-auth.guard";
 
 /**
- * Phase 5 Track C1：结构化健康检查。
+ * Phase 5 Track C1：本地 Agent 健康检查。
  *
- * GET /api/health 返回 Terminus shape：
- * ```json
- * {
- *   "status": "ok",
- *   "info": { "database": { "status": "up" }, "redis": { "status": "up" } },
- *   "error": {},
- *   "details": { ... }
- * }
- * ```
+ * GET /api/health：
+ * - `database` ping SQLite
+ * - `redis` 用 LockProvider 探活（memory 模式下也返回 up，符合本地单进程语义）
  *
- * 任一组件 down → status 502 + 标记哪个组件失败，运维 / 网关可精准判断。
- *
- * `@SkipResponseEnvelope()` 让 ResponseInterceptor 不包装 Terminus 自有 shape。
+ * 匿名访问，跳过 ResponseInterceptor 包装（Terminus 自有 shape）。
  */
-@Controller("health")
+@Controller("api/health")
 export class HealthController {
   constructor(
     private readonly health: HealthCheckService,

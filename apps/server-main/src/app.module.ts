@@ -2,14 +2,17 @@ import path from "node:path";
 import {
   CommonModule,
   type CommonModuleOptions,
+  PlainTextLogger,
   ProxyThrottlerGuard,
   RedisCacheProvider,
+  RedisHealthIndicator,
   RedisLockProvider,
 } from "@meshbot/common";
 import { MainModule } from "@meshbot/main";
 import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { APP_GUARD } from "@nestjs/core";
+import { TerminusModule } from "@nestjs/terminus";
 import { ThrottlerModule } from "@nestjs/throttler";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import Redis from "ioredis";
@@ -67,19 +70,26 @@ import { AuthController } from "./rest/auth.controller";
     }),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (cfg: ConfigService) => ({
-        type: "postgres" as const,
-        url: cfg.getOrThrow<string>("DATABASE_URL"),
-        autoLoadEntities: true,
-        namingStrategy: new SnakeNamingStrategy(),
-        synchronize: false,
-        migrationsRun: process.env.NODE_ENV !== "production",
-        migrations: [path.join(__dirname, "migrations", "*.{js,ts}")],
-        logging:
-          process.env.NODE_ENV !== "production"
-            ? ["error", "warn", "migration"]
-            : ["error"],
-      }),
+      useFactory: (cfg: ConfigService) => {
+        const isProd = process.env.NODE_ENV === "production";
+        return {
+          type: "postgres" as const,
+          url: cfg.getOrThrow<string>("DATABASE_URL"),
+          autoLoadEntities: true,
+          namingStrategy: new SnakeNamingStrategy(),
+          synchronize: false,
+          migrationsRun: !isProd,
+          migrations: [path.join(__dirname, "migrations", "*.{js,ts}")],
+          logging: isProd ? ["error"] : ["error", "warn", "migration"],
+          // Phase 5 C2 / C3：production 切纯文本 logger + 强制 UTC 时区
+          ...(isProd
+            ? {
+                logger: new PlainTextLogger(),
+                extra: { options: "-c timezone=UTC" },
+              }
+            : {}),
+        };
+      },
     }),
     // Phase 5 Track B3：全局限流，proxy-aware
     // 三档桶：突发 / 分钟内 / 小时内
@@ -88,11 +98,14 @@ import { AuthController } from "./rest/auth.controller";
       { name: "medium", ttl: 60_000, limit: 300 },
       { name: "long", ttl: 3_600_000, limit: 5000 },
     ]),
+    // Phase 5 Track C1：结构化健康检查（DB + Redis 分组上报）
+    TerminusModule,
     AuthModule,
     MainModule,
   ],
   controllers: [HealthController, AuthController],
   providers: [
+    RedisHealthIndicator,
     // 注意：guard 注册顺序 = 执行顺序（先 throttle、后 jwt）
     { provide: APP_GUARD, useClass: ProxyThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },

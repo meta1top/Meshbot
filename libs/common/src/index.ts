@@ -4,6 +4,7 @@ export * from "./decorators";
 export * from "./dto";
 export * from "./errors";
 export * from "./guards";
+export * from "./health";
 export * from "./interceptors";
 export * from "./lock";
 export * from "./middlewares";

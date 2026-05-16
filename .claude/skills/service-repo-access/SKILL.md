@@ -169,3 +169,57 @@ Controller / Processor / Gateway / Resolver / Tool
 4. 在所属 Module 用 `TxTypeOrmModule.forFeature([XEntity])` 注册（参考 `.claude/skills/service-tx-lock-cache/SKILL.md`）
 5. 跑 `pnpm check:repo -- --map` 确认归属正确显示
 
+## 软删除模式（Phase 5 起）
+
+当业务需求要求「删除后保留审计 / 可恢复」时，采用 TypeORM 软删除：
+
+### Entity 标记
+
+```ts
+import { DeleteDateColumn, Entity, Index, PrimaryGeneratedColumn } from "typeorm";
+
+@Entity("agent_session")
+@Index(["userId", "name"], { unique: true, where: '"deleted_at" IS NULL' })
+export class AgentSession {
+  @PrimaryGeneratedColumn("uuid")
+  id!: string;
+
+  // ...其余列
+
+  @DeleteDateColumn({ type: "timestamptz", nullable: true })
+  deletedAt!: Date | null;
+}
+```
+
+要点：
+- 时间戳列名固定 `deletedAt` → `deleted_at`（SnakeNamingStrategy 自动转）
+- **凡涉及唯一约束的字段必须配部分唯一索引**：`@Index([...], { where: '"deleted_at" IS NULL' })`
+  否则软删后无法重建同名 / 同 slug（被旧软删除记录占住）
+
+### Service 层
+
+- 默认 `find` / `findOne` 自动过滤 `deleted_at IS NULL`（TypeORM 内置）
+- 删除走 `softRemove(entity)` 或 `softDelete(criteria)`
+- 查含软删数据：`find({ withDeleted: true })`
+- 恢复：`recover(entity)` 或 `restore(criteria)`
+- **不**用 ORM cascade 软删；子实体由各自 Service 显式处理（与项目约定 `@ManyToOne`/`cascade` 全禁用一致）
+
+### 迁移 DDL
+
+新增软删字段 + 转换唯一索引：
+
+```sql
+ALTER TABLE agent_session ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ NULL;
+-- 转换原全表唯一索引为部分唯一索引
+DROP INDEX IF EXISTS uq_agent_session_user_name;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_agent_session_user_name_active
+  ON agent_session (user_id, name)
+  WHERE deleted_at IS NULL;
+```
+
+### 不适用场景
+
+- **审计日志**（事件 / 操作记录）：本身不可变，不需要软删
+- **session token / refresh token**：用 `expiresAt` + 物理删除即可
+- **本地 server-agent 单进程实体**：当前 `User` / `Setting` / `ModelConfig` 都不软删
+

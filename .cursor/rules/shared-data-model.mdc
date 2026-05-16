@@ -45,3 +45,45 @@ alwaysApply: false
 
 - Schema 文件建议以 `*.schema.ts` 结尾；导出 `XxxSchema` 与 `XxxData` / 领域名类型（如 `AdminProfile`）便于前后端一致引用。  
 - 业务库如需对外暴露 Schema，可从 DTO 文件 **re-export** 类型包中的同名符号，避免分叉。
+
+## 主键策略（Phase 5 起）
+
+每个新 Entity 选 **UUID** 或 **Snowflake** 之一，按下表决策：
+
+| 场景 | 推荐 | 理由 |
+|------|------|------|
+| 本地单进程实体（`server-agent`：`User` / `Setting` / `ModelConfig` 等） | **UUID**（`@PrimaryGeneratedColumn("uuid")`） | 简单；单机无并发冲突；无需配 NODE_ID |
+| 对外暴露的随机不可猜测 token（refresh token / invite token / api key 等） | **UUID 或 base64url(randomBytes)** | 安全优先；不需要时间序 |
+| 云端多实例可能并发插入的业务实体（`server-main`：未来的会话 / 消息 / 事件 / 任务等） | **Snowflake**（`@meshbot/common` 的 `generateSnowflakeId`） | 时间有序（DB B+ 树友好）+ 多节点无冲突 + ID 长度 ~19 位（UUID 36 字符的约一半）|
+| 需要时间排序的实体（消息流 / 日志 / 审计 / 事件等） | **Snowflake** | ID 本身即时间戳，避免单独存 sort key |
+
+### Snowflake 用法
+
+```ts
+import { generateSnowflakeId } from "@meshbot/common";
+import { BeforeInsert, Entity, PrimaryColumn } from "typeorm";
+
+@Entity("agent_event")
+export class AgentEvent {
+  @PrimaryColumn({ type: "varchar", length: 20 })
+  id!: string;
+
+  @BeforeInsert()
+  generateId() {
+    if (!this.id) this.id = generateSnowflakeId();
+  }
+
+  // ...其余列
+}
+```
+
+### Snowflake 多实例部署
+
+server-main 多实例 / k8s 横向扩容时，**每个节点必须设置唯一 `MESHBOT_NODE_ID`**（0-1023 整数），否则同毫秒可能 ID 冲突。
+
+部署方式：
+- Docker compose：`environment: { MESHBOT_NODE_ID: ${REPLICA_ID} }`
+- k8s：从 `metadata.name`（hash 取低 10 bit）或 statefulset ordinal 派生
+- 单实例 / 本地：留空（默认 0）
+
+详见 `libs/common/src/utils/snowflake.ts` 文件注释。

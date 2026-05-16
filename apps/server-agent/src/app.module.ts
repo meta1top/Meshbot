@@ -2,11 +2,14 @@ import path from "node:path";
 import { AgentModule } from "@meshbot/agent";
 import {
   CommonModule,
+  PlainTextLogger,
   ProxyThrottlerGuard,
+  RedisHealthIndicator,
   TxTypeOrmModule,
 } from "@meshbot/common";
 import { Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
+import { TerminusModule } from "@nestjs/terminus";
 import { ThrottlerModule } from "@nestjs/throttler";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import {
@@ -18,6 +21,7 @@ import {
   QueryResolver,
 } from "nestjs-i18n";
 import { AuthModule } from "./auth.module";
+import { HealthController } from "./controllers/health.controller";
 import { ModelConfigController } from "./controllers/model-config.controller";
 import { SettingController } from "./controllers/setting.controller";
 import { SetupController } from "./controllers/setup.controller";
@@ -56,6 +60,10 @@ const meshbotDir = resolveMeshbotDir();
       migrations: [path.join(__dirname, "migrations", "*.{js,ts}")],
       synchronize: false,
       migrationsRun: true,
+      // Phase 5 C2：production 切纯文本 logger（dev 保留 NestJS 默认 colored）
+      ...(process.env.NODE_ENV === "production"
+        ? { logger: new PlainTextLogger(), logging: ["error"] }
+        : { logging: ["error", "warn", "migration"] }),
       // SQLite 并发优化（spec 第 5.1 节风险 R1）：
       // - journal_mode=WAL 提升并发读写表现
       // - busy_timeout=5000 让阻塞写在 5s 内重试，避免立即抛 SQLITE_BUSY
@@ -71,14 +79,22 @@ const meshbotDir = resolveMeshbotDir();
       { name: "short", ttl: 1000, limit: 50 },
       { name: "medium", ttl: 60_000, limit: 600 },
     ]),
+    // Phase 5 Track C1：结构化健康检查
+    TerminusModule,
     AgentModule,
     AuthModule,
     StaticModule.forRoot(),
   ],
-  controllers: [ModelConfigController, SettingController, SetupController],
+  controllers: [
+    HealthController,
+    ModelConfigController,
+    SettingController,
+    SetupController,
+  ],
   providers: [
     ModelConfigService,
     SettingService,
+    RedisHealthIndicator,
     // 注意：guard 注册顺序 = 执行顺序（先 throttle、后 jwt）
     { provide: APP_GUARD, useClass: ProxyThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
