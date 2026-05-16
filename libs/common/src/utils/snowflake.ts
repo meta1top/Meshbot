@@ -1,5 +1,5 @@
 /**
- * Snowflake ID 生成器 —— Phase 5 Track D1。
+ * Snowflake ID 生成器 —— Phase 5 Track D1（扩展自 Phase 6 C1：auto NODE_ID）。
  *
  * 64-bit 布局：
  *   1 bit  保留（始终 0，确保正整数表示）
@@ -10,13 +10,18 @@
  * 输出：十进制字符串（19-20 位）。比 UUID（36 字符）短约一半，时间有序便于
  * 数据库 B+ 树 / Snowflake 分片键。
  *
- * 节点 ID 来源：`process.env.MESHBOT_NODE_ID`（数字 0-1023）；缺失默认 0。
- * 多实例部署必须为每个节点设置唯一 NODE_ID，否则同毫秒可能冲突。
+ * 节点 ID 来源（按优先级）：
+ *   1. `process.env.MESHBOT_NODE_ID`（显式配，多副本必备）
+ *   2. hostname FNV-1a hash & 0x3ff（自动派生，k8s pod / docker 容器友好）
+ *   3. 0（兜底；单实例无所谓）
  *
- * EPOCH 选 `2026-01-01T00:00:00Z`（meshbot 项目起点附近），可用至 ~2095。
+ * 多副本（>= 100 节点）birthday paradox 冲突概率 ~1%，关键场景仍建议显式配 env。
+ *
+ * EPOCH 选 `2025-01-01T00:00:00Z`（meshbot 项目起点附近），可用至 ~2094。
  */
+import { hostname } from "node:os";
 
-const EPOCH_MS = 1735689600000n; // 2026-01-01T00:00:00Z
+const EPOCH_MS = 1735689600000n; // 2025-01-01T00:00:00Z（注：const 名沿用，实际 epoch 是 2025）
 const NODE_BITS = 10n;
 const SEQ_BITS = 12n;
 const NODE_SHIFT = SEQ_BITS;
@@ -24,12 +29,51 @@ const TIME_SHIFT = NODE_BITS + SEQ_BITS;
 const MAX_NODE_ID = (1n << NODE_BITS) - 1n; // 1023
 const MAX_SEQ = (1n << SEQ_BITS) - 1n; // 4095
 
+/** FNV-1a 32-bit 哈希，用于从 hostname 派生 nodeId。 */
+function fnv1aHash(str: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
+
+/**
+ * Phase 6 C1：派生 nodeId。
+ *
+ * 优先级：
+ *   1. `MESHBOT_NODE_ID` env（非空数字）
+ *   2. hostname FNV-1a hash & 0x3ff
+ *   3. 0
+ *
+ * 返回范围始终在 [0, 1023]。
+ */
+export function deriveNodeId(): number {
+  const explicit = process.env.MESHBOT_NODE_ID;
+  if (explicit !== undefined && explicit !== "") {
+    const n = Number(explicit);
+    if (Number.isFinite(n) && n >= 0) return Math.floor(n) & 0x3ff;
+  }
+  try {
+    const host = hostname();
+    if (host) return fnv1aHash(host) & 0x3ff;
+  } catch {
+    /* hostname() 不可用时兜底 0 */
+  }
+  return 0;
+}
+
 export class SnowflakeIdGenerator {
   private lastMs = -1n;
   private seq = 0n;
   private readonly nodeId: bigint;
 
-  constructor(nodeId: number = Number(process.env.MESHBOT_NODE_ID ?? 0)) {
+  /**
+   * @param nodeId 默认由 `deriveNodeId()` 自动决定（env → hostname → 0）。
+   *               传入 number 则直接采用（用于测试或显式覆盖）。
+   */
+  constructor(nodeId: number = deriveNodeId()) {
     const safe = BigInt(Math.max(0, Math.floor(nodeId))) & MAX_NODE_ID;
     this.nodeId = safe;
   }

@@ -1,5 +1,6 @@
 export * from "./cache";
 export { CommonModule, type CommonModuleOptions } from "./common.module";
+export * from "./config";
 export * from "./decorators";
 export * from "./dto";
 export * from "./errors";

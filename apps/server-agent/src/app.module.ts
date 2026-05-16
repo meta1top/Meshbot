@@ -2,12 +2,14 @@ import path from "node:path";
 import { AgentModule } from "@meshbot/agent";
 import {
   CommonModule,
+  createEnvValidator,
   PlainTextLogger,
   ProxyThrottlerGuard,
   RedisHealthIndicator,
   TxTypeOrmModule,
 } from "@meshbot/common";
 import { Module } from "@nestjs/common";
+import { ConfigModule } from "@nestjs/config";
 import { APP_GUARD } from "@nestjs/core";
 import { TerminusModule } from "@nestjs/terminus";
 import { ThrottlerModule } from "@nestjs/throttler";
@@ -25,6 +27,7 @@ import { HealthController } from "./controllers/health.controller";
 import { ModelConfigController } from "./controllers/model-config.controller";
 import { SettingController } from "./controllers/setting.controller";
 import { SetupController } from "./controllers/setup.controller";
+import { EnvSchema } from "./env.schema";
 import { ModelConfig } from "./entities/model-config.entity";
 import { Setting } from "./entities/setting.entity";
 import { User } from "./entities/user.entity";
@@ -38,6 +41,12 @@ const meshbotDir = resolveMeshbotDir();
 
 @Module({
   imports: [
+    // Phase 6 C3：启动期 Zod 校验环境变量
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: [".env.development", ".env"],
+      validate: createEnvValidator(EnvSchema),
+    }),
     CommonModule.forRoot(),
     I18nModule.forRoot({
       fallbackLanguage: "zh",
