@@ -91,12 +91,31 @@ pnpm build                           # turbo run build
 
 husky pre-commit 已自动跑前 5 项（用 baseline 增量，CI 用 strict）。
 
+## 下载与安装
+
+- **桌面端（desktop）**：从 [Releases](https://github.com/meta1top/Meshbot/releases) 下载对应平台安装包
+  - macOS：`*.dmg`（Apple Silicon / Intel）
+  - Windows：`*.exe`
+  - Linux：`*.AppImage`
+- **CLI（cli-agent）**：
+
+  ```bash
+  npm i -g @meshbot/cli-agent
+  meshbot --help
+  ```
+
+- **server-agent（npm 包）**：通常通过 cli-agent / desktop 间接使用；独立部署见 [`infra/prod/README.md`](infra/prod/README.md) Docker 编排
+- **server-main（云协同后端）**：仅 Docker 形态，见 [`infra/prod/README.md`](infra/prod/README.md)
+
+变更日志：[CHANGELOG.md](CHANGELOG.md)。
+
 ## 文档
 
 - **架构与规约**：[`.claude/CLAUDE.md`](.claude/CLAUDE.md)
 - **设计文档**：[`docs/superpowers/specs/`](docs/superpowers/specs/)
 - **实施计划**：[`docs/superpowers/plans/`](docs/superpowers/plans/)
 - **贡献指南**：[`CONTRIBUTING.md`](CONTRIBUTING.md)
+- **生产部署**：[`infra/prod/README.md`](infra/prod/README.md)
 
 ## License
 

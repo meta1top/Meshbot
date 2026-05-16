@@ -1,0 +1,80 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # changesets 需要完整 history 判断变更范围
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        # 发布前先 build；cli-agent / server-agent 都是 publish dist 目录
+        run: pnpm build
+
+      # changesets/action：
+      # - 若仓库有未消费的 changeset 文件 → 自动开 "Version Packages" PR
+      #   该 PR 改 package.json + CHANGELOG，merge 后再次触发本 workflow
+      # - 若 changeset 已被 PR 消费（package.json 已经反映新版本，且无新 changeset）
+      #   → 执行 `pnpm release`（changeset publish）：发 npm + 创建 git tag
+      #
+      # publish:
+      #   pnpm release 内部跑 `changeset publish`，自动给 fixed 组每个 public 包打 tag
+      #   并 npm publish。Tag 格式：`@scope/pkg@x.y.z`。
+      #
+      # 下游 workflow（package-desktop.yml / publish-cli.yml）原本监听
+      # `cli@*` / `app@*` 短 tag —— D3 step 会改它们的触发器对齐 changesets tag 格式。
+      - name: Create Release Pull Request or Publish
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          version: pnpm version-packages
+          publish: pnpm release
+          title: "chore: release packages"
+          commit: "chore: release packages"
+          createGithubReleases: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # changesets publish 不为 private 包打 tag（如 @meshbot/desktop）。
+      # 这里手工补 tag，触发 package-desktop.yml 跨平台构建 desktop 安装包。
+      - name: Push tag for private desktop package
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          set -euo pipefail
+          DESKTOP_VERSION=$(jq -r .version apps/desktop/package.json)
+          DESKTOP_TAG="@meshbot/desktop@${DESKTOP_VERSION}"
+          # 已存在则不重复推（changeset publish 可能已为 fixed 组里的 public 包打过同版本号 tag，
+          # 但 desktop 是 private，所以这步只针对它）
+          if ! git rev-parse "${DESKTOP_TAG}" >/dev/null 2>&1; then
+            git tag "${DESKTOP_TAG}"
+            git push origin "${DESKTOP_TAG}"
+            echo "Pushed ${DESKTOP_TAG}"
+          else
+            echo "${DESKTOP_TAG} already exists, skipping"
+          fi

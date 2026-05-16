@@ -1,8 +1,12 @@
 name: Package desktop
 
+# 触发器：changesets 发布后 release.yml 会推 `@meshbot/desktop@<version>` tag
+# （desktop 是 private 包，changeset publish 不自动打 tag，由 release.yml 手工补）。
+# 旧 `app@*` 短 tag 保留作为兼容路径，方便仍需手工发版的临时场景。
 on:
   push:
     tags:
+      - "@meshbot/desktop@*"
       - "app@*"
 
 concurrency:
@@ -26,13 +30,13 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@v4
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 22
           cache: pnpm
 
       - name: Install Linux build deps
@@ -63,8 +67,18 @@ jobs:
           fi
           ls -lh upload/
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v4
         with:
           name: meshbot-desktop-${{ matrix.os }}
           path: upload/
           if-no-files-found: error
+
+      # Tag-driven trigger 自动附到 GitHub Release（changesets/action 已创建过 release，
+      # 这里追加 artifact 到同一 release）
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: upload/*
+          fail_on_unmatched_files: false

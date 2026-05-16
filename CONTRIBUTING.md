@@ -88,7 +88,36 @@ pnpm build
 
 ## 发布流程
 
-> 本节将在 Track D（changesets 接入）落地后回填。当前手工流程：push `cli@<version>` 触发 `publish-cli.yml`、push `app@<version>` 触发 `package-desktop.yml`。
+仓库通过 [changesets](https://github.com/changesets/changesets) 管理对外发布的版本号 + changelog。
+`@meshbot/cli-agent` / `@meshbot/server-agent` / `@meshbot/desktop` 在 `.changeset/config.json` 的 `fixed`
+组里，共享同一版本号，统一节奏发版。
+
+### 提交 PR 前加 changeset
+
+涉及 cli-agent / server-agent / desktop 改动的 PR 必须含 changeset：
+
+```bash
+pnpm changeset
+# 交互式选择：哪些包受影响、bump 级别（patch/minor/major）、写变更说明
+git add .changeset/*.md && git commit
+```
+
+只改文档 / 内部 lib / web-app 的 PR 不需要 changeset（`ignore` 名单或对外包无影响时）。
+
+### 自动发布流水线
+
+1. PR 合并到 `main` → [`release.yml`](.github/workflows/release.yml) 自动开 **"Version Packages" PR**
+   （把累计 changeset 合成 `package.json` bump + CHANGELOG 追加）
+2. 合并 Version PR → `release.yml` 跑：
+   - `pnpm release`（`changeset publish`）—— `cli-agent` / `server-agent` npm publish + 自动打 git tag
+   - 末尾手工推 `@meshbot/desktop@<v>` tag（desktop 是 private 包，changesets 不自动 tag）
+3. `@meshbot/desktop@<v>` tag → [`package-desktop.yml`](.github/workflows/package-desktop.yml)
+   跨平台（macOS / Windows / Linux）构建安装包 + 附到同一 GitHub Release
+
+### 手工发布（应急路径）
+
+旧短 tag `app@<v>` 仍受 `package-desktop.yml` 监听，可应急使用。
+不推荐 —— 不会更新 CHANGELOG / npm 包版本，与自动流程脱节。
 
 ## 常见问题
 

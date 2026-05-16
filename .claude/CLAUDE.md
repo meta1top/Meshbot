@@ -176,14 +176,33 @@ Phase 1 暂未引入 Form/FormItem 封装；现阶段写表单允许直接用 sh
 - **TS `class X extends createZodDto(S) {}` 实例字段丢失**：用 class + interface 声明合并补字段类型（biome `noUnsafeDeclarationMerging` 逐个 ignore）
 - **NodeNext + typeorm CLI 冲突**：`__dirname` 在 ESM 上下文失效。修复：data-source.cli.ts 用 `process.cwd()` 算 repo root，并通过 `TS_NODE_COMPILER_OPTIONS` 强制 commonjs 编译
 
-### Phase 4 待办（按优先级）
+### Phase 4（CI/CD + Redis + Docker + 发布工具链）✅ 已完成
 
-- **业务迭代**：meshbot 自行定义云端协同业务模型并接入 server-main（参考但不照搬其它项目；新增实体走 `service-repo-access` + `service-tx-lock-cache` + `swagger-api-declaration` 规约 + 新增 TypeORM 迁移）
-- **Redis**：`@WithLock` / `@Cacheable` 切 RedisProvider（Phase 3 仍是 MemoryProvider）
-- **Dockerfile**：server-main / server-agent / cli-agent / desktop 各自 production 镜像 + docker-compose 编排
-- **CI/CD**：GitHub Actions（lint + check + test + build matrix）
-- **发布工具链**：版本号策略（changesets）/ electron-builder release / cli-agent npm publish / 自动 changelog
-- **监控接入**：Sentry / OTel
-- **小琐事**：`ts-jest isolatedModules` 配置迁移 / pre-commit 运行时调优
+> 范围决策：用户明确推迟监控（Sentry / OTel）到 Phase 5+。业务迭代由 meshbot 自行迭代不在 Phase 4。
 
-设计依据：`docs/superpowers/specs/2026-05-13-meshbot-borrow--design.md` + `docs/superpowers/specs/2026-05-14-meshbot-phase-3-design.md`。
+- **Track A（CI/CD）**：A0 修 Phase 3 残留 baseline → `.github/workflows/ci.yml` 主流水线（PR + push main，Linux + Node 22，Postgres + Redis 服务，install / lint / typecheck / `check:strict` / sync:* / test / build）+ 跨平台 docker-build 矩阵（server-main / server-agent，buildx + gha cache）；README 加 CI badge + CONTRIBUTING.md
+- **Track B（Redis Provider）**：`libs/common/src/lock/redis-lock.provider.ts`（Redlock 单点变体，SET NX PX + token + Lua 释放）+ `libs/common/src/cache/redis-cache.provider.ts`（JSON + SCAN/DEL pipeline）+ `CommonModule.forRootAsync`（按 `ConfigService.REDIS_URL` 选 memory / redis）；server-main 切 forRootAsync；libs/main 不再自带 forRoot（必须根 AppModule 唯一注册）；e2e `describe.each([["memory"], ["redis"]])` 双链路；dev compose 加 redis 服务（宿主 6380 避冲突）
+- **Track C（Docker）**：`apps/server-main/Dockerfile`（多 stage + `pnpm deploy --no-optional`，332MB）+ `apps/server-agent/Dockerfile`（build 装 python3/make/g++，runtime 装 sqlite-libs，432MB）+ `infra/prod/docker-compose.prod.yml`（postgres + redis + server-main 编排，secret 在 `.env.prod`）；server-agent `StaticModule.forRoot()` 找不到 web-agent 时降级 API-only
+- **Track D（发布工具链）**：changesets 接入（`@meshbot/cli-agent` + `@meshbot/server-agent` + `@meshbot/desktop` `fixed` 组共享版本）+ `release.yml`（changesets/action PR-driven 自动发版 + 补 `@meshbot/desktop@<v>` tag）；删 `publish-cli.yml`（npm publish 由 changesets 自动处理）；改 `package-desktop.yml` 触发器 + 上传 GitHub Release；CHANGELOG.md 索引 + 各包占位
+- **Track E（Phase 3 小琐事）**：E1 `ts-jest isolatedModules` 警告从 transformer options 迁到 `tsconfig.base.json` 的 `compilerOptions.isolatedModules`；E2 `pnpm check:parallel`（pnpm run regex 并行 5 围栏）—— pre-commit 10.7s → 6.2s
+
+### Phase 4 期间踩的坑（仅记可复用经验）
+
+- **pnpm deploy 默认带 optional deps**：typeorm 的 optional db 驱动（better-sqlite3、@swc 等）会被拉进 server-main 镜像。修复：`--no-optional` 显式裁剪；同时把 server-agent 实际 runtime 用的 `better-sqlite3` 从根 devDeps 移到 server-agent 直接 deps（不能被 `--no-optional` 误剔）
+- **`describe.each` 多链路 e2e 时 Provider 重叠**：原 libs/main `MainModule` 自带 `CommonModule.forRoot()` 与 AppModule / 测试 module 的 forRoot 重复注册，导致装饰器拿到的 LockProvider 实例与预期不一致。修复：从 lib 移走 `CommonModule.forRoot()`，强制由根 AppModule 唯一注册
+- **changesets `ignore` 与 `fixed` 互斥规则**：public 包不能依赖 ignored 私有包。修复：把内部 libs（common/main/types/...）从 ignore 中拿出来 —— private 包仍然不会被 publish，但会 bump 版本号
+- **changesets 不为 private 包打 tag**：`@meshbot/desktop` 是 private，`changeset publish` 不创建 `@meshbot/desktop@<v>` tag。修复：`release.yml` 末尾根据 `apps/desktop/package.json.version` 手工补 tag → 触发 `package-desktop.yml`
+- **`actions/checkout@v6` 等 v6 标签不存在**：迁移到当前 LTS `@v4`；同时 `actions/setup-node` 也对齐
+
+### Phase 5 待办（推迟项）
+
+- **监控接入**：Sentry / OTel / Grafana（用户明确推迟）
+- **业务迭代**：meshbot 自行定义云端协同业务模型并接入 server-main
+- **Redis HA**：Sentinel / Cluster 模式；RedisLockProvider 已抽象，换实现即可
+- **k8s / Helm 部署**：Phase 4 只到 Dockerfile + docker-compose 单机编排
+- **多环境隔离**：dev / staging / prod 完整链路
+- **CDN / 镜像加速分发**
+- **TTL 续期 watchdog**：长时间事务下锁过期防护
+- **Turbo remote cache**：CI 构建提速
+
+设计依据：`docs/superpowers/specs/2026-05-13-meshbot-borrow--design.md` + `docs/superpowers/specs/2026-05-14-meshbot-phase-3-design.md` + `docs/superpowers/specs/2026-05-16-meshbot-phase-4-design.md`。
