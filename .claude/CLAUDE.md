@@ -132,6 +132,6 @@ Phase 1 暂未引入 Form/FormItem 封装；现阶段写表单允许直接用 sh
 
 ## Phase 进度
 
-Phase 1（地基）✅ / Phase 2（工程化 harness）✅ / Phase 3（云端轨框架基线）✅ / Phase 4（CI/CD + Redis + Docker + 发布工具链）✅ / Phase 5（错误码 + 响应 envelope + Trace ID + 限流 + Health + Swagger + Snowflake + 软删除）✅
+Phase 1（地基）✅ / Phase 2（工程化 harness）✅ / Phase 3（云端轨框架基线）✅ / Phase 4（CI/CD + Redis + Docker + 发布工具链）✅ / Phase 5（错误码 + 响应 envelope + Trace ID + 限流 + Health + Swagger + Snowflake + 软删除）✅ / Phase 6（Throttler Redis storage + RedisLock watchdog + Snowflake auto NODE_ID + env Zod 校验 + WebSocket Gateway 框架）✅
 
 各 Phase 已完成范围、踩坑、设计依据见 [`docs/PHASE_HISTORY.md`](../docs/PHASE_HISTORY.md)。

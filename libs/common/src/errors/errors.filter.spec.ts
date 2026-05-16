@@ -27,6 +27,7 @@ function makeHost(url = "/api/foo", traceId = "trace-1") {
   };
   const req = { url, traceId };
   const host: ArgumentsHost = {
+    getType: () => "http",
     switchToHttp: () => ({
       getRequest: () => req,
       getResponse: () => res,

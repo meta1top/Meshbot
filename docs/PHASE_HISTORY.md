@@ -120,3 +120,26 @@
 - **AppError envelope HTTP 状态码语义**：业务错误（邮箱重复 / 密码错）走 HTTP 200 + envelope code，避免污染 4xx/5xx（这些留给框架级问题：限流 429 / 鉴权 401 / 未找到 404 等）。客户端按 `success` / `code` 判定
 - **Throttle decorator 在测试模块下静默失效**：tests 不 import ThrottlerModule / ProxyThrottlerGuard 时，`@Throttle()` 的 metadata 仅设置但无 guard 读取，所以单元测试不受限流影响（测试代码无需额外 mock）
 - **Snowflake 时钟回拨**：本实现选择「等回到 lastMs」而非抛错；NTP 大幅回拨时仍可能错乱，多实例部署额外依赖 NODE_ID 唯一性来避免冲突
+
+---
+
+## Phase 6（多实例正确性 + 启动期约束 + WebSocket 框架预备）✅ 已完成
+
+- **Track A（Throttler Redis storage）**：`@nest-lab/throttler-storage-redis`；server-main AppModule 提 `REDIS_CLIENT` Symbol，由 `CommonModule.forRootAsync` 与 `ThrottlerModule.forRootAsync` 共享同一 Redis 实例，避免双连接池
+- **Track B（RedisLock TTL watchdog）**：`AcquireOptions.{watchdog,renewIntervalMs}` 经 `@WithLock` 透传；`RedisLockProvider` 用 Lua `RENEW_SCRIPT`（token 校验 + PEXPIRE）按 `renewIntervalMs` 续期；token 不匹配 → 静默停 watchdog；`release()` 清定时器；`MemoryLockProvider` 是 no-op。`redis-lock.provider.spec.ts` 加 4 个 watchdog case（持续续期 / release 后停 / 抢占静默停 / 不启用时超 ttl 释放）
+- **Track C（Snowflake auto NODE_ID + Zod env）**：
+  - `libs/common/src/utils/snowflake.ts`：`deriveNodeId()` 优先级 `MESHBOT_NODE_ID env > FNV-1a(hostname()) & 0x3ff > 0`；`new SnowflakeIdGenerator()` 默认派生
+  - `libs/common/src/config/env-schema.ts`：`createEnvValidator(schema)` 工厂；fail-fast 列字段路径
+  - server-main / server-agent 各起 `env.schema.ts` + `ConfigModule.forRoot({ validate })`
+- **Track D（WebSocket Gateway 框架）**：
+  - `libs/common/src/ws/`：`WsAuthGuard`（读 `client.data.user` → 抛 `WsException(AppError(UNAUTHORIZED))`）、`WsExceptionFilter`（复用 `formatEnvelope` + 401 主动 disconnect + 事件名 `exception`）、`wsTraceMiddleware`（`x-trace-id` 透传 / 随机 UUID）、`createWsJwtMiddleware`（handshake 期 verify，失败不阻断 connect）、`BaseWebSocketGateway`（`afterInit` 串联两 middleware）
+  - `libs/common/src/errors/format-envelope.ts`：HTTP / WS 共用 envelope 拼装；`ErrorsFilter` / `WsExceptionFilter` 都先 `host.getType()` 早返，避免跨上下文误处理
+  - server-main `apps/server-main/src/ws/health.gateway.ts`：`@UseFilters(WsExceptionFilter)` + `@UseGuards(WsAuthGuard)` + `SubscribeMessage("ping")` 返回 `{ pong, traceId }`；e2e 3 case（合法 JWT → pong / 无 token → exception envelope code 2 + disconnect / 上游 traceId 透传）
+
+### Phase 6 期间踩的坑（仅记可复用经验）
+
+- **NestJS DI 元数据需要运行期 import**：`WsExceptionFilter` 用 `import type { I18nService }` 时 `__metadata("design:paramtypes", [Function])` —— 类型被擦除，DI 拿不到。改成 `import { I18nService }` + `biome-ignore lint/style/useImportType` 解决
+- **socket.io 中 `error` 是保留事件**：服务端 `client.emit("error", ...)` 客户端不会通过 `socket.on("error", ...)` 收到自定义 payload。改用 `exception` 事件名（对齐 NestJS 内置 BaseWsExceptionFilter 约定）
+- **pnpm peer-dep 变体导致 DiscoveryService DI 报错**：libs/common 加 `@nestjs/websockets` peer 后，pnpm 重新解析了 `@nestjs/core` 的 peer 变体路径；需 `pnpm install` 重做 node_modules 让所有 workspace 共享同一变体
+- **handshake middleware 不应阻断**：JWT verify 失败时 `next()` 放行（而非 `next(err)`）；让 `WsAuthGuard` 在订阅消息时报错并通过 envelope 给客户端可见反馈，避免客户端只看到模糊的 `connect_error`
+- **@UseFilters 需要 provider 注册**：`@UseFilters(WsExceptionFilter)` 用类引用时，Nest 通过 DI 实例化，需要把类加进 module providers；否则 `Nest can't resolve dependencies` 报错
