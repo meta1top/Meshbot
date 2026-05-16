@@ -1,5 +1,6 @@
-export type {
-  ApiResponse,
-  PaginatedRequest,
-  PaginatedResponse,
-} from "./api-response";
+export {
+  type Envelope,
+  type PageData,
+  type PageRequest,
+  PageRequestSchema,
+} from "./common/page.schema";

@@ -7,6 +7,7 @@ import {
 import { Body, Controller, HttpCode, Post } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
+import { Throttle } from "@nestjs/throttler";
 
 import { Public } from "../auth/public.decorator";
 
@@ -29,6 +30,8 @@ export class AuthController {
   ) {}
 
   @Public()
+  // 限流：同源 IP 1 分钟内最多 5 次注册（防爬虫批量注册账号）
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post("register")
   @HttpCode(201)
   async register(@Body() dto: RegisterUserDto): Promise<AuthTokenResponse> {
@@ -37,6 +40,8 @@ export class AuthController {
   }
 
   @Public()
+  // 限流：同源 IP 1 分钟内最多 10 次登录（防密码爆破）
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post("login")
   @HttpCode(200)
   async login(@Body() dto: LoginDto): Promise<AuthTokenResponse> {

@@ -1,8 +1,13 @@
 import path from "node:path";
 import { AgentModule } from "@meshbot/agent";
-import { CommonModule, TxTypeOrmModule } from "@meshbot/common";
+import {
+  CommonModule,
+  ProxyThrottlerGuard,
+  TxTypeOrmModule,
+} from "@meshbot/common";
 import { Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
+import { ThrottlerModule } from "@nestjs/throttler";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import {
   AcceptLanguageResolver,
@@ -61,6 +66,11 @@ const meshbotDir = resolveMeshbotDir();
       },
     }),
     TxTypeOrmModule.forFeature([ModelConfig, Setting]),
+    // Phase 5 Track B3：限流（本地轨较宽，单进程仅做防风暴）
+    ThrottlerModule.forRoot([
+      { name: "short", ttl: 1000, limit: 50 },
+      { name: "medium", ttl: 60_000, limit: 600 },
+    ]),
     AgentModule,
     AuthModule,
     StaticModule.forRoot(),
@@ -69,6 +79,8 @@ const meshbotDir = resolveMeshbotDir();
   providers: [
     ModelConfigService,
     SettingService,
+    // 注意：guard 注册顺序 = 执行顺序（先 throttle、后 jwt）
+    { provide: APP_GUARD, useClass: ProxyThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
   ],
 })

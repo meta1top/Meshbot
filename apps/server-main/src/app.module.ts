@@ -2,6 +2,7 @@ import path from "node:path";
 import {
   CommonModule,
   type CommonModuleOptions,
+  ProxyThrottlerGuard,
   RedisCacheProvider,
   RedisLockProvider,
 } from "@meshbot/common";
@@ -9,6 +10,7 @@ import { MainModule } from "@meshbot/main";
 import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { APP_GUARD } from "@nestjs/core";
+import { ThrottlerModule } from "@nestjs/throttler";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import Redis from "ioredis";
 import {
@@ -79,10 +81,21 @@ import { AuthController } from "./rest/auth.controller";
             : ["error"],
       }),
     }),
+    // Phase 5 Track B3：全局限流，proxy-aware
+    // 三档桶：突发 / 分钟内 / 小时内
+    ThrottlerModule.forRoot([
+      { name: "short", ttl: 1000, limit: 30 },
+      { name: "medium", ttl: 60_000, limit: 300 },
+      { name: "long", ttl: 3_600_000, limit: 5000 },
+    ]),
     AuthModule,
     MainModule,
   ],
   controllers: [HealthController, AuthController],
-  providers: [{ provide: APP_GUARD, useClass: JwtAuthGuard }],
+  providers: [
+    // 注意：guard 注册顺序 = 执行顺序（先 throttle、后 jwt）
+    { provide: APP_GUARD, useClass: ProxyThrottlerGuard },
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+  ],
 })
 export class AppModule {}

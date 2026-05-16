@@ -8,6 +8,7 @@ import {
   RedisCacheProvider,
   RedisLockProvider,
   ResponseInterceptor,
+  traceIdMiddleware,
 } from "@meshbot/common";
 import { MainModule } from "@meshbot/main";
 import type { INestApplication } from "@nestjs/common";
@@ -141,6 +142,7 @@ describe.each<[Mode]>([
 
     app = moduleRef.createNestApplication();
     app.setGlobalPrefix("api");
+    app.use(traceIdMiddleware);
     const i18n = app.get(I18nService);
     const reflector = app.get(Reflector);
     app.useGlobalPipes(new I18nZodValidationPipe(i18n));
@@ -267,5 +269,27 @@ describe.each<[Mode]>([
         "Required field",
       ]),
     );
+  });
+
+  it("trace ID — 上游 x-trace-id 透传到 response header + envelope.traceId", async () => {
+    if (maybeSkip()) return;
+    const upstream = "phase-5-trace-1";
+    const res = await request(app.getHttpServer())
+      .post("/api/auth/register")
+      .set("x-trace-id", upstream)
+      .send({}); // 故意空 body → 触发校验错误 envelope，方便检查 traceId
+    expect(res.headers["x-trace-id"]).toBe(upstream);
+    expect(res.body.traceId).toBe(upstream);
+  });
+
+  it("trace ID — 无上游 header 时自动生成 UUID 写入响应", async () => {
+    if (maybeSkip()) return;
+    const res = await request(app.getHttpServer())
+      .post("/api/auth/register")
+      .send({});
+    expect(res.headers["x-trace-id"]).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
+    expect(res.body.traceId).toBe(res.headers["x-trace-id"]);
   });
 });
