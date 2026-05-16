@@ -1,10 +1,16 @@
 import path from "node:path";
-import { CommonModule } from "@meshbot/common";
+import {
+  CommonModule,
+  type CommonModuleOptions,
+  RedisCacheProvider,
+  RedisLockProvider,
+} from "@meshbot/common";
 import { MainModule } from "@meshbot/main";
 import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { APP_GUARD } from "@nestjs/core";
 import { TypeOrmModule } from "@nestjs/typeorm";
+import Redis from "ioredis";
 import {
   AcceptLanguageResolver,
   CookieResolver,
@@ -25,7 +31,24 @@ import { AuthController } from "./rest/auth.controller";
       isGlobal: true,
       envFilePath: [".env.development", ".env"],
     }),
-    CommonModule.forRoot(),
+    // 锁 / 缓存：REDIS_URL 存在 → RedisProvider；否则 memory 兜底。
+    // RedisProvider 在云端 / 生产部署生效；本地开发不起 redis 也能跑。
+    CommonModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (cfg: ConfigService): CommonModuleOptions => {
+        const redisUrl = cfg.get<string>("REDIS_URL");
+        if (!redisUrl) return {};
+        const redis = new Redis(redisUrl, {
+          // 启动失败让 server 整体 fail-fast，不悄悄退化到 memory
+          maxRetriesPerRequest: 3,
+          lazyConnect: false,
+        });
+        return {
+          lock: new RedisLockProvider(redis),
+          cache: new RedisCacheProvider(redis),
+        };
+      },
+    }),
     I18nModule.forRoot({
       fallbackLanguage: "zh",
       loader: I18nJsonLoader,

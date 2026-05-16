@@ -32,9 +32,19 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
 
     env:
       DATABASE_URL: postgresql://meshbot:meshbot@localhost:5432/meshbot_main
+      REDIS_URL: redis://localhost:6379
       # JWT_SECRET 由测试代码本地 mock，无需 GitHub secret
       NODE_ENV: test
 

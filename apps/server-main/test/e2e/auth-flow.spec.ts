@@ -2,8 +2,11 @@ import "reflect-metadata";
 import path from "node:path";
 import {
   CommonModule,
+  type CommonModuleOptions,
   I18nExceptionFilter,
   I18nZodValidationPipe,
+  RedisCacheProvider,
+  RedisLockProvider,
 } from "@meshbot/common";
 import { MainModule } from "@meshbot/main";
 import type { INestApplication } from "@nestjs/common";
@@ -13,6 +16,7 @@ import { JwtModule } from "@nestjs/jwt";
 import { PassportModule } from "@nestjs/passport";
 import { Test } from "@nestjs/testing";
 import { TypeOrmModule } from "@nestjs/typeorm";
+import Redis from "ioredis";
 import {
   AcceptLanguageResolver,
   HeaderResolver,
@@ -33,19 +37,74 @@ import {
 
 const I18N_PATH = path.join(__dirname, "..", "..", "i18n");
 
-describe("server-main auth e2e (register + login)", () => {
+const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
+
+async function isRedisReachable(): Promise<boolean> {
+  const probe = new Redis(REDIS_URL, {
+    maxRetriesPerRequest: 1,
+    lazyConnect: false,
+    connectTimeout: 1_000,
+  });
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      probe.disconnect();
+      resolve(ok);
+    };
+    probe.on("ready", () => settle(true));
+    probe.on("error", () => settle(false));
+    setTimeout(() => settle(false), 1_200);
+  });
+}
+
+type Mode = "memory" | "redis";
+
+interface ProviderRef {
+  redis?: Redis;
+}
+
+function buildCommonOptions(mode: Mode, ref: ProviderRef): CommonModuleOptions {
+  if (mode === "memory") return {};
+  const redis = new Redis(REDIS_URL, {
+    maxRetriesPerRequest: 3,
+    lazyConnect: false,
+  });
+  ref.redis = redis;
+  return {
+    lock: new RedisLockProvider(redis),
+    cache: new RedisCacheProvider(redis),
+  };
+}
+
+// 测试用例覆盖 memory + redis 双 provider 链路。redis 不可达时该 block skip。
+describe.each<[Mode]>([
+  ["memory"],
+  ["redis"],
+])("server-main auth e2e (%s)", (mode) => {
   let app: INestApplication;
   let dbCtx: TestDbContext | null = null;
   let skipReason: string | null = null;
+  const providerRef: ProviderRef = {};
 
   beforeAll(async () => {
-    const reachable = await isPostgresReachable();
-    if (!reachable) {
-      skipReason = "Postgres unreachable; run `pnpm dev:db:up` to enable e2e";
-      console.warn(`[auth-flow] ${skipReason}`);
+    const pgOk = await isPostgresReachable();
+    if (!pgOk) {
+      skipReason = "Postgres unreachable; run `pnpm dev:db:up`";
+      console.warn(`[auth-flow:${mode}] ${skipReason}`);
       return;
     }
+    if (mode === "redis") {
+      const redisOk = await isRedisReachable();
+      if (!redisOk) {
+        skipReason = `Redis unreachable at ${REDIS_URL}; run 'pnpm dev:db:up'（含 redis 服务）`;
+        console.warn(`[auth-flow:${mode}] ${skipReason}`);
+        return;
+      }
+    }
     dbCtx = await createTestDb();
+    const commonOptions = buildCommonOptions(mode, providerRef);
 
     const moduleRef = await Test.createTestingModule({
       imports: [
@@ -54,7 +113,7 @@ describe("server-main auth e2e (register + login)", () => {
           ignoreEnvFile: true,
           load: [() => ({ JWT_SECRET: "e2e-test-secret", JWT_EXPIRES: "1h" })],
         }),
-        CommonModule.forRoot(),
+        CommonModule.forRoot(commonOptions),
         I18nModule.forRoot({
           fallbackLanguage: "zh",
           loader: I18nJsonLoader,
@@ -90,18 +149,19 @@ describe("server-main auth e2e (register + login)", () => {
   afterAll(async () => {
     if (app) await app.close();
     if (dbCtx) await dbCtx.cleanup();
+    if (providerRef.redis) providerRef.redis.disconnect();
   });
 
   function maybeSkip() {
     if (skipReason) {
-      console.warn(`[auth-flow] skipping: ${skipReason}`);
+      console.warn(`[auth-flow:${mode}] skipping: ${skipReason}`);
       return true;
     }
     return false;
   }
 
   const ALICE = {
-    email: "alice@test.io",
+    email: `alice-${mode}@test.io`,
     password: "alicepass1",
     displayName: "Alice",
   };
@@ -175,11 +235,5 @@ describe("server-main auth e2e (register + login)", () => {
         "Required field",
       ]),
     );
-  });
-
-  it("无 token 访问 protected health 403 — 框架预留：当前 health 是 @Public，不验证此场景", async () => {
-    if (maybeSkip()) return;
-    // 仅留位标：等 meshbot 真业务加 protected endpoint 后再补 401 / 403 用例
-    expect(true).toBe(true);
   });
 });

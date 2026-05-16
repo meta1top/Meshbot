@@ -1,4 +1,8 @@
-import { type DynamicModule, Module } from "@nestjs/common";
+import {
+  type DynamicModule,
+  Module,
+  type ModuleMetadata,
+} from "@nestjs/common";
 import { DiscoveryModule } from "@nestjs/core";
 
 import { CacheInitializer } from "./cache/cache.initializer";
@@ -8,11 +12,23 @@ import { LockInitializer } from "./lock/lock.initializer";
 import { LOCK_PROVIDER, type LockProvider } from "./lock/lock.provider";
 import { MemoryLockProvider } from "./lock/memory-lock.provider";
 
+const COMMON_MODULE_OPTIONS = Symbol("COMMON_MODULE_OPTIONS");
+
 export interface CommonModuleOptions {
   /** 锁提供者：默认 "memory"（进程内互斥） */
   lock?: "memory" | LockProvider;
   /** 缓存提供者：默认 "memory"（lru-cache） */
   cache?: "memory" | CacheProvider;
+}
+
+export interface CommonModuleAsyncOptions {
+  imports?: ModuleMetadata["imports"];
+  // biome-ignore lint/suspicious/noExplicitAny: inject token list 与 NestJS DI 兼容
+  inject?: any[];
+  useFactory: (
+    // biome-ignore lint/suspicious/noExplicitAny: factory 参数由 inject 决定，运行时类型推断不可知
+    ...args: any[]
+  ) => CommonModuleOptions | Promise<CommonModuleOptions>;
 }
 
 @Module({})
@@ -23,52 +39,99 @@ export class CommonModule {
    * **只能在根模块（AppModule）调一次**。返回的 DynamicModule 标记
    * `global: true`，子模块 / 子 app 无需重复 import。多次调用会创建
    * 多份 LockProvider / CacheProvider 实例，导致不同代码路径取到
-   * 不同的内部状态（内存 Map / LRUCache），破坏锁与缓存的全局一致性
-   * （例如 @WithLock 取到的锁实例与 @Cacheable 写入的缓存实例不在同一进程域内）。
+   * 不同的内部状态（内存 Map / LRUCache），破坏锁与缓存的全局一致性。
    *
-   * @example
-   * \@Module({
-   *   imports: [
-   *     CommonModule.forRoot(),  // 只在 AppModule 调一次
-   *     // ... 其它业务模块直接用 @WithLock / @Cacheable 即可
-   *   ],
+   * 同步配置（最常用，本地轨默认）：
+   *
+   * ```ts
+   * @Module({ imports: [CommonModule.forRoot()] })  // 全 memory 兜底
+   * @Module({ imports: [CommonModule.forRoot({ lock: new RedisLockProvider(redis) })] })
+   * ```
+   *
+   * 异步配置（云端轨：根据 ConfigService.REDIS_URL 选 memory / redis）：
+   *
+   * ```ts
+   * CommonModule.forRootAsync({
+   *   inject: [ConfigService],
+   *   useFactory: (cfg: ConfigService) => {
+   *     const url = cfg.get<string>("REDIS_URL");
+   *     if (!url) return {};                 // memory 兜底
+   *     const redis = new Redis(url);
+   *     return {
+   *       lock: new RedisLockProvider(redis),
+   *       cache: new RedisCacheProvider(redis),
+   *     };
+   *   },
    * })
-   * export class AppModule {}
+   * ```
    */
   static forRoot(options: CommonModuleOptions = {}): DynamicModule {
-    const lockChoice = options.lock ?? "memory";
-    const cacheChoice = options.cache ?? "memory";
-
-    // 注：当 choice === "memory" 时，使用 useExisting 别名 PROVIDER token
-    // 指向同一个 Memory*Provider 实例，避免直接按类注入与按 token 注入
-    // 拿到不同实例（不同内部状态）导致互斥/缓存语义失效。
-    // biome-ignore lint/suspicious/noExplicitAny: Nest Provider 联合类型在内联组合时较冗长，统一用 any 简化
-    const providers: any[] = [LockInitializer, CacheInitializer];
-
-    if (lockChoice === "memory") {
-      providers.push(MemoryLockProvider, {
-        provide: LOCK_PROVIDER,
-        useExisting: MemoryLockProvider,
-      });
-    } else {
-      providers.push({ provide: LOCK_PROVIDER, useValue: lockChoice });
-    }
-
-    if (cacheChoice === "memory") {
-      providers.push(MemoryCacheProvider, {
-        provide: CACHE_PROVIDER,
-        useExisting: MemoryCacheProvider,
-      });
-    } else {
-      providers.push({ provide: CACHE_PROVIDER, useValue: cacheChoice });
-    }
-
-    return {
-      module: CommonModule,
-      imports: [DiscoveryModule],
-      providers,
-      exports: [LOCK_PROVIDER, CACHE_PROVIDER],
-      global: true,
-    };
+    return buildModule(
+      [
+        {
+          provide: COMMON_MODULE_OPTIONS,
+          useValue: options,
+        },
+      ],
+      [],
+    );
   }
+
+  static forRootAsync(options: CommonModuleAsyncOptions): DynamicModule {
+    return buildModule(
+      [
+        {
+          provide: COMMON_MODULE_OPTIONS,
+          inject: options.inject ?? [],
+          useFactory: options.useFactory,
+        },
+      ],
+      options.imports ?? [],
+    );
+  }
+}
+
+function buildModule(
+  // biome-ignore lint/suspicious/noExplicitAny: providers 联合类型在内联组合时冗长，统一用 any 简化
+  optionsProviders: any[],
+  imports: NonNullable<ModuleMetadata["imports"]>,
+): DynamicModule {
+  // biome-ignore lint/suspicious/noExplicitAny: 同上
+  const providers: any[] = [
+    ...optionsProviders,
+    LockInitializer,
+    CacheInitializer,
+    MemoryLockProvider,
+    MemoryCacheProvider,
+    {
+      provide: LOCK_PROVIDER,
+      inject: [COMMON_MODULE_OPTIONS, MemoryLockProvider],
+      useFactory: (
+        options: CommonModuleOptions,
+        memory: MemoryLockProvider,
+      ): LockProvider => {
+        const choice = options.lock ?? "memory";
+        return choice === "memory" ? memory : choice;
+      },
+    },
+    {
+      provide: CACHE_PROVIDER,
+      inject: [COMMON_MODULE_OPTIONS, MemoryCacheProvider],
+      useFactory: (
+        options: CommonModuleOptions,
+        memory: MemoryCacheProvider,
+      ): CacheProvider => {
+        const choice = options.cache ?? "memory";
+        return choice === "memory" ? memory : choice;
+      },
+    },
+  ];
+
+  return {
+    module: CommonModule,
+    imports: [DiscoveryModule, ...imports],
+    providers,
+    exports: [LOCK_PROVIDER, CACHE_PROVIDER],
+    global: true,
+  };
 }
