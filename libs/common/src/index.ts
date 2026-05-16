@@ -11,3 +11,4 @@ export * from "./lock";
 export * from "./middlewares";
 export * from "./typeorm";
 export * from "./utils";
+export * from "./ws";

@@ -21,17 +21,34 @@
   "peerDependencies": {
     "@nestjs/common": "^11",
     "@nestjs/core": "^11",
+    "@nestjs/platform-socket.io": "^11",
     "@nestjs/terminus": "^11",
     "@nestjs/throttler": "^6",
     "@nestjs/typeorm": "^11",
+    "@nestjs/websockets": "^11",
     "nestjs-i18n": "^10",
     "nestjs-zod": "^4",
     "reflect-metadata": "*",
     "rxjs": "^7",
+    "socket.io": "^4",
     "typeorm": "^0.3"
   },
+  "peerDependenciesMeta": {
+    "@nestjs/platform-socket.io": {
+      "optional": true
+    },
+    "@nestjs/websockets": {
+      "optional": true
+    },
+    "socket.io": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@nestjs/platform-socket.io": "^11",
+    "@nestjs/websockets": "^11",
     "@types/ioredis-mock": "^8.2.7",
-    "ioredis-mock": "^8.13.1"
+    "ioredis-mock": "^8.13.1",
+    "socket.io": "^4"
   }
 }

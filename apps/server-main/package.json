@@ -21,10 +21,12 @@
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11",
+    "@nestjs/platform-socket.io": "^11",
     "@nestjs/swagger": "^11.4.3",
     "@nestjs/terminus": "^11.1.1",
     "@nestjs/throttler": "^6.5.0",
     "@nestjs/typeorm": "^11.0.1",
+    "@nestjs/websockets": "^11",
     "bcrypt": "^6.0.0",
     "dotenv": "^17.4.2",
     "ioredis": "^5.10.1",
@@ -36,6 +38,7 @@
     "pg": "^8.20.0",
     "reflect-metadata": "^0.2",
     "rxjs": "^7",
+    "socket.io": "^4",
     "typeorm": "^0.3.28",
     "typeorm-naming-strategies": "^4.1.0",
     "zod": "^3"
@@ -44,6 +47,7 @@
     "@nestjs/cli": "^11",
     "@types/bcrypt": "^6.0.0",
     "@types/node": "^22",
-    "@types/passport-jwt": "^4.0.1"
+    "@types/passport-jwt": "^4.0.1",
+    "socket.io-client": "^4"
   }
 }

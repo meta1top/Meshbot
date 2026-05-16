@@ -35,6 +35,7 @@ import { JwtAuthGuard } from "./auth/jwt-auth.guard";
 import { EnvSchema } from "./env.schema";
 import { HealthController } from "./health.controller";
 import { AuthController } from "./rest/auth.controller";
+import { HealthGateway } from "./ws/health.gateway";
 
 /**
  * Phase 6 A1：共享 Redis 连接的 token —— CommonModule、ThrottlerModule、
@@ -134,6 +135,7 @@ const REDIS_CLIENT = Symbol("REDIS_CLIENT");
       },
     },
     RedisHealthIndicator,
+    HealthGateway,
     // 注意：guard 注册顺序 = 执行顺序（先 throttle、后 jwt）
     { provide: APP_GUARD, useClass: ProxyThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
