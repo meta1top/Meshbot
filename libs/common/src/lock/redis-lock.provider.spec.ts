@@ -102,4 +102,67 @@ describe("RedisLockProvider", () => {
     await release2();
     expect(await redis.get("k7")).toBeNull();
   });
+
+  // ============ Phase 6 B2/B3：watchdog 续期 ============
+
+  it("watchdog 持续续期：业务跑过 ttl 仍持有锁", async () => {
+    const { redis, provider } = makeProvider();
+    const release = await provider.acquire("w1", 200, 0, {
+      watchdog: true,
+      renewIntervalMs: 50,
+    });
+
+    // 等 350ms（超过原 ttl 175%）
+    await new Promise((r) => setTimeout(r, 350));
+
+    // 锁应仍在（被续期）
+    expect(await redis.get("w1")).not.toBeNull();
+
+    await release();
+    expect(await redis.get("w1")).toBeNull();
+  });
+
+  it("release 后 watchdog 停止：无重建锁", async () => {
+    const { redis, provider } = makeProvider();
+    const release = await provider.acquire("w2", 1000, 0, {
+      watchdog: true,
+      renewIntervalMs: 50,
+    });
+    await release();
+    expect(await redis.get("w2")).toBeNull();
+
+    // 等几个 renewInterval，确保停止
+    await new Promise((r) => setTimeout(r, 200));
+    expect(await redis.get("w2")).toBeNull();
+  });
+
+  it("token 不匹配 → watchdog 静默停止，不抛错", async () => {
+    const { redis, provider } = makeProvider();
+    const release = await provider.acquire("w3", 1000, 0, {
+      watchdog: true,
+      renewIntervalMs: 30,
+    });
+
+    // 模拟其他实例抢占（直接覆盖 key 为 other-token）
+    await redis.set("w3", "other-token", "PX", 5000);
+
+    // 给 watchdog 几个 tick 触发续期，检测 token 不匹配 → 静默退出
+    await new Promise((r) => setTimeout(r, 150));
+
+    // key 仍是 other-token，没被覆盖
+    expect(await redis.get("w3")).toBe("other-token");
+
+    // release 应幂等不抛
+    await expect(release()).resolves.toBeUndefined();
+    // release 走 Lua（token 不匹配也不删）→ other-token 仍在
+    expect(await redis.get("w3")).toBe("other-token");
+  });
+
+  it("不启用 watchdog 时：超 ttl 锁自动释放", async () => {
+    const { redis, provider } = makeProvider();
+    await provider.acquire("w4", 100, 0); // 不持 release 引用
+
+    await new Promise((r) => setTimeout(r, 200));
+    expect(await redis.get("w4")).toBeNull();
+  });
 });

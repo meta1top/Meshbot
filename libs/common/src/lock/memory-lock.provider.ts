@@ -7,7 +7,11 @@ import {
   withTimeout,
 } from "async-mutex";
 
-import type { LockProvider, LockRelease } from "./lock.provider";
+import type {
+  AcquireOptions,
+  LockProvider,
+  LockRelease,
+} from "./lock.provider";
 
 /**
  * 进程内互斥锁实现。
@@ -25,7 +29,9 @@ export class MemoryLockProvider implements LockProvider {
     key: string,
     _ttlMs: number,
     waitMs: number,
+    _options?: AcquireOptions,
   ): Promise<LockRelease> {
+    // watchdog 在单进程互斥下无意义（没有 TTL 概念），忽略 _options
     let mutex = this.mutexes.get(key);
     if (!mutex) {
       mutex = new Mutex();
