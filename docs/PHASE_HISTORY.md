@@ -33,7 +33,7 @@
 
 ## Phase 3（云端轨框架基线）✅ 已完成
 
-> 范围调整：实施期间用户明确「不照搬  业务」。原 spec 的 Membership / Invite / Organization 业务全部从 libs/main 剥离；只留**最小注册 / 登录示范**作为 server-main 框架基线。真实业务由 meshbot 自行迭代。
+> 范围调整：原 spec 的 Membership / Invite / Organization 业务全部从 libs/main 剥离；只留**最小注册 / 登录示范**作为 server-main 框架基线。真实业务由 meshbot 自行迭代。
 
 - **A1**：`libs/common/src/dto/i18n-zod-validation.pipe.ts` 桥接 nestjs-zod ↔ nestjs-i18n（拦截 ZodIssue → 翻译 → 抛 400）；`I18nExceptionFilter` 翻译 service 层抛出的 i18n-key HttpException；server-agent / server-main 全局注册；e2e 强制翻译断言（中英）
 - **B1**：`infra/dev/docker-compose.dev.yml`（Postgres 16-alpine）+ `pnpm dev:db:{up,down,reset,logs}` + `apps/server-main/.env.development.example`
@@ -80,16 +80,14 @@
 
 ## 设计依据
 
-- `docs/superpowers/specs/2026-05-13-meshbot-borrow--design.md` —— 借鉴范围全景路线图
-- `docs/superpowers/specs/2026-05-14-meshbot-phase-3-design.md` —— Phase 3 设计
-- `docs/superpowers/specs/2026-05-16-meshbot-phase-4-design.md` —— Phase 4 设计
+- `docs/superpowers/specs/` —— 各 Phase 设计文档
 - `docs/superpowers/plans/` —— 各 Phase 实施 plan
 
 ---
 
 ## Phase 5（错误 / 响应 / Gateway / Ops 框架抽屉）✅ 已完成
 
-> 借鉴  的框架细节，server-agent + server-main 双端落地。监控 / 业务模型 / BullMQ 队列 / Idempotency / Nacos / RBAC 推迟到未来。
+> 监控 / 业务模型 / BullMQ 队列 / Idempotency / RBAC 推迟到未来。
 
 - **Track A（错误 + 响应基石）**：
   - `libs/common/src/errors/` —— `ErrorCode` 接口 + `defineErrorCode` + `AppError` + `CommonErrorCode`（0 + 1-6 + 999）+ `ErrorsFilter`（合并 Phase 3 的 I18nExceptionFilter）

@@ -1,7 +1,11 @@
 import "reflect-metadata";
+import { EventEmitter } from "node:events";
 import RedisMock from "ioredis-mock";
 
 import { RedisLockProvider } from "./redis-lock.provider";
+
+// 测试集中多次创建 ioredis-mock 实例，其内部 EventEmitter 默认 10 个 listener 上限不够
+EventEmitter.defaultMaxListeners = 20;
 
 // ioredis-mock 默认导出与 ioredis 同形（构造函数 → 实例），但缺 eval 的
 // 完整 Lua 实现。它会把 KEYS/ARGV 直接转给提供的 lua 解释器（内部 lua-shim），

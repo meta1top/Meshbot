@@ -202,17 +202,7 @@ export const EnvSchema = z.object({
 ### 6.2 未决问题
 
 - Q1：WebSocket 是否走 `/api/ws` 路径前缀 → **是**（与 HTTP API `/api/*` 对齐）
-- Q2：Socket.io adapter 多实例切换时机 → Phase 7（业务需要广播时）
-- Q3：env schema 是否给 web-* 也加 → Phase 6 不做（Next.js 自己有 env 校验生态），未来再考虑
-
-### 6.3 Phase 7 候选
-
-- 业务模型（meshbot 自定义）
-- Socket.io Redis adapter（多实例广播）
-- 监控（Sentry / OTel；与 traceId 集成）
-- k8s / Helm
-- 多环境完整 CI/CD 链路
-- TTL watchdog 升级：基于 etcd lease（更可靠）
+- Q2：env schema 是否给 web-* 也加 → Phase 6 不做（Next.js 自己有 env 校验生态），未来再考虑
 
 ---
 

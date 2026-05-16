@@ -1066,51 +1066,6 @@ git commit -m "chore: add pnpm lockfile after initial install"
 ### Task 12: 更新 .cursor/rules 规范文件
 
 **Files:**
-- Modify: `.cursor/rules/meta1/standard.md`
+- Modify: `.cursor/rules/`
 
-需要将现有规范中的目录结构更新为与实际仓库一致。
-
-- [ ] **Step 1: 更新 `standard.md` 中的工程结构**
-
-将原来的：
-
-```
-meshbot/
-├── apps/
-│   ├── server/
-│   ├── web/
-│   └── desktop/
-├── libs/
-│   ├── {module}/
-│   ├── ...
-│   └── types/
-├── scripts/
-└── README.md
-```
-
-替换为：
-
-```
-meshbot/
-├── apps/
-│   ├── desktop/          # Electron 桌面壳
-│   ├── server-agent/     # NestJS 本地 agent
-│   ├── server-main/      # NestJS 云平台后端
-│   ├── web-agent/        # Next.js 桌面端 UI
-│   └── web-main/         # Next.js 云平台前端
-├── libs/
-│   ├── types/            # 前后端共享类型（Zod）
-│   └── shared/           # NestJS 共享模块
-├── packages/
-│   ├── common/           # Web 公共逻辑
-│   └── design/           # Tailwind + shadcn 组件库
-├── scripts/
-└── README.md
-```
-
-- [ ] **Step 2: 提交**
-
-```bash
-git add .cursor/rules/meta1/standard.md
-git commit -m "docs: update standard.md to match new monorepo structure"
-```
+按实际仓库结构创建规约文件。详见 Phase 2 的 skills 同步任务。
