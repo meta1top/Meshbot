@@ -18,6 +18,18 @@ export interface WithLockOptions {
   waitTimeout?: number;
   /** 获取锁失败时的错误消息 */
   errorMessage?: string;
+  /**
+   * Phase 6 B1：启用 watchdog 自动续期。
+   *
+   * 适用于业务方法运行时间可能 ≥ `ttl` 的场景（批处理 / 长时调度 / 慢 IO）。
+   * RedisLockProvider 在 acquire 后启动定时器，每 `renewIntervalMs` 验 token + PEXPIRE。
+   * MemoryLockProvider 忽略本选项。
+   *
+   * 默认 false。
+   */
+  watchdog?: boolean;
+  /** Phase 6 B1：watchdog 续期间隔（ms），默认 `Math.floor(ttl/3)` */
+  renewIntervalMs?: number;
 }
 
 /**
@@ -55,8 +67,14 @@ export function WithLock(options: WithLockOptions): MethodDecorator {
       const waitTimeout = options.waitTimeout ?? 5000;
 
       logger.debug(`Acquiring lock: ${lockKey}`);
+      const acquireOptions = options.watchdog
+        ? {
+            watchdog: true,
+            renewIntervalMs: options.renewIntervalMs ?? Math.floor(ttl / 3),
+          }
+        : undefined;
       const release = await provider
-        .acquire(lockKey, ttl, waitTimeout)
+        .acquire(lockKey, ttl, waitTimeout, acquireOptions)
         .catch((_err) => {
           logger.warn(`Failed to acquire lock: ${lockKey}`);
           throw new Error(

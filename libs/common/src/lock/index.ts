@@ -1,4 +1,5 @@
 export {
+  type AcquireOptions,
   LOCK_PROVIDER,
   type LockProvider,
   type LockRelease,
