@@ -1,14 +1,11 @@
-import {
-  ConflictException,
-  Injectable,
-  UnauthorizedException,
-} from "@nestjs/common";
+import { AppError } from "@meshbot/common";
+import { Injectable } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { InjectRepository } from "@nestjs/typeorm";
 import * as bcrypt from "bcrypt";
-import { I18nService } from "nestjs-i18n";
 import { Repository } from "typeorm";
 import { User } from "../entities/user.entity";
+import { AgentErrorCode } from "../errors/agent.error-codes";
 
 @Injectable()
 export class AuthService {
@@ -16,7 +13,6 @@ export class AuthService {
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
     private readonly jwtService: JwtService,
-    private readonly i18n: I18nService,
   ) {}
 
   async register(
@@ -25,9 +21,7 @@ export class AuthService {
   ): Promise<{ access_token: string }> {
     const existingUser = await this.userRepo.count();
     if (existingUser > 0) {
-      throw new ConflictException(
-        this.i18n.translate("auth.alreadyRegistered"),
-      );
+      throw new AppError(AgentErrorCode.AUTH_ALREADY_REGISTERED);
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
@@ -43,16 +37,12 @@ export class AuthService {
   ): Promise<{ access_token: string }> {
     const user = await this.userRepo.findOneBy({ username });
     if (!user) {
-      throw new UnauthorizedException(
-        this.i18n.translate("auth.invalidCredentials"),
-      );
+      throw new AppError(AgentErrorCode.AUTH_INVALID_CREDENTIALS);
     }
 
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) {
-      throw new UnauthorizedException(
-        this.i18n.translate("auth.invalidCredentials"),
-      );
+      throw new AppError(AgentErrorCode.AUTH_INVALID_CREDENTIALS);
     }
 
     return this.signToken(user);
