@@ -6,6 +6,8 @@ dist/
 .next/
 out/
 *.tsbuildinfo
+# Next.js 自动生成，随版本/dev 运行重写，不纳入版本控制
+next-env.d.ts
 
 # turbo
 .turbo/
@@ -30,6 +32,9 @@ release/
 !.vscode/settings.json
 *.swp
 *.swo
+
+# claude code 运行时
+.claude/scheduled_tasks.lock
 
 # os
 .DS_Store
