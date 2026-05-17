@@ -24,6 +24,13 @@ import type { ZodTypeAny, z } from "zod";
  * ```
  *
  * 校验失败时抛 Error 含字段路径 + 原因，stderr 输出便于运维定位。
+ *
+ * **值回写**：Zod 的 `.default()` / `z.coerce` 会产出与原始 `process.env`
+ * 不同的值（如 `NODE_ENV` 默认 "development"、`PORT` coerce 成 number）。
+ * 仅返回 `parsed.data` 时这些转换只对走 `ConfigService` 的读取生效；
+ * 项目中 `process.env.NODE_ENV` / Snowflake `MESHBOT_NODE_ID` 等存在直读
+ * `process.env` 的路径，会拿到未经转换的原始值，使校验"形同虚设"。
+ * 因此把校验/转换后的值字符串化写回 `process.env`，保证两条读取路径一致。
  */
 export function createEnvValidator<T extends ZodTypeAny>(schema: T) {
   return (env: Record<string, unknown>): z.infer<T> => {
@@ -38,6 +45,14 @@ export function createEnvValidator<T extends ZodTypeAny>(schema: T) {
       throw new Error(
         `[env-schema] 环境变量校验失败：\n${issues}\n请检查 .env.* 或部署环境变量是否齐全 / 合法。`,
       );
+    }
+    // 把 default / coerce 转换后的值回写 process.env，让直读 process.env
+    // 的代码路径（NODE_ENV / MESHBOT_NODE_ID 等）与 ConfigService 取值一致。
+    for (const [key, value] of Object.entries(
+      parsed.data as Record<string, unknown>,
+    )) {
+      if (value === undefined || value === null) continue;
+      process.env[key] = typeof value === "string" ? value : String(value);
     }
     return parsed.data;
   };

@@ -1,5 +1,5 @@
 import { BadRequestException, type PipeTransform } from "@nestjs/common";
-import type { ZodTypeAny, infer as ZInfer } from "zod";
+import type { infer as ZInfer, ZodTypeAny } from "zod";
 
 /**
  * 把 Zod schema 转成一个可以在 NestJS controller 用的 DTO 类。

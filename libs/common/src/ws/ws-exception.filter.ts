@@ -5,7 +5,6 @@ import { WsException } from "@nestjs/websockets";
 import { I18nContext, I18nService } from "nestjs-i18n";
 import type { Socket } from "socket.io";
 
-import { AppError } from "../errors/app.error";
 import { formatEnvelope, httpStatusFor } from "../errors/format-envelope";
 
 /**
@@ -57,8 +56,10 @@ export class WsExceptionFilter implements NestWsExceptionFilter {
 
     client.emit("exception", envelope);
 
-    // 401 → 主动断开；避免 client 在未鉴权状态长连接消耗资源
-    if (inner instanceof AppError && inner.errorCode.httpStatus === 401) {
+    // 鉴权失败（401 未授权 / 403 禁止）→ 主动断开，避免 client 在未鉴权
+    // 状态长连接消耗资源。用 httpStatusFor 归一化判断，不依赖单个 errorCode
+    // 的 httpStatus 精确配置（缺省可能落 200，导致鉴权连接不被断开）。
+    if (status === 401 || status === 403) {
       client.disconnect(true);
     }
   }

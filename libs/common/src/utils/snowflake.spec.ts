@@ -58,13 +58,24 @@ describe("SnowflakeIdGenerator", () => {
 });
 
 describe("deriveNodeId (Phase 6 C1)", () => {
-  const originalEnv = process.env.MESHBOT_NODE_ID;
+  const originalNodeId = process.env.MESHBOT_NODE_ID;
+  const originalRedisUrl = process.env.REDIS_URL;
+
+  beforeEach(() => {
+    // 多副本 fail-fast（H-3）依赖 REDIS_URL；hostname 回退用例需确保它未设
+    delete process.env.REDIS_URL;
+  });
 
   afterEach(() => {
-    if (originalEnv === undefined) {
+    if (originalNodeId === undefined) {
       delete process.env.MESHBOT_NODE_ID;
     } else {
-      process.env.MESHBOT_NODE_ID = originalEnv;
+      process.env.MESHBOT_NODE_ID = originalNodeId;
+    }
+    if (originalRedisUrl === undefined) {
+      delete process.env.REDIS_URL;
+    } else {
+      process.env.REDIS_URL = originalRedisUrl;
     }
   });
 
@@ -111,5 +122,17 @@ describe("deriveNodeId (Phase 6 C1)", () => {
     const id = deriveNodeId();
     expect(id).toBeGreaterThanOrEqual(0);
     expect(id).toBeLessThanOrEqual(1023);
+  });
+
+  it("H-3：REDIS_URL 存在（多副本）但未配 MESHBOT_NODE_ID → fail-fast", () => {
+    delete process.env.MESHBOT_NODE_ID;
+    process.env.REDIS_URL = "redis://localhost:6379";
+    expect(() => deriveNodeId()).toThrow(/MESHBOT_NODE_ID/);
+  });
+
+  it("H-3：REDIS_URL 存在但显式配了 MESHBOT_NODE_ID → 正常采用", () => {
+    process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.MESHBOT_NODE_ID = "7";
+    expect(deriveNodeId()).toBe(7);
   });
 });

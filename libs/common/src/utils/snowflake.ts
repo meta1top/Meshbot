@@ -21,6 +21,10 @@
  */
 import { hostname } from "node:os";
 
+import { Logger } from "@nestjs/common";
+
+const logger = new Logger("Snowflake");
+
 const EPOCH_MS = 1735689600000n; // 2025-01-01T00:00:00Z（注：const 名沿用，实际 epoch 是 2025）
 const NODE_BITS = 10n;
 const SEQ_BITS = 12n;
@@ -48,19 +52,46 @@ function fnv1aHash(str: string): number {
  *   3. 0
  *
  * 返回范围始终在 [0, 1023]。
+ *
+ * **多副本保护**：配了 `REDIS_URL`（= 云端轨多副本部署）却未显式配
+ * `MESHBOT_NODE_ID` 时，hostname hash 在中等副本规模存在不可忽略的碰撞概率
+ * → 两副本同 nodeId 在同毫秒产生重复 Snowflake 主键。此场景直接 fail-fast，
+ * 强制运维显式分配 NODE_ID，而非静默退化到 hostname hash。
+ *
+ * 最终选定的 nodeId 与来源会打印到启动日志，便于碰撞事故定位。
  */
 export function deriveNodeId(): number {
   const explicit = process.env.MESHBOT_NODE_ID;
   if (explicit !== undefined && explicit !== "") {
     const n = Number(explicit);
-    if (Number.isFinite(n) && n >= 0) return Math.floor(n) & 0x3ff;
+    if (Number.isFinite(n) && n >= 0) {
+      const id = Math.floor(n) & 0x3ff;
+      logger.log(`nodeId=${id}（来源：MESHBOT_NODE_ID env）`);
+      return id;
+    }
+  }
+  // 多副本（云端轨配了 REDIS_URL）必须显式分配 nodeId，禁止静默 hostname hash
+  if (process.env.REDIS_URL) {
+    throw new Error(
+      "[snowflake] 检测到 REDIS_URL（多副本部署）但未配置 MESHBOT_NODE_ID。" +
+        "多副本下 hostname hash 可能碰撞产生重复主键，请为每个副本显式分配唯一的 " +
+        "MESHBOT_NODE_ID（范围 0-1023）。",
+    );
   }
   try {
     const host = hostname();
-    if (host) return fnv1aHash(host) & 0x3ff;
+    if (host) {
+      const id = fnv1aHash(host) & 0x3ff;
+      logger.warn(
+        `nodeId=${id}（来源：hostname "${host}" hash 派生；单实例可接受，` +
+          `多副本请显式配置 MESHBOT_NODE_ID）`,
+      );
+      return id;
+    }
   } catch {
     /* hostname() 不可用时兜底 0 */
   }
+  logger.warn("nodeId=0（兜底；仅单实例安全）");
   return 0;
 }
 
@@ -102,7 +133,15 @@ export class SnowflakeIdGenerator {
   }
 }
 
-const singleton = new SnowflakeIdGenerator();
+/**
+ * 懒初始化 singleton：避免在模块 import 阶段就调用 `deriveNodeId()`。
+ *
+ * 模块顶层 `new SnowflakeIdGenerator()` 会在 import 时立即求值，早于
+ * `ConfigModule` 的 env 校验回写（C-1）；那时 `MESHBOT_NODE_ID` 还是原始值、
+ * 多副本 fail-fast（H-3）也可能在错误时机抛出。延迟到首次 `generateSnowflakeId()`
+ * 调用时构造，确保 env 已校验且回写完成。
+ */
+let singleton: SnowflakeIdGenerator | undefined;
 
 /**
  * 生成一个 Snowflake ID（字符串形式）。
@@ -125,5 +164,8 @@ const singleton = new SnowflakeIdGenerator();
  * 单独调用：`const id = generateSnowflakeId();`
  */
 export function generateSnowflakeId(): string {
+  if (singleton === undefined) {
+    singleton = new SnowflakeIdGenerator();
+  }
   return singleton.next();
 }

@@ -48,6 +48,7 @@
     "@nestjs/platform-socket.io": "^11",
     "@nestjs/websockets": "^11",
     "@types/ioredis-mock": "^8.2.7",
+    "@types/node": "^22",
     "ioredis-mock": "^8.13.1",
     "socket.io": "^4"
   }
