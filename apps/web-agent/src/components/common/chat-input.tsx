@@ -33,14 +33,14 @@ export function ChatInput({
 
   const handleSend = useCallback(() => {
     const trimmed = value.trim();
-    if (!trimmed || isLoading) return;
+    if (!trimmed) return;
     onSend?.(trimmed);
     setValue("");
     const el = editorRef.current;
     if (el) {
       el.innerText = "";
     }
-  }, [value, isLoading, onSend]);
+  }, [value, onSend]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -86,7 +86,7 @@ export function ChatInput({
           />
         </div>
 
-        {isLoading ? (
+        {isLoading && (
           <button
             type="button"
             onClick={handleInterrupt}
@@ -95,22 +95,21 @@ export function ChatInput({
           >
             <Square className="h-4 w-4 fill-current" />
           </button>
-        ) : (
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={!hasContent}
-            className={cn(
-              "flex h-8 w-8 shrink-0 items-center justify-center transition-colors",
-              hasContent
-                ? "text-foreground hover:text-foreground/80"
-                : "text-muted-foreground",
-            )}
-            title="Send message"
-          >
-            <Send className="h-4 w-4" />
-          </button>
         )}
+        <button
+          type="button"
+          onClick={handleSend}
+          disabled={!hasContent}
+          className={cn(
+            "flex h-8 w-8 shrink-0 items-center justify-center transition-colors",
+            hasContent
+              ? "text-foreground hover:text-foreground/80"
+              : "text-muted-foreground",
+          )}
+          title="Send message"
+        >
+          <Send className="h-4 w-4" />
+        </button>
       </div>
 
       <div className="flex items-center justify-between border-t border-border px-3 py-1.5">
