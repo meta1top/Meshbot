@@ -1,3 +1,4 @@
+import { NotFoundException } from "@nestjs/common";
 import { DataSource } from "typeorm";
 import { PendingMessage } from "../entities/pending-message.entity";
 import { Session } from "../entities/session.entity";
@@ -74,5 +75,36 @@ describe("SessionService", () => {
     expect(n).toBe(1);
     const pending = await service.listActivePending(sessionId);
     expect(pending[0].status).toBe("pending");
+  });
+
+  it("findSessionOrFail 对不存在的会话抛 NotFoundException", async () => {
+    await expect(service.findSessionOrFail("nonexistent")).rejects.toThrow(
+      NotFoundException,
+    );
+  });
+
+  it("appendMessage 在 idle 会话上返回 queued:false", async () => {
+    const { sessionId } = await service.createSession({ content: "m1" });
+    await service.setStatus(sessionId, "idle");
+    const res = await service.appendMessage(sessionId, { content: "m2" });
+    expect(res.queued).toBe(false);
+  });
+
+  it("markProcessed 写入 processed_at", async () => {
+    const { sessionId } = await service.createSession({ content: "m1" });
+    const claimed = await service.claimPending(sessionId);
+    await service.markProcessed(claimed.map((m) => m.id));
+    const repo = ds.getRepository(PendingMessage);
+    const row = await repo.findOneBy({ id: claimed[0].id });
+    expect(row?.status).toBe("processed");
+    expect(row?.processedAt).not.toBeNull();
+  });
+
+  it("rollbackToPending 把指定消息退回 pending", async () => {
+    const { sessionId } = await service.createSession({ content: "m1" });
+    const claimed = await service.claimPending(sessionId);
+    await service.rollbackToPending(claimed.map((m) => m.id));
+    const active = await service.listActivePending(sessionId);
+    expect(active.every((m) => m.status === "pending")).toBe(true);
   });
 });
