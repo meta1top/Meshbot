@@ -1,13 +1,20 @@
 import type { BaseMessage } from "@langchain/core/messages";
 import { END, START, StateGraph } from "@langchain/langgraph";
 import type { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
-import { supervisorNode } from "./nodes/supervisor.node";
+import {
+  createSupervisorNode,
+  type ModelProvider,
+} from "./nodes/supervisor.node";
 
 export interface GraphState {
   messages: BaseMessage[];
 }
 
-export function buildSupervisorGraph(checkpointer: SqliteSaver) {
+/** 构建 supervisor 单节点图。modelProvider 惰性提供 LLM。 */
+export function buildSupervisorGraph(
+  checkpointer: SqliteSaver,
+  modelProvider: ModelProvider,
+) {
   return new StateGraph<GraphState>({
     channels: {
       messages: {
@@ -16,7 +23,7 @@ export function buildSupervisorGraph(checkpointer: SqliteSaver) {
       },
     },
   })
-    .addNode("supervisor", supervisorNode)
+    .addNode("supervisor", createSupervisorNode(modelProvider))
     .addEdge(START, "supervisor")
     .addEdge("supervisor", END)
     .compile({ checkpointer });
