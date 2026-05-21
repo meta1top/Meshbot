@@ -1,0 +1,82 @@
+import "reflect-metadata";
+import { AgentModule } from "@meshbot/agent";
+import { TxTypeOrmModule } from "@meshbot/common";
+import { type INestApplication } from "@nestjs/common";
+import { EventEmitterModule } from "@nestjs/event-emitter";
+import { Test } from "@nestjs/testing";
+import { TypeOrmModule } from "@nestjs/typeorm";
+import request from "supertest";
+import { SessionController } from "../../src/controllers/session.controller";
+import { PendingMessage } from "../../src/entities/pending-message.entity";
+import { Session } from "../../src/entities/session.entity";
+import { RunnerService } from "../../src/services/runner.service";
+import { SessionService } from "../../src/services/session.service";
+
+describe("Session e2e", () => {
+  let app: INestApplication;
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        EventEmitterModule.forRoot(),
+        TypeOrmModule.forRoot({
+          type: "better-sqlite3",
+          database: ":memory:",
+          entities: [Session, PendingMessage],
+          synchronize: true,
+        }),
+        TxTypeOrmModule.forFeature([Session, PendingMessage]),
+        AgentModule,
+      ],
+      controllers: [SessionController],
+      providers: [SessionService, RunnerService],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    await app.init();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it("POST /api/sessions 创建会话返回 sessionId", async () => {
+    const res = await request(app.getHttpServer())
+      .post("/api/sessions")
+      .send({ content: "你好" })
+      .expect(201);
+    expect(typeof res.body.sessionId).toBe("string");
+  });
+
+  it("POST /api/sessions/:id/messages 追加消息", async () => {
+    const created = await request(app.getHttpServer())
+      .post("/api/sessions")
+      .send({ content: "first" });
+    const sessionId = created.body.sessionId as string;
+    const res = await request(app.getHttpServer())
+      .post(`/api/sessions/${sessionId}/messages`)
+      .send({ content: "second" })
+      .expect(201);
+    expect(typeof res.body.messageId).toBe("string");
+  });
+
+  it("GET /api/sessions/:id/pending 返回排队消息", async () => {
+    const created = await request(app.getHttpServer())
+      .post("/api/sessions")
+      .send({ content: "排队消息" });
+    const res = await request(app.getHttpServer())
+      .get(`/api/sessions/${created.body.sessionId}/pending`)
+      .expect(200);
+    expect(Array.isArray(res.body.pending)).toBe(true);
+  });
+
+  it("GET /api/sessions/:id/history 返回 messages 与 inflight 字段", async () => {
+    const created = await request(app.getHttpServer())
+      .post("/api/sessions")
+      .send({ content: "历史测试" });
+    const res = await request(app.getHttpServer())
+      .get(`/api/sessions/${created.body.sessionId}/history`)
+      .expect(200);
+    expect(res.body).toHaveProperty("messages");
+    expect(res.body).toHaveProperty("inflight");
+  });
+});
