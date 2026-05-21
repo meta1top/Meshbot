@@ -79,4 +79,10 @@ describe("Session e2e", () => {
     expect(res.body).toHaveProperty("messages");
     expect(res.body).toHaveProperty("inflight");
   });
+
+  it("GET /api/sessions/:id/pending 对不存在的会话返回 404", async () => {
+    await request(app.getHttpServer())
+      .get("/api/sessions/nonexistent-id/pending")
+      .expect(404);
+  });
 });
