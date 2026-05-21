@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { AIMessageChunk } from "@langchain/core/messages";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MeshbotConfigService } from "../../src/config/meshbot-config.service";
 import { GraphService } from "../../src/graph/graph.service";
@@ -16,7 +17,17 @@ describe("GraphService", () => {
     const configService = new MeshbotConfigService();
     (configService as unknown as Record<string, string>).meshbotDir = testDir;
     const promptService = new PromptService(testDir);
-    graphService = new GraphService(configService, promptService);
+    const fakeModel = {
+      stream: async function* () {
+        yield new AIMessageChunk({ id: "fixed-msg-id", content: "你" });
+        yield new AIMessageChunk({ id: "fixed-msg-id", content: "好" });
+      },
+      invoke: async () =>
+        new AIMessageChunk({ id: "fixed-msg-id", content: "你好" }),
+    };
+    graphService = new GraphService(configService, promptService, () =>
+      Promise.resolve(fakeModel as never),
+    );
   });
 
   afterEach(() => {
@@ -29,17 +40,23 @@ describe("GraphService", () => {
     expect(threadId.length).toBeGreaterThan(0);
   });
 
-  it("sends message and returns response", async () => {
-    const threadId = await graphService.startSession({ model: "gpt-4" });
-    const response = await graphService.sendMessage(threadId, "Hello");
-    expect(response.threadId).toBe(threadId);
-    expect(typeof response.content).toBe("string");
+  it("streamMessage 逐 chunk 产出 token 与稳定 messageId", async () => {
+    const threadId = await graphService.startSession({ model: "fake" });
+    const chunks: { messageId: string; delta: string }[] = [];
+    for await (const ev of graphService.streamMessage(threadId, "hi")) {
+      chunks.push(ev);
+    }
+    expect(chunks.length).toBeGreaterThan(0);
+    expect(chunks.every((c) => c.messageId === chunks[0].messageId)).toBe(true);
   });
 
-  it("returns history after messages", async () => {
-    const threadId = await graphService.startSession({ model: "gpt-4" });
-    await graphService.sendMessage(threadId, "Hello");
+  it("returns history after streamMessage", async () => {
+    const threadId = await graphService.startSession({ model: "fake" });
+    for await (const _ev of graphService.streamMessage(threadId, "hi")) {
+      // 仅消费流以驱动 checkpointer 落盘
+    }
     const history = await graphService.getHistory(threadId);
     expect(Array.isArray(history)).toBe(true);
+    expect(history.length).toBeGreaterThan(0);
   });
 });
