@@ -17,11 +17,17 @@ describe("GraphService", () => {
     const configService = new MeshbotConfigService();
     (configService as unknown as Record<string, string>).meshbotDir = testDir;
     const promptService = new PromptService(testDir);
-    // fakeModel 用 invoke()；streamMode:"messages" 在 node 链结束时发一个 chunk（非 token 级），
-    // 单测只验证管道连通 + messageId 稳定，token 级粒度需真实流式模型的集成测试覆盖。
+    // fakeModel 用 stream() 逐 token yield AIMessageChunk —— 与 supervisor 节点一致，
+    // 各 chunk 共享同一 id，验证 streamMode:"messages" 下管道连通 + messageId 稳定。
     const fakeModel = {
-      invoke: async () =>
-        new AIMessageChunk({ id: "fixed-msg-id", content: "你好" }),
+      stream: async () => {
+        async function* gen() {
+          for (const c of ["你", "好"]) {
+            yield new AIMessageChunk({ id: "fixed-msg-id", content: c });
+          }
+        }
+        return gen();
+      },
     };
     graphService = new GraphService(configService, promptService, () =>
       Promise.resolve(fakeModel as never),
