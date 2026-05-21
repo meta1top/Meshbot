@@ -135,11 +135,13 @@ export class RunnerService implements OnModuleInit {
       }
       run.status = "done";
       await this.sessions.markProcessed(ids);
-      this.emitter.emit(SESSION_WS_EVENTS.runDone, {
-        sessionId,
-        messageId: run.messageId ?? "",
-        content: run.content,
-      });
+      if (run.messageId) {
+        this.emitter.emit(SESSION_WS_EVENTS.runDone, {
+          sessionId,
+          messageId: run.messageId,
+          content: run.content,
+        });
+      }
     } catch (err) {
       if (run.abort.signal.aborted) {
         run.status = "interrupted";

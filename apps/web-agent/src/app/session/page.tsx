@@ -15,7 +15,7 @@ import {
   MessageList,
   type TimelineMessage,
 } from "@/components/session/message-list";
-import { disconnectSessionSocket, getSessionSocket } from "@/lib/socket";
+import { getSessionSocket } from "@/lib/socket";
 import { appendMessage, fetchHistory, fetchPending } from "@/rest/session";
 
 function SessionView() {
@@ -159,7 +159,6 @@ function SessionView() {
       socket.off(SESSION_WS_EVENTS.runDone, onDone);
       socket.off(SESSION_WS_EVENTS.runInterrupted, onInterrupted);
       socket.off(SESSION_WS_EVENTS.runError, onError);
-      disconnectSessionSocket();
     };
   }, [sessionId, router, apply, upsertChunk]);
 
