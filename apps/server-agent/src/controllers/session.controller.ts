@@ -22,16 +22,14 @@ export class SessionController {
     return result;
   }
 
-  /** 向已存在会话追加消息；idle 则启动 run，running 则入队。 */
+  /** 向已存在会话追加消息；总是触发 runner（kick 幂等，run 进行中自动 no-op）。 */
   @Post(":id/messages")
   async append(
     @Param("id") id: string,
     @Body() dto: AppendMessageDto,
   ): Promise<{ messageId: string; queued: boolean }> {
     const result = await this.sessions.appendMessage(id, dto);
-    if (!result.queued) {
-      this.runner.kick(id);
-    }
+    this.runner.kick(id);
     return result;
   }
 

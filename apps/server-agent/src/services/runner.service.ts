@@ -82,6 +82,7 @@ export class RunnerService implements OnModuleInit {
   async kickAndWait(sessionId: string): Promise<void> {
     if (this.running.has(sessionId)) return;
     this.running.add(sessionId);
+    await this.sessions.setStatus(sessionId, "running");
     try {
       while (true) {
         const batch = await this.sessions.claimPending(sessionId);

@@ -88,6 +88,26 @@ describe("RunnerService", () => {
     expect(sess.store.every((m) => m.status === "processed")).toBe(true);
   });
 
+  it("kick：循环排空后再入队的消息，再次 kick 能被消费（防丢唤醒）", async () => {
+    const sess = fakeSessionService();
+    const emitter = new EventEmitter2();
+    sess.enqueue("s1", "first");
+    const runner = new RunnerService(
+      sess as never,
+      fakeGraphService() as never,
+      emitter,
+    );
+    // 第一轮：消费 first，循环排空退出
+    await runner.kickAndWait("s1");
+    expect(sess.store.every((m) => m.status === "processed")).toBe(true);
+    // 模拟竞态：循环已退出后才入队
+    sess.enqueue("s1", "second");
+    // 再次 kick（Controller 无条件 kick）应能消费这条
+    await runner.kickAndWait("s1");
+    expect(sess.store).toHaveLength(2);
+    expect(sess.store.every((m) => m.status === "processed")).toBe(true);
+  });
+
   it("出错时发 run.error 并把消息退回 pending", async () => {
     const sess = fakeSessionService();
     const emitter = new EventEmitter2();
