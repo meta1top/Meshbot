@@ -46,6 +46,7 @@ export class StaticModule {
         ServeStaticModule.forRoot({
           rootPath,
           serveRoot: "/",
+          serveStaticOptions: { extensions: ["html"] },
         }),
       ],
     };

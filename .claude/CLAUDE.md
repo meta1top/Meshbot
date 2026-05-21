@@ -127,7 +127,7 @@ Phase 1 暂未引入 Form/FormItem 封装；现阶段写表单允许直接用 sh
 
 | 应用 | 数据库 | 当前 Entity |
 |------|--------|-------------|
-| server-agent | `agent.db`（SQLite，`~/.meshbot/`，TypeORM 迁移管理） | `User` / `Setting` / `ModelConfig` |
+| server-agent | `agent.db`（SQLite，`~/.meshbot/`，TypeORM 迁移管理） | `User` / `Setting` / `ModelConfig` / `Session` / `PendingMessage` |
 | server-main | Postgres（Phase 3，TypeORM 迁移管理） | `AppUser`（注册 / 登录框架基线；真实业务由 meshbot 自行扩展） |
 
 ## Phase 进度
