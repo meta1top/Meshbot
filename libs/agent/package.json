@@ -14,9 +14,11 @@
   "dependencies": {
     "@langchain/core": "^0.3",
     "@langchain/langgraph": "^0.2",
+    "@langchain/langgraph-checkpoint": "~0.0.18",
     "@langchain/langgraph-checkpoint-sqlite": "^0.1",
     "@nestjs/common": "^11.1.19",
-    "@nestjs/core": "^11.1.19"
+    "@nestjs/core": "^11.1.19",
+    "langchain": "^0.3.37"
   },
   "devDependencies": {
     "@nestjs/testing": "^11.1.19",

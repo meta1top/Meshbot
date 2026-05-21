@@ -5,6 +5,7 @@ packages:
 
 overrides:
   '@types/node': ^22
+  '@langchain/langgraph-checkpoint': ~0.0.18
 
 peerDependencyRules:
   ignoreMissing:
