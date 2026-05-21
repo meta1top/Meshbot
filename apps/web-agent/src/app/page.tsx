@@ -1,10 +1,13 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@meshbot/design";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { useState } from "react";
 import { ActivityHeatmap } from "@/components/common/activity-heatmap";
 import { ChatInput } from "@/components/common/chat-input";
 import { AppShellLayout } from "@/components/layouts/app-shell-layout";
+import { createSession } from "@/rest/session";
 
 const heatmapData = Array.from({ length: 96 }, (_, index) =>
   index === 79 ? 100 : index % 5 === 0 ? 50 : 0,
@@ -12,6 +15,22 @@ const heatmapData = Array.from({ length: 96 }, (_, index) =>
 
 export default function Home() {
   const t = useTranslations("home");
+  const router = useRouter();
+  const [sending, setSending] = useState(false);
+
+  /** 发送消息：创建新会话并跳转到会话页 */
+  const handleSend = async (msg: string) => {
+    if (sending) return;
+    setSending(true);
+    try {
+      const sessionId = await createSession(msg);
+      router.push(`/session?id=${sessionId}`);
+    } catch (err) {
+      console.error("创建会话失败", err);
+      setSending(false);
+    }
+  };
+
   const metrics = [
     { label: t("metrics.sessions"), value: "3" },
     { label: t("metrics.messages"), value: "947" },
@@ -68,7 +87,8 @@ export default function Home() {
       </div>
       <div className="sticky bottom-4 mt-auto bg-background pt-4">
         <ChatInput
-          onSend={(msg) => console.log("send:", msg)}
+          onSend={handleSend}
+          isLoading={sending}
           modelName="Flash · Medium"
           tokenUsage={{ current: 12, max: 128 }}
         />
