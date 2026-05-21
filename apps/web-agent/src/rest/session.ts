@@ -1,11 +1,23 @@
+"use client";
+
 import type { HistoryResponse, PendingResponse } from "@meshbot/types-agent";
 import { apiClient } from "@meshbot/web-common";
 
-/** 后端成功响应 envelope（ResponseInterceptor 包装）。 */
+/** 后端成功响应 envelope（server-agent 全局 ResponseInterceptor 包装）。 */
 interface SuccessEnvelope<T> {
   success: boolean;
   code: number;
+  message: string;
   data: T;
+  timestamp: string;
+  path: string;
+  traceId?: string;
+}
+
+/** appendMessage 返回的业务 payload。 */
+interface AppendMessagePayload {
+  messageId: string;
+  queued: boolean;
 }
 
 /**
@@ -14,6 +26,8 @@ interface SuccessEnvelope<T> {
  * server-agent 全局 ResponseInterceptor 把成功响应包成
  * `{ success, code, data, ... }`。这里识别该 envelope 并取出 `data`；
  * 若响应未被包装（如 @SkipResponseEnvelope 路由或测试环境）则原样返回。
+ *
+ * 注：rest/model-config.ts 暂未做同样解包（已知技术债），新增 REST 封装应参照本文件。
  */
 function unwrap<T>(body: T | SuccessEnvelope<T>): T {
   if (
@@ -39,12 +53,10 @@ export async function createSession(content: string): Promise<string> {
 export async function appendMessage(
   sessionId: string,
   content: string,
-): Promise<{ messageId: string; queued: boolean }> {
-  type Payload = { messageId: string; queued: boolean };
-  const { data } = await apiClient.post<SuccessEnvelope<Payload> | Payload>(
-    `/api/sessions/${sessionId}/messages`,
-    { content },
-  );
+): Promise<AppendMessagePayload> {
+  const { data } = await apiClient.post<
+    SuccessEnvelope<AppendMessagePayload> | AppendMessagePayload
+  >(`/api/sessions/${sessionId}/messages`, { content });
   return unwrap(data);
 }
 

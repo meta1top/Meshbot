@@ -1,3 +1,5 @@
+"use client";
+
 import { SESSION_WS_NAMESPACE } from "@meshbot/types-agent";
 import { getAccessToken, getBrowserApiBaseUrl } from "@meshbot/web-common";
 import { io, type Socket } from "socket.io-client";
