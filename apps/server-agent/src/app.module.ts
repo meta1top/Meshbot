@@ -28,6 +28,8 @@ import { ModelConfigController } from "./controllers/model-config.controller";
 import { SettingController } from "./controllers/setting.controller";
 import { SetupController } from "./controllers/setup.controller";
 import { EnvSchema } from "./env.schema";
+import { PendingMessage } from "./entities/pending-message.entity";
+import { Session } from "./entities/session.entity";
 import { ModelConfig } from "./entities/model-config.entity";
 import { Setting } from "./entities/setting.entity";
 import { User } from "./entities/user.entity";
@@ -65,7 +67,7 @@ const meshbotDir = resolveMeshbotDir();
     TypeOrmModule.forRoot({
       type: "better-sqlite3",
       database: path.join(meshbotDir, "agent.db"),
-      entities: [ModelConfig, Setting, User],
+      entities: [ModelConfig, Setting, User, Session, PendingMessage],
       migrations: [path.join(__dirname, "migrations", "*.{js,ts}")],
       synchronize: false,
       migrationsRun: true,
