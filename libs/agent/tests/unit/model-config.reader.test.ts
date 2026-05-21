@@ -40,4 +40,58 @@ describe("readActiveModelConfig", () => {
       baseUrl: "https://x",
     });
   });
+
+  it("disabled 行（enabled=0）不返回", () => {
+    const db = new Database(dbPath);
+    db.prepare(
+      `INSERT INTO model_configs (id, provider_type, name, model, api_key, base_url, enabled, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      "1",
+      "openai",
+      "禁用",
+      "gpt-4o",
+      "sk-test",
+      "",
+      0,
+      "2026-01-01 00:00:00",
+      "2026-01-01 00:00:00",
+    );
+    db.close();
+    expect(readActiveModelConfig(dbPath)).toBeNull();
+  });
+
+  it("ORDER BY created_at ASC：返回最早创建的启用行", () => {
+    const db = new Database(dbPath);
+    const stmt = db.prepare(
+      `INSERT INTO model_configs (id, provider_type, name, model, api_key, base_url, enabled, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?)`,
+    );
+    // 先插入较晚的行，确保若缺少 ORDER BY 则会返回错误的结果
+    stmt.run(
+      "2",
+      "openai",
+      "较晚",
+      "gpt-4-turbo",
+      "sk-b",
+      "",
+      1,
+      "2026-02-01 00:00:00",
+      "2026-02-01 00:00:00",
+    );
+    stmt.run(
+      "1",
+      "openai",
+      "较早",
+      "gpt-4o",
+      "sk-a",
+      "",
+      1,
+      "2026-01-01 00:00:00",
+      "2026-01-01 00:00:00",
+    );
+    db.close();
+    const result = readActiveModelConfig(dbPath);
+    expect(result?.model).toBe("gpt-4o");
+  });
 });
