@@ -11,6 +11,7 @@ import {
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { APP_GUARD } from "@nestjs/core";
+import { EventEmitterModule } from "@nestjs/event-emitter";
 import { TerminusModule } from "@nestjs/terminus";
 import { ThrottlerModule } from "@nestjs/throttler";
 import { TypeOrmModule } from "@nestjs/typeorm";
@@ -51,6 +52,7 @@ const meshbotDir = resolveMeshbotDir();
       validate: createEnvValidator(EnvSchema),
     }),
     CommonModule.forRoot(),
+    EventEmitterModule.forRoot(),
     I18nModule.forRoot({
       fallbackLanguage: "zh",
       loader: I18nJsonLoader,
