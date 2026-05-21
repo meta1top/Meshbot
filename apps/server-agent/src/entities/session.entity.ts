@@ -17,7 +17,7 @@ export class Session {
   title!: string;
 
   /** idle = 无 run 在跑；running = 有 run 在跑。 */
-  @Column({ default: "idle" })
+  @Column({ type: "varchar", default: "idle" })
   status!: SessionStatus;
 
   @CreateDateColumn({ name: "created_at" })

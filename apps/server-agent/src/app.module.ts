@@ -36,6 +36,7 @@ import { User } from "./entities/user.entity";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { ModelConfigService } from "./services/model-config.service";
 import { SettingService } from "./services/setting.service";
+import { SessionModule } from "./session.module";
 import { StaticModule } from "./static.module";
 import { resolveMeshbotDir } from "./utils/meshbot-dir";
 
@@ -93,6 +94,7 @@ const meshbotDir = resolveMeshbotDir();
     // Phase 5 Track C1：结构化健康检查
     TerminusModule,
     AgentModule,
+    SessionModule,
     AuthModule,
     StaticModule.forRoot(),
   ],

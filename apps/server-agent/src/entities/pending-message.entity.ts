@@ -20,7 +20,7 @@ export class PendingMessage {
   content!: string;
 
   /** pending = 排队中；processing = 已取出处理中；processed = 已完成。 */
-  @Column({ default: "pending" })
+  @Column({ type: "varchar", default: "pending" })
   status!: PendingMessageStatus;
 
   @CreateDateColumn({ name: "created_at" })

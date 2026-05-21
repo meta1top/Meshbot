@@ -23,12 +23,14 @@ const config: Config = {
     "^@meshbot/types-agent$": "<rootDir>/libs/types-agent/src",
     "^@meshbot/types-main$": "<rootDir>/libs/types-main/src",
     // 强制 framework 包从单一物理路径解析，避免多份实例（同 token 不同
-    // identity → Nest DI 解析失败）。`.npmrc` 启用 node-linker=hoisted 后
-    // 依赖统一提升到根 node_modules（天然单实例），故指向根目录；旧的
-    // apps/server-main/node_modules/* 在 hoisted 下是指向已失效 .pnpm
-    // 虚拟目录的悬空符号链接，jest 无法解析（套件加载失败）。
-    "^@nestjs/typeorm$": "<rootDir>/node_modules/@nestjs/typeorm",
-    "^@nestjs/typeorm/(.*)$": "<rootDir>/node_modules/@nestjs/typeorm/$1",
+    // identity → Nest DI 解析失败）。@nestjs/typeorm 在 pnpm hoisted 模式下
+    // 不会提升到根目录（只在各应用子 node_modules 内有符号链接），故直接
+    // 指向 .pnpm 虚拟目录里唯一的物理路径确保单实例。typeorm 已成功提升至
+    // 根 node_modules，保持原指向。
+    "^@nestjs/typeorm$":
+      "<rootDir>/node_modules/.pnpm/@nestjs+typeorm@11.0.1_@nestjs+common@11.1.19_class-transformer@0.5.1_class-validator@0_4636b8909bd773d658ae09b149b6fc41/node_modules/@nestjs/typeorm",
+    "^@nestjs/typeorm/(.*)$":
+      "<rootDir>/node_modules/.pnpm/@nestjs+typeorm@11.0.1_@nestjs+common@11.1.19_class-transformer@0.5.1_class-validator@0_4636b8909bd773d658ae09b149b6fc41/node_modules/@nestjs/typeorm/$1",
     "^typeorm$": "<rootDir>/node_modules/typeorm",
     "^typeorm/(.*)$": "<rootDir>/node_modules/typeorm/$1",
   },
