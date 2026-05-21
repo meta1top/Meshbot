@@ -9,3 +9,10 @@ export {
   useModelConfigs,
   useProviders,
 } from "./model-config";
+
+export {
+  appendMessage,
+  createSession,
+  fetchHistory,
+  fetchPending,
+} from "./session";
