@@ -11,3 +11,4 @@ export {
   registerSchema,
   type UserInfo,
 } from "./auth";
+export * from "./session";
