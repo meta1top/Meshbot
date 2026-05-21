@@ -1,3 +1,4 @@
+import type { SessionStatus } from "@meshbot/types-agent";
 import {
   Column,
   CreateDateColumn,
@@ -17,7 +18,7 @@ export class Session {
 
   /** idle = 无 run 在跑；running = 有 run 在跑。 */
   @Column({ default: "idle" })
-  status!: string;
+  status!: SessionStatus;
 
   @CreateDateColumn({ name: "created_at" })
   createdAt!: Date;

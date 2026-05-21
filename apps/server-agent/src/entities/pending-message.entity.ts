@@ -1,3 +1,4 @@
+import type { PendingMessageStatus } from "@meshbot/types-agent";
 import {
   Column,
   CreateDateColumn,
@@ -20,7 +21,7 @@ export class PendingMessage {
 
   /** pending = 排队中；processing = 已取出处理中；processed = 已完成。 */
   @Column({ default: "pending" })
-  status!: string;
+  status!: PendingMessageStatus;
 
   @CreateDateColumn({ name: "created_at" })
   createdAt!: Date;
