@@ -121,4 +121,46 @@ describe("RunnerService", () => {
     expect(snapshotDuringRun).not.toBeNull();
     expect(runner.getInflight("s1")).toBeNull();
   });
+
+  it("interrupt：中断 run 发 run.interrupted", async () => {
+    const sess = fakeSessionService();
+    const emitter = new EventEmitter2();
+    const events: string[] = [];
+    emitter.onAny((name) => events.push(String(name)));
+    sess.enqueue("s1", "hi");
+    const graph = {
+      async *streamMessage(_s: string, _i: string, signal?: AbortSignal) {
+        yield { messageId: "msg-1", delta: "部分" };
+        // 第二次产出前检查中断信号
+        if (signal?.aborted) {
+          throw Object.assign(new Error("aborted"), { name: "AbortError" });
+        }
+        yield { messageId: "msg-1", delta: "更多" };
+      },
+    };
+    const runner = new RunnerService(sess as never, graph as never, emitter);
+    emitter.on("run.chunk", () => runner.interrupt("s1"));
+    await runner.kickAndWait("s1");
+    expect(events).toContain("run.interrupted");
+    expect(events).not.toContain("run.error");
+  });
+
+  it("onModuleInit：把遗留 processing 消息退回 pending", async () => {
+    const sess = fakeSessionService();
+    let rolledBack = 0;
+    const sessWithRollback = {
+      ...sess,
+      async rollbackProcessingToPending() {
+        rolledBack = 3;
+        return 3;
+      },
+    };
+    const runner = new RunnerService(
+      sessWithRollback as never,
+      fakeGraphService() as never,
+      new EventEmitter2(),
+    );
+    await runner.onModuleInit();
+    expect(rolledBack).toBe(3);
+  });
 });

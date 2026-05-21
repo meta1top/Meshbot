@@ -29,6 +29,8 @@ export interface InflightView {
 export class RunnerService implements OnModuleInit {
   private readonly logger = new Logger(RunnerService.name);
   private readonly inflight = new Map<string, InflightRun>();
+  /** 消费循环入口哨兵：在第一个 await 之前同步设置，防止同一 tick 双 kick。 */
+  private readonly running = new Set<string>();
 
   constructor(
     private readonly sessions: SessionService,
@@ -38,15 +40,16 @@ export class RunnerService implements OnModuleInit {
 
   /** 启动时把遗留的 processing 消息退回 pending（重启 inflight 丢失后可重跑）。 */
   async onModuleInit(): Promise<void> {
+    // 本地轨单进程单用户：重启时全量回滚遗留 processing（无需按 session 过滤）
     const n = await this.sessions.rollbackProcessingToPending();
     if (n > 0) {
       this.logger.log(`启动恢复：${n} 条遗留 processing 消息已退回 pending`);
     }
   }
 
-  /** 启动消费循环（fire-and-forget）。已有 inflight 则跳过（防重入）。 */
+  /** 启动消费循环（fire-and-forget）。已有消费循环则跳过（防重入）。 */
   kick(sessionId: string): void {
-    if (this.inflight.has(sessionId)) return;
+    if (this.running.has(sessionId)) return;
     void this.kickAndWait(sessionId).catch((err) => {
       this.logger.error(`run loop crashed for ${sessionId}`, err);
     });
@@ -72,27 +75,36 @@ export class RunnerService implements OnModuleInit {
    * 消费循环：取 pending → 跑一次 run → 检查是否还有 pending → 续跑。
    * 测试直接 await 本方法；生产经 kick 触发不 await。
    *
-   * runOnce 抛错时由内层 try/catch 吞掉以中断循环（避免毒消息无限重试），
+   * running 哨兵在第一个 await 之前同步设置，防止同 tick 内双 kick 竞争。
+   * runOnce 抛错时由内层 try/catch 记录日志后中断循环（避免毒消息无限重试），
    * 错误事件已在 runOnce 内发出，本方法对外正常 resolve。
    */
   async kickAndWait(sessionId: string): Promise<void> {
-    if (this.inflight.has(sessionId)) return;
+    if (this.running.has(sessionId)) return;
+    this.running.add(sessionId);
     try {
       while (true) {
         const batch = await this.sessions.claimPending(sessionId);
         if (batch.length === 0) break;
         try {
           await this.runOnce(sessionId, batch);
-        } catch {
+        } catch (err) {
+          this.logger.warn(`runOnce 失败，停止消费循环：${sessionId}`, err);
           break;
         }
       }
     } finally {
+      this.running.delete(sessionId);
       await this.sessions.setStatus(sessionId, "idle");
     }
   }
 
-  /** 跑一次 run：把一批消息拼成一次输入，流式产出并发事件。 */
+  /**
+   * 跑一次 run —— 把一批消息拼成一次输入流式产出；逐 chunk 发 runChunk；
+   * 完成发 runDone 并 markProcessed；被中断发 runInterrupted；
+   * 其他错误回滚消息为 pending、发 runError 并向上抛
+   * （由 kickAndWait 捕获以中止消费循环，避免毒消息无限重试）。
+   */
   private async runOnce(
     sessionId: string,
     batch: { id: string; content: string }[],
