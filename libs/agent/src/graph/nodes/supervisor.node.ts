@@ -19,6 +19,9 @@ export function createSupervisorNode(modelProvider: ModelProvider) {
     state: SupervisorState,
   ): Promise<Partial<SupervisorState>> {
     const model = await modelProvider();
+    if (!model) {
+      throw new Error("supervisor 节点未拿到可用 LLM：modelProvider 返回空");
+    }
     const reply = await model.invoke(state.messages);
     return { messages: [reply] };
   };
