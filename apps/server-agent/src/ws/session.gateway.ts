@@ -47,7 +47,13 @@ export class SessionGateway extends BaseWebSocketGateway {
     return this.jwt.verify(token);
   }
 
-  /** 订阅会话：join 房间 + 回推 inflight 快照（若有）。 */
+  /**
+   * 订阅会话：join 房间 + 回推 inflight 快照（若有）。
+   *
+   * 快照通过 run.chunk 事件回推，其 delta 字段为「全量已累加内容」而非增量
+   * —— 复用前端的 chunk 累加逻辑。客户端在订阅后应以此初始化 buffer，
+   * 再接收后续真正的增量 chunk。
+   */
   @UseGuards(WsAuthGuard)
   @SubscribeMessage(SESSION_WS_EVENTS.subscribe)
   handleSubscribe(
@@ -65,7 +71,7 @@ export class SessionGateway extends BaseWebSocketGateway {
     }
   }
 
-  /** 中断会话当前 run。 */
+  /** 中断会话当前 run（内存操作，无需 socket 引用）。 */
   @UseGuards(WsAuthGuard)
   @SubscribeMessage(SESSION_WS_EVENTS.interrupt)
   handleInterrupt(@MessageBody() body: SessionTopic): void {
