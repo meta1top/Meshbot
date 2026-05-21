@@ -25,6 +25,7 @@ function SessionView() {
   const [messages, setMessages] = useState<TimelineMessage[]>([]);
   const [running, setRunning] = useState(false);
   const messagesRef = useRef<TimelineMessage[]>([]);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   /** 单一写入口：同步更新 ref 与 state。 */
   const apply = useCallback(
@@ -75,13 +76,15 @@ function SessionView() {
           content: m.content,
         }));
         if (history.inflight) {
-          initial.push({
-            id: history.inflight.messageId ?? "inflight",
-            role: "assistant",
-            content: history.inflight.content,
-            streaming: history.inflight.status === "streaming",
-          });
           setRunning(history.inflight.status === "streaming");
+          if (history.inflight.messageId) {
+            initial.push({
+              id: history.inflight.messageId,
+              role: "assistant",
+              content: history.inflight.content,
+              streaming: history.inflight.status === "streaming",
+            });
+          }
         }
         for (const p of pending.pending) {
           initial.push({
@@ -91,23 +94,25 @@ function SessionView() {
             pending: true,
           });
         }
-        messagesRef.current = initial;
-        setMessages(initial);
+        // 合并：历史快照打底，但保留 socket 已先到的消息（不被覆盖）
+        apply((current) => {
+          const initialIds = new Set(initial.map((m) => m.id));
+          const socketArrived = current.filter((m) => !initialIds.has(m.id));
+          return [...initial, ...socketArrived];
+        });
       },
     );
 
     const socket = getSessionSocket();
     const subscribe = () =>
       socket.emit(SESSION_WS_EVENTS.subscribe, { sessionId });
-    socket.on("connect", subscribe);
-    if (socket.connected) subscribe();
 
-    socket.on(SESSION_WS_EVENTS.runChunk, (e: RunChunkEvent) => {
+    const onChunk = (e: RunChunkEvent) => {
       if (e.sessionId !== sessionId) return;
       setRunning(true);
       upsertChunk(e.messageId, e.delta, true);
-    });
-    socket.on(SESSION_WS_EVENTS.runDone, (e: RunDoneEvent) => {
+    };
+    const onDone = (e: RunDoneEvent) => {
       if (e.sessionId !== sessionId) return;
       setRunning(false);
       apply((prev) =>
@@ -117,8 +122,8 @@ function SessionView() {
             : m,
         ),
       );
-    });
-    socket.on(SESSION_WS_EVENTS.runInterrupted, (e: RunInterruptedEvent) => {
+    };
+    const onInterrupted = (e: RunInterruptedEvent) => {
       if (e.sessionId !== sessionId) return;
       setRunning(false);
       apply((prev) =>
@@ -126,30 +131,43 @@ function SessionView() {
           m.id === e.messageId ? { ...m, streaming: false } : m,
         ),
       );
-    });
-    socket.on(SESSION_WS_EVENTS.runError, (e: RunErrorEvent) => {
+    };
+    const onError = (e: RunErrorEvent) => {
       if (e.sessionId !== sessionId) return;
       setRunning(false);
       apply((prev) => [
         ...prev,
         {
-          id: `err-${Date.now()}`,
+          id: `err-${crypto.randomUUID()}`,
           role: "assistant",
           content: `出错：${e.error}`,
         },
       ]);
-    });
+    };
+
+    socket.on("connect", subscribe);
+    if (socket.connected) subscribe();
+    socket.on(SESSION_WS_EVENTS.runChunk, onChunk);
+    socket.on(SESSION_WS_EVENTS.runDone, onDone);
+    socket.on(SESSION_WS_EVENTS.runInterrupted, onInterrupted);
+    socket.on(SESSION_WS_EVENTS.runError, onError);
 
     return () => {
       cancelled = true;
       socket.off("connect", subscribe);
-      socket.off(SESSION_WS_EVENTS.runChunk);
-      socket.off(SESSION_WS_EVENTS.runDone);
-      socket.off(SESSION_WS_EVENTS.runInterrupted);
-      socket.off(SESSION_WS_EVENTS.runError);
+      socket.off(SESSION_WS_EVENTS.runChunk, onChunk);
+      socket.off(SESSION_WS_EVENTS.runDone, onDone);
+      socket.off(SESSION_WS_EVENTS.runInterrupted, onInterrupted);
+      socket.off(SESSION_WS_EVENTS.runError, onError);
       disconnectSessionSocket();
     };
   }, [sessionId, router, apply, upsertChunk]);
+
+  /** 新消息或流式增量到达时，平滑滚动到底部。 */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: messages 仅作触发依赖，effect 体不直接读取
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   /** 会话页继续发送：立即插 pending 气泡，调追加接口。 */
   const handleSend = useCallback(
@@ -179,6 +197,7 @@ function SessionView() {
     <AppShellLayout>
       <div className="flex w-full max-w-[620px] flex-1 flex-col">
         <MessageList messages={messages} />
+        <div ref={bottomRef} />
       </div>
       <div className="sticky bottom-4 mt-auto bg-background pt-4">
         <ChatInput
