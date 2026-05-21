@@ -70,7 +70,8 @@ export class GraphService {
    *
    * 仅生成 UUID；system prompt 在每次 streamMessage 时按需前置，
    * 不在此处写入 checkpointer（checkpointer.put 直写 API 易出错）。
-   * config 暂未使用，保留入参便于后续接入 temperature / model。
+   * config 当前完全未使用（含 systemPrompt —— 系统提示统一由 PromptService 提供）；
+   * 保留入参便于后续接入 temperature / model。
    */
   async startSession(_config: AgentConfig): Promise<ThreadId> {
     const threadId = randomUUID();
@@ -83,6 +84,8 @@ export class GraphService {
    * 基于 LangGraph graph.stream(..., { streamMode: "messages" })：
    * 每个 chunk 带稳定 message.id，作为本条 assistant 消息的标识。
    * 透传 signal 支持中断。
+   *
+   * system prompt 仅在首轮注入（无历史时），避免在 checkpointer 状态里重复累加。
    */
   async *streamMessage(
     threadId: ThreadId,
@@ -91,8 +94,14 @@ export class GraphService {
   ): AsyncGenerator<StreamChunk> {
     this.promptService.reloadIfChanged();
     const systemPrompt = this.promptService.getPrompt("system");
+    const state = await this.graph.getState({
+      configurable: { thread_id: threadId },
+    });
+    const hasHistory =
+      Array.isArray((state.values as GraphState)?.messages) &&
+      (state.values as GraphState).messages.length > 0;
     const inputMessages: BaseMessage[] = [];
-    if (systemPrompt) {
+    if (systemPrompt && !hasHistory) {
       inputMessages.push(new SystemMessage(systemPrompt));
     }
     inputMessages.push(new HumanMessage(message));
@@ -105,11 +114,12 @@ export class GraphService {
       },
     );
     for await (const part of stream) {
+      // streamMode:"messages" 产出 [BaseMessage, metadata] 元组
       const msg = Array.isArray(part) ? part[0] : part;
       if (!(msg instanceof AIMessageChunk)) continue;
       const delta = typeof msg.content === "string" ? msg.content : "";
       if (!delta) continue;
-      yield { messageId: msg.id ?? threadId, delta };
+      yield { messageId: msg.id ?? randomUUID(), delta };
     }
   }
 

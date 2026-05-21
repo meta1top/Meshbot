@@ -17,11 +17,9 @@ describe("GraphService", () => {
     const configService = new MeshbotConfigService();
     (configService as unknown as Record<string, string>).meshbotDir = testDir;
     const promptService = new PromptService(testDir);
+    // fakeModel 用 invoke()；streamMode:"messages" 在 node 链结束时发一个 chunk（非 token 级），
+    // 单测只验证管道连通 + messageId 稳定，token 级粒度需真实流式模型的集成测试覆盖。
     const fakeModel = {
-      stream: async function* () {
-        yield new AIMessageChunk({ id: "fixed-msg-id", content: "你" });
-        yield new AIMessageChunk({ id: "fixed-msg-id", content: "好" });
-      },
       invoke: async () =>
         new AIMessageChunk({ id: "fixed-msg-id", content: "你好" }),
     };
@@ -48,6 +46,7 @@ describe("GraphService", () => {
     }
     expect(chunks.length).toBeGreaterThan(0);
     expect(chunks.every((c) => c.messageId === chunks[0].messageId)).toBe(true);
+    expect(chunks.map((c) => c.delta).join("")).toBe("你好");
   });
 
   it("returns history after streamMessage", async () => {
