@@ -15,9 +15,12 @@ import { fetchProfile, ProfileUnauthorizedError } from "@/rest/auth";
 export const profileQueryAtom = atomWithQuery<UserInfo>(() => ({
   queryKey: ["auth", "profile"],
   queryFn: fetchProfile,
-  retry: (_failureCount: number, error: Error) =>
-    !(error instanceof ProfileUnauthorizedError),
+  // profile 5 分钟内视为新鲜（与 QueryClient 全局默认一致，此处显式声明）
   staleTime: 5 * 60 * 1000,
+  // 401 不重试；其他错误按 QueryClient 全局 retry 次数兜底
+  retry: (_failureCount: number, error: Error) =>
+    !(error instanceof ProfileUnauthorizedError) &&
+    error.name !== "ProfileUnauthorizedError",
 }));
 
 /** 当前登录用户；未登录 / 加载中为 null。 */
