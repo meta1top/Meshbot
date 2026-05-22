@@ -1,108 +1,98 @@
 "use client";
 
-import { getAccessToken, getBrowserApiBaseUrl } from "@meshbot/web-common";
 import type { AuthStatus } from "@meshbot/types-agent";
-import { useQueryClient } from "@tanstack/react-query";
+import { getBrowserApiBaseUrl } from "@meshbot/web-common";
+import { useAtomValue } from "jotai";
 import { Loader2 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { authStatusQueryKey } from "@/rest/auth";
+import { profileQueryAtom } from "@/atoms/auth";
 
 const PUBLIC_ROUTES = ["/login", "/setup"];
-
-type AuthBootstrap =
-  | { phase: "loading" }
-  | {
-      phase: "done";
-      authStatus: AuthStatus | undefined;
-      fetchFailed: boolean;
-    };
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const queryClient = useQueryClient();
-  const [bootstrap, setBootstrap] = useState<AuthBootstrap>({
-    phase: "loading",
-  });
+  const profile = useAtomValue(profileQueryAtom);
   const [resolved, setResolved] = useState(false);
 
   useEffect(() => {
-    const base = getBrowserApiBaseUrl();
-    const url = `${base}/api/setup-status`;
-    const headers: Record<string, string> = { Accept: "application/json" };
-    const token = getAccessToken();
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
+    if (profile.isPending) {
+      return;
     }
 
     let cancelled = false;
-    void fetch(url, { headers })
-      .then(async (res) => {
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
-        }
-        return res.json() as Promise<AuthStatus>;
-      })
-      .then((authStatus) => {
+
+    if (profile.isSuccess && profile.data) {
+      if (PUBLIC_ROUTES.includes(pathname)) {
+        router.replace("/");
+        return;
+      }
+      setResolved(true);
+      return;
+    }
+
+    const errorName = (profile.error as { name?: string } | null)?.name;
+    const isUnauthorized = errorName === "ProfileUnauthorizedError";
+
+    if (!isUnauthorized) {
+      setResolved(true);
+      return;
+    }
+
+    void fetchSetupStatus()
+      .then((setup) => {
         if (cancelled) {
           return;
         }
-        queryClient.setQueryData(authStatusQueryKey, authStatus);
-        setBootstrap({ phase: "done", authStatus, fetchFailed: false });
+        if (setup.needsSetup) {
+          if (pathname !== "/setup") {
+            router.replace("/setup");
+            return;
+          }
+        } else if (pathname !== "/login") {
+          router.replace("/login");
+          return;
+        }
+        setResolved(true);
       })
       .catch(() => {
         if (cancelled) {
           return;
         }
-        queryClient.removeQueries({ queryKey: [...authStatusQueryKey] });
-        setBootstrap({
-          phase: "done",
-          authStatus: undefined,
-          fetchFailed: true,
-        });
+        setResolved(true);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [queryClient]);
+  }, [
+    profile.isPending,
+    profile.isSuccess,
+    profile.data,
+    profile.error,
+    pathname,
+    router,
+  ]);
 
-  useEffect(() => {
-    if (bootstrap.phase === "loading") {
-      return;
-    }
-
-    if (bootstrap.fetchFailed) {
-      setResolved(true);
-      return;
-    }
-
-    const { authStatus } = bootstrap;
-
-    if (authStatus?.needsSetup) {
-      if (pathname !== "/setup") {
-        router.replace("/setup");
-        return;
-      }
-    } else if (!getAccessToken()) {
-      if (pathname !== "/login") {
-        router.replace("/login");
-        return;
-      }
-    } else if (PUBLIC_ROUTES.includes(pathname)) {
-      router.replace("/");
-      return;
-    }
-
-    setResolved(true);
-  }, [bootstrap, pathname, router]);
-
-  if (bootstrap.phase === "loading" || !resolved) {
+  if (profile.isPending || !resolved) {
     return <SplashScreen />;
   }
 
   return <>{children}</>;
+}
+
+/** 拉 setup-status —— 仅在 profile 401 时用于分流。 */
+async function fetchSetupStatus(): Promise<AuthStatus> {
+  const base = getBrowserApiBaseUrl();
+  const res = await fetch(`${base}/api/setup-status`, {
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) {
+    throw new Error(`setup-status failed: HTTP ${res.status}`);
+  }
+  const body = (await res.json()) as { data?: AuthStatus } & AuthStatus;
+  return (body.data ?? body) as AuthStatus;
 }
 
 function SplashScreen() {
