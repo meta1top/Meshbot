@@ -68,8 +68,8 @@ export class AuthService {
   async getProfile(userId: string): Promise<{ id: string; username: string }> {
     const user = await this.validateUser(userId);
     if (!user) {
-      // 防御性分支：JWT 有效但用户已被删，复用登录失败码
-      throw new AppError(AgentErrorCode.AUTH_INVALID_CREDENTIALS);
+      // 防御性分支：JWT 有效但用户已被删，返回 401 让前端判定未登录
+      throw new AppError(AgentErrorCode.AUTH_UNAUTHORIZED);
     }
     return { id: user.id, username: user.username };
   }

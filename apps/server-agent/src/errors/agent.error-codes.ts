@@ -16,4 +16,9 @@ export const AgentErrorCode = defineErrorCode({
     code: 3002,
     message: "auth.invalidCredentials",
   },
+  AUTH_UNAUTHORIZED: {
+    code: 3003,
+    message: "auth.unauthorized",
+    httpStatus: 401,
+  },
 });

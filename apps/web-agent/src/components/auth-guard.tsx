@@ -9,8 +9,6 @@ import { useEffect, useState } from "react";
 import { profileQueryAtom } from "@/atoms/auth";
 import { ProfileUnauthorizedError } from "@/rest/auth";
 
-const PUBLIC_ROUTES = ["/login", "/setup"];
-
 /** 启动鉴权守卫：profile 优先判定，401 时拉 setup-status 分流。 */
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -27,7 +25,9 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     if (profile.isSuccess && profile.data) {
-      if (PUBLIC_ROUTES.includes(pathname)) {
+      // 已登录用户停留在 /login 无意义 → 回主页；但 /setup 是多步向导，
+      // 注册后仍需停留配置模型，由向导自己控制离开
+      if (pathname === "/login") {
         setResolved(false);
         router.replace("/");
         return;

@@ -1,12 +1,15 @@
 import "reflect-metadata";
-import { TxTypeOrmModule } from "@meshbot/common";
+import path from "node:path";
+import { ErrorsFilter, TxTypeOrmModule } from "@meshbot/common";
 import { type INestApplication } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 import { JwtModule } from "@nestjs/jwt";
 import { PassportModule } from "@nestjs/passport";
 import { Test } from "@nestjs/testing";
-import { TypeOrmModule } from "@nestjs/typeorm";
+import { getRepositoryToken, TypeOrmModule } from "@nestjs/typeorm";
+import { I18nJsonLoader, I18nModule, I18nService } from "nestjs-i18n";
 import request from "supertest";
+import type { Repository } from "typeorm";
 import { AuthController } from "../../src/controllers/auth.controller";
 import { User } from "../../src/entities/user.entity";
 import { JwtAuthGuard } from "../../src/guards/jwt-auth.guard";
@@ -32,6 +35,13 @@ describe("Auth profile e2e", () => {
           secret: JWT_SECRET,
           signOptions: { expiresIn: "7d" },
         }),
+        I18nModule.forRoot({
+          fallbackLanguage: "zh",
+          loader: I18nJsonLoader,
+          loaderOptions: {
+            path: path.join(__dirname, "../../i18n"),
+          },
+        }),
       ],
       controllers: [AuthController],
       providers: [
@@ -41,6 +51,8 @@ describe("Auth profile e2e", () => {
       ],
     }).compile();
     app = moduleRef.createNestApplication();
+    // 对齐 main.ts：ErrorsFilter 把 AppError 映射成 errorCode.httpStatus
+    app.useGlobalFilters(new ErrorsFilter(app.get(I18nService)));
     await app.init();
 
     const reg = await request(app.getHttpServer())
@@ -70,6 +82,17 @@ describe("Auth profile e2e", () => {
     await request(app.getHttpServer())
       .get("/api/auth/profile")
       .set("Authorization", "Bearer not-a-valid-jwt")
+      .expect(401);
+  });
+
+  it("GET /api/auth/profile —— JWT 有效但用户已删除返回 401", async () => {
+    // 仅允许一个用户注册，复用 beforeAll 的 alice token，删库后再请求
+    const userRepo = app.get<Repository<User>>(getRepositoryToken(User));
+    await userRepo.clear();
+
+    await request(app.getHttpServer())
+      .get("/api/auth/profile")
+      .set("Authorization", `Bearer ${token}`)
       .expect(401);
   });
 });
