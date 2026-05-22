@@ -7,15 +7,18 @@ import { Loader2 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { profileQueryAtom } from "@/atoms/auth";
+import { ProfileUnauthorizedError } from "@/rest/auth";
 
 const PUBLIC_ROUTES = ["/login", "/setup"];
 
+/** 启动鉴权守卫：profile 优先判定，401 时拉 setup-status 分流。 */
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const profile = useAtomValue(profileQueryAtom);
   const [resolved, setResolved] = useState(false);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: isSuccess gates data
   useEffect(() => {
     if (profile.isPending) {
       return;
@@ -25,6 +28,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
     if (profile.isSuccess && profile.data) {
       if (PUBLIC_ROUTES.includes(pathname)) {
+        setResolved(false);
         router.replace("/");
         return;
       }
@@ -32,8 +36,9 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const errorName = (profile.error as { name?: string } | null)?.name;
-    const isUnauthorized = errorName === "ProfileUnauthorizedError";
+    const isUnauthorized =
+      profile.error instanceof ProfileUnauthorizedError ||
+      (profile.error as Error | null)?.name === "ProfileUnauthorizedError";
 
     if (!isUnauthorized) {
       setResolved(true);
@@ -47,10 +52,12 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
         }
         if (setup.needsSetup) {
           if (pathname !== "/setup") {
+            setResolved(false);
             router.replace("/setup");
             return;
           }
         } else if (pathname !== "/login") {
+          setResolved(false);
           router.replace("/login");
           return;
         }
@@ -66,14 +73,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [
-    profile.isPending,
-    profile.isSuccess,
-    profile.data,
-    profile.error,
-    pathname,
-    router,
-  ]);
+  }, [profile.isPending, profile.isSuccess, profile.error, pathname, router]);
 
   if (profile.isPending || !resolved) {
     return <SplashScreen />;

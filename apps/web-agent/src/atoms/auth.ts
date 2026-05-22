@@ -3,6 +3,7 @@
 import type { UserInfo } from "@meshbot/types-agent";
 import { atom } from "jotai";
 import { atomWithQuery } from "jotai-tanstack-query";
+import { profileQueryKey } from "@/lib/profile-client";
 import { fetchProfile, ProfileUnauthorizedError } from "@/rest/auth";
 
 /**
@@ -13,7 +14,7 @@ import { fetchProfile, ProfileUnauthorizedError } from "@/rest/auth";
  * QueryObserverResult，暴露 data / isPending / isSuccess / error 等字段。
  */
 export const profileQueryAtom = atomWithQuery<UserInfo>(() => ({
-  queryKey: ["auth", "profile"],
+  queryKey: profileQueryKey,
   queryFn: fetchProfile,
   // profile 5 分钟内视为新鲜（与 QueryClient 全局默认一致，此处显式声明）
   staleTime: 5 * 60 * 1000,

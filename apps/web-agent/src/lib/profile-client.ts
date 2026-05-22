@@ -3,6 +3,9 @@
 import type { UserInfo } from "@meshbot/types-agent";
 import { getAccessToken, getBrowserApiBaseUrl } from "@meshbot/web-common";
 
+/** profile 查询的 queryKey —— atom 与 invalidate 共用。 */
+export const profileQueryKey = ["auth", "profile"] as const;
+
 /** profile 请求未授权（401）—— AuthGuard 据此走 setup-status 分流。 */
 export class ProfileUnauthorizedError extends Error {
   constructor() {

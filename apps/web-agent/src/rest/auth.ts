@@ -9,6 +9,7 @@ import type {
 import { apiClient, setAccessToken } from "@meshbot/web-common";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { profileQueryKey } from "@/lib/profile-client";
 
 export const authStatusQueryKey = ["auth", "status"] as const;
 
@@ -60,7 +61,7 @@ export function useLogin() {
   return useMutation({
     mutationFn: login,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["auth", "profile"] });
+      queryClient.invalidateQueries({ queryKey: profileQueryKey });
     },
   });
 }
@@ -70,7 +71,7 @@ export function useRegister() {
   return useMutation({
     mutationFn: register,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["auth", "profile"] });
+      queryClient.invalidateQueries({ queryKey: profileQueryKey });
     },
   });
 }
