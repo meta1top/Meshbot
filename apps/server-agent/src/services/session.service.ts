@@ -136,7 +136,10 @@ export class SessionService {
     );
   }
 
-  /** 把一批 processing 消息退回 pending（run 出错时调用）。 */
+  /**
+   * 把一批 processing 消息退回 pending。
+   * （当前无生产调用方，保留备用；run 出错改用 markFailed）
+   */
   async rollbackToPending(ids: string[]): Promise<void> {
     if (ids.length === 0) return;
     await this.pendingRepo.update({ id: In(ids) }, { status: "pending" });

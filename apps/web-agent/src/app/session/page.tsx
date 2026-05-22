@@ -165,11 +165,15 @@ function SessionView() {
     const onError = (e: RunErrorEvent) => {
       if (e.sessionId !== sessionId) return;
       setRunning(false);
-      // 不再追加错误气泡：把对应用户气泡标记 failed，由其上挂载重试按钮
-      if (!e.messageId) return;
+      // 不再追加错误气泡：把对应气泡标记 failed，由其上挂载重试按钮
+      // pendingIds 覆盖「流前出错」场景（messageId 为 null 时仍能标记用户气泡）
+      const failedIds = new Set<string>(e.pendingIds);
+      if (e.messageId) {
+        failedIds.add(e.messageId);
+      }
       apply((prev) =>
         prev.map((m) =>
-          m.id === e.messageId
+          failedIds.has(m.id)
             ? { ...m, failed: true, pending: false, streaming: false }
             : m,
         ),
@@ -218,7 +222,11 @@ function SessionView() {
         { id: tempId, role: "user", content: msg, pending: true },
       ]);
       try {
-        await appendMessage(sessionId, msg);
+        const { messageId } = await appendMessage(sessionId, msg);
+        // 用服务端真实 id 替换临时 id —— 与 checkpointer / pending 表对齐，避免重复气泡
+        apply((prev) =>
+          prev.map((m) => (m.id === tempId ? { ...m, id: messageId } : m)),
+        );
       } catch (err) {
         console.error("追加消息失败", err);
       }

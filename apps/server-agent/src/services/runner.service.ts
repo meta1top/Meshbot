@@ -191,6 +191,7 @@ export class RunnerService implements OnModuleInit {
         this.emitter.emit(SESSION_WS_EVENTS.runError, {
           sessionId,
           messageId: run.messageId,
+          pendingIds: ids,
           error: err instanceof Error ? err.message : String(err),
         });
         throw err;

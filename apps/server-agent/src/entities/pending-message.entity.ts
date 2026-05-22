@@ -19,7 +19,7 @@ export class PendingMessage {
   @Column({ type: "text" })
   content!: string;
 
-  /** pending = 排队中；processing = 已取出处理中；processed = 已完成。 */
+  /** pending=排队中；processing=处理中；processed=已完成；failed=处理失败可重试。 */
   @Column({ type: "varchar", default: "pending" })
   status!: PendingMessageStatus;
 

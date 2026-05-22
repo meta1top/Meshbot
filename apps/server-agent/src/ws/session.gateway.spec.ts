@@ -114,7 +114,12 @@ describe("SessionGateway", () => {
     (gw as unknown as { server: unknown }).server = {
       to: () => ({ emit: (...a: unknown[]) => toEmit.push(a) }),
     };
-    const payload = { sessionId: "s1", messageId: null, error: "boom" };
+    const payload = {
+      sessionId: "s1",
+      messageId: null,
+      pendingIds: ["p1"],
+      error: "boom",
+    };
     gw.onRunError(payload);
     expect(toEmit[0]).toEqual([SESSION_WS_EVENTS.runError, payload]);
   });

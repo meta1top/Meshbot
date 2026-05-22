@@ -91,6 +91,8 @@ export type RunInterruptedEvent = z.infer<typeof RunInterruptedEventSchema>;
 export const RunErrorEventSchema = z.object({
   sessionId: z.string(),
   messageId: z.string().nullable(),
+  /** 出错批次的用户 PendingMessage id —— 流前出错（messageId 为 null）时供前端定位失败气泡。 */
+  pendingIds: z.array(z.string()),
   error: z.string(),
 });
 export type RunErrorEvent = z.infer<typeof RunErrorEventSchema>;
