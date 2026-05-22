@@ -79,17 +79,16 @@ export class GraphService {
   }
 
   /**
-   * 向会话发送一条消息并逐 token 流式产出 assistant 回复。
+   * 向会话发送一批消息并逐 token 流式产出 assistant 回复。
    *
-   * 基于 LangGraph graph.stream(..., { streamMode: "messages" })：
-   * 每个 chunk 带稳定 message.id，作为本条 assistant 消息的标识。
-   * 透传 signal 支持中断。
-   *
+   * 每条入参构造一条带显式 id 的 HumanMessage（id = 调用方的 PendingMessage.id），
+   * 让 checkpointer 里的 user 消息与 pending 表可对齐去重。
    * system prompt 仅在首轮注入（无历史时），避免在 checkpointer 状态里重复累加。
+   * 透传 signal 支持中断。
    */
   async *streamMessage(
     threadId: ThreadId,
-    message: string,
+    inputs: { id: string; content: string }[],
     signal?: AbortSignal,
   ): AsyncGenerator<StreamChunk> {
     this.promptService.reloadIfChanged();
@@ -104,15 +103,43 @@ export class GraphService {
     if (systemPrompt && !hasHistory) {
       inputMessages.push(new SystemMessage(systemPrompt));
     }
-    inputMessages.push(new HumanMessage(message));
-    const stream = await this.graph.stream(
-      { messages: inputMessages },
-      {
-        configurable: { thread_id: threadId },
-        streamMode: "messages",
-        signal,
-      },
-    );
+    for (const input of inputs) {
+      inputMessages.push(
+        new HumanMessage({ content: input.content, id: input.id }),
+      );
+    }
+    yield* this.runGraphStream(threadId, { messages: inputMessages }, signal);
+  }
+
+  /**
+   * 不加新消息，从 checkpointer 现有状态恢复并流式产出 assistant 回复。
+   *
+   * 用于重试 —— failed 消息的 HumanMessage 已在会话里（最后一条），
+   * 重试只让 graph 基于现有状态重跑产出回复。
+   *
+   * 传 `{ messages: [] }` 而非 `null`：已完成的图没有 pending task，
+   * `stream(null)` 会原地返回不重跑；给一个空 messages 输入（concat reducer
+   * 对空数组无副作用，不新增 user 消息）才会触发 START → supervisor 重新跑一轮。
+   */
+  async *resumeStream(
+    threadId: ThreadId,
+    signal?: AbortSignal,
+  ): AsyncGenerator<StreamChunk> {
+    this.promptService.reloadIfChanged();
+    yield* this.runGraphStream(threadId, { messages: [] }, signal);
+  }
+
+  /** 执行 graph.stream 并把 AIMessageChunk 逐个 yield 成 StreamChunk。 */
+  private async *runGraphStream(
+    threadId: ThreadId,
+    input: { messages: BaseMessage[] } | null,
+    signal?: AbortSignal,
+  ): AsyncGenerator<StreamChunk> {
+    const stream = await this.graph.stream(input, {
+      configurable: { thread_id: threadId },
+      streamMode: "messages",
+      signal,
+    });
     for await (const part of stream) {
       // streamMode:"messages" 产出 [BaseMessage, metadata] 元组
       const msg = Array.isArray(part) ? part[0] : part;
