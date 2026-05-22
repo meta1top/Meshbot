@@ -22,6 +22,25 @@ export function getBrowserApiBaseUrl(): string {
   return resolveBaseURL();
 }
 
+/**
+ * 解包 server 端统一响应 envelope。
+ *
+ * server 全局 ResponseInterceptor 把成功响应包成
+ * `{ success, code, message, data, ... }`。识别该结构（同时含 success 与
+ * data 字段）则取内层 `data`；否则（@SkipResponseEnvelope 路由 / 裸响应）原样返回。
+ */
+export function unwrapEnvelope(body: unknown): unknown {
+  if (
+    body !== null &&
+    typeof body === "object" &&
+    "success" in body &&
+    "data" in body
+  ) {
+    return (body as { data: unknown }).data;
+  }
+  return body;
+}
+
 export function createApiClient(baseURL?: string): AxiosInstance {
   const client = axios.create({
     baseURL: baseURL ?? resolveBaseURL(),
@@ -40,7 +59,10 @@ export function createApiClient(baseURL?: string): AxiosInstance {
   });
 
   client.interceptors.response.use(
-    (response) => response,
+    (response) => {
+      response.data = unwrapEnvelope(response.data);
+      return response;
+    },
     (error) => {
       if (axios.isAxiosError(error) && error.response?.status === 401) {
         if (typeof window !== "undefined") {
