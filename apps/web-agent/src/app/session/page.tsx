@@ -8,7 +8,14 @@ import {
   SESSION_WS_EVENTS,
 } from "@meshbot/types-agent";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ChatInput } from "@/components/common/chat-input";
 import { AppShellLayout } from "@/components/layouts/app-shell-layout";
 import {
@@ -92,12 +99,16 @@ function SessionView() {
             });
           }
         }
-        // 去重分区：id 已在 history 的不另起气泡，failed 则给历史气泡打标
         for (const p of pending.pending) {
+          if (p.status === "processed") {
+            continue;
+          }
           if (historyIds.has(p.id)) {
             if (p.status === "failed") {
-              const hit = initial.find((m) => m.id === p.id);
-              if (hit) hit.failed = true;
+              const idx = initial.findIndex((m) => m.id === p.id);
+              if (idx !== -1) {
+                initial[idx] = { ...initial[idx], failed: true };
+              }
             }
             continue;
           }
@@ -124,11 +135,10 @@ function SessionView() {
     const onChunk = (e: RunChunkEvent) => {
       if (e.sessionId !== sessionId) return;
       setRunning(true);
-      // 重试成功后流式恢复：清掉历史用户气泡上的 failed 标记
       apply((prev) =>
-        prev.some((m) => m.failed)
-          ? prev.map((m) => (m.failed ? { ...m, failed: false } : m))
-          : prev,
+        prev.map((m) =>
+          m.id === e.messageId && m.failed ? { ...m, failed: false } : m,
+        ),
       );
       upsertChunk(e.messageId, e.delta, true);
     };
@@ -183,11 +193,20 @@ function SessionView() {
     };
   }, [sessionId, router, apply, upsertChunk]);
 
+  const timelineMessages = useMemo(
+    () => messages.filter((m) => !m.pending),
+    [messages],
+  );
+  const queuedMessages = useMemo(
+    () => messages.filter((m) => m.pending),
+    [messages],
+  );
+
   /** 新消息或流式增量到达时，平滑滚动到底部。 */
-  // biome-ignore lint/correctness/useExhaustiveDependencies: messages 仅作触发依赖，effect 体不直接读取
+  // biome-ignore lint/correctness/useExhaustiveDependencies: timelineMessages 仅作触发依赖，effect 体不直接读取
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [timelineMessages]);
 
   /** 会话页继续发送：立即插 pending 气泡，调追加接口。 */
   const handleSend = useCallback(
@@ -222,10 +241,6 @@ function SessionView() {
       console.error("重试失败", err);
     }
   }, [sessionId]);
-
-  // 分区渲染：pending 气泡进排队区，其余进主时间线
-  const queuedMessages = messages.filter((m) => m.pending);
-  const timelineMessages = messages.filter((m) => !m.pending);
 
   return (
     <AppShellLayout>
