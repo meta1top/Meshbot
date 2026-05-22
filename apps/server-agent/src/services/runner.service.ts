@@ -55,6 +55,14 @@ export class RunnerService implements OnModuleInit {
     });
   }
 
+  /** 启动重试消费（fire-and-forget）。重试 failed 消息。 */
+  kickRetry(sessionId: string): void {
+    if (this.running.has(sessionId)) return;
+    void this.kickRetryAndWait(sessionId).catch((err) => {
+      this.logger.error(`retry loop crashed for ${sessionId}`, err);
+    });
+  }
+
   /** 取某 session 当前 inflight 快照；无则 null。 */
   getInflight(sessionId: string): InflightView | null {
     const run = this.inflight.get(sessionId);
@@ -88,7 +96,7 @@ export class RunnerService implements OnModuleInit {
         const batch = await this.sessions.claimPending(sessionId);
         if (batch.length === 0) break;
         try {
-          await this.runOnce(sessionId, batch);
+          await this.runOnce(sessionId, batch, false);
         } catch (err) {
           this.logger.warn(`runOnce 失败，停止消费循环：${sessionId}`, err);
           break;
@@ -101,17 +109,47 @@ export class RunnerService implements OnModuleInit {
   }
 
   /**
-   * 跑一次 run —— 把一批消息拼成一次输入流式产出；逐 chunk 发 runChunk；
+   * 重试消费循环：取 failed 消息 → resume run（不写新 HumanMessage）→
+   * 检查是否还有 failed → 续跑。测试直接 await 本方法；生产经 kickRetry 触发不 await。
+   *
+   * 结构与 kickAndWait 一致：running 哨兵防双 kick，runOnce 抛错时记录日志后中断循环。
+   */
+  async kickRetryAndWait(sessionId: string): Promise<void> {
+    if (this.running.has(sessionId)) return;
+    this.running.add(sessionId);
+    await this.sessions.setStatus(sessionId, "running");
+    try {
+      while (true) {
+        const batch = await this.sessions.claimFailed(sessionId);
+        if (batch.length === 0) break;
+        try {
+          await this.runOnce(sessionId, batch, true);
+        } catch (err) {
+          this.logger.warn(`retry runOnce 失败：${sessionId}`, err);
+          break;
+        }
+      }
+    } finally {
+      this.running.delete(sessionId);
+      await this.sessions.setStatus(sessionId, "idle");
+    }
+  }
+
+  /**
+   * 跑一次 run —— 流式产出一批消息的应答；逐 chunk 发 runChunk；
    * 完成发 runDone 并 markProcessed；被中断发 runInterrupted；
-   * 其他错误回滚消息为 pending、发 runError 并向上抛
-   * （由 kickAndWait 捕获以中止消费循环，避免毒消息无限重试）。
+   * 其他错误把消息标 failed（HumanMessage 已在 checkpointer，不回滚 pending）、
+   * 发 runError 并向上抛（由消费循环捕获以中止，避免毒消息无限重试）。
+   *
+   * resume=false 走 streamMessage（按 batch 逐条写带 id 的 HumanMessage）；
+   * resume=true 走 resumeStream（从 checkpointer 现有状态重跑，不写新消息）。
    */
   private async runOnce(
     sessionId: string,
     batch: { id: string; content: string }[],
+    resume: boolean,
   ): Promise<void> {
     const ids = batch.map((m) => m.id);
-    const input = batch.map((m) => m.content).join("\n");
     const run: InflightRun = {
       messageId: null,
       content: "",
@@ -120,11 +158,14 @@ export class RunnerService implements OnModuleInit {
     };
     this.inflight.set(sessionId, run);
     try {
-      for await (const chunk of this.graph.streamMessage(
-        sessionId,
-        input,
-        run.abort.signal,
-      )) {
+      const stream = resume
+        ? this.graph.resumeStream(sessionId, run.abort.signal)
+        : this.graph.streamMessage(
+            sessionId,
+            batch.map((m) => ({ id: m.id, content: m.content })),
+            run.abort.signal,
+          );
+      for await (const chunk of stream) {
         run.messageId = chunk.messageId;
         run.content += chunk.delta;
         this.emitter.emit(SESSION_WS_EVENTS.runChunk, {
@@ -150,7 +191,7 @@ export class RunnerService implements OnModuleInit {
           messageId: run.messageId ?? "",
         });
       } else {
-        await this.sessions.rollbackToPending(ids);
+        await this.sessions.markFailed(ids);
         this.emitter.emit(SESSION_WS_EVENTS.runError, {
           sessionId,
           messageId: run.messageId,

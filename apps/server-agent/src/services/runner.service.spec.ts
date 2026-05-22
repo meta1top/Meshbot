@@ -21,6 +21,16 @@ function fakeSessionService() {
     async rollbackToPending(ids: string[]) {
       for (const m of store) if (ids.includes(m.id)) m.status = "pending";
     },
+    async markFailed(ids: string[]) {
+      for (const m of store) if (ids.includes(m.id)) m.status = "failed";
+    },
+    async claimFailed(sessionId: string) {
+      const rows = store.filter(
+        (m) => m.sessionId === sessionId && m.status === "failed",
+      );
+      for (const r of rows) r.status = "processing";
+      return rows;
+    },
     async setStatus() {},
     enqueue(sessionId: string, content: string) {
       store.push({
@@ -42,6 +52,11 @@ function fakeGraphService(opts?: { throwErr?: boolean }) {
       if (opts?.throwErr) throw new Error("llm boom");
       yield { messageId: "msg-1", delta: "你" };
       yield { messageId: "msg-1", delta: "好" };
+    },
+    async *resumeStream() {
+      if (opts?.throwErr) throw new Error("llm boom");
+      yield { messageId: "msg-r", delta: "重" };
+      yield { messageId: "msg-r", delta: "试" };
     },
   };
 }
@@ -108,7 +123,7 @@ describe("RunnerService", () => {
     expect(sess.store.every((m) => m.status === "processed")).toBe(true);
   });
 
-  it("出错时发 run.error 并把消息退回 pending", async () => {
+  it("出错时发 run.error 并把消息标 failed（不回滚 pending）", async () => {
     const sess = fakeSessionService();
     const emitter = new EventEmitter2();
     const errs: unknown[] = [];
@@ -121,7 +136,21 @@ describe("RunnerService", () => {
     );
     await runner.kickAndWait("s1");
     expect(errs).toHaveLength(1);
-    expect(sess.store[0].status).toBe("pending");
+    expect(sess.store[0].status).toBe("failed");
+  });
+
+  it("kickRetryAndWait：把 failed 消息重跑成 processed", async () => {
+    const sess = fakeSessionService();
+    const emitter = new EventEmitter2();
+    sess.enqueue("s1", "hi");
+    sess.store[0].status = "failed";
+    const runner = new RunnerService(
+      sess as never,
+      fakeGraphService() as never,
+      emitter,
+    );
+    await runner.kickRetryAndWait("s1");
+    expect(sess.store[0].status).toBe("processed");
   });
 
   it("getInflight：run 进行中可取到累加快照", async () => {
