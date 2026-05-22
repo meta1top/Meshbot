@@ -75,15 +75,33 @@ export class SessionService {
     return s;
   }
 
-  /** 列出会话下排队中 / 处理中的消息（pending + processing），按时间升序。 */
+  /** 列出会话下排队/处理/失败中的消息，按时间升序。 */
   listActivePending(sessionId: string): Promise<PendingMessage[]> {
     return this.pendingRepo.find({
       where: [
         { sessionId, status: "pending" },
         { sessionId, status: "processing" },
+        { sessionId, status: "failed" },
       ],
       order: { createdAt: "ASC" },
     });
+  }
+
+  /**
+   * 取会话全部 failed 消息，整批转 processing 后返回（用于重试）。
+   * 这些消息的 HumanMessage 已在 checkpointer，重试只重跑产出回复。
+   */
+  async claimFailed(sessionId: string): Promise<PendingMessage[]> {
+    const rows = await this.pendingRepo.find({
+      where: { sessionId, status: "failed" },
+      order: { createdAt: "ASC" },
+    });
+    if (rows.length === 0) return [];
+    await this.pendingRepo.update(
+      { id: In(rows.map((r) => r.id)) },
+      { status: "processing" },
+    );
+    return rows.map((r) => ({ ...r, status: "processing" as const }));
   }
 
   /**
@@ -101,6 +119,12 @@ export class SessionService {
       { status: "processing" },
     );
     return rows.map((r) => ({ ...r, status: "processing" as const }));
+  }
+
+  /** 把一批消息标记为 failed（run 出错时调用；HumanMessage 已在 checkpointer）。 */
+  async markFailed(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    await this.pendingRepo.update({ id: In(ids) }, { status: "failed" });
   }
 
   /** 把一批消息标记为 processed，写 processed_at。 */

@@ -107,4 +107,32 @@ describe("SessionService", () => {
     const active = await service.listActivePending(sessionId);
     expect(active.every((m) => m.status === "pending")).toBe(true);
   });
+
+  it("markFailed 把消息标 failed", async () => {
+    const { sessionId } = await service.createSession({ content: "m1" });
+    const claimed = await service.claimPending(sessionId);
+    await service.markFailed(claimed.map((m) => m.id));
+    const active = await service.listActivePending(sessionId);
+    expect(active).toHaveLength(1);
+    expect(active[0].status).toBe("failed");
+  });
+
+  it("listActivePending 包含 failed 状态消息", async () => {
+    const { sessionId } = await service.createSession({ content: "m1" });
+    const claimed = await service.claimPending(sessionId);
+    await service.markFailed(claimed.map((m) => m.id));
+    const active = await service.listActivePending(sessionId);
+    expect(active.some((m) => m.status === "failed")).toBe(true);
+  });
+
+  it("claimFailed 把 failed 消息批量转 processing 并返回", async () => {
+    const { sessionId } = await service.createSession({ content: "m1" });
+    const claimed = await service.claimPending(sessionId);
+    await service.markFailed(claimed.map((m) => m.id));
+    const reclaimed = await service.claimFailed(sessionId);
+    expect(reclaimed).toHaveLength(1);
+    expect(reclaimed[0].status).toBe("processing");
+    const active = await service.listActivePending(sessionId);
+    expect(active.every((m) => m.status === "processing")).toBe(true);
+  });
 });
