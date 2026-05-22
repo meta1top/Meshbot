@@ -1,3 +1,4 @@
+import "reflect-metadata";
 import { TxTypeOrmModule } from "@meshbot/common";
 import { type INestApplication } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
@@ -63,5 +64,12 @@ describe("Auth profile e2e", () => {
       .expect(200);
     expect(res.body.username).toBe("alice");
     expect(typeof res.body.id).toBe("string");
+  });
+
+  it("GET /api/auth/profile 无效 token 返回 401", async () => {
+    await request(app.getHttpServer())
+      .get("/api/auth/profile")
+      .set("Authorization", "Bearer not-a-valid-jwt")
+      .expect(401);
   });
 });

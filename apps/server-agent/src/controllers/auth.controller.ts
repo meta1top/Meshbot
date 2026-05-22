@@ -28,6 +28,7 @@ export class AuthController {
   /** 取当前登录用户 profile（受 JWT 保护，未登录返回 401）。 */
   @Get("profile")
   profile(@Req() req: { user?: { id: string; username: string } }) {
+    // JwtAuthGuard 保证此处已注入 user，空串分支不可达（仅满足类型）
     return this.authService.getProfile(req.user?.id ?? "");
   }
 }
