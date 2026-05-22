@@ -17,6 +17,8 @@
     "@meshbot/web-common": "workspace:*",
     "@tanstack/react-query": "^5.100.9",
     "axios": "^1.16.0",
+    "jotai": "^2.20.0",
+    "jotai-tanstack-query": "^0.11.0",
     "lucide-react": "^0.468",
     "next": "^16.2.4",
     "next-intl": "^4.11.0",
