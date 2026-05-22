@@ -85,4 +85,14 @@ describe("Session e2e", () => {
       .get("/api/sessions/nonexistent-id/pending")
       .expect(404);
   });
+
+  it("POST /api/sessions/:id/retry 无 failed 消息返回 retried:false", async () => {
+    const created = await request(app.getHttpServer())
+      .post("/api/sessions")
+      .send({ content: "retry 测试" });
+    const res = await request(app.getHttpServer())
+      .post(`/api/sessions/${created.body.sessionId}/retry`)
+      .expect(201);
+    expect(res.body.retried).toBe(false);
+  });
 });

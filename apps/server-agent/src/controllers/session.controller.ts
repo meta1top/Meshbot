@@ -49,6 +49,18 @@ export class SessionController {
     };
   }
 
+  /** 重试该会话所有失败消息：failed → processing → resume run。 */
+  @Post(":id/retry")
+  async retry(@Param("id") id: string): Promise<{ retried: boolean }> {
+    await this.sessions.findSessionOrFail(id);
+    const active = await this.sessions.listActivePending(id);
+    const hasFailed = active.some((m) => m.status === "failed");
+    if (hasFailed) {
+      this.runner.kickRetry(id);
+    }
+    return { retried: hasFailed };
+  }
+
   /** 取排队中 / 处理中的用户消息。 */
   @Get(":id/pending")
   async pending(@Param("id") id: string): Promise<PendingResponse> {
