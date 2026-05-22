@@ -1,12 +1,12 @@
 "use client";
 
-import { apiClient, setAccessToken } from "@meshbot/web-common";
 import type {
   AuthStatus,
   LoginInput,
   LoginResponse,
   RegisterInput,
 } from "@meshbot/types-agent";
+import { apiClient, setAccessToken } from "@meshbot/web-common";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
@@ -66,3 +66,5 @@ export function useRegister() {
     mutationFn: register,
   });
 }
+
+export { fetchProfile, ProfileUnauthorizedError } from "@/lib/profile-client";
