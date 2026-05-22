@@ -9,14 +9,17 @@ export interface TimelineMessage {
   content: string;
   pending?: boolean;
   streaming?: boolean;
+  failed?: boolean;
 }
 
 interface MessageListProps {
   messages: TimelineMessage[];
+  /** 失败消息「重试」按钮回调。 */
+  onRetry?: () => void;
 }
 
 /** 会话消息时间线。user 右对齐，assistant 左对齐。 */
-export function MessageList({ messages }: MessageListProps) {
+export function MessageList({ messages, onRetry }: MessageListProps) {
   return (
     <div className="flex flex-col gap-3">
       {messages
@@ -39,6 +42,18 @@ export function MessageList({ messages }: MessageListProps) {
             )}
             {m.pending && (
               <span className="ml-2 text-xs text-muted-foreground">排队中</span>
+            )}
+            {m.failed && (
+              <span className="ml-2 text-xs text-destructive">
+                失败
+                <button
+                  type="button"
+                  onClick={onRetry}
+                  className="ml-1 underline hover:text-destructive/80"
+                >
+                  重试
+                </button>
+              </span>
             )}
           </div>
         ))}

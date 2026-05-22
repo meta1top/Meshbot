@@ -49,3 +49,14 @@ export async function fetchPending(
   );
   return data;
 }
+
+/** 重试会话失败消息。 */
+export async function retrySession(
+  sessionId: string,
+): Promise<{ retried: boolean }> {
+  const { data } = await apiClient.post<{ retried: boolean }>(
+    `/api/sessions/${sessionId}/retry`,
+    {},
+  );
+  return data;
+}

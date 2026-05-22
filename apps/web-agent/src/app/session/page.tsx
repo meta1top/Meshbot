@@ -16,7 +16,12 @@ import {
   type TimelineMessage,
 } from "@/components/session/message-list";
 import { getSessionSocket } from "@/lib/socket";
-import { appendMessage, fetchHistory, fetchPending } from "@/rest/session";
+import {
+  appendMessage,
+  fetchHistory,
+  fetchPending,
+  retrySession,
+} from "@/rest/session";
 
 function SessionView() {
   const searchParams = useSearchParams();
@@ -75,6 +80,7 @@ function SessionView() {
           role: m.role,
           content: m.content,
         }));
+        const historyIds = new Set(history.messages.map((m) => m.id));
         if (history.inflight) {
           setRunning(history.inflight.status === "streaming");
           if (history.inflight.messageId) {
@@ -86,7 +92,15 @@ function SessionView() {
             });
           }
         }
+        // 去重分区：id 已在 history 的不另起气泡，failed 则给历史气泡打标
         for (const p of pending.pending) {
+          if (historyIds.has(p.id)) {
+            if (p.status === "failed") {
+              const hit = initial.find((m) => m.id === p.id);
+              if (hit) hit.failed = true;
+            }
+            continue;
+          }
           initial.push({
             id: p.id,
             role: "user",
@@ -110,6 +124,12 @@ function SessionView() {
     const onChunk = (e: RunChunkEvent) => {
       if (e.sessionId !== sessionId) return;
       setRunning(true);
+      // 重试成功后流式恢复：清掉历史用户气泡上的 failed 标记
+      apply((prev) =>
+        prev.some((m) => m.failed)
+          ? prev.map((m) => (m.failed ? { ...m, failed: false } : m))
+          : prev,
+      );
       upsertChunk(e.messageId, e.delta, true);
     };
     const onDone = (e: RunDoneEvent) => {
@@ -135,14 +155,15 @@ function SessionView() {
     const onError = (e: RunErrorEvent) => {
       if (e.sessionId !== sessionId) return;
       setRunning(false);
-      apply((prev) => [
-        ...prev,
-        {
-          id: `err-${crypto.randomUUID()}`,
-          role: "assistant",
-          content: `出错：${e.error}`,
-        },
-      ]);
+      // 不再追加错误气泡：把对应用户气泡标记 failed，由其上挂载重试按钮
+      if (!e.messageId) return;
+      apply((prev) =>
+        prev.map((m) =>
+          m.id === e.messageId
+            ? { ...m, failed: true, pending: false, streaming: false }
+            : m,
+        ),
+      );
     };
 
     socket.on("connect", subscribe);
@@ -192,13 +213,32 @@ function SessionView() {
     getSessionSocket().emit(SESSION_WS_EVENTS.interrupt, { sessionId });
   }, [sessionId]);
 
+  /** 失败消息「重试」：调 retry 接口，结果经 socket 事件回流。 */
+  const handleRetry = useCallback(async () => {
+    if (!sessionId) return;
+    try {
+      await retrySession(sessionId);
+    } catch (err) {
+      console.error("重试失败", err);
+    }
+  }, [sessionId]);
+
+  // 分区渲染：pending 气泡进排队区，其余进主时间线
+  const queuedMessages = messages.filter((m) => m.pending);
+  const timelineMessages = messages.filter((m) => !m.pending);
+
   return (
     <AppShellLayout>
       <div className="flex w-full max-w-[620px] flex-1 flex-col">
-        <MessageList messages={messages} />
+        <MessageList messages={timelineMessages} onRetry={handleRetry} />
         <div ref={bottomRef} />
       </div>
       <div className="sticky bottom-4 mt-auto bg-background pt-4">
+        {queuedMessages.length > 0 && (
+          <div className="mb-2">
+            <MessageList messages={queuedMessages} />
+          </div>
+        )}
         <ChatInput
           onSend={handleSend}
           onInterrupt={handleInterrupt}
