@@ -60,6 +60,19 @@ export class AuthService {
     return this.userRepo.findOneBy({ id: userId });
   }
 
+  /**
+   * 取当前用户 profile。userId 来自已验证的 JWT。
+   *
+   * 查库确认用户仍存在；不存在则抛未授权错误（JWT 有效但用户被删的防御分支）。
+   */
+  async getProfile(userId: string): Promise<{ id: string; username: string }> {
+    const user = await this.validateUser(userId);
+    if (!user) {
+      throw new AppError(AgentErrorCode.AUTH_INVALID_CREDENTIALS);
+    }
+    return { id: user.id, username: user.username };
+  }
+
   private signToken(user: User): { access_token: string } {
     const payload = { sub: user.id, username: user.username };
     return { access_token: this.jwtService.sign(payload) };
