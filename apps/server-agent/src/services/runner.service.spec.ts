@@ -142,6 +142,8 @@ describe("RunnerService", () => {
   it("kickRetryAndWait：把 failed 消息重跑成 processed", async () => {
     const sess = fakeSessionService();
     const emitter = new EventEmitter2();
+    const chunks: Array<{ messageId: string }> = [];
+    emitter.on("run.chunk", (p) => chunks.push(p as { messageId: string }));
     sess.enqueue("s1", "hi");
     sess.store[0].status = "failed";
     const runner = new RunnerService(
@@ -151,6 +153,7 @@ describe("RunnerService", () => {
     );
     await runner.kickRetryAndWait("s1");
     expect(sess.store[0].status).toBe("processed");
+    expect(chunks[0]?.messageId).toBe("msg-r");
   });
 
   it("getInflight：run 进行中可取到累加快照", async () => {

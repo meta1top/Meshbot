@@ -160,11 +160,7 @@ export class RunnerService implements OnModuleInit {
     try {
       const stream = resume
         ? this.graph.resumeStream(sessionId, run.abort.signal)
-        : this.graph.streamMessage(
-            sessionId,
-            batch.map((m) => ({ id: m.id, content: m.content })),
-            run.abort.signal,
-          );
+        : this.graph.streamMessage(sessionId, batch, run.abort.signal);
       for await (const chunk of stream) {
         run.messageId = chunk.messageId;
         run.content += chunk.delta;
