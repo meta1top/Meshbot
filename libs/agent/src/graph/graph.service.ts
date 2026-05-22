@@ -85,6 +85,8 @@ export class GraphService {
    * 让 checkpointer 里的 user 消息与 pending 表可对齐去重。
    * system prompt 仅在首轮注入（无历史时），避免在 checkpointer 状态里重复累加。
    * 透传 signal 支持中断。
+   *
+   * @param inputs 至少一条 —— 调用方保证非空批次。
    */
   async *streamMessage(
     threadId: ThreadId,
@@ -125,14 +127,13 @@ export class GraphService {
     threadId: ThreadId,
     signal?: AbortSignal,
   ): AsyncGenerator<StreamChunk> {
-    this.promptService.reloadIfChanged();
     yield* this.runGraphStream(threadId, { messages: [] }, signal);
   }
 
   /** 执行 graph.stream 并把 AIMessageChunk 逐个 yield 成 StreamChunk。 */
   private async *runGraphStream(
     threadId: ThreadId,
-    input: { messages: BaseMessage[] } | null,
+    input: { messages: BaseMessage[] },
     signal?: AbortSignal,
   ): AsyncGenerator<StreamChunk> {
     const stream = await this.graph.stream(input, {
