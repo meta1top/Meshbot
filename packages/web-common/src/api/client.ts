@@ -28,6 +28,12 @@ export function getBrowserApiBaseUrl(): string {
  * server 全局 ResponseInterceptor 把成功响应包成
  * `{ success, code, message, data, ... }`。识别该结构（同时含 success 与
  * data 字段）则取内层 `data`；否则（@SkipResponseEnvelope 路由 / 裸响应）原样返回。
+ *
+ * 约定：ResponseInterceptor 是唯一产生 `{success, data}` 包装的层；业务 DTO
+ * 不应同时含 success + data 字段，否则会被误解包。
+ *
+ * 返回 `unknown` —— 这是运行时转换，调用方经 `apiClient.get<T>()` 声明的
+ * 泛型类型不参与此处校验。
  */
 export function unwrapEnvelope(body: unknown): unknown {
   if (
@@ -36,6 +42,7 @@ export function unwrapEnvelope(body: unknown): unknown {
     "success" in body &&
     "data" in body
   ) {
+    // data 可能合法地为 null（void 返回的端点），原样返回
     return (body as { data: unknown }).data;
   }
   return body;
