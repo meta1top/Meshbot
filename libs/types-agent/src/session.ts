@@ -9,6 +9,7 @@ export const PendingMessageStatus = z.enum([
   "pending",
   "processing",
   "processed",
+  "failed",
 ]);
 export type PendingMessageStatus = z.infer<typeof PendingMessageStatus>;
 
@@ -97,6 +98,12 @@ export type RunErrorEvent = z.infer<typeof RunErrorEventSchema>;
 /** socket: 客户端 session.subscribe / session.interrupt 入参。 */
 export const SessionTopicSchema = z.object({ sessionId: z.string() });
 export type SessionTopic = z.infer<typeof SessionTopicSchema>;
+
+/** POST /api/sessions/:id/retry 出参。 */
+export const RetryResponseSchema = z.object({
+  retried: z.boolean(),
+});
+export type RetryResponse = z.infer<typeof RetryResponseSchema>;
 
 /** WS namespace 与事件名常量。 */
 export const SESSION_WS_NAMESPACE = "ws/session";

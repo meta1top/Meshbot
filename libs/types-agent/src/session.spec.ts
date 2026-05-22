@@ -1,6 +1,8 @@
 import { describe, expect, it } from "@jest/globals";
 import {
   CreateSessionSchema,
+  PendingMessageStatus,
+  RetryResponseSchema,
   RunChunkEventSchema,
   SessionStatus,
 } from "./session";
@@ -23,5 +25,20 @@ describe("session schemas", () => {
   it("RunChunkEventSchema 校验流式 chunk 载荷", () => {
     const payload = { sessionId: "s1", messageId: "m1", delta: "tok" };
     expect(RunChunkEventSchema.parse(payload)).toEqual(payload);
+  });
+
+  it("PendingMessageStatus 包含 failed", () => {
+    expect(PendingMessageStatus.options).toEqual([
+      "pending",
+      "processing",
+      "processed",
+      "failed",
+    ]);
+  });
+
+  it("RetryResponseSchema 校验 retried 标志", () => {
+    expect(RetryResponseSchema.parse({ retried: true })).toEqual({
+      retried: true,
+    });
   });
 });
