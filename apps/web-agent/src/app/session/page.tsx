@@ -22,6 +22,7 @@ import {
 } from "react";
 import {
   appendUsageAtom,
+  appendUsageByMessageAtom,
   resetUsageAtom,
   sessionTotalsAtom,
   setInitialUsageAtom,
@@ -58,11 +59,18 @@ function SessionView() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState("");
   const chatInputRef = useRef<ChatInputHandle>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const oldestMessageIdRef = useRef<string | null>(null);
+  const hasMoreHistoryRef = useRef(true);
+  const loadingMoreRef = useRef(false);
+  const [hasMoreHistory, setHasMoreHistory] = useState(true);
+  const topSentinelRef = useRef<HTMLDivElement>(null);
 
   const usageByMessage = useAtomValue(usageByMessageAtom);
   const sessionTotals = useAtomValue(sessionTotalsAtom);
   const setInitialUsage = useSetAtom(setInitialUsageAtom);
   const appendUsage = useSetAtom(appendUsageAtom);
+  const appendUsageByMessage = useSetAtom(appendUsageByMessageAtom);
   const resetUsage = useSetAtom(resetUsageAtom);
   const { data: modelConfigs } = useModelConfigs();
   const enabledModel = modelConfigs?.find((c) => c.enabled);
@@ -202,7 +210,18 @@ function SessionView() {
           const socketArrived = current.filter((m) => !initialIds.has(m.id));
           return [...initial, ...socketArrived];
         });
-        setInitialUsage(history.usage);
+        if (history.sessionTotals) {
+          setInitialUsage({
+            sessionTotals: history.sessionTotals,
+            byMessage: history.byMessage,
+          });
+        } else {
+          // 防御：首次必有 sessionTotals
+          appendUsageByMessage(history.byMessage);
+        }
+        oldestMessageIdRef.current = initial[0]?.id ?? null;
+        hasMoreHistoryRef.current = history.hasMore;
+        setHasMoreHistory(history.hasMore);
       },
     );
 
@@ -355,6 +374,7 @@ function SessionView() {
     resetUsage,
     setInitialUsage,
     appendUsage,
+    appendUsageByMessage,
   ]);
 
   const timelineMessages = useMemo(
@@ -482,9 +502,86 @@ function SessionView() {
     }
   }, [sessionId]);
 
+  /**
+   * 滚动到顶部触发：拉早于当前最旧消息的下一批 history。
+   * - 锚定视口：prepend 前后 scrollTop 自动补偿，使用户当前看的消息不动
+   * - 并发去重：loadingMoreRef 期间忽略重复触发
+   */
+  const loadMoreHistory = useCallback(async () => {
+    if (!sessionId) return;
+    if (!hasMoreHistoryRef.current) return;
+    if (loadingMoreRef.current) return;
+    const cursor = oldestMessageIdRef.current;
+    if (!cursor) return;
+    loadingMoreRef.current = true;
+    const scroller = scrollContainerRef.current;
+    const prevScrollHeight = scroller?.scrollHeight ?? 0;
+    const prevScrollTop = scroller?.scrollTop ?? 0;
+    try {
+      const res = await fetchHistory(sessionId, cursor);
+      apply((prev) => {
+        const newMessages: TimelineMessage[] = res.messages.map((m) => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          ...(m.reasoning
+            ? { reasoning: m.reasoning, reasoningDurationMs: 0 }
+            : {}),
+        }));
+        // 去重：socket 抢先到的或本地已有的不重复 prepend
+        const existingIds = new Set(prev.map((m) => m.id));
+        const fresh = newMessages.filter((m) => !existingIds.has(m.id));
+        return [...fresh, ...prev];
+      });
+      appendUsageByMessage(res.byMessage);
+      oldestMessageIdRef.current = res.messages[0]?.id ?? cursor;
+      hasMoreHistoryRef.current = res.hasMore;
+      setHasMoreHistory(res.hasMore);
+      // 锚定视口：等 DOM 完成 prepend 后补偿 scrollTop
+      requestAnimationFrame(() => {
+        if (!scroller) return;
+        const newScrollHeight = scroller.scrollHeight;
+        scroller.scrollTop =
+          prevScrollTop + (newScrollHeight - prevScrollHeight);
+      });
+    } catch (err) {
+      console.error("加载更早消息失败", err);
+    } finally {
+      loadingMoreRef.current = false;
+    }
+  }, [sessionId, apply, appendUsageByMessage]);
+
+  // 顶部哨兵触发上拉加载更早历史
+  useEffect(() => {
+    if (!hasMoreHistory) return;
+    const sentinel = topSentinelRef.current;
+    if (!sentinel) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          void loadMoreHistory();
+        }
+      },
+      { rootMargin: "100px" },
+    );
+    io.observe(sentinel);
+    return () => io.disconnect();
+  }, [loadMoreHistory, hasMoreHistory]);
+
   return (
-    <AppShellLayout>
+    <AppShellLayout scrollContainerRef={scrollContainerRef}>
       <div className="flex w-full flex-1 flex-col">
+        {hasMoreHistory && (
+          <div
+            ref={topSentinelRef}
+            className="flex justify-center py-2 text-xs text-muted-foreground/60"
+          />
+        )}
+        {!hasMoreHistory && timelineMessages.length > 0 && (
+          <div className="py-2 text-center text-xs text-muted-foreground/40">
+            会话开头
+          </div>
+        )}
         <MessageList
           messages={timelineMessages}
           onRetry={handleRetry}
