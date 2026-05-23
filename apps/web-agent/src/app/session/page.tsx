@@ -27,7 +27,10 @@ import {
   setInitialUsageAtom,
   usageByMessageAtom,
 } from "@/atoms/session-usage";
-import { ChatInput } from "@/components/common/chat-input";
+import {
+  ChatInput,
+  type ChatInputHandle,
+} from "@/components/common/chat-input";
 import { AppShellLayout } from "@/components/layouts/app-shell-layout";
 import {
   MessageList,
@@ -39,6 +42,7 @@ import { getSessionSocket } from "@/lib/socket";
 import { useModelConfigs } from "@/rest/model-config";
 import {
   appendMessage,
+  deletePendingMessage,
   fetchHistory,
   fetchPending,
   retrySession,
@@ -52,6 +56,8 @@ function SessionView() {
   const [running, setRunning] = useState(false);
   const messagesRef = useRef<TimelineMessage[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [draft, setDraft] = useState("");
+  const chatInputRef = useRef<ChatInputHandle>(null);
 
   const usageByMessage = useAtomValue(usageByMessageAtom);
   const sessionTotals = useAtomValue(sessionTotalsAtom);
@@ -400,6 +406,74 @@ function SessionView() {
     getSessionSocket().emit(SESSION_WS_EVENTS.interrupt, { sessionId });
   }, [sessionId]);
 
+  /**
+   * 删除一条 pending 消息。
+   * - 200：本地从 messages 移除
+   * - 404：消息已不存在，本地也移除（兜底）
+   * - 409：runner 已开始处理；不动本地，依赖 onHuman 自然推动状态收敛
+   * - 其他错误：alert 提示
+   */
+  const handleDeletePending = useCallback(
+    async (id: string) => {
+      if (!sessionId) return;
+      try {
+        await deletePendingMessage(sessionId, id);
+        apply((prev) => prev.filter((m) => m.id !== id));
+      } catch (err) {
+        const status =
+          err instanceof Error &&
+          "response" in err &&
+          typeof (err as { response?: { status?: number } }).response
+            ?.status === "number"
+            ? (err as { response: { status: number } }).response.status
+            : undefined;
+        if (status === 404) {
+          apply((prev) => prev.filter((m) => m.id !== id));
+        } else if (status === 409) {
+          window.alert("消息已开始处理，无法删除");
+        } else {
+          console.error("删除 pending 失败", err);
+          window.alert("网络错误，请重试");
+        }
+      }
+    },
+    [sessionId, apply],
+  );
+
+  /**
+   * 编辑 = 删 + 把内容回填输入框 + focus。
+   * 若输入框已有非空 draft，confirm 后才覆盖。
+   */
+  const handleEditPending = useCallback(
+    async (id: string) => {
+      if (!sessionId) return;
+      if (draft.trim() && !window.confirm("覆盖当前输入框内容？")) return;
+      try {
+        const { content } = await deletePendingMessage(sessionId, id);
+        apply((prev) => prev.filter((m) => m.id !== id));
+        setDraft(content);
+        chatInputRef.current?.focus();
+      } catch (err) {
+        const status =
+          err instanceof Error &&
+          "response" in err &&
+          typeof (err as { response?: { status?: number } }).response
+            ?.status === "number"
+            ? (err as { response: { status: number } }).response.status
+            : undefined;
+        if (status === 404) {
+          apply((prev) => prev.filter((m) => m.id !== id));
+        } else if (status === 409) {
+          window.alert("消息已开始处理，无法编辑");
+        } else {
+          console.error("编辑 pending 失败", err);
+          window.alert("网络错误，请重试");
+        }
+      }
+    },
+    [sessionId, draft, apply],
+  );
+
   /** 失败消息「重试」：调 retry 接口，结果经 socket 事件回流。 */
   const handleRetry = useCallback(async () => {
     if (!sessionId) return;
@@ -438,12 +512,15 @@ function SessionView() {
           <div className="mb-2">
             <PendingList
               messages={queuedMessages}
-              onDelete={() => console.warn("删除待处理消息：即将支持")}
-              onEdit={() => console.warn("编辑待处理消息：即将支持")}
+              onDelete={handleDeletePending}
+              onEdit={handleEditPending}
             />
           </div>
         )}
         <ChatInput
+          ref={chatInputRef}
+          value={draft}
+          onChange={setDraft}
           onSend={handleSend}
           onInterrupt={handleInterrupt}
           isLoading={running}
