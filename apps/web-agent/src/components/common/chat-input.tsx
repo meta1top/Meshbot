@@ -116,6 +116,10 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
 
     const handleKeyDown = useCallback(
       (e: React.KeyboardEvent<HTMLDivElement>) => {
+        // IME 组合期间（中文/日文/韩文输入法未确认）不拦截 Enter——让 IME
+        // 自己用回车 confirm 候选词。nativeEvent.isComposing / keyCode===229
+        // 任一为 true 都视为组合中。
+        if (e.nativeEvent.isComposing || e.keyCode === 229) return;
         if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault();
           handleSend();
