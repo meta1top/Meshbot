@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { In, Repository } from "typeorm";
 import { LlmCall } from "../entities/llm-call.entity";
 
 /** LlmCallService.record 入参 —— 单次 LLM 调用的完整观测数据。 */
@@ -73,5 +73,16 @@ export class LlmCallService {
         callCount: 0,
       },
     );
+  }
+
+  /**
+   * 按 messageId 批量查 LlmCall（用于历史分页本批的 byMessage 投影）。
+   * 空数组直接返 []，不打数据库。
+   */
+  async listByMessageIds(messageIds: string[]): Promise<LlmCall[]> {
+    if (messageIds.length === 0) return [];
+    return this.llmCallRepo.find({
+      where: { messageId: In(messageIds) },
+    });
   }
 }
