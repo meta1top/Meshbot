@@ -15,7 +15,7 @@
     "dev": "turbo run dev",
     "dev:web-agent": "pnpm --filter @meshbot/web-agent dev",
     "dev:web-main": "pnpm --filter @meshbot/web-main dev",
-    "dev:server-agent": "pnpm --filter @meshbot/server-agent dev",
+    "dev:server-agent": "turbo run dev --filter=@meshbot/server-agent...",
     "dev:server-main": "pnpm --filter @meshbot/server-main dev",
     "dev:desktop": "pnpm --filter @meshbot/desktop dev",
     "dev:cli-agent": "turbo run dev --filter=@meshbot/cli-agent",

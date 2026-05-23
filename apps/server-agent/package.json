@@ -12,7 +12,7 @@
   },
   "scripts": {
     "build": "nest build",
-    "dev": "nest start --watch",
+    "dev": "nest build && nodemon",
     "start": "node dist/main",
     "clean": "rm -rf dist",
     "typecheck": "tsc --project tsconfig.json --noEmit"
@@ -57,6 +57,7 @@
     "@types/better-sqlite3": "^7.6.13",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^24",
-    "@types/passport-jwt": "^4.0.1"
+    "@types/passport-jwt": "^4.0.1",
+    "nodemon": "^3.1.14"
   }
 }

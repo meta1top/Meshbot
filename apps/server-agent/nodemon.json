@@ -1,0 +1,13 @@
+{
+  "watch": [
+    "src",
+    "../../libs/agent/dist",
+    "../../libs/common/dist",
+    "../../libs/types-agent/dist",
+    "../../libs/types/dist"
+  ],
+  "ext": "ts,js,json",
+  "ignore": ["src/**/*.spec.ts", "**/*.test.ts"],
+  "exec": "nest build && node dist/main.js",
+  "delay": "500"
+}
