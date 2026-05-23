@@ -32,6 +32,16 @@ export const AppendMessageSchema = z.object({
 });
 export type AppendMessageInput = z.infer<typeof AppendMessageSchema>;
 
+/** 历史 ReAct 轨迹中的单次工具调用。 */
+export const HistoryToolCallSchema = z.object({
+  toolCallId: z.string(),
+  name: z.string(),
+  args: z.unknown(),
+  status: z.enum(["ok", "error"]),
+  result: z.string(),
+});
+export type HistoryToolCall = z.infer<typeof HistoryToolCallSchema>;
+
 /** 会话历史中的一条消息（来自 LangGraph checkpointer）。 */
 export const HistoryMessageSchema = z.object({
   id: z.string(),
@@ -39,6 +49,7 @@ export const HistoryMessageSchema = z.object({
   content: z.string(),
   /** 推理模型的思考过程（持久化在 checkpointer 的 additional_kwargs.reasoning_content）。 */
   reasoning: z.string().optional(),
+  toolCalls: z.array(HistoryToolCallSchema).optional(),
 });
 export type HistoryMessage = z.infer<typeof HistoryMessageSchema>;
 
@@ -192,6 +203,44 @@ export const RunUsageEventSchema = MessageUsageSchema.extend({
 });
 export type RunUsageEvent = z.infer<typeof RunUsageEventSchema>;
 
+/** socket: run.tool_call_start —— tool 即将开始执行。 */
+export const RunToolCallStartEventSchema = z.object({
+  sessionId: z.string(),
+  messageId: z.string(),
+  toolCallId: z.string(),
+  name: z.string(),
+  args: z.unknown(),
+});
+export type RunToolCallStartEvent = z.infer<typeof RunToolCallStartEventSchema>;
+
+/** socket: run.tool_call_progress —— tool 执行中的增量输出（如 bash stdout）。 */
+export const RunToolCallProgressEventSchema = z.object({
+  sessionId: z.string(),
+  toolCallId: z.string(),
+  delta: z.string(),
+});
+export type RunToolCallProgressEvent = z.infer<
+  typeof RunToolCallProgressEventSchema
+>;
+
+/**
+ * Tool 执行结束（成功/失败）。
+ *
+ * - `resultPreview`：前 200 字符摘要，前端显示。
+ * - `content`：完整 result 字符串，runner 落库用；**gateway 转发前剥掉**，
+ *   不上 socket 线。
+ */
+export const RunToolCallEndEventSchema = z.object({
+  sessionId: z.string(),
+  messageId: z.string(),
+  toolCallId: z.string(),
+  name: z.string(),
+  ok: z.boolean(),
+  resultPreview: z.string(),
+  content: z.string(),
+});
+export type RunToolCallEndEvent = z.infer<typeof RunToolCallEndEventSchema>;
+
 /**
  * DELETE /api/sessions/:sessionId/pending-messages/:messageId 响应载荷。
  * 返回 content 让前端在「编辑」场景下回填输入框。
@@ -224,4 +273,7 @@ export const SESSION_WS_EVENTS = {
   runInterrupted: "run.interrupted",
   runError: "run.error",
   runUsage: "run.usage",
+  runToolCallStart: "run.tool_call_start",
+  runToolCallProgress: "run.tool_call_progress",
+  runToolCallEnd: "run.tool_call_end",
 } as const;
