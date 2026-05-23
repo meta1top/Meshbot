@@ -3,7 +3,19 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".next/**"]
+      "outputs": ["dist/**", ".next/**", "out/**", "tsconfig.tsbuildinfo"]
+    },
+    "@meshbot/server-agent#build": {
+      "dependsOn": ["^build", "@meshbot/web-agent#build"],
+      "outputs": ["dist/**", "tsconfig.tsbuildinfo"]
+    },
+    "@meshbot/desktop#build": {
+      "dependsOn": [
+        "^build",
+        "@meshbot/web-agent#build",
+        "@meshbot/server-agent#build"
+      ],
+      "outputs": ["dist/**", "tsconfig.tsbuildinfo"]
     },
     "dev": {
       "cache": false,
