@@ -11,6 +11,7 @@ import {
   SESSION_WS_EVENTS,
 } from "@meshbot/types-agent";
 import { useAtomValue, useSetAtom } from "jotai";
+import { ArrowDown } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Suspense,
@@ -65,6 +66,13 @@ function SessionView() {
   const loadingMoreRef = useRef(false);
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const topSentinelRef = useRef<HTMLDivElement>(null);
+  /**
+   * 是否吸附到底部：决定流式输出时是否自动滚到底。
+   * - 初始 true（默认 follow）
+   * - 用户主动滚离底部 → bottomRef IO 报 not intersecting → false
+   * - 用户滚回底部（或点「滚到底」按钮）→ bottomRef IO 报 intersecting → true
+   */
+  const [stickToBottom, setStickToBottom] = useState(true);
 
   const usageByMessage = useAtomValue(usageByMessageAtom);
   const sessionTotals = useAtomValue(sessionTotalsAtom);
@@ -386,11 +394,35 @@ function SessionView() {
     [messages],
   );
 
-  /** 新消息或流式增量到达时，平滑滚动到底部。 */
+  /**
+   * 新消息或流式增量到达时，仅在 stickToBottom=true 时自动滚到底。
+   * 用户主动滚离底部时停止跟随；点右下角按钮可恢复。
+   */
   // biome-ignore lint/correctness/useExhaustiveDependencies: timelineMessages 仅作触发依赖，effect 体不直接读取
   useEffect(() => {
+    if (!stickToBottom) return;
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [timelineMessages]);
+  }, [timelineMessages, stickToBottom]);
+
+  /**
+   * 底部哨兵 IO：bottomRef 可见 = 用户在底部 → stickToBottom=true；
+   * 不可见 = 用户滚走了 → false。直接基于"哨兵在不在视口"判断，比 scroll
+   * 事件 + 阈值检测更稳（不受 smooth 动画期间的瞬时偏移干扰）。
+   */
+  useEffect(() => {
+    const sentinel = bottomRef.current;
+    const root = scrollContainerRef.current;
+    if (!sentinel || !root) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        const visible = entries[0]?.isIntersecting ?? false;
+        setStickToBottom(visible);
+      },
+      { root, threshold: 0 },
+    );
+    io.observe(sentinel);
+    return () => io.disconnect();
+  }, []);
 
   /**
    * 会话页发送：前端生成最终 messageId（UUID），乐观插入 user 气泡到 pending 区，
@@ -603,6 +635,20 @@ function SessionView() {
           aria-hidden
           className="pointer-events-none absolute inset-x-0 -bottom-4 h-4 bg-background"
         />
+        {/* 滚到底按钮：仅在用户离开底部时显示；点击恢复 stickToBottom + 立即平滑滚到底 */}
+        {!stickToBottom && (
+          <button
+            type="button"
+            aria-label="滚动到底部"
+            className="absolute right-2 -top-12 flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background text-foreground shadow-sm hover:bg-muted"
+            onClick={() => {
+              setStickToBottom(true);
+              bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+            }}
+          >
+            <ArrowDown className="h-4 w-4" />
+          </button>
+        )}
         {queuedMessages.length > 0 && (
           <div className="mb-2">
             <PendingList
