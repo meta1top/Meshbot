@@ -7,7 +7,9 @@
     "dev": "nest start --watch",
     "start": "node dist/main",
     "clean": "rm -rf dist",
-    "typecheck": "tsc --project tsconfig.json --noEmit"
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "migration": "tsx ../../scripts/typeorm-cli.ts src/data-source.cli.ts",
+    "migration:archive": "tsx ../../scripts/archive-migrations.ts ."
   },
   "dependencies": {
     "@meshbot/common": "workspace:*",
