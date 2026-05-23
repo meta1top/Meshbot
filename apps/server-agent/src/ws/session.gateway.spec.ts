@@ -35,7 +35,7 @@ describe("SessionGateway", () => {
     ]);
   });
 
-  it("subscribe：inflight messageId 为 null 时回推空字符串", () => {
+  it("subscribe：inflight messageId 为 null 时不回推（避免前端创建空 id 卡住气泡）", () => {
     const runner = {
       getInflight: () => ({
         messageId: null,
@@ -47,10 +47,7 @@ describe("SessionGateway", () => {
     const gw = new SessionGateway({} as never, runner as never);
     const sock = fakeSocket();
     gw.handleSubscribe({ sessionId: "s1" }, sock);
-    expect(sock.emitted[0]).toEqual([
-      SESSION_WS_EVENTS.runChunk,
-      { sessionId: "s1", messageId: "", delta: "部分内容" },
-    ]);
+    expect(sock.emitted).toHaveLength(0);
   });
 
   it("subscribe：无 inflight 不回推", () => {
