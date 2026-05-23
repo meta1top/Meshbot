@@ -1,8 +1,8 @@
 "use client";
 
+import { cn } from "@meshbot/design";
 import { clearAccessToken } from "@meshbot/web-common";
 import { useTheme } from "@meshbot/web-common/react";
-import { cn } from "@meshbot/design";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Clock,
@@ -24,9 +24,15 @@ import { LanguageToggle } from "@/components/language-toggle";
 interface AppShellLayoutProps {
   children: React.ReactNode;
   className?: string;
+  /** 暴露内部滚动容器 ref，供子页面读取/操作 scrollTop（如分页锚定）。 */
+  scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
 }
 
-export function AppShellLayout({ children, className }: AppShellLayoutProps) {
+export function AppShellLayout({
+  children,
+  className,
+  scrollContainerRef,
+}: AppShellLayoutProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { theme, toggleTheme } = useTheme();
@@ -166,6 +172,7 @@ export function AppShellLayout({ children, className }: AppShellLayoutProps) {
 
         <section className="relative flex min-w-0 flex-1 flex-col">
           <div
+            ref={scrollContainerRef}
             className={cn(
               "flex min-h-0 flex-1 flex-col overflow-y-auto",
               className,
