@@ -7,6 +7,9 @@ import {
   type RunHumanEvent,
   type RunInterruptedEvent,
   type RunReasoningChunkEvent,
+  type RunToolCallEndEvent,
+  type RunToolCallProgressEvent,
+  type RunToolCallStartEvent,
   type RunUsageEvent,
   SESSION_WS_EVENTS,
 } from "@meshbot/types-agent";
@@ -167,6 +170,18 @@ function SessionView() {
           // 不显示动态秒数（实际生成时长信息没存）。reasoningStartedAt 不设。
           ...(m.reasoning
             ? { reasoning: m.reasoning, reasoningDurationMs: 0 }
+            : {}),
+          // 持久化的 tool calls：转 ToolCallView；progress 留空（流式过程没存）
+          ...(m.toolCalls && m.toolCalls.length > 0
+            ? {
+                toolCalls: m.toolCalls.map((tc) => ({
+                  toolCallId: tc.toolCallId,
+                  name: tc.name,
+                  args: tc.args,
+                  status: tc.status,
+                  result: tc.result,
+                })),
+              }
             : {}),
         }));
         const historyIds = new Set(history.messages.map((m) => m.id));
@@ -351,6 +366,68 @@ function SessionView() {
       if (e.sessionId !== sessionId) return;
       appendUsage(e);
     };
+    const onToolStart = (e: RunToolCallStartEvent) => {
+      if (e.sessionId !== sessionId) return;
+      apply((prev) =>
+        prev.map((m) =>
+          m.id === e.messageId
+            ? {
+                ...m,
+                toolCalls: [
+                  ...(m.toolCalls ?? []),
+                  {
+                    toolCallId: e.toolCallId,
+                    name: e.name,
+                    args: e.args,
+                    status: "running" as const,
+                  },
+                ],
+              }
+            : m,
+        ),
+      );
+    };
+    const onToolProgress = (e: RunToolCallProgressEvent) => {
+      if (e.sessionId !== sessionId) return;
+      apply((prev) =>
+        prev.map((m) =>
+          m.toolCalls?.some((t) => t.toolCallId === e.toolCallId)
+            ? {
+                ...m,
+                toolCalls: m.toolCalls.map((t) =>
+                  t.toolCallId === e.toolCallId
+                    ? { ...t, progress: (t.progress ?? "") + e.delta }
+                    : t,
+                ),
+              }
+            : m,
+        ),
+      );
+    };
+    const onToolEnd = (
+      // gateway 已剥 content；前端只用 resultPreview
+      e: Omit<RunToolCallEndEvent, "content">,
+    ) => {
+      if (e.sessionId !== sessionId) return;
+      apply((prev) =>
+        prev.map((m) =>
+          m.toolCalls?.some((t) => t.toolCallId === e.toolCallId)
+            ? {
+                ...m,
+                toolCalls: m.toolCalls.map((t) =>
+                  t.toolCallId === e.toolCallId
+                    ? {
+                        ...t,
+                        status: e.ok ? ("ok" as const) : ("error" as const),
+                        result: e.resultPreview,
+                      }
+                    : t,
+                ),
+              }
+            : m,
+        ),
+      );
+    };
 
     socket.on("connect", subscribe);
     if (socket.connected) subscribe();
@@ -361,6 +438,9 @@ function SessionView() {
     socket.on(SESSION_WS_EVENTS.runInterrupted, onInterrupted);
     socket.on(SESSION_WS_EVENTS.runError, onError);
     socket.on(SESSION_WS_EVENTS.runUsage, onUsage);
+    socket.on(SESSION_WS_EVENTS.runToolCallStart, onToolStart);
+    socket.on(SESSION_WS_EVENTS.runToolCallProgress, onToolProgress);
+    socket.on(SESSION_WS_EVENTS.runToolCallEnd, onToolEnd);
 
     return () => {
       cancelled = true;
@@ -372,6 +452,9 @@ function SessionView() {
       socket.off(SESSION_WS_EVENTS.runInterrupted, onInterrupted);
       socket.off(SESSION_WS_EVENTS.runError, onError);
       socket.off(SESSION_WS_EVENTS.runUsage, onUsage);
+      socket.off(SESSION_WS_EVENTS.runToolCallStart, onToolStart);
+      socket.off(SESSION_WS_EVENTS.runToolCallProgress, onToolProgress);
+      socket.off(SESSION_WS_EVENTS.runToolCallEnd, onToolEnd);
     };
   }, [
     sessionId,
