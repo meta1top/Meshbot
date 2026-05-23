@@ -187,9 +187,33 @@ export class GraphService {
         durationMs: Date.now() - startedAt,
       };
     } else if (lastMessageId) {
-      // 流产生了 chunk 但供应商未上报 usage_metadata —— 观测缺一行记录
+      // 流产生了 chunk 但供应商未上报 usage_metadata —— 详细诊断日志，方便定位
+      // 是 LangChain 字段映射缺失，还是供应商 API 本身没返回 usage（如自定义代理）。
+      const acc = accumulated as
+        | (AIMessageChunk & {
+            response_metadata?: Record<string, unknown>;
+            additional_kwargs?: Record<string, unknown>;
+          })
+        | undefined;
       console.warn(
         `LLM provider ${this.modelMeta.providerType} (${this.modelMeta.model}) did not report usage_metadata for session thread=${threadId}`,
+      );
+      console.warn(
+        "  诊断信息——若 response_metadata / additional_kwargs 含 usage/tokenUsage 字段，说明 LangChain 集成包未把它映射到 usage_metadata（可在此兜底）；都缺则供应商 API 没回 usage：",
+        JSON.stringify(
+          {
+            usage_metadata: acc?.usage_metadata,
+            response_metadata: acc?.response_metadata,
+            additional_kwargs: acc?.additional_kwargs,
+            content_type: typeof acc?.content,
+            content_preview:
+              typeof acc?.content === "string"
+                ? acc.content.slice(0, 50)
+                : undefined,
+          },
+          null,
+          2,
+        ),
       );
     }
   }
