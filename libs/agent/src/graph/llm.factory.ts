@@ -22,21 +22,25 @@ const PROVIDER_MODEL_NAME: Record<string, string> = {
 };
 
 /**
- * 调试用 callback：把每次 LLM 调用的 prompt 与原始 LLMResult（含 llmOutput.tokenUsage
- * 等供应商原文）打到控制台，便于诊断 usage 缺失等问题。设环境变量
- * MESHBOT_LLM_DEBUG=0 可关闭。
+ * 调试用 callback：默认打**单行摘要**（model、prompt 末条预览、token 用量、finish_reason）。
+ * 出错时打详细错误。如需全量原始 LLMResult（诊断 usage 缺失等问题）设
+ * `MESHBOT_LLM_DEBUG=verbose`；设 `=0` 关闭。
  */
 class LlmDebugCallbackHandler extends BaseCallbackHandler {
   name = "LlmDebugCallback";
 
-  handleLLMStart(llm: Serialized, prompts: string[]): void {
-    const name = (llm as { name?: string }).name ?? "<unknown>";
-    console.log(
-      `[LLM start] ${name} prompts=${JSON.stringify(prompts).slice(0, 500)}`,
-    );
-  }
+  private readonly verbose = process.env.MESHBOT_LLM_DEBUG === "verbose";
 
   handleChatModelStart(llm: Serialized, messages: BaseMessage[][]): void {
+    if (!this.verbose) {
+      // 单行摘要：最后一条消息的 role + content 前 60 字
+      const last = messages[messages.length - 1]?.slice(-1)[0];
+      const role = last?._getType?.() ?? "?";
+      const content =
+        typeof last?.content === "string" ? last.content.slice(0, 60) : "";
+      console.log(`[LLM start] ${role}="${content}"`);
+      return;
+    }
     const name = (llm as { name?: string }).name ?? "<unknown>";
     console.log(
       `[LLM start chat] ${name} messages=${JSON.stringify(messages).slice(0, 1000)}`,
@@ -44,6 +48,30 @@ class LlmDebugCallbackHandler extends BaseCallbackHandler {
   }
 
   handleLLMEnd(output: LLMResult): void {
+    if (!this.verbose) {
+      // 单行摘要：text 前 60 字 + token 用量
+      const g = output.generations[0]?.[0];
+      const text =
+        typeof g?.text === "string" ? g.text.slice(0, 60) : "<non-string>";
+      const meta = (
+        g as {
+          message?: {
+            usage_metadata?: {
+              input_tokens?: number;
+              output_tokens?: number;
+              total_tokens?: number;
+            };
+          };
+        }
+      )?.message?.usage_metadata;
+      const usage = meta
+        ? `in=${meta.input_tokens ?? "?"} out=${meta.output_tokens ?? "?"} total=${meta.total_tokens ?? "?"}`
+        : "no usage_metadata";
+      const finish = (g as { generationInfo?: { finish_reason?: string } })
+        ?.generationInfo?.finish_reason;
+      console.log(`[LLM end] ${usage} finish=${finish ?? "?"} text="${text}"`);
+      return;
+    }
     console.log(
       "[LLM end] LLMResult=",
       JSON.stringify(
