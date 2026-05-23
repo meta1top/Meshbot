@@ -170,50 +170,26 @@ export class GraphService {
       lastMessageId = messageId;
       yield { kind: "chunk", messageId, delta };
     }
-    // 流结束：从累计 AIMessageChunk 读 usage_metadata（LangChain 0.3 跨厂商标准字段）
-    const usage = accumulated?.usage_metadata;
-    if (usage && lastMessageId) {
+    // 流结束：先取 LangChain 标准 usage_metadata，缺失则按多个兜底字段（OpenAI 兼容
+    // 路径如 deepseek-v4-pro 把 token 信息放 response_metadata.usage / tokenUsage）提取。
+    const extracted = extractUsage(accumulated);
+    if (extracted && lastMessageId) {
       yield {
         kind: "usage",
         messageId: lastMessageId,
         providerType: this.modelMeta.providerType,
         model: this.modelMeta.model,
-        inputTokens: usage.input_tokens ?? 0,
-        outputTokens: usage.output_tokens ?? 0,
-        totalTokens: usage.total_tokens ?? 0,
-        cacheReadTokens: usage.input_token_details?.cache_read ?? 0,
-        cacheCreationTokens: usage.input_token_details?.cache_creation ?? 0,
-        reasoningTokens: usage.output_token_details?.reasoning ?? 0,
+        inputTokens: extracted.inputTokens,
+        outputTokens: extracted.outputTokens,
+        totalTokens: extracted.totalTokens,
+        cacheReadTokens: extracted.cacheReadTokens,
+        cacheCreationTokens: extracted.cacheCreationTokens,
+        reasoningTokens: extracted.reasoningTokens,
         durationMs: Date.now() - startedAt,
       };
     } else if (lastMessageId) {
-      // 流产生了 chunk 但供应商未上报 usage_metadata —— 详细诊断日志，方便定位
-      // 是 LangChain 字段映射缺失，还是供应商 API 本身没返回 usage（如自定义代理）。
-      const acc = accumulated as
-        | (AIMessageChunk & {
-            response_metadata?: Record<string, unknown>;
-            additional_kwargs?: Record<string, unknown>;
-          })
-        | undefined;
       console.warn(
-        `LLM provider ${this.modelMeta.providerType} (${this.modelMeta.model}) did not report usage_metadata for session thread=${threadId}`,
-      );
-      console.warn(
-        "  诊断信息——若 response_metadata / additional_kwargs 含 usage/tokenUsage 字段，说明 LangChain 集成包未把它映射到 usage_metadata（可在此兜底）；都缺则供应商 API 没回 usage：",
-        JSON.stringify(
-          {
-            usage_metadata: acc?.usage_metadata,
-            response_metadata: acc?.response_metadata,
-            additional_kwargs: acc?.additional_kwargs,
-            content_type: typeof acc?.content,
-            content_preview:
-              typeof acc?.content === "string"
-                ? acc.content.slice(0, 50)
-                : undefined,
-          },
-          null,
-          2,
-        ),
+        `LLM provider ${this.modelMeta.providerType} (${this.modelMeta.model}) 未上报 usage（usage_metadata / response_metadata.usage / additional_kwargs.usage 均缺失）, thread=${threadId}`,
       );
     }
   }
@@ -238,4 +214,125 @@ export class GraphService {
     if (t === "system") return "system";
     return "assistant";
   }
+}
+
+/** 从累计 AIMessageChunk 提取规范化 token 用量。 */
+interface ExtractedUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  reasoningTokens: number;
+}
+
+/**
+ * 从累计 AIMessageChunk 兜底提取 token 用量。
+ *
+ * 取数优先级：
+ * 1. `usage_metadata` —— LangChain 0.3 跨厂商标准字段（@langchain/openai 0.6+ 等）
+ * 2. `response_metadata.usage` —— OpenAI 兼容路径原始字段（deepseek、第三方代理常用）
+ * 3. `response_metadata.tokenUsage` —— LangChain 旧版 camelCase 字段
+ * 4. `additional_kwargs.usage` —— 个别集成包的位置
+ *
+ * 全部缺失返回 null。
+ */
+function extractUsage(msg: AIMessageChunk | undefined): ExtractedUsage | null {
+  if (!msg) return null;
+
+  // 1) LangChain 标准 usage_metadata
+  const meta = msg.usage_metadata;
+  if (meta && (meta.input_tokens || meta.output_tokens || meta.total_tokens)) {
+    return {
+      inputTokens: meta.input_tokens ?? 0,
+      outputTokens: meta.output_tokens ?? 0,
+      totalTokens: meta.total_tokens ?? 0,
+      cacheReadTokens: meta.input_token_details?.cache_read ?? 0,
+      cacheCreationTokens: meta.input_token_details?.cache_creation ?? 0,
+      reasoningTokens: meta.output_token_details?.reasoning ?? 0,
+    };
+  }
+
+  const rawMsg = msg as unknown as {
+    response_metadata?: Record<string, unknown>;
+    additional_kwargs?: Record<string, unknown>;
+  };
+
+  // 2) response_metadata.usage —— OpenAI 兼容字段（snake_case）
+  const respUsage = rawMsg.response_metadata?.usage as
+    | {
+        prompt_tokens?: number;
+        completion_tokens?: number;
+        total_tokens?: number;
+        prompt_tokens_details?: { cached_tokens?: number };
+        completion_tokens_details?: { reasoning_tokens?: number };
+        // deepseek 私有扩展
+        prompt_cache_hit_tokens?: number;
+      }
+    | undefined;
+  if (
+    respUsage &&
+    (respUsage.prompt_tokens ||
+      respUsage.completion_tokens ||
+      respUsage.total_tokens)
+  ) {
+    const inputTokens = respUsage.prompt_tokens ?? 0;
+    const outputTokens = respUsage.completion_tokens ?? 0;
+    return {
+      inputTokens,
+      outputTokens,
+      totalTokens: respUsage.total_tokens ?? inputTokens + outputTokens,
+      cacheReadTokens:
+        respUsage.prompt_tokens_details?.cached_tokens ??
+        respUsage.prompt_cache_hit_tokens ??
+        0,
+      cacheCreationTokens: 0,
+      reasoningTokens:
+        respUsage.completion_tokens_details?.reasoning_tokens ?? 0,
+    };
+  }
+
+  // 3) response_metadata.tokenUsage —— LangChain 旧式 camelCase
+  const tokenUsage = rawMsg.response_metadata?.tokenUsage as
+    | {
+        promptTokens?: number;
+        completionTokens?: number;
+        totalTokens?: number;
+      }
+    | undefined;
+  if (tokenUsage && (tokenUsage.promptTokens || tokenUsage.completionTokens)) {
+    const inputTokens = tokenUsage.promptTokens ?? 0;
+    const outputTokens = tokenUsage.completionTokens ?? 0;
+    return {
+      inputTokens,
+      outputTokens,
+      totalTokens: tokenUsage.totalTokens ?? inputTokens + outputTokens,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      reasoningTokens: 0,
+    };
+  }
+
+  // 4) additional_kwargs.usage
+  const altUsage = rawMsg.additional_kwargs?.usage as
+    | {
+        prompt_tokens?: number;
+        completion_tokens?: number;
+        total_tokens?: number;
+      }
+    | undefined;
+  if (altUsage && (altUsage.prompt_tokens || altUsage.completion_tokens)) {
+    const inputTokens = altUsage.prompt_tokens ?? 0;
+    const outputTokens = altUsage.completion_tokens ?? 0;
+    return {
+      inputTokens,
+      outputTokens,
+      totalTokens: altUsage.total_tokens ?? inputTokens + outputTokens,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      reasoningTokens: 0,
+    };
+  }
+
+  return null;
 }
