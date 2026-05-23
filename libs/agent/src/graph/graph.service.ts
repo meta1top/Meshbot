@@ -186,6 +186,11 @@ export class GraphService {
         reasoningTokens: usage.output_token_details?.reasoning ?? 0,
         durationMs: Date.now() - startedAt,
       };
+    } else if (lastMessageId) {
+      // 流产生了 chunk 但供应商未上报 usage_metadata —— 观测缺一行记录
+      console.warn(
+        `LLM provider ${this.modelMeta.providerType} (${this.modelMeta.model}) did not report usage_metadata for session thread=${threadId}`,
+      );
     }
   }
 

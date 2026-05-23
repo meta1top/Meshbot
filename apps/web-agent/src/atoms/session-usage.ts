@@ -18,20 +18,61 @@ const EMPTY_TOTALS: SessionTotals = {
   callCount: 0,
 };
 
+/** 从 byMessage 重算 sessionTotals。 */
+function computeTotals(byMessage: Record<string, MessageUsage>): SessionTotals {
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let totalTokens = 0;
+  let cacheReadTokens = 0;
+  let cacheCreationTokens = 0;
+  let reasoningTokens = 0;
+  let callCount = 0;
+  for (const m of Object.values(byMessage)) {
+    inputTokens += m.inputTokens;
+    outputTokens += m.outputTokens;
+    totalTokens += m.totalTokens;
+    cacheReadTokens += m.cacheReadTokens;
+    cacheCreationTokens += m.cacheCreationTokens;
+    reasoningTokens += m.reasoningTokens;
+    callCount += 1;
+  }
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    cacheReadTokens,
+    cacheCreationTokens,
+    reasoningTokens,
+    callCount,
+  };
+}
+
 /** messageId → 单次 LLM 调用用量。 */
 export const usageByMessageAtom = atom<Record<string, MessageUsage>>({});
 
 /** 会话累计 —— 所有 LLM 调用的 SUM + callCount。 */
 export const sessionTotalsAtom = atom<SessionTotals>(EMPTY_TOTALS);
 
-/** 用 history 接口返回的 usage 初始化 atoms。 */
-export const setInitialUsageAtom = atom(null, (_get, set, u: SessionUsage) => {
-  set(usageByMessageAtom, u.byMessage);
-  set(sessionTotalsAtom, u.sessionTotals);
+/** 用 history 接口返回的 usage 初始化 atoms（merge 而非覆盖，避免竞态丢计）。 */
+export const setInitialUsageAtom = atom(null, (get, set, u: SessionUsage) => {
+  const existing = get(usageByMessageAtom);
+  // 合并历史 + 已通过 appendUsage 累计的（按 messageId 去重，atom 中已存在的优先）
+  const merged: Record<string, MessageUsage> = { ...u.byMessage };
+  for (const [id, m] of Object.entries(existing)) {
+    merged[id] = m;
+  }
+  set(usageByMessageAtom, merged);
+  // sessionTotals 从合并后的 byMessage 求和重算，避免双计或丢计
+  set(sessionTotalsAtom, computeTotals(merged));
 });
 
-/** socket run.usage 增量 —— 单条 + 累加。 */
+/** socket run.usage 增量 —— 单条 + 累加（同 messageId 幂等跳过）。 */
 export const appendUsageAtom = atom(null, (get, set, u: RunUsageEvent) => {
+  const existing = get(usageByMessageAtom);
+  // 同 messageId 已在 → 幂等跳过（避免 socket 重传 / setInitialUsage 双计）
+  if (existing[u.messageId]) {
+    return;
+  }
   const single: MessageUsage = {
     providerType: u.providerType,
     model: u.model,
@@ -43,7 +84,7 @@ export const appendUsageAtom = atom(null, (get, set, u: RunUsageEvent) => {
     reasoningTokens: u.reasoningTokens,
     durationMs: u.durationMs,
   };
-  const byMessage = { ...get(usageByMessageAtom), [u.messageId]: single };
+  const byMessage = { ...existing, [u.messageId]: single };
   set(usageByMessageAtom, byMessage);
   const t = get(sessionTotalsAtom);
   set(sessionTotalsAtom, {
