@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { DiscoveryModule } from "@nestjs/core";
 import { MeshbotConfigModule } from "./config/meshbot-config.module";
 import { MeshbotConfigService } from "./config/meshbot-config.service";
 import { GraphService } from "./graph/graph.service";
@@ -6,7 +7,7 @@ import { PromptService } from "./prompt/prompt.service";
 import { ToolRegistry } from "./tools/tool-registry";
 
 @Module({
-  imports: [MeshbotConfigModule],
+  imports: [DiscoveryModule, MeshbotConfigModule],
   providers: [
     ToolRegistry,
     {
