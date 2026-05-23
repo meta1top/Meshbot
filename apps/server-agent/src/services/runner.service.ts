@@ -2,6 +2,7 @@ import { GraphService } from "@meshbot/agent";
 import { SESSION_WS_EVENTS } from "@meshbot/types-agent";
 import { Injectable, Logger, type OnModuleInit } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
+import { LlmCallService } from "./llm-call.service";
 import { SessionService } from "./session.service";
 
 /** 进程内 run 的内存状态。 */
@@ -36,6 +37,7 @@ export class RunnerService implements OnModuleInit {
     private readonly sessions: SessionService,
     private readonly graph: GraphService,
     private readonly emitter: EventEmitter2,
+    private readonly llmCalls: LlmCallService,
   ) {}
 
   /** 启动时把遗留的 processing 消息退回 pending（重启 inflight 丢失后可重跑）。 */
@@ -161,13 +163,53 @@ export class RunnerService implements OnModuleInit {
       const stream = resume
         ? this.graph.resumeStream(sessionId, run.abort.signal)
         : this.graph.streamMessage(sessionId, batch, run.abort.signal);
-      for await (const chunk of stream) {
-        run.messageId = chunk.messageId;
-        run.content += chunk.delta;
-        this.emitter.emit(SESSION_WS_EVENTS.runChunk, {
+      for await (const event of stream) {
+        if (event.kind === "chunk") {
+          run.messageId = event.messageId;
+          run.content += event.delta;
+          this.emitter.emit(SESSION_WS_EVENTS.runChunk, {
+            sessionId,
+            messageId: event.messageId,
+            delta: event.delta,
+          });
+          continue;
+        }
+        // event.kind === "usage"
+        try {
+          await this.llmCalls.record({
+            sessionId,
+            messageId: event.messageId,
+            providerType: event.providerType,
+            model: event.model,
+            inputTokens: event.inputTokens,
+            outputTokens: event.outputTokens,
+            totalTokens: event.totalTokens,
+            cacheReadTokens: event.cacheReadTokens,
+            cacheCreationTokens: event.cacheCreationTokens,
+            reasoningTokens: event.reasoningTokens,
+            durationMs: event.durationMs,
+          });
+        } catch (err) {
+          this.logger.error(
+            `LLM 调用观测落库失败 session=${sessionId} msg=${event.messageId}`,
+            err,
+          );
+        }
+        this.logger.log(
+          `LLM call session=${sessionId} msg=${event.messageId} provider=${event.providerType} model=${event.model} in=${event.inputTokens}(cache_read=${event.cacheReadTokens} cache_creation=${event.cacheCreationTokens}) out=${event.outputTokens}(reasoning=${event.reasoningTokens}) total=${event.totalTokens} dur=${event.durationMs}ms`,
+        );
+        this.emitter.emit(SESSION_WS_EVENTS.runUsage, {
           sessionId,
-          messageId: chunk.messageId,
-          delta: chunk.delta,
+          messageId: event.messageId,
+          providerType: event.providerType,
+          model: event.model,
+          inputTokens: event.inputTokens,
+          outputTokens: event.outputTokens,
+          totalTokens: event.totalTokens,
+          cacheReadTokens: event.cacheReadTokens,
+          cacheCreationTokens: event.cacheCreationTokens,
+          reasoningTokens: event.reasoningTokens,
+          durationMs: event.durationMs,
         });
       }
       run.status = "done";
