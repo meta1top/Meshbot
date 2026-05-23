@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { NotFoundException } from "@nestjs/common";
+import { ConflictException, NotFoundException } from "@nestjs/common";
 import { DataSource } from "typeorm";
 import { PendingMessage } from "../entities/pending-message.entity";
 import { Session } from "../entities/session.entity";
@@ -144,5 +144,61 @@ describe("SessionService", () => {
     expect(reclaimed[0].status).toBe("processing");
     const active = await service.listActivePending(sessionId);
     expect(active.every((m) => m.status === "processing")).toBe(true);
+  });
+
+  it("deletePendingMessage 删 status=pending 返回 content", async () => {
+    const { sessionId } = await service.createSession({ content: "m1" });
+    const messageId = randomUUID();
+    await service.appendMessage(sessionId, { messageId, content: "to delete" });
+    const res = await service.deletePendingMessage(sessionId, messageId);
+    expect(res).toEqual({ content: "to delete" });
+    const remaining = await service.listActivePending(sessionId);
+    expect(remaining.find((m) => m.id === messageId)).toBeUndefined();
+  });
+
+  it("deletePendingMessage 对 status=processing 抛 ConflictException", async () => {
+    const { sessionId } = await service.createSession({ content: "m1" });
+    const claimed = await service.claimPending(sessionId);
+    expect(claimed[0].status).toBe("processing");
+    await expect(
+      service.deletePendingMessage(sessionId, claimed[0].id),
+    ).rejects.toThrow(ConflictException);
+  });
+
+  it("deletePendingMessage 对 status=failed 抛 ConflictException", async () => {
+    const { sessionId } = await service.createSession({ content: "m1" });
+    const claimed = await service.claimPending(sessionId);
+    await service.markFailed([claimed[0].id]);
+    await expect(
+      service.deletePendingMessage(sessionId, claimed[0].id),
+    ).rejects.toThrow(ConflictException);
+  });
+
+  it("deletePendingMessage 对 status=processed 抛 ConflictException", async () => {
+    const { sessionId } = await service.createSession({ content: "m1" });
+    const claimed = await service.claimPending(sessionId);
+    await service.markProcessed([claimed[0].id]);
+    await expect(
+      service.deletePendingMessage(sessionId, claimed[0].id),
+    ).rejects.toThrow(ConflictException);
+  });
+
+  it("deletePendingMessage 对不存在的 messageId 抛 NotFoundException", async () => {
+    const { sessionId } = await service.createSession({ content: "m1" });
+    await expect(
+      service.deletePendingMessage(sessionId, randomUUID()),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it("deletePendingMessage 跨 session 删抛 NotFoundException（不暴露存在性）", async () => {
+    const { sessionId: sA } = await service.createSession({ content: "a" });
+    const { sessionId: sB } = await service.createSession({ content: "b" });
+    const messageId = randomUUID();
+    await service.appendMessage(sB, { messageId, content: "in b" });
+    await expect(service.deletePendingMessage(sA, messageId)).rejects.toThrow(
+      NotFoundException,
+    );
+    const stillInB = await service.listActivePending(sB);
+    expect(stillInB.find((m) => m.id === messageId)).toBeDefined();
   });
 });
