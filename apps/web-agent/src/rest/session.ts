@@ -1,6 +1,10 @@
 "use client";
 
-import type { HistoryResponse, PendingResponse } from "@meshbot/types-agent";
+import type {
+  DeletePendingResponse,
+  HistoryResponse,
+  PendingResponse,
+} from "@meshbot/types-agent";
 import { apiClient } from "@meshbot/web-common";
 
 /** appendMessage 返回的业务 payload。 */
@@ -61,6 +65,20 @@ export async function retrySession(
   const { data } = await apiClient.post<{ retried: boolean }>(
     `/api/sessions/${sessionId}/retry`,
     {},
+  );
+  return data;
+}
+
+/**
+ * 删除一条 pending 消息。仅 status=pending 可删。
+ * 返回 content 给「编辑」场景：删完后把内容回填输入框。
+ */
+export async function deletePendingMessage(
+  sessionId: string,
+  messageId: string,
+): Promise<DeletePendingResponse> {
+  const { data } = await apiClient.delete<DeletePendingResponse>(
+    `/api/sessions/${sessionId}/pending-messages/${messageId}`,
   );
   return data;
 }
