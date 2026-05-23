@@ -36,7 +36,14 @@ interface ChatInputProps {
 
 /** 父组件通过 ref 调用的方法。 */
 export interface ChatInputHandle {
-  focus: () => void;
+  /**
+   * 聚焦输入框，光标置于内容末尾。
+   *
+   * 可选传入 `withText`：调用方刚 setDraft(text) 时，React state 提交是异步的，
+   * 若不传值则 focus 时 DOM innerText 还是旧值，光标会停在旧内容末尾。
+   * 传入 withText 让组件先把 DOM innerText 同步到该值，再 focus 到末尾。
+   */
+  focus: (withText?: string) => void;
 }
 
 export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
@@ -64,11 +71,31 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       }
     }, [value]);
 
-    useImperativeHandle(ref, () => ({
-      focus: () => {
-        editorRef.current?.focus();
-      },
-    }));
+    useImperativeHandle(
+      ref,
+      () => ({
+        focus: (withText?: string) => {
+          const el = editorRef.current;
+          if (!el) return;
+          // 主动同步 DOM 内容：withText 优先（调用方明确知道要落的内容），
+          // 否则用 props.value（闭包值）。两者都能避免 React effect 排程的滞后。
+          const target = withText ?? value;
+          if (el.innerText !== target) {
+            el.innerText = target;
+          }
+          el.focus();
+          // 光标移到内容末尾。contentEditable 没有 setSelectionRange，
+          // 必须用 Range/Selection API：折叠到末尾节点。
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          range.collapse(false);
+          const sel = window.getSelection();
+          sel?.removeAllRanges();
+          sel?.addRange(range);
+        },
+      }),
+      [value],
+    );
 
     const handleInput = useCallback(() => {
       const el = editorRef.current;

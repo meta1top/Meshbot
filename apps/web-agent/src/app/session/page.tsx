@@ -452,7 +452,9 @@ function SessionView() {
         const { content } = await deletePendingMessage(sessionId, id);
         apply((prev) => prev.filter((m) => m.id !== id));
         setDraft(content);
-        chatInputRef.current?.focus();
+        // 把 content 显式传给 focus —— setDraft 是异步的，focus 同一 tick 调用时
+        // 闭包里的 value 仍是旧值。withText 让组件直接同步 DOM 到末尾。
+        chatInputRef.current?.focus(content);
       } catch (err) {
         const status =
           err instanceof Error &&
