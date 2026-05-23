@@ -1,14 +1,23 @@
-import { GraphService } from "@meshbot/agent";
-import type {
-  DeletePendingResponse,
-  HistoryResponse,
-  MessageUsage,
-  PendingResponse,
+import {
+  type DeletePendingResponse,
+  type HistoryResponse,
+  HistoryQuerySchema,
+  type MessageUsage,
+  type PendingResponse,
 } from "@meshbot/types-agent";
-import { Body, Controller, Delete, Get, Param, Post } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Query,
+} from "@nestjs/common";
 import { AppendMessageDto, CreateSessionDto } from "../dto/session.dto";
 import { LlmCallService } from "../services/llm-call.service";
 import { RunnerService } from "../services/runner.service";
+import { SessionMessageService } from "../services/session-message.service";
 import { SessionService } from "../services/session.service";
 
 /** 会话 REST 端点。瘦 Controller —— 业务在 SessionService / RunnerService。 */
@@ -17,8 +26,8 @@ export class SessionController {
   constructor(
     private readonly sessions: SessionService,
     private readonly runner: RunnerService,
-    private readonly graph: GraphService,
     private readonly llmCalls: LlmCallService,
+    private readonly sessionMessages: SessionMessageService,
   ) {}
 
   /** 创建会话：写库后异步发起 run，立即返回 sessionId。 */
@@ -40,17 +49,26 @@ export class SessionController {
     return result;
   }
 
-  /** 取已处理历史 + 当前 inflight 快照 + usage 汇总。 */
+  /**
+   * 取会话历史（cursor 分页）。
+   *
+   * - 无 before：返最新 limit 条 + inflight + sessionTotals
+   * - 有 before：返早于 before 的 limit 条；inflight 为 null、sessionTotals 不返
+   * - byMessage：每次都返本批 messages 对应的 LLM usage 投影
+   */
   @Get(":id/history")
-  async history(@Param("id") id: string): Promise<HistoryResponse> {
+  async history(
+    @Param("id") id: string,
+    @Query() rawQuery: Record<string, string>,
+  ): Promise<HistoryResponse> {
     await this.sessions.findSessionOrFail(id);
-    const messages = await this.graph.getHistory(id);
-    const inflight = this.runner.getInflight(id);
-    const [sessionTotals, calls] = await Promise.all([
-      this.llmCalls.getSessionTotals(id),
-      this.llmCalls.listBySession(id),
-    ]);
+    const { before, limit } = HistoryQuerySchema.parse(rawQuery);
+    const page = await this.sessionMessages.listPage(id, { before, limit });
+
     const byMessage: Record<string, MessageUsage> = {};
+    const calls = await this.llmCalls.listByMessageIds(
+      page.messages.map((m) => m.id),
+    );
     for (const c of calls) {
       byMessage[c.messageId] = {
         providerType: c.providerType,
@@ -64,15 +82,21 @@ export class SessionController {
         durationMs: c.durationMs,
       };
     }
+
+    const isFirstPage = !before;
     return {
-      messages: messages.map((m) => ({
+      messages: page.messages.map((m) => ({
         id: m.id,
-        role: m.role,
+        role: m.role as "user" | "assistant" | "system",
         content: m.content,
         ...(m.reasoning ? { reasoning: m.reasoning } : {}),
       })),
-      inflight,
-      usage: { sessionTotals, byMessage },
+      hasMore: page.hasMore,
+      inflight: isFirstPage ? this.runner.getInflight(id) : null,
+      ...(isFirstPage
+        ? { sessionTotals: await this.llmCalls.getSessionTotals(id) }
+        : {}),
+      byMessage,
     };
   }
 
