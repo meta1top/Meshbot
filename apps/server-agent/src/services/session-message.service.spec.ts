@@ -129,4 +129,51 @@ describe("SessionMessageService", () => {
       service.listPage("sB", { before: aIds[0], limit: 10 }),
     ).rejects.toThrow(NotFoundException);
   });
+
+  it("recordToolResult 写入 role=tool 行，id = toolCallId", async () => {
+    await service.recordToolResult({
+      id: "tc1",
+      sessionId: "s1",
+      toolCallId: "tc1",
+      content: "result text",
+    });
+    const row = await ds.getRepository(SessionMessage).findOneBy({ id: "tc1" });
+    expect(row).toMatchObject({
+      id: "tc1",
+      sessionId: "s1",
+      role: "tool",
+      content: "result text",
+      toolCallId: "tc1",
+    });
+  });
+
+  it("recordToolResult 重复 id 幂等", async () => {
+    await service.recordToolResult({
+      id: "tc1",
+      sessionId: "s1",
+      toolCallId: "tc1",
+      content: "first",
+    });
+    await service.recordToolResult({
+      id: "tc1",
+      sessionId: "s1",
+      toolCallId: "tc1",
+      content: "second",
+    });
+    const row = await ds.getRepository(SessionMessage).findOneBy({ id: "tc1" });
+    expect(row?.content).toBe("first");
+  });
+
+  it("recordAssistant 可附带 toolCalls JSON 字符串", async () => {
+    const calls = [{ id: "tc1", name: "echo", args: { text: "hi" } }];
+    await service.recordAssistant({
+      id: "a1",
+      sessionId: "s1",
+      content: "calling echo",
+      reasoning: null,
+      toolCalls: JSON.stringify(calls),
+    });
+    const row = await ds.getRepository(SessionMessage).findOneBy({ id: "a1" });
+    expect(row?.toolCalls).toBe(JSON.stringify(calls));
+  });
 });

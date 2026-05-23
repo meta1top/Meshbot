@@ -16,6 +16,16 @@ export interface RecordAssistantInput {
   sessionId: string;
   content: string;
   reasoning: string | null;
+  /** 序列化好的 tool_calls JSON 字符串（assistant 调工具时）。 */
+  toolCalls?: string | null;
+}
+
+/** 写 tool 结果入参。id = toolCallId 保证幂等 + 与 LangChain ToolMessage 一致。 */
+export interface RecordToolResultInput {
+  id: string;
+  sessionId: string;
+  toolCallId: string;
+  content: string;
 }
 
 /** listPage 返回。 */
@@ -57,7 +67,7 @@ export class SessionMessageService {
   }
 
   /**
-   * 记录一条 assistant 消息（含可选 reasoning）。幂等。
+   * 记录一条 assistant 消息（含可选 reasoning / toolCalls）。幂等。
    */
   async recordAssistant(input: RecordAssistantInput): Promise<void> {
     const exists = await this.repo.findOneBy({ id: input.id });
@@ -68,8 +78,25 @@ export class SessionMessageService {
       role: "assistant",
       content: input.content,
       reasoning: input.reasoning,
-      toolCalls: null,
+      toolCalls: input.toolCalls ?? null,
       toolCallId: null,
+    });
+  }
+
+  /**
+   * 记录一条 role=tool 消息（tool 调用结果）。幂等（id = toolCallId）。
+   */
+  async recordToolResult(input: RecordToolResultInput): Promise<void> {
+    const exists = await this.repo.findOneBy({ id: input.id });
+    if (exists) return;
+    await this.repo.insert({
+      id: input.id,
+      sessionId: input.sessionId,
+      role: "tool",
+      content: input.content,
+      reasoning: null,
+      toolCalls: null,
+      toolCallId: input.toolCallId,
     });
   }
 
