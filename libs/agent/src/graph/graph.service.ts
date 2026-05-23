@@ -7,10 +7,13 @@ import {
   SystemMessage,
 } from "@langchain/core/messages";
 import { Injectable, Optional } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { createSqliteCheckpointer } from "../checkpoint/sqlite-checkpointer";
 import { MeshbotConfigService } from "../config/meshbot-config.service";
 import { readActiveModelConfig } from "../config/model-config.reader";
 import { PromptService } from "../prompt/prompt.service";
+import { ToolRegistry } from "../tools/tool-registry";
+import type { ToolContext } from "../tools/tool.types";
 import type { GraphState } from "./graph.builder";
 import { buildSupervisorGraph } from "./graph.builder";
 import { createChatModel } from "./llm.factory";
@@ -71,10 +74,21 @@ export class GraphService {
    * 自动 miss。避免每次 runOnce 都 initChatModel 动态加载包（~200ms / 次）。
    */
   private modelCache = new Map<string, BaseChatModel>();
+  /**
+   * 当前活跃 run 的上下文引用。单 run 串行假设（未来并发需 AsyncLocalStorage）。
+   * streamMessage / resumeStream 进入时设置，finally 清空。
+   */
+  private ctxRef: {
+    sessionId: string;
+    messageId: string;
+    signal: AbortSignal;
+  } | null = null;
 
   constructor(
     private configService: MeshbotConfigService,
     private promptService: PromptService,
+    private readonly toolRegistry: ToolRegistry,
+    private readonly eventEmitter: EventEmitter2,
     @Optional() modelProvider?: ModelProvider,
     @Optional() modelMeta?: { providerType: string; model: string },
   ) {
@@ -82,7 +96,24 @@ export class GraphService {
     this.checkpointer = createSqliteCheckpointer(dbPath);
     const provider: ModelProvider =
       modelProvider ?? (() => this.resolveModel());
-    this.graph = buildSupervisorGraph(this.checkpointer, provider);
+    this.graph = buildSupervisorGraph(
+      this.checkpointer,
+      provider,
+      this.toolRegistry,
+      () => {
+        if (!this.ctxRef) {
+          throw new Error(
+            "toolsNode called without active run (ctxRef is null)",
+          );
+        }
+        return {
+          sessionId: this.ctxRef.sessionId,
+          messageId: this.ctxRef.messageId,
+          emitter: this.eventEmitter,
+          signal: this.ctxRef.signal,
+        } satisfies Omit<ToolContext, "toolCallId">;
+      },
+    );
     this.modelMeta = modelMeta ?? { providerType: "unknown", model: "unknown" };
   }
 
@@ -135,30 +166,36 @@ export class GraphService {
     inputs: { id: string; content: string }[],
     signal?: AbortSignal,
   ): AsyncGenerator<StreamChunk> {
-    this.promptService.reloadIfChanged();
-    const systemPrompt = this.promptService.getPrompt("system");
-    const state = await this.graph.getState({
-      configurable: { thread_id: threadId },
-    });
-    const hasHistory =
-      Array.isArray((state.values as GraphState)?.messages) &&
-      (state.values as GraphState).messages.length > 0;
-    const inputMessages: BaseMessage[] = [];
-    if (systemPrompt && !hasHistory) {
-      inputMessages.push(new SystemMessage(systemPrompt));
+    const abortSignal = signal ?? new AbortController().signal;
+    this.ctxRef = { sessionId: threadId, messageId: "", signal: abortSignal };
+    try {
+      this.promptService.reloadIfChanged();
+      const systemPrompt = this.promptService.getPrompt("system");
+      const state = await this.graph.getState({
+        configurable: { thread_id: threadId },
+      });
+      const hasHistory =
+        Array.isArray((state.values as GraphState)?.messages) &&
+        (state.values as GraphState).messages.length > 0;
+      const inputMessages: BaseMessage[] = [];
+      if (systemPrompt && !hasHistory) {
+        inputMessages.push(new SystemMessage(systemPrompt));
+      }
+      for (const input of inputs) {
+        inputMessages.push(
+          new HumanMessage({ content: input.content, id: input.id }),
+        );
+      }
+      // 先把本批次 user 消息以 human 事件 yield 出去，runner 据此 emit run.human，
+      // 让 frontend 在 chunk 到达之前把 user 气泡从 pending 区迁到聊天区末尾，
+      // 保证 user → assistant 视觉顺序与 checkpointer 状态一致。
+      for (const input of inputs) {
+        yield { kind: "human", messageId: input.id };
+      }
+      yield* this.runGraphStream(threadId, { messages: inputMessages }, signal);
+    } finally {
+      this.ctxRef = null;
     }
-    for (const input of inputs) {
-      inputMessages.push(
-        new HumanMessage({ content: input.content, id: input.id }),
-      );
-    }
-    // 先把本批次 user 消息以 human 事件 yield 出去，runner 据此 emit run.human，
-    // 让 frontend 在 chunk 到达之前把 user 气泡从 pending 区迁到聊天区末尾，
-    // 保证 user → assistant 视觉顺序与 checkpointer 状态一致。
-    for (const input of inputs) {
-      yield { kind: "human", messageId: input.id };
-    }
-    yield* this.runGraphStream(threadId, { messages: inputMessages }, signal);
   }
 
   /**
@@ -175,7 +212,13 @@ export class GraphService {
     threadId: ThreadId,
     signal?: AbortSignal,
   ): AsyncGenerator<StreamChunk> {
-    yield* this.runGraphStream(threadId, { messages: [] }, signal);
+    const abortSignal = signal ?? new AbortController().signal;
+    this.ctxRef = { sessionId: threadId, messageId: "", signal: abortSignal };
+    try {
+      yield* this.runGraphStream(threadId, { messages: [] }, signal);
+    } finally {
+      this.ctxRef = null;
+    }
   }
 
   /**
@@ -218,6 +261,7 @@ export class GraphService {
       accumulated = accumulated === undefined ? msg : accumulated.concat(msg);
       const messageId = msg.id ?? randomUUID();
       lastMessageId = messageId;
+      if (this.ctxRef) this.ctxRef.messageId = messageId;
       // DeepSeek 等推理模型先吐 reasoning_content（额外字段），再吐 content。
       // 同一个 chunk 不会同时有两者，分别处理。
       const reasoningDelta =

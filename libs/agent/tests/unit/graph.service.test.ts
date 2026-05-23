@@ -2,10 +2,12 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { AIMessageChunk } from "@langchain/core/messages";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MeshbotConfigService } from "../../src/config/meshbot-config.service";
 import { GraphService } from "../../src/graph/graph.service";
 import { PromptService } from "../../src/prompt/prompt.service";
+import { ToolRegistry } from "../../src/tools/tool-registry";
 
 describe("GraphService", () => {
   let testDir: string;
@@ -42,9 +44,13 @@ describe("GraphService", () => {
         return gen();
       },
     };
+    const toolRegistry = new ToolRegistry({ getProviders: () => [] } as never);
+    const eventEmitter = new EventEmitter2();
     graphService = new GraphService(
       configService,
       promptService,
+      toolRegistry,
+      eventEmitter,
       () => Promise.resolve(fakeModel as never),
       { providerType: "fake", model: "fake-model" },
     );

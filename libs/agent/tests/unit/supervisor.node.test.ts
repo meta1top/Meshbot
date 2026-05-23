@@ -17,10 +17,13 @@ function fakeStreamingModel(chunks: string[]) {
   } as unknown as BaseChatModel;
 }
 
+/** 无 tool 的空 toolsProvider 桩，用于不需要测试 tool binding 的用例。 */
+const noTools = () => [];
+
 describe("createSupervisorNode", () => {
   it("调用注入的 model.stream 并把累加后的 AIMessage 追加到 state", async () => {
     const model = fakeStreamingModel(["你", "好"]);
-    const node = createSupervisorNode(() => Promise.resolve(model));
+    const node = createSupervisorNode(() => Promise.resolve(model), noTools);
     const result = await node({ messages: [new HumanMessage("hi")] });
     expect(model.stream).toHaveBeenCalledTimes(1);
     expect(result.messages).toHaveLength(1);
@@ -32,7 +35,7 @@ describe("createSupervisorNode", () => {
 
   it("把完整消息历史传给 model.stream", async () => {
     const model = fakeStreamingModel(["ok"]);
-    const node = createSupervisorNode(() => Promise.resolve(model));
+    const node = createSupervisorNode(() => Promise.resolve(model), noTools);
     const messages = [
       new HumanMessage("a"),
       new HumanMessage("b"),
@@ -47,8 +50,9 @@ describe("createSupervisorNode", () => {
   });
 
   it("modelProvider 返回空时抛错", async () => {
-    const node = createSupervisorNode(() =>
-      Promise.resolve(null as unknown as BaseChatModel),
+    const node = createSupervisorNode(
+      () => Promise.resolve(null as unknown as BaseChatModel),
+      noTools,
     );
     await expect(node({ messages: [new HumanMessage("hi")] })).rejects.toThrow(
       "modelProvider 返回空",
@@ -57,7 +61,7 @@ describe("createSupervisorNode", () => {
 
   it("LLM 流未产出任何 chunk 时抛错", async () => {
     const model = fakeStreamingModel([]);
-    const node = createSupervisorNode(() => Promise.resolve(model));
+    const node = createSupervisorNode(() => Promise.resolve(model), noTools);
     await expect(node({ messages: [new HumanMessage("hi")] })).rejects.toThrow(
       "未产出任何内容",
     );
