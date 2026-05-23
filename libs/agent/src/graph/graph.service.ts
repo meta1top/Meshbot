@@ -31,27 +31,41 @@ export interface Message {
   content: string;
 }
 
-/** 流式 run 产出的单个 token 事件。 */
-export interface StreamChunk {
-  messageId: string;
-  delta: string;
-}
+/** 流式 run 产出的事件：chunk = 单个 token；usage = 调用结束的 token 用量。 */
+export type StreamChunk =
+  | { kind: "chunk"; messageId: string; delta: string }
+  | {
+      kind: "usage";
+      messageId: string;
+      providerType: string;
+      model: string;
+      inputTokens: number;
+      outputTokens: number;
+      totalTokens: number;
+      cacheReadTokens: number;
+      cacheCreationTokens: number;
+      reasoningTokens: number;
+      durationMs: number;
+    };
 
 @Injectable()
 export class GraphService {
   private checkpointer: ReturnType<typeof createSqliteCheckpointer>;
   private graph: ReturnType<typeof buildSupervisorGraph>;
+  private modelMeta: { providerType: string; model: string };
 
   constructor(
     private configService: MeshbotConfigService,
     private promptService: PromptService,
     @Optional() modelProvider?: ModelProvider,
+    @Optional() modelMeta?: { providerType: string; model: string },
   ) {
     const dbPath = this.configService.getDatabasePath();
     this.checkpointer = createSqliteCheckpointer(dbPath);
     const provider: ModelProvider =
       modelProvider ?? (() => this.resolveModel());
     this.graph = buildSupervisorGraph(this.checkpointer, provider);
+    this.modelMeta = modelMeta ?? { providerType: "unknown", model: "unknown" };
   }
 
   /** 按当前 agent.db 的启用 ModelConfig 构造 chat model。 */
@@ -62,6 +76,7 @@ export class GraphService {
         "没有启用的模型配置（model_configs 表为空或全部 disabled）",
       );
     }
+    this.modelMeta = { providerType: cfg.providerType, model: cfg.model };
     return createChatModel(cfg);
   }
 
@@ -130,24 +145,47 @@ export class GraphService {
     yield* this.runGraphStream(threadId, { messages: [] }, signal);
   }
 
-  /** 执行 graph.stream 并把 AIMessageChunk 逐个 yield 成 StreamChunk。 */
+  /** 执行 graph.stream 并把 AIMessageChunk 逐个 yield 成 StreamChunk；末尾 yield usage 事件。 */
   private async *runGraphStream(
     threadId: ThreadId,
     input: { messages: BaseMessage[] },
     signal?: AbortSignal,
   ): AsyncGenerator<StreamChunk> {
+    const startedAt = Date.now();
     const stream = await this.graph.stream(input, {
       configurable: { thread_id: threadId },
       streamMode: "messages",
       signal,
     });
+    let lastMessageId: string | null = null;
+    let accumulated: AIMessageChunk | undefined;
     for await (const part of stream) {
       // streamMode:"messages" 产出 [BaseMessage, metadata] 元组
       const msg = Array.isArray(part) ? part[0] : part;
       if (!(msg instanceof AIMessageChunk)) continue;
+      accumulated = accumulated === undefined ? msg : accumulated.concat(msg);
       const delta = typeof msg.content === "string" ? msg.content : "";
       if (!delta) continue;
-      yield { messageId: msg.id ?? randomUUID(), delta };
+      const messageId = msg.id ?? randomUUID();
+      lastMessageId = messageId;
+      yield { kind: "chunk", messageId, delta };
+    }
+    // 流结束：从累计 AIMessageChunk 读 usage_metadata（LangChain 0.3 跨厂商标准字段）
+    const usage = accumulated?.usage_metadata;
+    if (usage && lastMessageId) {
+      yield {
+        kind: "usage",
+        messageId: lastMessageId,
+        providerType: this.modelMeta.providerType,
+        model: this.modelMeta.model,
+        inputTokens: usage.input_tokens ?? 0,
+        outputTokens: usage.output_tokens ?? 0,
+        totalTokens: usage.total_tokens ?? 0,
+        cacheReadTokens: usage.input_token_details?.cache_read ?? 0,
+        cacheCreationTokens: usage.input_token_details?.cache_creation ?? 0,
+        reasoningTokens: usage.output_token_details?.reasoning ?? 0,
+        durationMs: Date.now() - startedAt,
+      };
     }
   }
 

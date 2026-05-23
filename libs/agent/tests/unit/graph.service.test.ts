@@ -26,15 +26,27 @@ describe("GraphService", () => {
         streamCall += 1;
         const msgId = `fake-msg-${streamCall}`;
         async function* gen() {
-          for (const c of ["你", "好"]) {
-            yield new AIMessageChunk({ id: msgId, content: c });
-          }
+          yield new AIMessageChunk({ id: msgId, content: "你" });
+          yield new AIMessageChunk({
+            id: msgId,
+            content: "好",
+            usage_metadata: {
+              input_tokens: 10,
+              output_tokens: 2,
+              total_tokens: 12,
+              input_token_details: { cache_read: 3, cache_creation: 0 },
+              output_token_details: { reasoning: 0 },
+            },
+          });
         }
         return gen();
       },
     };
-    graphService = new GraphService(configService, promptService, () =>
-      Promise.resolve(fakeModel as never),
+    graphService = new GraphService(
+      configService,
+      promptService,
+      () => Promise.resolve(fakeModel as never),
+      { providerType: "fake", model: "fake-model" },
     );
   });
 
@@ -50,15 +62,47 @@ describe("GraphService", () => {
 
   it("streamMessage 逐 chunk 产出 token 与稳定 messageId", async () => {
     const threadId = await graphService.startSession({ model: "fake" });
-    const chunks: { messageId: string; delta: string }[] = [];
+    const events: Array<
+      | { kind: "chunk"; messageId: string; delta: string }
+      | { kind: "usage"; messageId: string }
+    > = [];
     for await (const ev of graphService.streamMessage(threadId, [
       { id: "pm-1", content: "hi" },
     ])) {
-      chunks.push(ev);
+      events.push(ev);
     }
+    const chunks = events.filter(
+      (e): e is { kind: "chunk"; messageId: string; delta: string } =>
+        e.kind === "chunk",
+    );
     expect(chunks.length).toBeGreaterThan(0);
     expect(chunks.every((c) => c.messageId === chunks[0].messageId)).toBe(true);
     expect(chunks.map((c) => c.delta).join("")).toBe("你好");
+  });
+
+  it("streamMessage 末尾 yield usage 事件含 token 明细", async () => {
+    const threadId = await graphService.startSession({ model: "fake" });
+    // biome-ignore lint/suspicious/noExplicitAny: 测试方便起见用 any 装载事件
+    const events: any[] = [];
+    for await (const ev of graphService.streamMessage(threadId, [
+      { id: "pm-1", content: "hi" },
+    ])) {
+      events.push(ev);
+    }
+    const usage = events.find((e) => e.kind === "usage");
+    expect(usage).toBeTruthy();
+    const firstChunk = events.find((e) => e.kind === "chunk");
+    expect(usage.messageId).toBe(firstChunk.messageId);
+    expect(usage.inputTokens).toBe(10);
+    expect(usage.outputTokens).toBe(2);
+    expect(usage.totalTokens).toBe(12);
+    expect(usage.cacheReadTokens).toBe(3);
+    expect(usage.cacheCreationTokens).toBe(0);
+    expect(usage.reasoningTokens).toBe(0);
+    expect(usage.providerType).toBe("fake");
+    expect(usage.model).toBe("fake-model");
+    expect(typeof usage.durationMs).toBe("number");
+    expect(usage.durationMs).toBeGreaterThanOrEqual(0);
   });
 
   it("returns history after streamMessage", async () => {
