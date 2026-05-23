@@ -103,3 +103,15 @@ export const resetUsageAtom = atom(null, (_get, set) => {
   set(usageByMessageAtom, {});
   set(sessionTotalsAtom, EMPTY_TOTALS);
 });
+
+/**
+ * 合并一批 byMessage 到 usageByMessageAtom。
+ * 用于翻页时把老消息的 usage 投影合进展示。同 id 覆盖（不该重复）。
+ */
+export const appendUsageByMessageAtom = atom(
+  null,
+  (get, set, batch: Record<string, MessageUsage>) => {
+    const current = get(usageByMessageAtom);
+    set(usageByMessageAtom, { ...current, ...batch });
+  },
+);
