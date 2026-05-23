@@ -175,6 +175,16 @@ export const RunUsageEventSchema = MessageUsageSchema.extend({
 });
 export type RunUsageEvent = z.infer<typeof RunUsageEventSchema>;
 
+/**
+ * DELETE /api/sessions/:sessionId/pending-messages/:messageId 响应载荷。
+ * 返回 content 让前端在「编辑」场景下回填输入框。
+ */
+export const DeletePendingResponseSchema = z.object({
+  deleted: z.literal(true),
+  content: z.string(),
+});
+export type DeletePendingResponse = z.infer<typeof DeletePendingResponseSchema>;
+
 /** socket: 客户端 session.subscribe / session.interrupt 入参。 */
 export const SessionTopicSchema = z.object({ sessionId: z.string() });
 export type SessionTopic = z.infer<typeof SessionTopicSchema>;
