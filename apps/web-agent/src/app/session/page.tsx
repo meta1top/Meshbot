@@ -5,8 +5,10 @@ import {
   type RunDoneEvent,
   type RunErrorEvent,
   type RunInterruptedEvent,
+  type RunUsageEvent,
   SESSION_WS_EVENTS,
 } from "@meshbot/types-agent";
+import { useAtomValue, useSetAtom } from "jotai";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Suspense,
@@ -16,13 +18,22 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  appendUsageAtom,
+  resetUsageAtom,
+  sessionTotalsAtom,
+  setInitialUsageAtom,
+  usageByMessageAtom,
+} from "@/atoms/session-usage";
 import { ChatInput } from "@/components/common/chat-input";
 import { AppShellLayout } from "@/components/layouts/app-shell-layout";
 import {
   MessageList,
   type TimelineMessage,
 } from "@/components/session/message-list";
+import { getModelContextWindow } from "@/lib/model-context-window";
 import { getSessionSocket } from "@/lib/socket";
+import { useModelConfigs } from "@/rest/model-config";
 import {
   appendMessage,
   fetchHistory,
@@ -38,6 +49,17 @@ function SessionView() {
   const [running, setRunning] = useState(false);
   const messagesRef = useRef<TimelineMessage[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  const usageByMessage = useAtomValue(usageByMessageAtom);
+  const sessionTotals = useAtomValue(sessionTotalsAtom);
+  const setInitialUsage = useSetAtom(setInitialUsageAtom);
+  const appendUsage = useSetAtom(appendUsageAtom);
+  const resetUsage = useSetAtom(resetUsageAtom);
+  const { data: modelConfigs } = useModelConfigs();
+  const enabledModel = modelConfigs?.find((c) => c.enabled);
+  const contextWindow = enabledModel
+    ? getModelContextWindow(enabledModel.model)
+    : 128_000;
 
   /** 单一写入口：同步更新 ref 与 state。 */
   const apply = useCallback(
@@ -77,6 +99,7 @@ function SessionView() {
       router.replace("/");
       return;
     }
+    resetUsage();
     let cancelled = false;
 
     void Promise.all([fetchHistory(sessionId), fetchPending(sessionId)]).then(
@@ -125,6 +148,7 @@ function SessionView() {
           const socketArrived = current.filter((m) => !initialIds.has(m.id));
           return [...initial, ...socketArrived];
         });
+        setInitialUsage(history.usage);
       },
     );
 
@@ -179,6 +203,10 @@ function SessionView() {
         ),
       );
     };
+    const onUsage = (e: RunUsageEvent) => {
+      if (e.sessionId !== sessionId) return;
+      appendUsage(e);
+    };
 
     socket.on("connect", subscribe);
     if (socket.connected) subscribe();
@@ -186,6 +214,7 @@ function SessionView() {
     socket.on(SESSION_WS_EVENTS.runDone, onDone);
     socket.on(SESSION_WS_EVENTS.runInterrupted, onInterrupted);
     socket.on(SESSION_WS_EVENTS.runError, onError);
+    socket.on(SESSION_WS_EVENTS.runUsage, onUsage);
 
     return () => {
       cancelled = true;
@@ -194,8 +223,17 @@ function SessionView() {
       socket.off(SESSION_WS_EVENTS.runDone, onDone);
       socket.off(SESSION_WS_EVENTS.runInterrupted, onInterrupted);
       socket.off(SESSION_WS_EVENTS.runError, onError);
+      socket.off(SESSION_WS_EVENTS.runUsage, onUsage);
     };
-  }, [sessionId, router, apply, upsertChunk]);
+  }, [
+    sessionId,
+    router,
+    apply,
+    upsertChunk,
+    resetUsage,
+    setInitialUsage,
+    appendUsage,
+  ]);
 
   const timelineMessages = useMemo(
     () => messages.filter((m) => !m.pending),
@@ -253,7 +291,11 @@ function SessionView() {
   return (
     <AppShellLayout>
       <div className="flex w-full flex-1 flex-col">
-        <MessageList messages={timelineMessages} onRetry={handleRetry} />
+        <MessageList
+          messages={timelineMessages}
+          onRetry={handleRetry}
+          usageByMessage={usageByMessage}
+        />
         <div ref={bottomRef} />
       </div>
       <div className="sticky bottom-4 mt-auto w-full bg-background pt-4">
@@ -266,6 +308,17 @@ function SessionView() {
           onSend={handleSend}
           onInterrupt={handleInterrupt}
           isLoading={running}
+          tokenUsage={{
+            current: sessionTotals.totalTokens,
+            max: contextWindow,
+            breakdown: {
+              inputTokens: sessionTotals.inputTokens,
+              outputTokens: sessionTotals.outputTokens,
+              cacheReadTokens: sessionTotals.cacheReadTokens,
+              reasoningTokens: sessionTotals.reasoningTokens,
+              callCount: sessionTotals.callCount,
+            },
+          }}
         />
       </div>
     </AppShellLayout>
