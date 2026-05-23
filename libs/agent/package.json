@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@meshbot/types-agent": "workspace:^",
     "@langchain/anthropic": "0.3.34",
     "@langchain/core": "^0.3",
     "@langchain/deepseek": "0.1.0",
