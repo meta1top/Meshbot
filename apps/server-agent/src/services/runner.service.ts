@@ -3,12 +3,15 @@ import { SESSION_WS_EVENTS } from "@meshbot/types-agent";
 import { Injectable, Logger, type OnModuleInit } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { LlmCallService } from "./llm-call.service";
+import { SessionMessageService } from "./session-message.service";
 import { SessionService } from "./session.service";
 
 /** 进程内 run 的内存状态。 */
 interface InflightRun {
   messageId: string | null;
   content: string;
+  /** 推理内容累积（DeepSeek 等推理模型）；非推理模型保持空串。 */
+  reasoning: string;
   status: "streaming" | "done" | "interrupted";
   abort: AbortController;
 }
@@ -38,6 +41,7 @@ export class RunnerService implements OnModuleInit {
     private readonly graph: GraphService,
     private readonly emitter: EventEmitter2,
     private readonly llmCalls: LlmCallService,
+    private readonly sessionMessages: SessionMessageService,
   ) {}
 
   /** 启动时把遗留的 processing 消息退回 pending（重启 inflight 丢失后可重跑）。 */
@@ -162,6 +166,7 @@ export class RunnerService implements OnModuleInit {
     const run: InflightRun = {
       messageId: null,
       content: "",
+      reasoning: "",
       status: "streaming",
       abort: new AbortController(),
     };
@@ -188,9 +193,21 @@ export class RunnerService implements OnModuleInit {
             sessionId,
             messageId: event.messageId,
           });
+          // 双写 session_messages（fire-and-forget，写失败仅 log）
+          const content =
+            batch.find((b) => b.id === event.messageId)?.content ?? "";
+          this.sessionMessages
+            .recordUser({ id: event.messageId, sessionId, content })
+            .catch((err) =>
+              this.logger.error(
+                `session_messages.recordUser 失败 msg=${event.messageId}`,
+                err,
+              ),
+            );
           continue;
         }
         if (event.kind === "reasoning") {
+          run.reasoning += event.delta;
           this.emitter.emit(SESSION_WS_EVENTS.runReasoning, {
             sessionId,
             messageId: event.messageId,
@@ -262,6 +279,21 @@ export class RunnerService implements OnModuleInit {
           messageId: run.messageId,
           content: run.content,
         });
+        // 双写 session_messages（fire-and-forget）
+        const reasoning = run.reasoning ? run.reasoning : null;
+        this.sessionMessages
+          .recordAssistant({
+            id: run.messageId,
+            sessionId,
+            content: run.content,
+            reasoning,
+          })
+          .catch((err) =>
+            this.logger.error(
+              `session_messages.recordAssistant 失败 msg=${run.messageId}`,
+              err,
+            ),
+          );
       }
       this.logger.log(
         `runOnce done session=${sessionId} total=${streamEndedAt - runStartedAt}ms markProcessed=${markProcessedMs}ms`,

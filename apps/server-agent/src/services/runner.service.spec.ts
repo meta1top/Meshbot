@@ -99,6 +99,14 @@ function fakeLlmCallService() {
   };
 }
 
+/** 内存版 SessionMessageService 替身。 */
+function fakeSessionMessageService() {
+  return {
+    async recordUser(_input: unknown) {},
+    async recordAssistant(_input: unknown) {},
+  };
+}
+
 describe("RunnerService", () => {
   it("kick：消费 pending → 发 run.chunk/run.done → 消息转 processed", async () => {
     const sess = fakeSessionService();
@@ -114,6 +122,7 @@ describe("RunnerService", () => {
       fakeGraphService() as never,
       emitter,
       llmCalls as never,
+      fakeSessionMessageService() as never,
     );
     await runner.kickAndWait("s1");
     expect(
@@ -139,6 +148,7 @@ describe("RunnerService", () => {
       fakeGraphService() as never,
       emitter,
       llmCalls as never,
+      fakeSessionMessageService() as never,
     );
     await runner.kickAndWait("s1");
     expect(sess.store).toHaveLength(2);
@@ -155,6 +165,7 @@ describe("RunnerService", () => {
       fakeGraphService() as never,
       emitter,
       llmCalls as never,
+      fakeSessionMessageService() as never,
     );
     // 第一轮：消费 first，循环排空退出
     await runner.kickAndWait("s1");
@@ -179,6 +190,7 @@ describe("RunnerService", () => {
       fakeGraphService({ throwErr: true }) as never,
       emitter,
       llmCalls as never,
+      fakeSessionMessageService() as never,
     );
     await runner.kickAndWait("s1");
     expect(errs).toHaveLength(1);
@@ -198,6 +210,7 @@ describe("RunnerService", () => {
       fakeGraphService() as never,
       emitter,
       llmCalls as never,
+      fakeSessionMessageService() as never,
     );
     await runner.kickRetryAndWait("s1");
     expect(sess.store[0].status).toBe("processed");
@@ -215,6 +228,7 @@ describe("RunnerService", () => {
       fakeGraphService() as never,
       emitter,
       llmCalls as never,
+      fakeSessionMessageService() as never,
     );
     emitter.on("run.chunk", () => {
       snapshotDuringRun = runner.getInflight("s1");
@@ -246,6 +260,7 @@ describe("RunnerService", () => {
       graph as never,
       emitter,
       llmCalls as never,
+      fakeSessionMessageService() as never,
     );
     emitter.on("run.chunk", () => runner.interrupt("s1"));
     await runner.kickAndWait("s1");
@@ -269,6 +284,7 @@ describe("RunnerService", () => {
       fakeGraphService() as never,
       new EventEmitter2(),
       llmCalls as never,
+      fakeSessionMessageService() as never,
     );
     await runner.onModuleInit();
     expect(rolledBack).toBe(3);
@@ -286,6 +302,7 @@ describe("RunnerService", () => {
       fakeGraphService() as never,
       emitter,
       llmCalls as never,
+      fakeSessionMessageService() as never,
     );
     await runner.kickAndWait("s1");
     expect(llmCalls.records).toHaveLength(1);
