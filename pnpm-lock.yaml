@@ -517,9 +517,15 @@ importers:
       '@nestjs/core':
         specifier: ^11.1.19
         version: 11.1.19(@nestjs/common@11.1.19(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/platform-express@11.1.19)(@nestjs/websockets@11.1.21)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/event-emitter':
+        specifier: ^3.1.0
+        version: 3.1.0(@nestjs/common@11.1.19(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.19)
       langchain:
         specifier: ^0.3.37
         version: 0.3.37(@langchain/anthropic@0.3.34(@langchain/core@0.3.80(openai@5.12.2(ws@8.18.3)(zod@3.25.76)))(zod@3.25.76))(@langchain/core@0.3.80(openai@5.12.2(ws@8.18.3)(zod@3.25.76)))(@langchain/deepseek@0.1.0(@langchain/core@0.3.80(openai@5.12.2(ws@8.18.3)(zod@3.25.76)))(ws@8.18.3))(@langchain/google-genai@0.2.18(@langchain/core@0.3.80(openai@5.12.2(ws@8.18.3)(zod@3.25.76))))(@langchain/ollama@0.2.4(@langchain/core@0.3.80(openai@5.12.2(ws@8.18.3)(zod@3.25.76))))(axios@1.16.0)(handlebars@4.7.9)(openai@5.12.2(ws@8.18.3)(zod@3.25.76))(typeorm@0.3.28(better-sqlite3@12.9.0)(ioredis@5.10.1)(pg@8.20.0)(ts-node@10.9.2(@swc/core@1.15.33)(@types/node@22.19.17)(typescript@5.9.3)))(ws@8.18.3)
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
     devDependencies:
       '@nestjs/testing':
         specifier: ^11.1.19
