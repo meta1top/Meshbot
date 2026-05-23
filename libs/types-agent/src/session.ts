@@ -91,11 +91,28 @@ export const SessionUsageSchema = z.object({
 });
 export type SessionUsage = z.infer<typeof SessionUsageSchema>;
 
-/** GET /api/sessions/:id/history 出参。 */
+/** GET /api/sessions/:id/history 查询参数。 */
+export const HistoryQuerySchema = z.object({
+  /** Cursor：上一批最早消息的 id；不传 = 拉最新一批。 */
+  before: z.string().optional(),
+  /** 每页条数，默认 50，硬上限 200。 */
+  limit: z.coerce.number().int().min(1).max(200).optional().default(50),
+});
+export type HistoryQuery = z.infer<typeof HistoryQuerySchema>;
+
+/**
+ * GET /api/sessions/:id/history 出参。
+ *
+ * cursor 分页：messages 按 createdAt asc，hasMore 表示老消息是否还有。
+ * 仅首次（before 未传）返 inflight + sessionTotals；翻页时不返。byMessage
+ * 始终是本批 messages 对应的 LLM usage 投影，前端合并到 atom。
+ */
 export const HistoryResponseSchema = z.object({
   messages: z.array(HistoryMessageSchema),
+  hasMore: z.boolean(),
   inflight: InflightSnapshotSchema.nullable(),
-  usage: SessionUsageSchema,
+  sessionTotals: SessionTotalsSchema.optional(),
+  byMessage: z.record(z.string(), MessageUsageSchema),
 });
 export type HistoryResponse = z.infer<typeof HistoryResponseSchema>;
 
