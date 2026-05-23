@@ -6,6 +6,18 @@ import { ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { formatTokens } from "@/lib/format-tokens";
 import { MarkdownContent } from "./markdown-content";
+import { ToolCallBlock } from "./tool-call-block";
+
+export interface ToolCallView {
+  toolCallId: string;
+  name: string;
+  args: unknown;
+  /** 流式累积的 stdout/stderr（仅 bash 等流式 tool）。 */
+  progress?: string;
+  /** 最终结果（end 后；历史读取也填这里）。 */
+  result?: string;
+  status: "running" | "ok" | "error";
+}
 
 /** 时间线上的一条消息（统一视图模型）。 */
 export interface TimelineMessage {
@@ -31,6 +43,7 @@ export interface TimelineMessage {
   reasoningStartedAt?: number;
   /** 推理结束耗时（毫秒，仅 assistant）。设值后认为推理已结束。 */
   reasoningDurationMs?: number;
+  toolCalls?: ToolCallView[];
 }
 
 interface MessageListProps {
@@ -74,15 +87,25 @@ export function MessageList({
                 durationMs={m.reasoningDurationMs}
               />
             ) : null}
+            {m.role === "assistant" &&
+              m.toolCalls &&
+              m.toolCalls.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  {m.toolCalls.map((tc) => (
+                    <ToolCallBlock key={tc.toolCallId} tool={tc} />
+                  ))}
+                </div>
+              )}
             {/*
               推理流期间 content 还是空、loading 也没有 → 隐藏空气泡。
-              只要有内容、loading、streaming、failed 或 usage 之一，气泡就该出现。
+              只要有内容、loading、streaming、failed、toolCalls 或 usage 之一，气泡就该出现。
             */}
             {(m.role === "user" ||
               m.content ||
               m.loading ||
               m.streaming ||
               m.failed ||
+              (m.toolCalls && m.toolCalls.length > 0) ||
               usageByMessage?.[m.id]) && (
               <div
                 className={cn(
