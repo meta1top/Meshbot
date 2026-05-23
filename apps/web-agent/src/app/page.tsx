@@ -17,6 +17,7 @@ export default function Home() {
   const t = useTranslations("home");
   const router = useRouter();
   const [sending, setSending] = useState(false);
+  const [draft, setDraft] = useState("");
 
   /** 发送消息：创建新会话并跳转到会话页 */
   const handleSend = async (msg: string) => {
@@ -87,6 +88,8 @@ export default function Home() {
       </div>
       <div className="sticky bottom-4 mt-auto bg-background pt-4">
         <ChatInput
+          value={draft}
+          onChange={setDraft}
           onSend={handleSend}
           isLoading={sending}
           modelName="Flash · Medium"
