@@ -256,7 +256,7 @@ function SessionView() {
         <MessageList messages={timelineMessages} onRetry={handleRetry} />
         <div ref={bottomRef} />
       </div>
-      <div className="sticky bottom-4 mt-auto bg-background pt-4">
+      <div className="sticky bottom-4 mt-auto w-full max-w-[620px] bg-background pt-4">
         {queuedMessages.length > 0 && (
           <div className="mb-2">
             <MessageList messages={queuedMessages} />
