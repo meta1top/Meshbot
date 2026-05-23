@@ -9,6 +9,7 @@ import {
   useImperativeHandle,
   useRef,
 } from "react";
+import { formatTokens } from "@/lib/format-tokens";
 
 interface ChatInputProps {
   /** 受控值。父组件维护 draft state。 */
@@ -235,26 +236,25 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
                   {tokenUsage.breakdown ? (
                     <div className="space-y-0.5 text-xs">
                       <div>
-                        总计 {tokenUsage.current.toLocaleString()} /{" "}
-                        {tokenUsage.max.toLocaleString()}
+                        总计 {formatTokens(tokenUsage.current)} /{" "}
+                        {formatTokens(tokenUsage.max)}
                       </div>
                       <div>
-                        输入 {tokenUsage.breakdown.inputTokens.toLocaleString()}
+                        输入 {formatTokens(tokenUsage.breakdown.inputTokens)}
                         {tokenUsage.breakdown.cacheReadTokens > 0 &&
-                          `（缓存 ${tokenUsage.breakdown.cacheReadTokens.toLocaleString()}）`}
+                          `（缓存 ${formatTokens(tokenUsage.breakdown.cacheReadTokens)}）`}
                       </div>
                       <div>
-                        输出{" "}
-                        {tokenUsage.breakdown.outputTokens.toLocaleString()}
+                        输出 {formatTokens(tokenUsage.breakdown.outputTokens)}
                         {tokenUsage.breakdown.reasoningTokens > 0 &&
-                          `（推理 ${tokenUsage.breakdown.reasoningTokens.toLocaleString()}）`}
+                          `（推理 ${formatTokens(tokenUsage.breakdown.reasoningTokens)}）`}
                       </div>
                       <div>{tokenUsage.breakdown.callCount} 次调用</div>
                     </div>
                   ) : (
                     <>
-                      {tokenUsage.current.toLocaleString()} /{" "}
-                      {tokenUsage.max.toLocaleString()}
+                      {formatTokens(tokenUsage.current)} /{" "}
+                      {formatTokens(tokenUsage.max)}
                     </>
                   )}
                 </TooltipContent>

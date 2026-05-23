@@ -4,6 +4,7 @@ import { cn } from "@meshbot/design";
 import type { MessageUsage } from "@meshbot/types-agent";
 import { ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
+import { formatTokens } from "@/lib/format-tokens";
 import { MarkdownContent } from "./markdown-content";
 
 /** 时间线上的一条消息（统一视图模型）。 */
@@ -204,11 +205,15 @@ function ReasoningBlock({
 
 function renderUsageLine(u: MessageUsage): string {
   const parts: string[] = [u.model];
-  let inputPart = `输入 ${u.inputTokens}`;
-  if (u.cacheReadTokens > 0) inputPart += `（缓存 ${u.cacheReadTokens}）`;
+  let inputPart = `输入 ${formatTokens(u.inputTokens)}`;
+  if (u.cacheReadTokens > 0) {
+    inputPart += `（缓存 ${formatTokens(u.cacheReadTokens)}）`;
+  }
   parts.push(inputPart);
-  let outputPart = `输出 ${u.outputTokens}`;
-  if (u.reasoningTokens > 0) outputPart += `（推理 ${u.reasoningTokens}）`;
+  let outputPart = `输出 ${formatTokens(u.outputTokens)}`;
+  if (u.reasoningTokens > 0) {
+    outputPart += `（推理 ${formatTokens(u.reasoningTokens)}）`;
+  }
   parts.push(outputPart);
   return parts.join(" · ");
 }
