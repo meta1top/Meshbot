@@ -78,7 +78,7 @@ const meshbotDir = resolveMeshbotDir();
       // Phase 5 C2：production 切纯文本 logger（dev 保留 NestJS 默认 colored）
       ...(process.env.NODE_ENV === "production"
         ? { logger: new PlainTextLogger(), logging: ["error"] }
-        : { logging: ["error", "warn", "migration"] }),
+        : { logging: ["query", "error", "warn", "migration"] }),
       // SQLite 并发优化（spec 第 5.1 节风险 R1）：
       // - journal_mode=WAL 提升并发读写表现
       // - busy_timeout=5000 让阻塞写在 5s 内重试，避免立即抛 SQLITE_BUSY
