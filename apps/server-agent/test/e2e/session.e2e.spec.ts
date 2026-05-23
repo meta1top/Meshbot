@@ -7,8 +7,10 @@ import { Test } from "@nestjs/testing";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import request from "supertest";
 import { SessionController } from "../../src/controllers/session.controller";
+import { LlmCall } from "../../src/entities/llm-call.entity";
 import { PendingMessage } from "../../src/entities/pending-message.entity";
 import { Session } from "../../src/entities/session.entity";
+import { LlmCallService } from "../../src/services/llm-call.service";
 import { RunnerService } from "../../src/services/runner.service";
 import { SessionService } from "../../src/services/session.service";
 
@@ -22,14 +24,14 @@ describe("Session e2e", () => {
         TypeOrmModule.forRoot({
           type: "better-sqlite3",
           database: ":memory:",
-          entities: [Session, PendingMessage],
+          entities: [Session, PendingMessage, LlmCall],
           synchronize: true,
         }),
-        TxTypeOrmModule.forFeature([Session, PendingMessage]),
+        TxTypeOrmModule.forFeature([Session, PendingMessage, LlmCall]),
         AgentModule,
       ],
       controllers: [SessionController],
-      providers: [SessionService, RunnerService],
+      providers: [SessionService, RunnerService, LlmCallService],
     }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
@@ -78,6 +80,7 @@ describe("Session e2e", () => {
       .expect(200);
     expect(res.body).toHaveProperty("messages");
     expect(res.body).toHaveProperty("inflight");
+    expect(res.body.usage.sessionTotals.callCount).toBe(0);
   });
 
   it("GET /api/sessions/:id/pending 对不存在的会话返回 404", async () => {

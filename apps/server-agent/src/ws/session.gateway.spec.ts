@@ -123,4 +123,28 @@ describe("SessionGateway", () => {
     gw.onRunError(payload);
     expect(toEmit[0]).toEqual([SESSION_WS_EVENTS.runError, payload]);
   });
+
+  it("onRunUsage：把事件转发到对应房间", () => {
+    const runner = { getInflight: () => null, interrupt: jest.fn() };
+    const gw = new SessionGateway({} as never, runner as never);
+    const toEmit: unknown[] = [];
+    (gw as unknown as { server: unknown }).server = {
+      to: () => ({ emit: (...a: unknown[]) => toEmit.push(a) }),
+    };
+    const payload = {
+      sessionId: "s1",
+      messageId: "m1",
+      providerType: "deepseek",
+      model: "deepseek-chat",
+      inputTokens: 10,
+      outputTokens: 2,
+      totalTokens: 12,
+      cacheReadTokens: 3,
+      cacheCreationTokens: 0,
+      reasoningTokens: 0,
+      durationMs: 100,
+    };
+    gw.onRunUsage(payload);
+    expect(toEmit[0]).toEqual([SESSION_WS_EVENTS.runUsage, payload]);
+  });
 });

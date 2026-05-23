@@ -1,7 +1,12 @@
 import { GraphService } from "@meshbot/agent";
-import type { HistoryResponse, PendingResponse } from "@meshbot/types-agent";
+import type {
+  HistoryResponse,
+  MessageUsage,
+  PendingResponse,
+} from "@meshbot/types-agent";
 import { Body, Controller, Get, Param, Post } from "@nestjs/common";
 import { AppendMessageDto, CreateSessionDto } from "../dto/session.dto";
+import { LlmCallService } from "../services/llm-call.service";
 import { RunnerService } from "../services/runner.service";
 import { SessionService } from "../services/session.service";
 
@@ -12,6 +17,7 @@ export class SessionController {
     private readonly sessions: SessionService,
     private readonly runner: RunnerService,
     private readonly graph: GraphService,
+    private readonly llmCalls: LlmCallService,
   ) {}
 
   /** 创建会话：写库后异步发起 run，立即返回 sessionId。 */
@@ -33,12 +39,30 @@ export class SessionController {
     return result;
   }
 
-  /** 取已处理历史 + 当前 inflight 快照。 */
+  /** 取已处理历史 + 当前 inflight 快照 + usage 汇总。 */
   @Get(":id/history")
   async history(@Param("id") id: string): Promise<HistoryResponse> {
     await this.sessions.findSessionOrFail(id);
     const messages = await this.graph.getHistory(id);
     const inflight = this.runner.getInflight(id);
+    const [sessionTotals, calls] = await Promise.all([
+      this.llmCalls.getSessionTotals(id),
+      this.llmCalls.listBySession(id),
+    ]);
+    const byMessage: Record<string, MessageUsage> = {};
+    for (const c of calls) {
+      byMessage[c.messageId] = {
+        providerType: c.providerType,
+        model: c.model,
+        inputTokens: c.inputTokens,
+        outputTokens: c.outputTokens,
+        totalTokens: c.totalTokens,
+        cacheReadTokens: c.cacheReadTokens,
+        cacheCreationTokens: c.cacheCreationTokens,
+        reasoningTokens: c.reasoningTokens,
+        durationMs: c.durationMs,
+      };
+    }
     return {
       messages: messages.map((m) => ({
         id: m.id,
@@ -46,6 +70,7 @@ export class SessionController {
         content: m.content,
       })),
       inflight,
+      usage: { sessionTotals, byMessage },
     };
   }
 

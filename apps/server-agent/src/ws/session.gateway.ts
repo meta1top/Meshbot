@@ -8,6 +8,7 @@ import {
   type RunDoneEvent,
   type RunErrorEvent,
   type RunInterruptedEvent,
+  type RunUsageEvent,
   SESSION_WS_EVENTS,
   SESSION_WS_NAMESPACE,
   type SessionTopic,
@@ -102,5 +103,11 @@ export class SessionGateway extends BaseWebSocketGateway {
   @OnEvent(SESSION_WS_EVENTS.runError)
   onRunError(payload: RunErrorEvent): void {
     this.server.to(payload.sessionId).emit(SESSION_WS_EVENTS.runError, payload);
+  }
+
+  /** RunnerService → run.usage → 转发到房间。 */
+  @OnEvent(SESSION_WS_EVENTS.runUsage)
+  onRunUsage(payload: RunUsageEvent): void {
+    this.server.to(payload.sessionId).emit(SESSION_WS_EVENTS.runUsage, payload);
   }
 }
