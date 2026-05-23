@@ -1,6 +1,7 @@
 import {
   type DeletePendingResponse,
   type HistoryResponse,
+  type HistoryToolCall,
   HistoryQuerySchema,
   type MessageUsage,
   type PendingResponse,
@@ -84,13 +85,49 @@ export class SessionController {
     }
 
     const isFirstPage = !before;
+
+    const rows = page.messages;
+    const toolByCallId = new Map<string, (typeof rows)[number]>();
+    for (const r of rows) {
+      if (r.role === "tool" && r.toolCallId) {
+        toolByCallId.set(r.toolCallId, r);
+      }
+    }
+
+    const messages = rows
+      .filter((r) => r.role !== "tool")
+      .map((r) => {
+        const base = {
+          id: r.id,
+          role: r.role as "user" | "assistant" | "system",
+          content: r.content,
+          ...(r.reasoning ? { reasoning: r.reasoning } : {}),
+        };
+        if (r.role !== "assistant" || !r.toolCalls) return base;
+        try {
+          const calls = JSON.parse(r.toolCalls) as Array<{
+            id: string;
+            name: string;
+            args: unknown;
+          }>;
+          const toolCalls: HistoryToolCall[] = calls.map((c) => {
+            const tr = toolByCallId.get(c.id);
+            return {
+              toolCallId: c.id,
+              name: c.name,
+              args: c.args,
+              status: "ok" as const,
+              result: tr?.content ?? "",
+            };
+          });
+          return { ...base, toolCalls };
+        } catch {
+          return base;
+        }
+      });
+
     return {
-      messages: page.messages.map((m) => ({
-        id: m.id,
-        role: m.role as "user" | "assistant" | "system",
-        content: m.content,
-        ...(m.reasoning ? { reasoning: m.reasoning } : {}),
-      })),
+      messages,
       hasMore: page.hasMore,
       inflight: isFirstPage ? this.runner.getInflight(id) : null,
       ...(isFirstPage

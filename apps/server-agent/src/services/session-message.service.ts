@@ -132,9 +132,27 @@ export class SessionMessageService {
       take: opts.limit + 1,
     });
     const hasMore = rows.length > opts.limit;
-    const slice = hasMore ? rows.slice(0, opts.limit) : rows;
+    let slice = hasMore ? rows.slice(0, opts.limit) : rows;
     // reverse 回 asc（前端按时间顺序展示）
     slice.reverse();
+
+    // Round up：把 slice 末尾紧跟着的 role=tool 行（如果有）一并捞回，
+    // 避免 assistant 与其 tool result 被切到不同页。
+    if (slice.length > 0) {
+      const lastInSlice = slice[slice.length - 1];
+      const qb = this.repo
+        .createQueryBuilder("m")
+        .where("m.session_id = :sessionId", { sessionId })
+        .andWhere("m.created_at > :cutoff", { cutoff: lastInSlice.createdAt })
+        .andWhere("m.role = :role", { role: "tool" })
+        .orderBy("m.created_at", "ASC");
+      if (anchorDate) {
+        qb.andWhere("m.created_at < :anchor", { anchor: anchorDate });
+      }
+      const trailingTools = await qb.getMany();
+      slice = [...slice, ...trailingTools];
+    }
+
     return { messages: slice, hasMore };
   }
 }
