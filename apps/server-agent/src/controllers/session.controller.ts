@@ -1,10 +1,11 @@
 import { GraphService } from "@meshbot/agent";
 import type {
+  DeletePendingResponse,
   HistoryResponse,
   MessageUsage,
   PendingResponse,
 } from "@meshbot/types-agent";
-import { Body, Controller, Get, Param, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Post } from "@nestjs/common";
 import { AppendMessageDto, CreateSessionDto } from "../dto/session.dto";
 import { LlmCallService } from "../services/llm-call.service";
 import { RunnerService } from "../services/runner.service";
@@ -101,5 +102,18 @@ export class SessionController {
         createdAt: m.createdAt.toISOString(),
       })),
     };
+  }
+
+  /** 删除一条 pending 消息。仅 status=pending 可删；其余状态返 409。 */
+  @Delete(":id/pending-messages/:messageId")
+  async deletePending(
+    @Param("id") sessionId: string,
+    @Param("messageId") messageId: string,
+  ): Promise<DeletePendingResponse> {
+    const { content } = await this.sessions.deletePendingMessage(
+      sessionId,
+      messageId,
+    );
+    return { deleted: true, content };
   }
 }
