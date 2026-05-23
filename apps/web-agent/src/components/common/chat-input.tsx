@@ -10,7 +10,18 @@ interface ChatInputProps {
   isLoading?: boolean;
   placeholder?: string;
   modelName?: string;
-  tokenUsage?: { current: number; max: number };
+  tokenUsage?: {
+    current: number;
+    max: number;
+    /** 分项明细（可选）—— 提供时 Tooltip 展示详细分解。 */
+    breakdown?: {
+      inputTokens: number;
+      outputTokens: number;
+      cacheReadTokens: number;
+      reasoningTokens: number;
+      callCount: number;
+    };
+  };
 }
 
 export function ChatInput({
@@ -154,8 +165,30 @@ export function ChatInput({
                 </div>
               </TooltipTrigger>
               <TooltipContent>
-                {tokenUsage.current.toLocaleString()} /{" "}
-                {tokenUsage.max.toLocaleString()}
+                {tokenUsage.breakdown ? (
+                  <div className="space-y-0.5 text-xs">
+                    <div>
+                      总计 {tokenUsage.current.toLocaleString()} /{" "}
+                      {tokenUsage.max.toLocaleString()}
+                    </div>
+                    <div>
+                      输入 {tokenUsage.breakdown.inputTokens.toLocaleString()}
+                      {tokenUsage.breakdown.cacheReadTokens > 0 &&
+                        `（缓存 ${tokenUsage.breakdown.cacheReadTokens.toLocaleString()}）`}
+                    </div>
+                    <div>
+                      输出 {tokenUsage.breakdown.outputTokens.toLocaleString()}
+                      {tokenUsage.breakdown.reasoningTokens > 0 &&
+                        `（推理 ${tokenUsage.breakdown.reasoningTokens.toLocaleString()}）`}
+                    </div>
+                    <div>{tokenUsage.breakdown.callCount} 次调用</div>
+                  </div>
+                ) : (
+                  <>
+                    {tokenUsage.current.toLocaleString()} /{" "}
+                    {tokenUsage.max.toLocaleString()}
+                  </>
+                )}
               </TooltipContent>
             </Tooltip>
           </div>
