@@ -18,14 +18,18 @@ export async function createSession(content: string): Promise<string> {
   return data.sessionId;
 }
 
-/** 向会话追加一条消息。 */
+/**
+ * 向会话追加一条消息。`messageId` 由调用方生成（UUID）—— 让前端乐观插入 user
+ * 气泡时就用最终 id，run.human 到达时能直接按 id 找到目标气泡迁出。
+ */
 export async function appendMessage(
   sessionId: string,
+  messageId: string,
   content: string,
 ): Promise<AppendMessagePayload> {
   const { data } = await apiClient.post<AppendMessagePayload>(
     `/api/sessions/${sessionId}/messages`,
-    { content },
+    { messageId, content },
   );
   return data;
 }

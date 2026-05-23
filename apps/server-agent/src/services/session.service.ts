@@ -52,7 +52,11 @@ export class SessionService {
     return { sessionId: session.id };
   }
 
-  /** 向已存在会话追加一条 pending 消息。单表写入，无需事务。 */
+  /**
+   * 向已存在会话追加一条 pending 消息。messageId 由调用方生成（前端 UUID）：
+   * 让前端乐观插入 user 气泡时就拿到最终 id，避免 run.human 早于 200 返回时
+   * 找不到目标气泡。单表写入，无需事务。
+   */
   async appendMessage(
     sessionId: string,
     input: AppendMessageInput,
@@ -60,6 +64,7 @@ export class SessionService {
     const session = await this.findSessionOrFail(sessionId);
     const msg = await this.pendingRepo.save(
       this.pendingRepo.create({
+        id: input.messageId,
         sessionId,
         content: input.content,
         status: "pending",

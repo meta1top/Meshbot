@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { NotFoundException } from "@nestjs/common";
 import { DataSource } from "typeorm";
 import { PendingMessage } from "../entities/pending-message.entity";
@@ -45,7 +46,10 @@ describe("SessionService", () => {
 
   it("appendMessage 写 pending 消息并返回 queued 标志", async () => {
     const { sessionId } = await service.createSession({ content: "first" });
-    const res = await service.appendMessage(sessionId, { content: "second" });
+    const res = await service.appendMessage(sessionId, {
+      messageId: randomUUID(),
+      content: "second",
+    });
     expect(res.queued).toBe(true);
     const pending = await service.listActivePending(sessionId);
     expect(pending).toHaveLength(2);
@@ -53,7 +57,10 @@ describe("SessionService", () => {
 
   it("claimPending 把 pending 批量转 processing 并返回", async () => {
     const { sessionId } = await service.createSession({ content: "m1" });
-    await service.appendMessage(sessionId, { content: "m2" });
+    await service.appendMessage(sessionId, {
+      messageId: randomUUID(),
+      content: "m2",
+    });
     const claimed = await service.claimPending(sessionId);
     expect(claimed.map((m) => m.content)).toEqual(["m1", "m2"]);
     const stillActive = await service.listActivePending(sessionId);
@@ -86,7 +93,10 @@ describe("SessionService", () => {
   it("appendMessage 在 idle 会话上返回 queued:false", async () => {
     const { sessionId } = await service.createSession({ content: "m1" });
     await service.setStatus(sessionId, "idle");
-    const res = await service.appendMessage(sessionId, { content: "m2" });
+    const res = await service.appendMessage(sessionId, {
+      messageId: randomUUID(),
+      content: "m2",
+    });
     expect(res.queued).toBe(false);
   });
 

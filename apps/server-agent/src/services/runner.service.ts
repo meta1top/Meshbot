@@ -65,10 +65,17 @@ export class RunnerService implements OnModuleInit {
     });
   }
 
-  /** 取某 session 当前 inflight 快照；无则 null。 */
+  /**
+   * 取某 session 当前 inflight 快照；无则 null。
+   *
+   * 只暴露真正「在跑」的 run（status === streaming）。run 完成后
+   * inflight 条目仍会在 finally 块里短暂存留，期间 frontend 若刚好
+   * fetchHistory 会拿到 done 状态的残影，与 checkpointer 里持久化好的
+   * assistant 消息形成「双气泡」（一个完整、一个空带闪烁光标）。
+   */
   getInflight(sessionId: string): InflightView | null {
     const run = this.inflight.get(sessionId);
-    if (!run) return null;
+    if (!run || run.status !== "streaming") return null;
     return {
       messageId: run.messageId,
       content: run.content,
@@ -159,12 +166,45 @@ export class RunnerService implements OnModuleInit {
       abort: new AbortController(),
     };
     this.inflight.set(sessionId, run);
+    const runStartedAt = Date.now();
+    this.logger.log(
+      `runOnce start session=${sessionId} batch=${ids.length} resume=${resume}`,
+    );
+    let firstHumanLogged = false;
+    let firstChunkLogged = false;
     try {
       const stream = resume
         ? this.graph.resumeStream(sessionId, run.abort.signal)
         : this.graph.streamMessage(sessionId, batch, run.abort.signal);
       for await (const event of stream) {
+        if (event.kind === "human") {
+          if (!firstHumanLogged) {
+            firstHumanLogged = true;
+            this.logger.log(
+              `runOnce first-human session=${sessionId} +${Date.now() - runStartedAt}ms`,
+            );
+          }
+          this.emitter.emit(SESSION_WS_EVENTS.runHuman, {
+            sessionId,
+            messageId: event.messageId,
+          });
+          continue;
+        }
+        if (event.kind === "reasoning") {
+          this.emitter.emit(SESSION_WS_EVENTS.runReasoning, {
+            sessionId,
+            messageId: event.messageId,
+            delta: event.delta,
+          });
+          continue;
+        }
         if (event.kind === "chunk") {
+          if (!firstChunkLogged) {
+            firstChunkLogged = true;
+            this.logger.log(
+              `runOnce first-chunk session=${sessionId} +${Date.now() - runStartedAt}ms (LLM TTFT incl graph init)`,
+            );
+          }
           run.messageId = event.messageId;
           run.content += event.delta;
           this.emitter.emit(SESSION_WS_EVENTS.runChunk, {
@@ -213,7 +253,9 @@ export class RunnerService implements OnModuleInit {
         });
       }
       run.status = "done";
+      const streamEndedAt = Date.now();
       await this.sessions.markProcessed(ids);
+      const markProcessedMs = Date.now() - streamEndedAt;
       if (run.messageId) {
         this.emitter.emit(SESSION_WS_EVENTS.runDone, {
           sessionId,
@@ -221,6 +263,9 @@ export class RunnerService implements OnModuleInit {
           content: run.content,
         });
       }
+      this.logger.log(
+        `runOnce done session=${sessionId} total=${streamEndedAt - runStartedAt}ms markProcessed=${markProcessedMs}ms`,
+      );
     } catch (err) {
       if (run.abort.signal.aborted) {
         run.status = "interrupted";

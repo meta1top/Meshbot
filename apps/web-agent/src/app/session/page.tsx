@@ -4,7 +4,9 @@ import {
   type RunChunkEvent,
   type RunDoneEvent,
   type RunErrorEvent,
+  type RunHumanEvent,
   type RunInterruptedEvent,
+  type RunReasoningChunkEvent,
   type RunUsageEvent,
   SESSION_WS_EVENTS,
 } from "@meshbot/types-agent";
@@ -31,6 +33,7 @@ import {
   MessageList,
   type TimelineMessage,
 } from "@/components/session/message-list";
+import { PendingList } from "@/components/session/pending-list";
 import { getModelContextWindow } from "@/lib/model-context-window";
 import { getSessionSocket } from "@/lib/socket";
 import { useModelConfigs } from "@/rest/model-config";
@@ -68,6 +71,35 @@ function SessionView() {
       setMessages(messagesRef.current);
     },
     [],
+  );
+
+  /**
+   * onHuman 触发：把指定 user 消息从当前位置抽出、追加到数组末尾，清 pending
+   * 标记（→ 离开 pending 区，进入聊天列表），并保证末尾存在 loading 占位 assistant 气泡。
+   *
+   * 因 messageId 由前端生成、append 同步用同一 id，run.human 到达时一定能 find 到。
+   */
+  const migrateHumanToTimeline = useCallback(
+    (messageId: string): void => {
+      apply((prev) => {
+        const idx = prev.findIndex((m) => m.id === messageId);
+        if (idx === -1) return prev;
+        const target = { ...prev[idx], pending: false };
+        const rest = [...prev.slice(0, idx), ...prev.slice(idx + 1)];
+        const next = [...rest, target];
+        if (next.some((m) => m.loading)) return next;
+        return [
+          ...next,
+          {
+            id: `loading-${messageId}`,
+            role: "assistant" as const,
+            content: "",
+            loading: true,
+          },
+        ];
+      });
+    },
+    [apply],
   );
 
   /** 按 messageId 累加流式 delta；不存在则新建 assistant 气泡。 */
@@ -109,16 +141,28 @@ function SessionView() {
           id: m.id,
           role: m.role,
           content: m.content,
+          // 持久化的 reasoning 直接带入；设了 durationMs=0 让 UI 显示「已思考」
+          // 不显示动态秒数（实际生成时长信息没存）。reasoningStartedAt 不设。
+          ...(m.reasoning
+            ? { reasoning: m.reasoning, reasoningDurationMs: 0 }
+            : {}),
         }));
         const historyIds = new Set(history.messages.map((m) => m.id));
         if (history.inflight) {
           setRunning(history.inflight.status === "streaming");
-          if (history.inflight.messageId) {
+          // 只在真正 streaming 时推 inflight 气泡；done/interrupted 状态下
+          // checkpointer 已持久化对应消息，再推一条会形成「双气泡」（一个完整、
+          // 一个空带闪烁光标）。
+          if (
+            history.inflight.messageId &&
+            history.inflight.status === "streaming" &&
+            !historyIds.has(history.inflight.messageId)
+          ) {
             initial.push({
               id: history.inflight.messageId,
               role: "assistant",
               content: history.inflight.content,
-              streaming: history.inflight.status === "streaming",
+              streaming: true,
             });
           }
         }
@@ -135,11 +179,15 @@ function SessionView() {
             }
             continue;
           }
+          // 仅 status === "pending"（runner 还没认领）进 pending 区；
+          // processing 当作正常 user 气泡（runner 已在跑、对应 assistant 即将出现）；
+          // failed 当作正常 user 气泡 + 失败标记。
           initial.push({
             id: p.id,
             role: "user",
             content: p.content,
-            pending: true,
+            pending: p.status === "pending",
+            failed: p.status === "failed",
           });
         }
         // 合并：历史快照打底，但保留 socket 已先到的消息（不被覆盖）
@@ -156,14 +204,75 @@ function SessionView() {
     const subscribe = () =>
       socket.emit(SESSION_WS_EVENTS.subscribe, { sessionId });
 
+    const onHuman = (e: RunHumanEvent) => {
+      if (e.sessionId !== sessionId) return;
+      migrateHumanToTimeline(e.messageId);
+    };
+    const onReasoning = (e: RunReasoningChunkEvent) => {
+      if (e.sessionId !== sessionId) return;
+      setRunning(true);
+      apply((prev) => {
+        // 首个 reasoning 到达：清当前消息的 loading 占位（按 id 匹配，而非全清，
+        // 否则会把同时排队的其它 user 消息从 pending 区误清出来——pending 标记
+        // 只由 run.human 事件清，不由 reasoning/chunk 顺手清）。
+        const withoutLoading = prev.filter(
+          (m) => !(m.loading && m.id === `loading-${e.messageId}`),
+        );
+        const idx = withoutLoading.findIndex((m) => m.id === e.messageId);
+        // 不存在则创建 assistant 占位：reasoningStartedAt 设为现在，
+        // content 为空（等 onChunk 到达时填）
+        if (idx === -1) {
+          return [
+            ...withoutLoading,
+            {
+              id: e.messageId,
+              role: "assistant" as const,
+              content: "",
+              reasoning: e.delta,
+              reasoningStartedAt: Date.now(),
+            },
+          ];
+        }
+        const copy = [...withoutLoading];
+        const existing = copy[idx];
+        copy[idx] = {
+          ...existing,
+          reasoning: (existing.reasoning ?? "") + e.delta,
+          reasoningStartedAt: existing.reasoningStartedAt ?? Date.now(),
+        };
+        return copy;
+      });
+    };
     const onChunk = (e: RunChunkEvent) => {
       if (e.sessionId !== sessionId) return;
       setRunning(true);
-      apply((prev) =>
-        prev.map((m) =>
-          m.id === e.messageId && m.failed ? { ...m, failed: false } : m,
-        ),
-      );
+      apply((prev) => {
+        // 首个 chunk 到达：
+        // 1) 清掉本次 run 的 loading 占位（按 id 匹配，不全清，避免影响其它排队中的 run）
+        // 2) 该消息若有进行中的 reasoning（startedAt 已设、durationMs 未设），
+        //    在第一次 chunk 到达时锁定 reasoningDurationMs
+        //
+        // pending user 标记的清理交给 run.human 事件（服务端真相），不在这里顺手做。
+        const withoutLoading = prev.filter(
+          (m) => !(m.loading && m.id === `loading-${e.messageId}`),
+        );
+        return withoutLoading.map((m) => {
+          if (m.id === e.messageId) {
+            const next = m.failed ? { ...m, failed: false } : m;
+            if (
+              next.reasoningStartedAt !== undefined &&
+              next.reasoningDurationMs === undefined
+            ) {
+              return {
+                ...next,
+                reasoningDurationMs: Date.now() - next.reasoningStartedAt,
+              };
+            }
+            return next;
+          }
+          return m;
+        });
+      });
       upsertChunk(e.messageId, e.delta, true);
     };
     const onDone = (e: RunDoneEvent) => {
@@ -195,12 +304,18 @@ function SessionView() {
       if (e.messageId) {
         failedIds.add(e.messageId);
       }
+      // 清掉失败那条 user 对应的 loading 占位（id 形如 loading-<messageId>）；
+      // 其它 run 的 loading 不动。
+      const loadingIdsToDrop = new Set<string>();
+      for (const id of failedIds) loadingIdsToDrop.add(`loading-${id}`);
       apply((prev) =>
-        prev.map((m) =>
-          failedIds.has(m.id)
-            ? { ...m, failed: true, pending: false, streaming: false }
-            : m,
-        ),
+        prev
+          .filter((m) => !loadingIdsToDrop.has(m.id))
+          .map((m) =>
+            failedIds.has(m.id)
+              ? { ...m, failed: true, pending: false, streaming: false }
+              : m,
+          ),
       );
     };
     const onUsage = (e: RunUsageEvent) => {
@@ -210,6 +325,8 @@ function SessionView() {
 
     socket.on("connect", subscribe);
     if (socket.connected) subscribe();
+    socket.on(SESSION_WS_EVENTS.runHuman, onHuman);
+    socket.on(SESSION_WS_EVENTS.runReasoning, onReasoning);
     socket.on(SESSION_WS_EVENTS.runChunk, onChunk);
     socket.on(SESSION_WS_EVENTS.runDone, onDone);
     socket.on(SESSION_WS_EVENTS.runInterrupted, onInterrupted);
@@ -219,6 +336,8 @@ function SessionView() {
     return () => {
       cancelled = true;
       socket.off("connect", subscribe);
+      socket.off(SESSION_WS_EVENTS.runHuman, onHuman);
+      socket.off(SESSION_WS_EVENTS.runReasoning, onReasoning);
       socket.off(SESSION_WS_EVENTS.runChunk, onChunk);
       socket.off(SESSION_WS_EVENTS.runDone, onDone);
       socket.off(SESSION_WS_EVENTS.runInterrupted, onInterrupted);
@@ -230,6 +349,7 @@ function SessionView() {
     router,
     apply,
     upsertChunk,
+    migrateHumanToTimeline,
     resetUsage,
     setInitialUsage,
     appendUsage,
@@ -250,21 +370,23 @@ function SessionView() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [timelineMessages]);
 
-  /** 会话页继续发送：立即插 pending 气泡，调追加接口。 */
+  /**
+   * 会话页发送：前端生成最终 messageId（UUID），乐观插入 user 气泡到 pending 区，
+   * append 传同一 id 给后端。这样 run.human 到达时能直接按 id 找到目标气泡迁移，
+   * 不需要 tempId 替换 / pendingHumanIdsRef 缓存。
+   *
+   * loading 占位 + 迁出 pending 区到聊天区末尾，全部交给 onHuman 处理。
+   */
   const handleSend = useCallback(
     async (msg: string) => {
       if (!sessionId) return;
-      const tempId = `local-${Date.now()}`;
+      const messageId = crypto.randomUUID();
       apply((prev) => [
         ...prev,
-        { id: tempId, role: "user", content: msg, pending: true },
+        { id: messageId, role: "user", content: msg, pending: true },
       ]);
       try {
-        const { messageId } = await appendMessage(sessionId, msg);
-        // 用服务端真实 id 替换临时 id —— 与 checkpointer / pending 表对齐，避免重复气泡
-        apply((prev) =>
-          prev.map((m) => (m.id === tempId ? { ...m, id: messageId } : m)),
-        );
+        await appendMessage(sessionId, messageId, msg);
       } catch (err) {
         console.error("追加消息失败", err);
       }
@@ -298,10 +420,27 @@ function SessionView() {
         />
         <div ref={bottomRef} />
       </div>
-      <div className="sticky bottom-4 mt-auto w-full bg-background pt-4">
+      {/*
+        sticky 输入区：bottom-4 距底 16px；上方放绝对定位的渐变遮罩做软淡出。
+        下方那 16px 缝隙由独立 bottom-bar 覆盖，避免滚动文字从缝隙钻出。
+      */}
+      <div className="sticky bottom-4 mt-auto w-full bg-background">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-linear-to-b from-transparent to-background"
+        />
+        {/* 底部缝隙遮挡：与 sticky 容器的 bottom-4 一致，覆盖输入框与窗口底之间的间隙 */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 -bottom-4 h-4 bg-background"
+        />
         {queuedMessages.length > 0 && (
           <div className="mb-2">
-            <MessageList messages={queuedMessages} />
+            <PendingList
+              messages={queuedMessages}
+              onDelete={() => console.warn("删除待处理消息：即将支持")}
+              onEdit={() => console.warn("编辑待处理消息：即将支持")}
+            />
           </div>
         )}
         <ChatInput

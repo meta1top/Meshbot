@@ -7,7 +7,9 @@ import {
   type RunChunkEvent,
   type RunDoneEvent,
   type RunErrorEvent,
+  type RunHumanEvent,
   type RunInterruptedEvent,
+  type RunReasoningChunkEvent,
   type RunUsageEvent,
   SESSION_WS_EVENTS,
   SESSION_WS_NAMESPACE,
@@ -63,10 +65,13 @@ export class SessionGateway extends BaseWebSocketGateway {
   ): void {
     client.join(body.sessionId);
     const inflight = this.runner.getInflight(body.sessionId);
-    if (inflight) {
+    // 仅在已分配 messageId 时才 replay，否则会发一条 messageId="" 的空 chunk，
+    // 前端按 id 索引 upsert 会创建一条永远卡住的空气泡（其后真实 chunk 用真实
+    // id，无法替换）。
+    if (inflight?.messageId) {
       client.emit(SESSION_WS_EVENTS.runChunk, {
         sessionId: body.sessionId,
-        messageId: inflight.messageId ?? "",
+        messageId: inflight.messageId,
         delta: inflight.content,
       });
     }
@@ -77,6 +82,20 @@ export class SessionGateway extends BaseWebSocketGateway {
   @SubscribeMessage(SESSION_WS_EVENTS.interrupt)
   handleInterrupt(@MessageBody() body: SessionTopic): void {
     this.runner.interrupt(body.sessionId);
+  }
+
+  /** RunnerService → run.human → 转发到房间。 */
+  @OnEvent(SESSION_WS_EVENTS.runHuman)
+  onRunHuman(payload: RunHumanEvent): void {
+    this.server.to(payload.sessionId).emit(SESSION_WS_EVENTS.runHuman, payload);
+  }
+
+  /** RunnerService → run.reasoning → 转发到房间。 */
+  @OnEvent(SESSION_WS_EVENTS.runReasoning)
+  onRunReasoning(payload: RunReasoningChunkEvent): void {
+    this.server
+      .to(payload.sessionId)
+      .emit(SESSION_WS_EVENTS.runReasoning, payload);
   }
 
   /** RunnerService → run.chunk → 转发到房间。 */

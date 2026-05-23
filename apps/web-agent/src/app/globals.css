@@ -1,6 +1,22 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "@meshbot/design/src/styles/globals.css";
+@import "highlight.js/styles/github.css";
+
+/* markdown 流式光标：在最后一个块级子元素的最后一段文字尾部，避免被块级布局推到新一行 */
+.md-streaming > :last-child::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  background: oklch(0.5 0 0 / 0.6);
+  animation: md-cursor-blink 1s steps(1) infinite;
+}
+@keyframes md-cursor-blink {
+  50% { opacity: 0; }
+}
 
 @source "../../../../packages/design/src";
 

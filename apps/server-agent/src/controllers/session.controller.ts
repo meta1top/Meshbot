@@ -68,6 +68,7 @@ export class SessionController {
         id: m.id,
         role: m.role,
         content: m.content,
+        ...(m.reasoning ? { reasoning: m.reasoning } : {}),
       })),
       inflight,
       usage: { sessionTotals, byMessage },

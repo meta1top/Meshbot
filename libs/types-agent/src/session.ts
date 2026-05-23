@@ -19,8 +19,15 @@ export const CreateSessionSchema = z.object({
 });
 export type CreateSessionInput = z.infer<typeof CreateSessionSchema>;
 
-/** POST /api/sessions/:id/messages 入参。 */
+/**
+ * POST /api/sessions/:id/messages 入参。
+ *
+ * `messageId` 由前端生成（UUID）：让前端在乐观插入 user 气泡时就拿到最终 id，
+ * 避免 run.human 早于 append 200 返回时找不到目标气泡。后端只校验长度（不强约束
+ * 格式）+ 写 pending_messages 表 + 作为 HumanMessage.id 入 checkpointer，三方对齐。
+ */
 export const AppendMessageSchema = z.object({
+  messageId: z.string().min(1),
   content: z.string().min(1),
 });
 export type AppendMessageInput = z.infer<typeof AppendMessageSchema>;
@@ -30,6 +37,8 @@ export const HistoryMessageSchema = z.object({
   id: z.string(),
   role: z.enum(["user", "assistant", "system"]),
   content: z.string(),
+  /** 推理模型的思考过程（持久化在 checkpointer 的 additional_kwargs.reasoning_content）。 */
+  reasoning: z.string().optional(),
 });
 export type HistoryMessage = z.infer<typeof HistoryMessageSchema>;
 
@@ -104,6 +113,22 @@ export const RunChunkEventSchema = z.object({
 });
 export type RunChunkEvent = z.infer<typeof RunChunkEventSchema>;
 
+/**
+ * socket: run.reasoning 事件载荷。
+ *
+ * 推理模型（DeepSeek v4-pro 等）在吐 content 前先逐 token 推送 reasoning_content。
+ * 前端把它累加到 assistant 气泡的折叠区，默认收起，点击「已思考 Xs」可展开。
+ * 不落库，刷页就没。
+ */
+export const RunReasoningChunkEventSchema = z.object({
+  sessionId: z.string(),
+  messageId: z.string(),
+  delta: z.string(),
+});
+export type RunReasoningChunkEvent = z.infer<
+  typeof RunReasoningChunkEventSchema
+>;
+
 /** socket: run.done 事件载荷。 */
 export const RunDoneEventSchema = z.object({
   sessionId: z.string(),
@@ -129,6 +154,20 @@ export const RunErrorEventSchema = z.object({
 });
 export type RunErrorEvent = z.infer<typeof RunErrorEventSchema>;
 
+/**
+ * socket: run.human 事件载荷。
+ *
+ * runner 把一条 user 消息以 HumanMessage 形式写入 checkpointer 时立即 emit。
+ * 前端据此把对应 user 气泡从 pending 区迁出，按事件到达顺序重排到聊天区末尾
+ * （在该批 chunk/done 之前），保证 user → assistant 的视觉时序一致。
+ */
+export const RunHumanEventSchema = z.object({
+  sessionId: z.string(),
+  /** 与 pending_messages.id / checkpointer HumanMessage.id 三方对齐。 */
+  messageId: z.string(),
+});
+export type RunHumanEvent = z.infer<typeof RunHumanEventSchema>;
+
 /** socket: run.usage 事件载荷（单条 LLM 调用完成）。 */
 export const RunUsageEventSchema = MessageUsageSchema.extend({
   sessionId: z.string(),
@@ -151,6 +190,8 @@ export const SESSION_WS_NAMESPACE = "ws/session";
 export const SESSION_WS_EVENTS = {
   subscribe: "session.subscribe",
   interrupt: "session.interrupt",
+  runHuman: "run.human",
+  runReasoning: "run.reasoning",
   runChunk: "run.chunk",
   runDone: "run.done",
   runInterrupted: "run.interrupted",
