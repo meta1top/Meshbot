@@ -218,12 +218,10 @@ function SessionView() {
       if (e.sessionId !== sessionId) return;
       setRunning(true);
       apply((prev) => {
-        // 首个 reasoning 到达：清当前消息的 loading 占位（按 id 匹配，而非全清，
-        // 否则会把同时排队的其它 user 消息从 pending 区误清出来——pending 标记
-        // 只由 run.human 事件清，不由 reasoning/chunk 顺手清）。
-        const withoutLoading = prev.filter(
-          (m) => !(m.loading && m.id === `loading-${e.messageId}`),
-        );
+        // 首个 reasoning 到达：清掉 loading 占位。任何时候至多有 1 个 loading
+        // （migrateHumanToTimeline 用 `if (next.some(m => m.loading)) return next`
+        // 保证），全清安全；不动 user 的 pending 标记（那个只由 run.human 清）。
+        const withoutLoading = prev.filter((m) => !m.loading);
         const idx = withoutLoading.findIndex((m) => m.id === e.messageId);
         // 不存在则创建 assistant 占位：reasoningStartedAt 设为现在，
         // content 为空（等 onChunk 到达时填）
@@ -254,14 +252,12 @@ function SessionView() {
       setRunning(true);
       apply((prev) => {
         // 首个 chunk 到达：
-        // 1) 清掉本次 run 的 loading 占位（按 id 匹配，不全清，避免影响其它排队中的 run）
+        // 1) 清掉 loading 占位（任何时候至多 1 个，全清安全）
         // 2) 该消息若有进行中的 reasoning（startedAt 已设、durationMs 未设），
         //    在第一次 chunk 到达时锁定 reasoningDurationMs
         //
         // pending user 标记的清理交给 run.human 事件（服务端真相），不在这里顺手做。
-        const withoutLoading = prev.filter(
-          (m) => !(m.loading && m.id === `loading-${e.messageId}`),
-        );
+        const withoutLoading = prev.filter((m) => !m.loading);
         return withoutLoading.map((m) => {
           if (m.id === e.messageId) {
             const next = m.failed ? { ...m, failed: false } : m;
