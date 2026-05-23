@@ -38,12 +38,20 @@ export async function appendMessage(
   return data;
 }
 
-/** 取会话已处理历史 + inflight。 */
+/**
+ * 取会话历史（cursor 分页）。
+ * - 不传 before：拉最新一批 + inflight + sessionTotals
+ * - 传 before：拉早于该 messageId 的一批；inflight 为 null、sessionTotals 不返
+ */
 export async function fetchHistory(
   sessionId: string,
+  before?: string,
 ): Promise<HistoryResponse> {
+  const params = new URLSearchParams();
+  if (before) params.set("before", before);
+  const qs = params.toString();
   const { data } = await apiClient.get<HistoryResponse>(
-    `/api/sessions/${sessionId}/history`,
+    `/api/sessions/${sessionId}/history${qs ? `?${qs}` : ""}`,
   );
   return data;
 }
