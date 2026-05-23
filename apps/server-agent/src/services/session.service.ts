@@ -4,7 +4,11 @@ import type {
   CreateSessionInput,
   SessionStatus,
 } from "@meshbot/types-agent";
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, Repository } from "typeorm";
 import { PendingMessage } from "../entities/pending-message.entity";
@@ -71,6 +75,39 @@ export class SessionService {
       }),
     );
     return { messageId: msg.id, queued: session.status === "running" };
+  }
+
+  /**
+   * 删除一条 pending 消息。仅 status=pending 可删，其余状态返 Conflict。
+   * 单表读+删；用 WHERE id+sessionId+status='pending' 三件套保证原子，防止
+   * 「读到 pending → delete 之间 runner claim」窗口。
+   *
+   * 返回原 content，让前端在「编辑」场景回填输入框。
+   */
+  async deletePendingMessage(
+    sessionId: string,
+    messageId: string,
+  ): Promise<{ content: string }> {
+    const row = await this.pendingRepo.findOneBy({ id: messageId, sessionId });
+    if (!row) {
+      throw new NotFoundException(`PendingMessage ${messageId} not found`);
+    }
+    if (row.status !== "pending") {
+      throw new ConflictException(
+        `PendingMessage ${messageId} 已处于 ${row.status} 状态，无法删除`,
+      );
+    }
+    const res = await this.pendingRepo.delete({
+      id: messageId,
+      sessionId,
+      status: "pending",
+    });
+    if (!res.affected) {
+      throw new ConflictException(
+        `PendingMessage ${messageId} 已开始处理，无法删除`,
+      );
+    }
+    return { content: row.content };
   }
 
   /** 取会话，不存在抛 404。 */
