@@ -10,6 +10,9 @@ import {
   type RunHumanEvent,
   type RunInterruptedEvent,
   type RunReasoningChunkEvent,
+  type RunToolCallEndEvent,
+  type RunToolCallProgressEvent,
+  type RunToolCallStartEvent,
   type RunUsageEvent,
   SESSION_WS_EVENTS,
   SESSION_WS_NAMESPACE,
@@ -128,5 +131,34 @@ export class SessionGateway extends BaseWebSocketGateway {
   @OnEvent(SESSION_WS_EVENTS.runUsage)
   onRunUsage(payload: RunUsageEvent): void {
     this.server.to(payload.sessionId).emit(SESSION_WS_EVENTS.runUsage, payload);
+  }
+
+  /** RunnerService → run.tool_call_start → 转发到房间。 */
+  @OnEvent(SESSION_WS_EVENTS.runToolCallStart)
+  onRunToolCallStart(payload: RunToolCallStartEvent): void {
+    this.server
+      .to(payload.sessionId)
+      .emit(SESSION_WS_EVENTS.runToolCallStart, payload);
+  }
+
+  /** RunnerService → run.tool_call_progress → 转发到房间。 */
+  @OnEvent(SESSION_WS_EVENTS.runToolCallProgress)
+  onRunToolCallProgress(payload: RunToolCallProgressEvent): void {
+    this.server
+      .to(payload.sessionId)
+      .emit(SESSION_WS_EVENTS.runToolCallProgress, payload);
+  }
+
+  /**
+   * RunnerService → run.tool_call_end → 转发到房间。
+   * **剥掉 `content` 字段**（可能很大）：前端只用 `resultPreview`；
+   * content 留在 NestJS event bus 供 runner 落库消费（不上 socket）。
+   */
+  @OnEvent(SESSION_WS_EVENTS.runToolCallEnd)
+  onRunToolCallEnd(payload: RunToolCallEndEvent): void {
+    const { content: _content, ...wireOut } = payload;
+    this.server
+      .to(payload.sessionId)
+      .emit(SESSION_WS_EVENTS.runToolCallEnd, wireOut);
   }
 }
