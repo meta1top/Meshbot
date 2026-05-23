@@ -44,12 +44,19 @@ export interface Message {
  * - human：本批次每条 user 消息以 HumanMessage 形式写入 checkpointer 时各 yield 一次；
  * - reasoning：单个 reasoning token（DeepSeek 等推理模型先吐 reasoning 再吐 content）；
  * - chunk：单个 assistant content token；
+ * - tool_calls：LLM 本轮调用的全部工具调用（流结束后一次性 yield）；
  * - usage：调用结束的 token 用量。
  */
 export type StreamChunk =
   | { kind: "human"; messageId: string }
   | { kind: "reasoning"; messageId: string; delta: string }
   | { kind: "chunk"; messageId: string; delta: string }
+  | {
+      kind: "tool_calls";
+      messageId: string;
+      /** LangChain AIMessage.tool_calls 原始数组（含 id/name/args）。 */
+      toolCalls: unknown[];
+    }
   | {
       kind: "usage";
       messageId: string;
@@ -303,6 +310,18 @@ export class GraphService {
       console.log(
         `[graph timing] thread=${threadId} reasoning=${reasoningCount} chunks=${chunkCount} last-chunk=${lastChunkOffset}ms stream-close=${streamClosedAt - startedAt}ms (after-last-chunk=${closeAfterLastChunk}ms)`,
       );
+    }
+    // 流结束：若 LLM 本轮调用了工具，yield tool_calls 事件（runner 缓存后写 session_messages）。
+    if (
+      lastMessageId &&
+      accumulated &&
+      (accumulated.tool_calls?.length ?? 0) > 0
+    ) {
+      yield {
+        kind: "tool_calls",
+        messageId: lastMessageId,
+        toolCalls: accumulated.tool_calls ?? [],
+      };
     }
     // 流结束：先取 LangChain 标准 usage_metadata，缺失则按多个兜底字段（OpenAI 兼容
     // 路径如 deepseek-v4-pro 把 token 信息放 response_metadata.usage / tokenUsage）提取。

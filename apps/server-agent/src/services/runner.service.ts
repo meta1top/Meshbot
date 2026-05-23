@@ -1,6 +1,10 @@
 import { GraphService } from "@meshbot/agent";
-import { SESSION_WS_EVENTS } from "@meshbot/types-agent";
+import {
+  type RunToolCallEndEvent,
+  SESSION_WS_EVENTS,
+} from "@meshbot/types-agent";
 import { Injectable, Logger, type OnModuleInit } from "@nestjs/common";
+import { OnEvent } from "@nestjs/event-emitter";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { LlmCallService } from "./llm-call.service";
 import { SessionMessageService } from "./session-message.service";
@@ -12,6 +16,8 @@ interface InflightRun {
   content: string;
   /** 推理内容累积（DeepSeek 等推理模型）；非推理模型保持空串。 */
   reasoning: string;
+  /** 序列化好的 tool_calls JSON 字符串（若 LLM 调了工具）；否则 null。 */
+  toolCalls: string | null;
   status: "streaming" | "done" | "interrupted";
   abort: AbortController;
 }
@@ -167,6 +173,7 @@ export class RunnerService implements OnModuleInit {
       messageId: null,
       content: "",
       reasoning: "",
+      toolCalls: null,
       status: "streaming",
       abort: new AbortController(),
     };
@@ -213,6 +220,10 @@ export class RunnerService implements OnModuleInit {
             messageId: event.messageId,
             delta: event.delta,
           });
+          continue;
+        }
+        if (event.kind === "tool_calls") {
+          run.toolCalls = JSON.stringify(event.toolCalls);
           continue;
         }
         if (event.kind === "chunk") {
@@ -287,6 +298,7 @@ export class RunnerService implements OnModuleInit {
             sessionId,
             content: run.content,
             reasoning,
+            toolCalls: run.toolCalls,
           })
           .catch((err) =>
             this.logger.error(
@@ -317,6 +329,29 @@ export class RunnerService implements OnModuleInit {
       }
     } finally {
       this.inflight.delete(sessionId);
+    }
+  }
+
+  /**
+   * 监听 toolsNode emit 的 run.tool_call_end —— 把 tool result 写入
+   * session_messages（role=tool）。fire-and-forget，写失败仅 log。
+   *
+   * gateway 转发给前端时已剥掉 content；runner 直接拿原始 event 含 content 落库。
+   */
+  @OnEvent(SESSION_WS_EVENTS.runToolCallEnd)
+  async onToolCallEnd(payload: RunToolCallEndEvent): Promise<void> {
+    try {
+      await this.sessionMessages.recordToolResult({
+        id: payload.toolCallId,
+        sessionId: payload.sessionId,
+        toolCallId: payload.toolCallId,
+        content: payload.content,
+      });
+    } catch (err) {
+      this.logger.error(
+        `session_messages.recordToolResult 失败 toolCallId=${payload.toolCallId}`,
+        err,
+      );
     }
   }
 }
