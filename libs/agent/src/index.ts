@@ -10,3 +10,5 @@ export { GraphService } from "./graph/graph.service";
 export type { ModelProvider } from "./graph/nodes/supervisor.node";
 export { PromptService } from "./prompt/prompt.service";
 export { ToolRegistry } from "./tools/tool-registry";
+export type { MeshbotTool, ToolContext } from "./tools/tool.types";
+export { Tool, TOOL_METADATA_KEY } from "./tools/tool.decorator";

@@ -6,6 +6,8 @@ import { MeshbotConfigService } from "./config/meshbot-config.service";
 import { GraphService } from "./graph/graph.service";
 import { PromptService } from "./prompt/prompt.service";
 import { ToolRegistry } from "./tools/tool-registry";
+import { BashTool } from "./tools/builtins/bash.tool";
+import { DateTool } from "./tools/builtins/date.tool";
 
 @Module({
   // EventEmitterModule.forRoot() 在 app 层（apps/server-agent app.module）也调；
@@ -15,6 +17,8 @@ import { ToolRegistry } from "./tools/tool-registry";
   imports: [DiscoveryModule, MeshbotConfigModule, EventEmitterModule.forRoot()],
   providers: [
     ToolRegistry,
+    BashTool,
+    DateTool,
     {
       provide: PromptService,
       useFactory: (configService: MeshbotConfigService) => {
