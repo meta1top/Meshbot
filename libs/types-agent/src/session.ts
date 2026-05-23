@@ -51,10 +51,42 @@ export const PendingMessageDtoSchema = z.object({
 });
 export type PendingMessageDto = z.infer<typeof PendingMessageDtoSchema>;
 
+/** 一次 LLM 调用的 token 明细（跨供应商统一字段；供应商不上报的项为 0）。 */
+const TokenBreakdownSchema = z.object({
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  totalTokens: z.number(),
+  cacheReadTokens: z.number(),
+  cacheCreationTokens: z.number(),
+  reasoningTokens: z.number(),
+});
+
+/** 单条 assistant 消息对应一次 LLM 调用的用量。 */
+export const MessageUsageSchema = TokenBreakdownSchema.extend({
+  providerType: z.string(),
+  model: z.string(),
+  durationMs: z.number(),
+});
+export type MessageUsage = z.infer<typeof MessageUsageSchema>;
+
+/** 会话累计：所有 LLM 调用的求和。 */
+export const SessionTotalsSchema = TokenBreakdownSchema.extend({
+  callCount: z.number(),
+});
+export type SessionTotals = z.infer<typeof SessionTotalsSchema>;
+
+/** 会话 usage 聚合 —— history 接口与前端 atom 共用。 */
+export const SessionUsageSchema = z.object({
+  sessionTotals: SessionTotalsSchema,
+  byMessage: z.record(z.string(), MessageUsageSchema),
+});
+export type SessionUsage = z.infer<typeof SessionUsageSchema>;
+
 /** GET /api/sessions/:id/history 出参。 */
 export const HistoryResponseSchema = z.object({
   messages: z.array(HistoryMessageSchema),
   inflight: InflightSnapshotSchema.nullable(),
+  usage: SessionUsageSchema,
 });
 export type HistoryResponse = z.infer<typeof HistoryResponseSchema>;
 
@@ -97,6 +129,13 @@ export const RunErrorEventSchema = z.object({
 });
 export type RunErrorEvent = z.infer<typeof RunErrorEventSchema>;
 
+/** socket: run.usage 事件载荷（单条 LLM 调用完成）。 */
+export const RunUsageEventSchema = MessageUsageSchema.extend({
+  sessionId: z.string(),
+  messageId: z.string(),
+});
+export type RunUsageEvent = z.infer<typeof RunUsageEventSchema>;
+
 /** socket: 客户端 session.subscribe / session.interrupt 入参。 */
 export const SessionTopicSchema = z.object({ sessionId: z.string() });
 export type SessionTopic = z.infer<typeof SessionTopicSchema>;
@@ -116,4 +155,5 @@ export const SESSION_WS_EVENTS = {
   runDone: "run.done",
   runInterrupted: "run.interrupted",
   runError: "run.error",
+  runUsage: "run.usage",
 } as const;
