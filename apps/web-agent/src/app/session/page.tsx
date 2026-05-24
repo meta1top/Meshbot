@@ -156,6 +156,15 @@ function SessionView() {
       router.replace("/");
       return;
     }
+    // 切换 session：清空上一轮 timeline + inflight 状态 + usage 累计。否则
+    // 后面的「合并历史 + socketArrived」逻辑会把旧 session 的消息当成「socket 已先到」
+    // 保留下来，两段对话就混在一起。
+    messagesRef.current = [];
+    setMessages([]);
+    setRunning(false);
+    oldestMessageIdRef.current = null;
+    hasMoreHistoryRef.current = true;
+    setHasMoreHistory(true);
     resetUsage();
     let cancelled = false;
 
