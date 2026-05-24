@@ -66,11 +66,19 @@ export function AppShellLayout({
     const onTitleUpdated = (e: SessionTitleUpdatedEvent) => {
       updateSessionTitle({ id: e.sessionId, title: e.title });
     };
+    // 重连后从服务端 re-pull 一次 list，补齐断连期间错过的 title_updated 事件
+    // （gateway 是 fire-and-forget，不会 replay 历史事件）。首次 connect 也会触发，
+    // 但 loadSessions / reloadSessions 是 cheap GET，可以接受。
+    const onConnect = () => {
+      void reload();
+    };
     socket.on(SESSION_WS_EVENTS.titleUpdated, onTitleUpdated);
+    socket.on("connect", onConnect);
     return () => {
       socket.off(SESSION_WS_EVENTS.titleUpdated, onTitleUpdated);
+      socket.off("connect", onConnect);
     };
-  }, [updateSessionTitle]);
+  }, [updateSessionTitle, reload]);
 
   useEffect(() => {
     document.body.classList.add("app-shell-mode");
