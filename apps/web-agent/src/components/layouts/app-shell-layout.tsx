@@ -130,11 +130,16 @@ export function AppShellLayout({
                   </button>
                 </div>
               ) : (
-                <SessionListSection
-                  title={t("sessions")}
-                  sessions={recent}
-                  emptyText={t("sessionsEmpty")}
-                />
+                // 「会话」段：有未固定项就正常列出；都没有的话仅在 pinned
+                // 也为空时显示「暂无会话」占位 —— 有 pinned 而 recent 空就
+                // 直接隐藏，避免误导用户「没有会话」。
+                (recent.length > 0 || pinned.length === 0) && (
+                  <SessionListSection
+                    title={t("sessions")}
+                    sessions={recent}
+                    emptyText={t("sessionsEmpty")}
+                  />
+                )
               )}
             </div>
 
