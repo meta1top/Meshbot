@@ -52,12 +52,16 @@ export class SessionTitleService {
   }
 
   private async generate(sessionId: string, content: string): Promise<void> {
+    const t0 = Date.now();
     const cur = await this.sessions.findSessionOrFail(sessionId);
     if (cur.titleGenerated) return;
+    const t1 = Date.now();
 
-    const model = await this.graph.getModel();
+    const model = await this.graph.getTitleModel();
     const promptText = this.buildPrompt(content);
+    const t2 = Date.now();
     const res = await model.invoke(promptText);
+    const t3 = Date.now();
     const raw = typeof res.content === "string" ? res.content : "";
     const title = sanitizeTitle(raw);
     if (!title) {
@@ -67,6 +71,9 @@ export class SessionTitleService {
 
     const updated = await this.sessions.patchIfNotGenerated(sessionId, title);
     if (!updated) return;
+    this.logger.log(
+      `session-title session=${sessionId} title="${title}" timing: find=${t1 - t0}ms getModel=${t2 - t1}ms invoke=${t3 - t2}ms total=${Date.now() - t0}ms`,
+    );
 
     this.emitter.emit(SESSION_WS_EVENTS.titleUpdated, {
       sessionId,

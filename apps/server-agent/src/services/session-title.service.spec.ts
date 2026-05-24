@@ -47,10 +47,10 @@ function fakePromptService(content?: string) {
   };
 }
 
-/** 假 GraphService —— 仅 getModel，返一个 invoke 假 model。 */
+/** 假 GraphService —— 仅 getTitleModel，返一个 invoke 假 model。 */
 function fakeGraph(content: string) {
   return {
-    async getModel() {
+    async getTitleModel() {
       return {
         async invoke(_prompt: string) {
           return { content };
@@ -62,7 +62,7 @@ function fakeGraph(content: string) {
 
 function fakeGraphError(err: Error) {
   return {
-    async getModel() {
+    async getTitleModel() {
       return {
         async invoke(_prompt: string) {
           throw err;
@@ -151,7 +151,7 @@ describe("SessionTitleService", () => {
     let invoked = false;
     const svc = new SessionTitleService(
       {
-        async getModel() {
+        async getTitleModel() {
           return {
             async invoke() {
               invoked = true;
@@ -180,7 +180,7 @@ describe("SessionTitleService", () => {
     // → patchIfNotGenerated 看到 titleGenerated=true 返 null → 不 emit。
     const svc = new SessionTitleService(
       {
-        async getModel() {
+        async getTitleModel() {
           return {
             async invoke(_prompt: string) {
               // LLM "调用" 期间外部改 titleGenerated=true（模拟用户改名落库）
@@ -226,7 +226,7 @@ describe("SessionTitleService", () => {
     let capturedPrompt = "";
     const svc = new SessionTitleService(
       {
-        async getModel() {
+        async getTitleModel() {
           return {
             async invoke(prompt: string) {
               capturedPrompt = prompt;

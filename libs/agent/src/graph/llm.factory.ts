@@ -125,6 +125,15 @@ const debugCallback =
  */
 export async function createChatModel(
   config: ActiveModelConfig,
+  options?: {
+    /** 覆盖 streaming，title / one-shot 场景设 false 跳过 stream 开销。 */
+    streaming?: boolean;
+    /**
+     * 透传到 OpenAI client 的额外参数。deepseek thinking 模型用
+     * `{ thinking: { type: "disabled" } }` 关思考；其他 provider 按各自约定。
+     */
+    modelKwargs?: Record<string, unknown>;
+  },
 ): Promise<BaseChatModel> {
   const configuration: Record<string, unknown> = {};
   if (config.baseUrl) configuration.baseURL = config.baseUrl;
@@ -139,7 +148,8 @@ export async function createChatModel(
       PROVIDER_MODEL_NAME[config.providerType] ?? config.providerType,
     apiKey: config.apiKey,
     ...(Object.keys(configuration).length > 0 ? { configuration } : {}),
-    streaming: true,
+    streaming: options?.streaming ?? true,
+    ...(options?.modelKwargs ? { modelKwargs: options.modelKwargs } : {}),
     ...(debugCallback ? { callbacks: [debugCallback] } : {}),
   })) as BaseChatModel;
 }

@@ -175,11 +175,33 @@ export class GraphService {
   }
 
   /**
-   * 暴露给 SessionTitleService 等非 graph 流程使用同一 chat model（带 cache）。
-   * 共享 modelCache 避免 SessionTitleService 每次都 initChatModel（~200ms）。
+   * 给 SessionTitleService 用的标题模型：复用 enabled model 凭证，但
+   * - streaming: false（一次性 invoke 不需要流式开销）
+   * - 关掉 deepseek thinking（标题用例不需要 reasoning，关掉可减少 ~1s 思考
+   *   时间 + 节省 token；非 deepseek provider 不传 thinking 参数）
+   *
+   * 独立 cache key 跟主 graph model 共存，避免互相覆盖。
    */
-  async getModel(): Promise<BaseChatModel> {
-    return this.resolveModel();
+  async getTitleModel(): Promise<BaseChatModel> {
+    const cfg = readActiveModelConfig(this.configService.getDatabasePath());
+    if (!cfg) {
+      throw new Error(
+        "没有启用的模型配置（model_configs 表为空或全部 disabled）",
+      );
+    }
+    const key = `title|${cfg.providerType}|${cfg.model}|${cfg.baseUrl ?? ""}|${cfg.apiKey ?? ""}`;
+    const cached = this.modelCache.get(key);
+    if (cached) return cached;
+    const modelKwargs =
+      cfg.providerType === "deepseek"
+        ? { thinking: { type: "disabled" } }
+        : undefined;
+    const model = await createChatModel(cfg, {
+      streaming: false,
+      modelKwargs,
+    });
+    this.modelCache.set(key, model);
+    return model;
   }
 
   /**
