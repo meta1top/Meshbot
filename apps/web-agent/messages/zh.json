@@ -63,14 +63,25 @@
     "newSession": "新会话",
     "scheduled": "计划任务",
     "pinned": "已固定",
-    "dragToPin": "拖拽以固定",
-    "recents": "最近",
-    "addMarketplacePlugin": "添加插件市场插件",
-    "respondToUserGreeting": "回复用户问候",
+    "sessions": "会话",
     "logout": "退出",
     "promptPlaceholder": "描述一个任务或提出一个问题",
     "local": "本地",
-    "modelBadge": "Flash · Medium"
+    "modelBadge": "Flash · Medium",
+    "sessionMenu": {
+      "rename": "修改标题",
+      "pin": "固定",
+      "unpin": "取消固定",
+      "delete": "删除"
+    },
+    "deleteConfirm": {
+      "title": "删除会话「{title}」？",
+      "description": "此会话内所有消息及记录将被永久删除，不可恢复。",
+      "cancel": "取消",
+      "confirm": "删除"
+    },
+    "loadFailed": "会话加载失败",
+    "retry": "重试"
   },
   "chatInput": {
     "placeholder": "描述一个任务或提出一个问题",
@@ -158,5 +169,8 @@
   "apiKey": "API Key",
   "apiEndpoint": "API 地址",
   "saving": "保存中...",
-  "saveAndStart": "保存并开始"
+  "saveAndStart": "保存并开始",
+  "description": "描述",
+  "cancel": "取消",
+  "confirm": "确认"
 }

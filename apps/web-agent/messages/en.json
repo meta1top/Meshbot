@@ -63,14 +63,25 @@
     "newSession": "New session",
     "scheduled": "Scheduled",
     "pinned": "Pinned",
-    "dragToPin": "Drag to pin",
-    "recents": "Recents",
-    "addMarketplacePlugin": "Add marketplace plugin",
-    "respondToUserGreeting": "Respond to user greeting",
-    "logout": "Logout",
+    "sessions": "Sessions",
+    "logout": "Log out",
     "promptPlaceholder": "Describe a task or ask a question",
     "local": "Local",
-    "modelBadge": "Flash · Medium"
+    "modelBadge": "Flash · Medium",
+    "sessionMenu": {
+      "rename": "Rename",
+      "pin": "Pin",
+      "unpin": "Unpin",
+      "delete": "Delete"
+    },
+    "deleteConfirm": {
+      "title": "Delete session \"{title}\"?",
+      "description": "All messages and records in this session will be permanently deleted.",
+      "cancel": "Cancel",
+      "confirm": "Delete"
+    },
+    "loadFailed": "Failed to load sessions",
+    "retry": "Retry"
   },
   "chatInput": {
     "placeholder": "Describe a task or ask a question",
@@ -158,5 +169,8 @@
   "apiKey": "API Key",
   "apiEndpoint": "API Endpoint",
   "saving": "Saving...",
-  "saveAndStart": "Save and start"
+  "saveAndStart": "Save and start",
+  "description": "Description",
+  "cancel": "Cancel",
+  "confirm": "Confirm"
 }
