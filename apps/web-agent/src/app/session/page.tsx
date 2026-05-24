@@ -719,10 +719,17 @@ function SessionView() {
           sessionId={sessionId ?? ""}
           running={running}
           onRegenerateOptimisticCut={(messageId) => {
+            // 截断到该消息（含），并清掉它的 failed 标记：
+            // 重生成就是「这条 user 即将重跑」，旧的 failed 已陈旧；
+            // 若新一轮再失败，onError 会重新打 failed。
             apply((prev) => {
               const idx = prev.findIndex((m) => m.id === messageId);
               if (idx < 0) return prev;
-              return prev.slice(0, idx + 1);
+              return prev
+                .slice(0, idx + 1)
+                .map((m) =>
+                  m.id === messageId && m.failed ? { ...m, failed: false } : m,
+                );
             });
           }}
           usageByMessage={usageByMessage}
