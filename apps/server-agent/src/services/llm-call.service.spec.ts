@@ -121,4 +121,38 @@ describe("LlmCallService", () => {
     const rows = await service.listBySession("s1");
     expect(rows.map((r) => r.messageId)).toEqual(["m1", "m2"]);
   });
+
+  it("deleteBySession 删该会话全部记录", async () => {
+    await service.record({
+      sessionId: "s1",
+      messageId: "m1",
+      providerType: "p",
+      model: "m",
+      inputTokens: 1,
+      outputTokens: 1,
+      totalTokens: 2,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      reasoningTokens: 0,
+      durationMs: 1,
+    });
+    await service.record({
+      sessionId: "s2",
+      messageId: "m2",
+      providerType: "p",
+      model: "m",
+      inputTokens: 1,
+      outputTokens: 1,
+      totalTokens: 2,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      reasoningTokens: 0,
+      durationMs: 1,
+    });
+    await service.deleteBySession("s1");
+    const remain1 = await service.listBySession("s1");
+    const remain2 = await service.listBySession("s2");
+    expect(remain1).toHaveLength(0);
+    expect(remain2).toHaveLength(1);
+  });
 });

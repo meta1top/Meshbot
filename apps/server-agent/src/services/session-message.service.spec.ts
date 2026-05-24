@@ -176,4 +176,14 @@ describe("SessionMessageService", () => {
     const row = await ds.getRepository(SessionMessage).findOneBy({ id: "a1" });
     expect(row?.toolCalls).toBe(JSON.stringify(calls));
   });
+
+  it("deleteBySession 删该会话全部消息", async () => {
+    await service.recordUser({ id: "u1", sessionId: "s1", content: "a" });
+    await service.recordUser({ id: "u2", sessionId: "s2", content: "b" });
+    await service.deleteBySession("s1");
+    const p1 = await service.listPage("s1", { limit: 10 });
+    const p2 = await service.listPage("s2", { limit: 10 });
+    expect(p1.messages).toHaveLength(0);
+    expect(p2.messages).toHaveLength(1);
+  });
 });

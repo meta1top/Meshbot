@@ -85,4 +85,9 @@ export class LlmCallService {
       where: { messageId: In(messageIds) },
     });
   }
+
+  /** 删某会话全部 LLM 调用观测（仅 session 删除时调用）。 */
+  async deleteBySession(sessionId: string): Promise<void> {
+    await this.llmCallRepo.delete({ sessionId });
+  }
 }

@@ -165,4 +165,9 @@ export class SessionMessageService {
 
     return { messages: slice, hasMore };
   }
+
+  /** 删某会话全部 session_messages（仅 session 删除时调用）。 */
+  async deleteBySession(sessionId: string): Promise<void> {
+    await this.repo.delete({ sessionId });
+  }
 }
