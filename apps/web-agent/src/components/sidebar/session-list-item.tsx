@@ -11,7 +11,7 @@ import {
   PinOff,
   Trash2,
 } from "lucide-react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { type KeyboardEvent, useCallback, useRef, useState } from "react";
 import {
@@ -32,6 +32,7 @@ import { SessionDeleteDialog } from "./session-delete-dialog";
 export function SessionListItem({ session }: { session: SessionSummary }) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const t = useTranslations("appShell.sessionMenu");
   const rename = useSetAtom(renameSessionAtom);
   const togglePin = useSetAtom(togglePinAtom);
@@ -40,7 +41,9 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const active = pathname === `/session/${session.id}`;
+  // 会话页路由是 /session?id=<sid>（query string），不是 /session/<sid>
+  const active =
+    pathname === "/session" && searchParams.get("id") === session.id;
 
   const startEditing = useCallback(() => {
     setMenuOpen(false);
@@ -119,7 +122,7 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
         ) : (
           <button
             type="button"
-            onClick={() => router.push(`/session/${session.id}`)}
+            onClick={() => router.push(`/session?id=${session.id}`)}
             className="min-w-0 flex-1 truncate text-left"
             title={session.title}
           >
