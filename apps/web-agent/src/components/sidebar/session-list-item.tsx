@@ -159,18 +159,12 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
               sideOffset={4}
               className="min-w-[140px]"
             >
-              <DropdownMenuItem
-                onSelect={(e) => {
-                  e.preventDefault();
-                  startEditing();
-                }}
-              >
+              <DropdownMenuItem onSelect={() => startEditing()}>
                 <Pencil className="h-3.5 w-3.5" />
                 {t("rename")}
               </DropdownMenuItem>
               <DropdownMenuItem
-                onSelect={async (e) => {
-                  e.preventDefault();
+                onSelect={async () => {
                   try {
                     await togglePin({
                       id: session.id,
@@ -190,10 +184,7 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
               </DropdownMenuItem>
               <DropdownMenuItem
                 destructive
-                onSelect={(e) => {
-                  e.preventDefault();
-                  setConfirmOpen(true);
-                }}
+                onSelect={() => setConfirmOpen(true)}
               >
                 <Trash2 className="h-3.5 w-3.5" />
                 {t("delete")}
