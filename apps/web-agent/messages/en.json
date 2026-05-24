@@ -81,7 +81,8 @@
       "confirm": "Delete"
     },
     "loadFailed": "Failed to load sessions",
-    "retry": "Retry"
+    "retry": "Retry",
+    "sessionsEmpty": "No sessions yet"
   },
   "chatInput": {
     "placeholder": "Describe a task or ask a question",
@@ -175,5 +176,6 @@
   "delete": "",
   "sessions": "",
   "loadFailed": "",
-  "retry": ""
+  "retry": "",
+  "sessionsEmpty": ""
 }

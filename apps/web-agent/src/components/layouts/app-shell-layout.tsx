@@ -130,7 +130,11 @@ export function AppShellLayout({
                   </button>
                 </div>
               ) : (
-                <SessionListSection title={t("sessions")} sessions={recent} />
+                <SessionListSection
+                  title={t("sessions")}
+                  sessions={recent}
+                  emptyText={t("sessionsEmpty")}
+                />
               )}
             </div>
 
