@@ -54,6 +54,13 @@ function fakeGraphService(opts?: { throwErr?: boolean }) {
       yield { kind: "chunk", messageId: "msg-1", delta: "你" };
       yield { kind: "chunk", messageId: "msg-1", delta: "好" };
       yield {
+        kind: "assistant_done",
+        messageId: "msg-1",
+        content: "你好",
+        reasoning: "",
+        toolCalls: null,
+      };
+      yield {
         kind: "usage",
         messageId: "msg-1",
         providerType: "deepseek",
@@ -71,6 +78,13 @@ function fakeGraphService(opts?: { throwErr?: boolean }) {
       if (opts?.throwErr) throw new Error("llm boom");
       yield { kind: "chunk", messageId: "msg-r", delta: "重" };
       yield { kind: "chunk", messageId: "msg-r", delta: "试" };
+      yield {
+        kind: "assistant_done",
+        messageId: "msg-r",
+        content: "重试",
+        reasoning: "",
+        toolCalls: null,
+      };
       yield {
         kind: "usage",
         messageId: "msg-r",
