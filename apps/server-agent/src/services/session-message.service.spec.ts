@@ -187,3 +187,63 @@ describe("SessionMessageService", () => {
     expect(p2.messages).toHaveLength(1);
   });
 });
+
+describe("findByIdOrFail / deleteAfter", () => {
+  let ds: DataSource;
+  let service: SessionMessageService;
+
+  beforeEach(async () => {
+    ds = new DataSource({
+      type: "better-sqlite3",
+      database: ":memory:",
+      entities: [SessionMessage],
+      synchronize: true,
+    });
+    await ds.initialize();
+    service = new SessionMessageService(ds.getRepository(SessionMessage));
+  });
+
+  afterEach(async () => {
+    await ds.destroy();
+  });
+
+  it("findByIdOrFail 不存在抛 NotFoundException", async () => {
+    await expect(service.findByIdOrFail("nope")).rejects.toThrow(
+      NotFoundException,
+    );
+  });
+
+  it("findByIdOrFail 存在返回 entity", async () => {
+    await service.recordUser({ id: "u1", sessionId: "s1", content: "a" });
+    const r = await service.findByIdOrFail("u1");
+    expect(r.id).toBe("u1");
+    expect(r.content).toBe("a");
+  });
+
+  it("deleteAfter 删 createdAt > cutoff 的消息，cutoff 本身保留", async () => {
+    await service.recordUser({ id: "u1", sessionId: "s1", content: "A" });
+    await new Promise((r) => setTimeout(r, 10));
+    await service.recordAssistant({
+      id: "a1",
+      sessionId: "s1",
+      content: "B",
+      reasoning: null,
+    });
+    await new Promise((r) => setTimeout(r, 10));
+    await service.recordUser({ id: "u2", sessionId: "s1", content: "C" });
+    const cutoffMsg = await service.findByIdOrFail("u1");
+    await service.deleteAfter("s1", cutoffMsg.createdAt);
+    const page = await service.listPage("s1", { limit: 10 });
+    expect(page.messages.map((m) => m.id)).toEqual(["u1"]);
+  });
+
+  it("deleteAfter 不影响其他 session", async () => {
+    await service.recordUser({ id: "x1", sessionId: "s1", content: "x" });
+    await new Promise((r) => setTimeout(r, 10));
+    await service.recordUser({ id: "y1", sessionId: "s2", content: "y" });
+    const cutoff = await service.findByIdOrFail("x1");
+    await service.deleteAfter("s1", cutoff.createdAt);
+    const p = await service.listPage("s2", { limit: 10 });
+    expect(p.messages.map((m) => m.id)).toEqual(["y1"]);
+  });
+});

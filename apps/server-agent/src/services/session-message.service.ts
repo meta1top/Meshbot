@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { LessThan, Repository } from "typeorm";
+import { LessThan, MoreThan, Repository } from "typeorm";
 import { SessionMessage } from "../entities/session-message.entity";
 
 /** 写 user 消息入参。 */
@@ -169,5 +169,25 @@ export class SessionMessageService {
   /** 删某会话全部 session_messages（仅 session 删除时调用）。 */
   async deleteBySession(sessionId: string): Promise<void> {
     await this.repo.delete({ sessionId });
+  }
+
+  /** 取一条消息，按 id 查；不存在抛 NotFoundException。 */
+  async findByIdOrFail(messageId: string): Promise<SessionMessage> {
+    const row = await this.repo.findOneBy({ id: messageId });
+    if (!row) {
+      throw new NotFoundException(`SessionMessage ${messageId} not found`);
+    }
+    return row;
+  }
+
+  /**
+   * 删某会话内 createdAt > cutoff 的所有消息。供「重生成」剪 history 用。
+   * cutoff 本身保留（严格 >，不是 >=）。
+   */
+  async deleteAfter(sessionId: string, cutoff: Date): Promise<void> {
+    await this.repo.delete({
+      sessionId,
+      createdAt: MoreThan(cutoff),
+    });
   }
 }
