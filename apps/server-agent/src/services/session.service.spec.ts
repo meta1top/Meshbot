@@ -364,4 +364,18 @@ describe("SessionService", () => {
       );
     });
   });
+
+  describe("createSession 返回 SessionSummary", () => {
+    it("返 sessionId + session 完整对象", async () => {
+      const r = await service.createSession({ content: "hello" });
+      expect(r.sessionId).toBeDefined();
+      expect(r.session.id).toBe(r.sessionId);
+      expect(r.session.title).toBe("hello");
+      expect(r.session.status).toBe("running");
+      expect(r.session.pinned).toBe(false);
+      expect(r.session.pinnedAt).toBeNull();
+      expect(typeof r.session.createdAt).toBe("string");
+      expect(typeof r.session.updatedAt).toBe("string");
+    });
+  });
 });

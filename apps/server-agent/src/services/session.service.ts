@@ -3,6 +3,7 @@ import type {
   AppendMessageInput,
   CreateSessionInput,
   SessionStatus,
+  SessionSummary,
 } from "@meshbot/types-agent";
 import {
   ConflictException,
@@ -18,6 +19,19 @@ import { LlmCallService } from "./llm-call.service";
 import { SessionMessageService } from "./session-message.service";
 
 const TITLE_MAX = 30;
+
+/** Session entity → SessionSummary（Date → ISO，pinned 派生）。 */
+function toSummary(s: Session): SessionSummary {
+  return {
+    id: s.id,
+    title: s.title,
+    status: s.status,
+    pinned: s.pinnedAt !== null,
+    pinnedAt: s.pinnedAt ? s.pinnedAt.toISOString() : null,
+    createdAt: s.createdAt.toISOString(),
+    updatedAt: s.updatedAt.toISOString(),
+  };
+}
 
 /** 会话与待处理用户消息的归属 Service。 */
 @Injectable()
@@ -38,15 +52,15 @@ export class SessionService {
    */
   async createSession(
     input: CreateSessionInput,
-  ): Promise<{ sessionId: string }> {
+  ): Promise<{ sessionId: string; session: SessionSummary }> {
     return this.createSessionInTx(input);
   }
 
   @Transactional()
   private async createSessionInTx(
     input: CreateSessionInput,
-  ): Promise<{ sessionId: string }> {
-    const session = await this.sessionRepo.save(
+  ): Promise<{ sessionId: string; session: SessionSummary }> {
+    const saved = await this.sessionRepo.save(
       this.sessionRepo.create({
         title: input.content.slice(0, TITLE_MAX),
         status: "running",
@@ -54,12 +68,12 @@ export class SessionService {
     );
     await this.pendingRepo.save(
       this.pendingRepo.create({
-        sessionId: session.id,
+        sessionId: saved.id,
         content: input.content,
         status: "pending",
       }),
     );
-    return { sessionId: session.id };
+    return { sessionId: saved.id, session: toSummary(saved) };
   }
 
   /**
@@ -217,14 +231,15 @@ export class SessionService {
    * id desc 作 tie-breaker（避免同毫秒漂移）。当前 dev 量级一次性全取，未来上
    * 千再加分页。
    */
-  async listAllSorted(): Promise<Session[]> {
-    return this.sessionRepo
+  async listAllSorted(): Promise<SessionSummary[]> {
+    const rows = await this.sessionRepo
       .createQueryBuilder("s")
       .orderBy("CASE WHEN s.pinned_at IS NULL THEN 1 ELSE 0 END", "ASC")
       .addOrderBy("s.pinned_at", "DESC")
       .addOrderBy("s.updated_at", "DESC")
       .addOrderBy("s.id", "DESC")
       .getMany();
+    return rows.map(toSummary);
   }
 
   /**
@@ -235,14 +250,15 @@ export class SessionService {
   async patch(
     sessionId: string,
     input: { title?: string; pinned?: boolean },
-  ): Promise<Session> {
+  ): Promise<SessionSummary> {
     const changes: Partial<Session> = {};
     if (input.title !== undefined) changes.title = input.title;
     if (input.pinned !== undefined) {
       changes.pinnedAt = input.pinned ? new Date() : null;
     }
     await this.sessionRepo.update({ id: sessionId }, changes);
-    return this.findSessionOrFail(sessionId);
+    const s = await this.findSessionOrFail(sessionId);
+    return toSummary(s);
   }
 
   /**
