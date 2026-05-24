@@ -369,22 +369,29 @@ function SessionView() {
     const onToolStart = (e: RunToolCallStartEvent) => {
       if (e.sessionId !== sessionId) return;
       apply((prev) =>
-        prev.map((m) =>
-          m.id === e.messageId
-            ? {
-                ...m,
-                toolCalls: [
-                  ...(m.toolCalls ?? []),
-                  {
-                    toolCallId: e.toolCallId,
-                    name: e.name,
-                    args: e.args,
-                    status: "running" as const,
-                  },
-                ],
-              }
-            : m,
-        ),
+        prev.map((m) => {
+          if (m.id !== e.messageId) return m;
+          // tool_call 开始 = 推理阶段结束。锁住 reasoningDurationMs，否则
+          // 「思考中 Xs」会一直跳到本轮 LLM 结束才能切回「已思考」。
+          const lockDuration =
+            m.reasoningStartedAt !== undefined &&
+            m.reasoningDurationMs === undefined
+              ? { reasoningDurationMs: Date.now() - m.reasoningStartedAt }
+              : {};
+          return {
+            ...m,
+            ...lockDuration,
+            toolCalls: [
+              ...(m.toolCalls ?? []),
+              {
+                toolCallId: e.toolCallId,
+                name: e.name,
+                args: e.args,
+                status: "running" as const,
+              },
+            ],
+          };
+        }),
       );
     };
     const onToolProgress = (e: RunToolCallProgressEvent) => {

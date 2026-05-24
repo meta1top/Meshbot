@@ -98,15 +98,16 @@ export function MessageList({
               )}
             {/*
               推理流期间 content 还是空、loading 也没有 → 隐藏空气泡。
-              只要有内容、loading、streaming、failed、toolCalls 或 usage 之一，气泡就该出现。
+              只要有内容、loading、streaming、failed 或 toolCalls 之一，气泡就该出现。
+              usage 不算独立显示理由 —— 中间决策轮（reasoning+toolCalls 但 content 空）
+              不该只为了挂个 token 行而出气泡。
             */}
             {(m.role === "user" ||
               m.content ||
               m.loading ||
               m.streaming ||
               m.failed ||
-              (m.toolCalls && m.toolCalls.length > 0) ||
-              usageByMessage?.[m.id]) && (
+              (m.toolCalls && m.toolCalls.length > 0)) && (
               <div
                 className={cn(
                   "text-sm leading-relaxed",
@@ -141,11 +142,13 @@ export function MessageList({
                     </button>
                   </span>
                 )}
-                {m.role === "assistant" && usageByMessage?.[m.id] && (
-                  <div className="mt-2 text-[11px] text-muted-foreground/70">
-                    {renderUsageLine(usageByMessage[m.id])}
-                  </div>
-                )}
+                {m.role === "assistant" &&
+                  m.content &&
+                  usageByMessage?.[m.id] && (
+                    <div className="mt-2 text-[11px] text-muted-foreground/70">
+                      {renderUsageLine(usageByMessage[m.id])}
+                    </div>
+                  )}
               </div>
             )}
           </div>
