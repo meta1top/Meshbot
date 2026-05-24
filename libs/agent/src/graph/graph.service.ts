@@ -170,6 +170,14 @@ export class GraphService {
   }
 
   /**
+   * 暴露给 SessionTitleService 等非 graph 流程使用同一 chat model（带 cache）。
+   * 共享 modelCache 避免 SessionTitleService 每次都 initChatModel（~200ms）。
+   */
+  async getModel(): Promise<BaseChatModel> {
+    return this.resolveModel();
+  }
+
+  /**
    * 创建会话，返回 thread id。
    *
    * 仅生成 UUID；system prompt 在每次 streamMessage 时按需前置，
