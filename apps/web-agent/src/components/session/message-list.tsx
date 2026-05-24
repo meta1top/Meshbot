@@ -85,7 +85,7 @@ export function MessageList({
           <div
             key={m.id}
             className={cn(
-              "group flex max-w-[80%] flex-col gap-2",
+              "group relative flex max-w-[80%] flex-col gap-2",
               m.role === "user" ? "self-end items-end" : "self-start",
             )}
           >
