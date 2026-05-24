@@ -18,4 +18,5 @@ export {
   fetchPending,
   listSessions,
   patchSession,
+  regenerateMessage,
 } from "./session";

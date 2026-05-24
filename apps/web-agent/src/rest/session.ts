@@ -127,3 +127,15 @@ export async function deleteSession(
   );
   return data;
 }
+
+/** 从某条 user 消息重新生成（删后面 + 重跑）。 */
+export async function regenerateMessage(
+  sessionId: string,
+  messageId: string,
+): Promise<{ regenerated: true }> {
+  const { data } = await apiClient.post<{ regenerated: true }>(
+    `/api/sessions/${sessionId}/messages/${messageId}/regenerate`,
+    {},
+  );
+  return data;
+}
