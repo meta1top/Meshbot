@@ -1,6 +1,10 @@
 "use client";
 
 import { cn } from "@meshbot/design";
+import {
+  SESSION_WS_EVENTS,
+  type SessionTitleUpdatedEvent,
+} from "@meshbot/types-agent";
 import { clearAccessToken } from "@meshbot/web-common";
 import { useTheme } from "@meshbot/web-common/react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -15,12 +19,14 @@ import {
   recentSessionsAtom,
   reloadSessionsAtom,
   sessionsStatusAtom,
+  updateSessionTitleAtom,
 } from "@/atoms/sessions";
 import { SidebarNavItem } from "@/components/common/sidebar-nav-item";
 import { DragRegion } from "@/components/drag-region";
 import { LanguageToggle } from "@/components/language-toggle";
 import { SessionListSection } from "@/components/sidebar/session-list-section";
 import { SessionListSkeleton } from "@/components/sidebar/session-list-skeleton";
+import { getSessionSocket } from "@/lib/socket";
 
 interface AppShellLayoutProps {
   children: React.ReactNode;
@@ -49,10 +55,22 @@ export function AppShellLayout({
   const status = useAtomValue(sessionsStatusAtom);
   const loadSessions = useSetAtom(loadSessionsAtom);
   const reload = useSetAtom(reloadSessionsAtom);
+  const updateSessionTitle = useSetAtom(updateSessionTitleAtom);
 
   useEffect(() => {
     void loadSessions();
   }, [loadSessions]);
+
+  useEffect(() => {
+    const socket = getSessionSocket();
+    const onTitleUpdated = (e: SessionTitleUpdatedEvent) => {
+      updateSessionTitle({ id: e.sessionId, title: e.title });
+    };
+    socket.on(SESSION_WS_EVENTS.titleUpdated, onTitleUpdated);
+    return () => {
+      socket.off(SESSION_WS_EVENTS.titleUpdated, onTitleUpdated);
+    };
+  }, [updateSessionTitle]);
 
   useEffect(() => {
     document.body.classList.add("app-shell-mode");

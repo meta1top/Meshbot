@@ -151,3 +151,25 @@ export const deleteSessionAtom = atom(null, async (get, set, id: string) => {
     get(sessionsAtom).filter((s) => s.id !== id),
   );
 });
+
+/**
+ * 按 id 局部 patch session title + titleGenerated=true。
+ * socket session.title_updated 收到 + 未来「重生成标题」入口共用。
+ */
+export const updateSessionTitleAtom = atom(
+  null,
+  (get, set, params: { id: string; title: string }) => {
+    const arr = get(sessionsAtom);
+    if (!arr.some((s) => s.id === params.id)) return;
+    set(
+      sessionsAtom,
+      sortSessions(
+        arr.map((s) =>
+          s.id === params.id
+            ? { ...s, title: params.title, titleGenerated: true }
+            : s,
+        ),
+      ),
+    );
+  },
+);
