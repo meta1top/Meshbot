@@ -96,8 +96,6 @@ export default function Home() {
           onChange={setDraft}
           onSend={handleSend}
           isLoading={sending}
-          modelName="Flash · Medium"
-          tokenUsage={{ current: 12, max: 128 }}
         />
       </div>
     </AppShellLayout>
