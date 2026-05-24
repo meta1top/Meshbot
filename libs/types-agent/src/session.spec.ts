@@ -91,22 +91,21 @@ describe("session schemas", () => {
     expect(RunUsageEventSchema.parse(e)).toEqual(e);
   });
 
-  it("HistoryResponseSchema 含 usage 字段", () => {
+  it("HistoryResponseSchema 含分页 + usage 字段", () => {
     const r = {
       messages: [],
+      hasMore: false,
       inflight: null,
-      usage: {
-        sessionTotals: {
-          inputTokens: 0,
-          outputTokens: 0,
-          totalTokens: 0,
-          cacheReadTokens: 0,
-          cacheCreationTokens: 0,
-          reasoningTokens: 0,
-          callCount: 0,
-        },
-        byMessage: {},
+      sessionTotals: {
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+        reasoningTokens: 0,
+        callCount: 0,
       },
+      byMessage: {},
     };
     expect(HistoryResponseSchema.parse(r)).toEqual(r);
   });
