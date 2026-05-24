@@ -388,8 +388,10 @@ function SessionView() {
       apply((prev) =>
         prev.map((m) => {
           if (m.id !== e.messageId) return m;
-          // tool_call 开始 = 推理阶段结束。锁住 reasoningDurationMs，否则
-          // 「思考中 Xs」会一直跳到本轮 LLM 结束才能切回「已思考」。
+          // tool_call 开始 = 本轮 LLM 文本已收尾。
+          // 1) 锁住 reasoningDurationMs，否则「思考中 Xs」会一直跳到本轮 LLM 结束才能切回「已思考」。
+          // 2) 清 streaming 标记，否则中间决策轮（content 已停 + tool_call 进行中）
+          //    气泡尾部的闪烁光标永不熄灭 —— runDone 要等整轮跑完才发。
           const lockDuration =
             m.reasoningStartedAt !== undefined &&
             m.reasoningDurationMs === undefined
@@ -398,6 +400,7 @@ function SessionView() {
           return {
             ...m,
             ...lockDuration,
+            streaming: false,
             toolCalls: [
               ...(m.toolCalls ?? []),
               {
