@@ -203,4 +203,39 @@ export class SessionService {
   async setStatus(sessionId: string, status: SessionStatus): Promise<void> {
     await this.sessionRepo.update({ id: sessionId }, { status });
   }
+
+  /**
+   * 列出全部会话，按「固定优先 / 固定组按 pinnedAt desc / 其余按 updatedAt desc」
+   * 排序。客户端 sortSessions 与之等价。
+   *
+   * id desc 作 tie-breaker（避免同毫秒漂移）。当前 dev 量级一次性全取，未来上
+   * 千再加分页。
+   */
+  async listAllSorted(): Promise<Session[]> {
+    return this.sessionRepo
+      .createQueryBuilder("s")
+      .orderBy("CASE WHEN s.pinned_at IS NULL THEN 1 ELSE 0 END", "ASC")
+      .addOrderBy("s.pinned_at", "DESC")
+      .addOrderBy("s.updated_at", "DESC")
+      .addOrderBy("s.id", "DESC")
+      .getMany();
+  }
+
+  /**
+   * 更新会话 title / pinned。至少传一项（Zod 在控制器 DTO 层已保证）。
+   * pinned: true → 写当前时间到 pinned_at；pinned: false → null。
+   * 单表 update，无需事务。
+   */
+  async patch(
+    sessionId: string,
+    input: { title?: string; pinned?: boolean },
+  ): Promise<Session> {
+    const patch: Partial<Session> = {};
+    if (input.title !== undefined) patch.title = input.title;
+    if (input.pinned !== undefined) {
+      patch.pinnedAt = input.pinned ? new Date() : null;
+    }
+    await this.sessionRepo.update({ id: sessionId }, patch);
+    return this.findSessionOrFail(sessionId);
+  }
 }

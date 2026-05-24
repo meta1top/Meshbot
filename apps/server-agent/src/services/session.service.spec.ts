@@ -201,4 +201,61 @@ describe("SessionService", () => {
     const stillInB = await service.listActivePending(sB);
     expect(stillInB.find((m) => m.id === messageId)).toBeDefined();
   });
+
+  describe("listAllSorted", () => {
+    it("已固定优先；都固定按 pinnedAt desc；未固定按 updatedAt desc", async () => {
+      const a = await service.createSession({ content: "A" });
+      await new Promise((r) => setTimeout(r, 10));
+      const b = await service.createSession({ content: "B" });
+      await new Promise((r) => setTimeout(r, 10));
+      const c = await service.createSession({ content: "C" });
+      await new Promise((r) => setTimeout(r, 10));
+      const d = await service.createSession({ content: "D" });
+
+      await service.patch(b.sessionId, { pinned: true });
+      await new Promise((r) => setTimeout(r, 10));
+      await service.patch(d.sessionId, { pinned: true });
+
+      const rows = await service.listAllSorted();
+      const ids = rows.map((s) => s.id);
+      expect(ids).toEqual([d.sessionId, b.sessionId, c.sessionId, a.sessionId]);
+    });
+
+    it("空列表返 []", async () => {
+      const rows = await service.listAllSorted();
+      expect(rows).toEqual([]);
+    });
+  });
+
+  describe("patch", () => {
+    it("更新 title", async () => {
+      const { sessionId } = await service.createSession({ content: "old" });
+      const updated = await service.patch(sessionId, { title: "new title" });
+      expect(updated.title).toBe("new title");
+    });
+
+    it("pinned=true 写 pinned_at；pinned=false 置 null", async () => {
+      const { sessionId } = await service.createSession({ content: "x" });
+      let s = await service.patch(sessionId, { pinned: true });
+      expect(s.pinnedAt).not.toBeNull();
+      s = await service.patch(sessionId, { pinned: false });
+      expect(s.pinnedAt).toBeNull();
+    });
+
+    it("同时更新 title 和 pinned", async () => {
+      const { sessionId } = await service.createSession({ content: "x" });
+      const s = await service.patch(sessionId, {
+        title: "T",
+        pinned: true,
+      });
+      expect(s.title).toBe("T");
+      expect(s.pinnedAt).not.toBeNull();
+    });
+
+    it("不存在的 id 抛 NotFoundException", async () => {
+      await expect(service.patch("nope", { title: "x" })).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
 });
