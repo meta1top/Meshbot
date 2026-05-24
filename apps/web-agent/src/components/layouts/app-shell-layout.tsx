@@ -101,33 +101,40 @@ export function AppShellLayout({
               </SidebarNavItem>
             </nav>
 
-            {pinned.length > 0 && (
-              <SessionListSection title={t("pinned")} sessions={pinned} />
-            )}
+            {/*
+              会话列表区域：flex-1 + min-h-0 让它在 aside 里占满剩余空间但不撑高，
+              overflow-y-auto 让超出时内部滚动；外面的 nav 顶 / logout 底保持可见。
+              -mx-2.5 + px-2.5 抵消滚动条裁切感（让 hover bg 仍能贴边）。
+            */}
+            <div className="-mx-2.5 mt-1 flex min-h-0 flex-1 flex-col overflow-y-auto px-2.5">
+              {pinned.length > 0 && (
+                <SessionListSection title={t("pinned")} sessions={pinned} />
+              )}
 
-            {status === "loading" ? (
-              <div className="mt-5">
-                <div className="px-2 text-[12px] font-medium text-muted-foreground">
-                  {t("sessions")}
+              {status === "loading" ? (
+                <div className="mt-5">
+                  <div className="px-2 text-[12px] font-medium text-muted-foreground">
+                    {t("sessions")}
+                  </div>
+                  <SessionListSkeleton />
                 </div>
-                <SessionListSkeleton />
-              </div>
-            ) : status === "error" ? (
-              <div className="mt-5 px-2 text-xs text-destructive">
-                {t("loadFailed")}{" "}
-                <button
-                  type="button"
-                  onClick={() => void reload()}
-                  className="underline hover:text-destructive/80"
-                >
-                  {t("retry")}
-                </button>
-              </div>
-            ) : (
-              <SessionListSection title={t("sessions")} sessions={recent} />
-            )}
+              ) : status === "error" ? (
+                <div className="mt-5 px-2 text-xs text-destructive">
+                  {t("loadFailed")}{" "}
+                  <button
+                    type="button"
+                    onClick={() => void reload()}
+                    className="underline hover:text-destructive/80"
+                  >
+                    {t("retry")}
+                  </button>
+                </div>
+              ) : (
+                <SessionListSection title={t("sessions")} sessions={recent} />
+              )}
+            </div>
 
-            <div className="mt-auto flex items-center justify-between px-2">
+            <div className="mt-2 flex items-center justify-between px-2">
               <button
                 type="button"
                 onClick={handleLogout}

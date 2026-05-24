@@ -1,6 +1,12 @@
 "use client";
 
-import { cn } from "@meshbot/design";
+import {
+  cn,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@meshbot/design";
 import type { SessionSummary } from "@meshbot/types-agent";
 import { useSetAtom } from "jotai";
 import {
@@ -27,7 +33,7 @@ import { SessionDeleteDialog } from "./session-delete-dialog";
  *  - 编辑：图标 + Input（autofocus + 全选）；Enter/blur 保存、Esc 取消、IME 期 Enter 忽略
  *  - 激活：路由匹配则高亮（与 SidebarNavItem 一致色）
  *
- * 三点菜单：修改标题 / 固定·取消固定 / 删除。
+ * 三点菜单：修改标题 / 固定·取消固定 / 删除 —— 使用 shadcn DropdownMenu。
  */
 export function SessionListItem({ session }: { session: SessionSummary }) {
   const router = useRouter();
@@ -46,7 +52,6 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
     pathname === "/session" && searchParams.get("id") === session.id;
 
   const startEditing = useCallback(() => {
-    setMenuOpen(false);
     setEditing(true);
     requestAnimationFrame(() => {
       inputRef.current?.focus();
@@ -130,69 +135,65 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
           </button>
         )}
         {!editing && (
-          <div className="relative">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setMenuOpen((v) => !v);
-              }}
-              className={cn(
-                "opacity-0 transition-opacity group-hover:opacity-100",
-                menuOpen && "opacity-100",
-              )}
-              aria-label="menu"
-            >
-              <MoreHorizontal className="h-3.5 w-3.5" />
-            </button>
-            {menuOpen && (
-              <div
-                role="menu"
-                onClick={(e) => e.stopPropagation()}
-                onKeyDown={(e) => e.stopPropagation()}
-                className="absolute right-0 top-5 z-10 min-w-[120px] border border-border bg-popover text-popover-foreground shadow"
+          <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className={cn(
+                  "opacity-0 transition-opacity group-hover:opacity-100",
+                  menuOpen && "opacity-100",
+                )}
+                aria-label="menu"
               >
-                <MenuItem
-                  icon={<Pencil className="h-3 w-3" />}
-                  onClick={startEditing}
-                >
-                  {t("rename")}
-                </MenuItem>
-                <MenuItem
-                  icon={
-                    session.pinned ? (
-                      <PinOff className="h-3 w-3" />
-                    ) : (
-                      <Pin className="h-3 w-3" />
-                    )
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              sideOffset={4}
+              className="min-w-[140px]"
+            >
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  startEditing();
+                }}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                {t("rename")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={async (e) => {
+                  e.preventDefault();
+                  try {
+                    await togglePin({
+                      id: session.id,
+                      pinned: !session.pinned,
+                    });
+                  } catch {
+                    // 已回滚
                   }
-                  onClick={async () => {
-                    setMenuOpen(false);
-                    try {
-                      await togglePin({
-                        id: session.id,
-                        pinned: !session.pinned,
-                      });
-                    } catch {
-                      // 已回滚
-                    }
-                  }}
-                >
-                  {session.pinned ? t("unpin") : t("pin")}
-                </MenuItem>
-                <MenuItem
-                  icon={<Trash2 className="h-3 w-3" />}
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setConfirmOpen(true);
-                  }}
-                  destructive
-                >
-                  {t("delete")}
-                </MenuItem>
-              </div>
-            )}
-          </div>
+                }}
+              >
+                {session.pinned ? (
+                  <PinOff className="h-3.5 w-3.5" />
+                ) : (
+                  <Pin className="h-3.5 w-3.5" />
+                )}
+                {session.pinned ? t("unpin") : t("pin")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                destructive
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setConfirmOpen(true);
+                }}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                {t("delete")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
       <SessionDeleteDialog
@@ -202,32 +203,5 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
         onConfirm={handleDeleteConfirm}
       />
     </>
-  );
-}
-
-function MenuItem({
-  icon,
-  children,
-  onClick,
-  destructive,
-}: {
-  icon: React.ReactNode;
-  children: React.ReactNode;
-  onClick: () => void;
-  destructive?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      role="menuitem"
-      onClick={onClick}
-      className={cn(
-        "flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-accent hover:text-white",
-        destructive && "text-destructive",
-      )}
-    >
-      {icon}
-      {children}
-    </button>
   );
 }
