@@ -176,5 +176,8 @@
   "rename": "",
   "unpin": "",
   "pin": "",
-  "delete": ""
+  "delete": "",
+  "sessions": "",
+  "loadFailed": "",
+  "retry": ""
 }

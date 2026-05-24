@@ -4,22 +4,23 @@ import { cn } from "@meshbot/design";
 import { clearAccessToken } from "@meshbot/web-common";
 import { useTheme } from "@meshbot/web-common/react";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  Clock,
-  Grip,
-  LogOut,
-  Moon,
-  MoreHorizontal,
-  Pin,
-  Plus,
-  Sun,
-} from "lucide-react";
+import { useAtomValue, useSetAtom } from "jotai";
+import { Clock, LogOut, Moon, Plus, Sun } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
+import {
+  loadSessionsAtom,
+  pinnedSessionsAtom,
+  recentSessionsAtom,
+  reloadSessionsAtom,
+  sessionsStatusAtom,
+} from "@/atoms/sessions";
 import { SidebarNavItem } from "@/components/common/sidebar-nav-item";
 import { DragRegion } from "@/components/drag-region";
 import { LanguageToggle } from "@/components/language-toggle";
+import { SessionListSection } from "@/components/sidebar/session-list-section";
+import { SessionListSkeleton } from "@/components/sidebar/session-list-skeleton";
 
 interface AppShellLayoutProps {
   children: React.ReactNode;
@@ -42,6 +43,16 @@ export function AppShellLayout({
   const isNewSessionActive = pathname === "/";
   const isScheduledActive = pathname === "/schedule";
   const [isMac, setIsMac] = useState(false);
+
+  const pinned = useAtomValue(pinnedSessionsAtom);
+  const recent = useAtomValue(recentSessionsAtom);
+  const status = useAtomValue(sessionsStatusAtom);
+  const loadSessions = useSetAtom(loadSessionsAtom);
+  const reload = useSetAtom(reloadSessionsAtom);
+
+  useEffect(() => {
+    void loadSessions();
+  }, [loadSessions]);
 
   useEffect(() => {
     document.body.classList.add("app-shell-mode");
@@ -90,53 +101,31 @@ export function AppShellLayout({
               </SidebarNavItem>
             </nav>
 
-            <div className="mt-8 px-2 text-[12px] font-medium text-muted-foreground">
-              {t("pinned")}
-            </div>
-            <div className="mt-1 space-y-0.5 text-[14px]">
-              <button
-                type="button"
-                className="group flex w-full items-center justify-between rounded-none px-2 py-1.5 text-left text-muted-foreground hover:bg-accent hover:text-white"
-              >
-                <div className="flex items-center gap-2">
-                  <Pin className="h-3.5 w-3.5 text-muted-foreground group-hover:text-white" />
-                  <span>{t("dragToPin")}</span>
-                </div>
-                <span className="opacity-0 transition-opacity group-hover:opacity-100">
-                  <MoreHorizontal className="h-3.5 w-3.5" />
-                </span>
-              </button>
-            </div>
+            {pinned.length > 0 && (
+              <SessionListSection title={t("pinned")} sessions={pinned} />
+            )}
 
-            <div className="mt-5 px-2 text-[12px] font-medium text-muted-foreground">
-              {t("recents")}
-            </div>
-            <div className="mt-1 space-y-0.5 text-[14px]">
-              <button
-                type="button"
-                className="group flex w-full items-center justify-between rounded-none px-2 py-1.5 text-left text-foreground/80 hover:bg-accent hover:text-white"
-              >
-                <div className="flex items-center gap-2">
-                  <Grip className="h-3.5 w-3.5 text-muted-foreground group-hover:text-white" />
-                  <span>{t("addMarketplacePlugin")}</span>
+            {status === "loading" ? (
+              <div className="mt-5">
+                <div className="px-2 text-[12px] font-medium text-muted-foreground">
+                  {t("sessions")}
                 </div>
-                <span className="opacity-0 transition-opacity group-hover:opacity-100">
-                  <MoreHorizontal className="h-3.5 w-3.5" />
-                </span>
-              </button>
-              <button
-                type="button"
-                className="group flex w-full items-center justify-between rounded-none px-2 py-1.5 text-left text-foreground/80 hover:bg-accent hover:text-white"
-              >
-                <div className="flex items-center gap-2">
-                  <Grip className="h-3.5 w-3.5 text-muted-foreground group-hover:text-white" />
-                  <span>{t("respondToUserGreeting")}</span>
-                </div>
-                <span className="opacity-0 transition-opacity group-hover:opacity-100">
-                  <MoreHorizontal className="h-3.5 w-3.5" />
-                </span>
-              </button>
-            </div>
+                <SessionListSkeleton />
+              </div>
+            ) : status === "error" ? (
+              <div className="mt-5 px-2 text-xs text-destructive">
+                {t("loadFailed")}{" "}
+                <button
+                  type="button"
+                  onClick={() => void reload()}
+                  className="underline hover:text-destructive/80"
+                >
+                  {t("retry")}
+                </button>
+              </div>
+            ) : (
+              <SessionListSection title={t("sessions")} sessions={recent} />
+            )}
 
             <div className="mt-auto flex items-center justify-between px-2">
               <button
