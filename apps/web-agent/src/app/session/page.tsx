@@ -203,11 +203,20 @@ function SessionView() {
             history.inflight.status === "streaming" &&
             !historyIds.has(history.inflight.messageId)
           ) {
+            // reasoning 也带上：避免「正文流中切回会话」时思考过程丢失。
+            // durationMs=0 让 UI 直接显示「已思考」（流式秒数信息没存）；
+            // 后续 ws 订阅 replay 的 reasoning chunk 会按 messageId 累加到此条上。
             initial.push({
               id: history.inflight.messageId,
               role: "assistant",
               content: history.inflight.content,
               streaming: true,
+              ...(history.inflight.reasoning
+                ? {
+                    reasoning: history.inflight.reasoning,
+                    reasoningDurationMs: 0,
+                  }
+                : {}),
             });
           }
         }

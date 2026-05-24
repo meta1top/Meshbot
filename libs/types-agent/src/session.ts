@@ -113,6 +113,8 @@ export type HistoryMessage = z.infer<typeof HistoryMessageSchema>;
 export const InflightSnapshotSchema = z.object({
   messageId: z.string().nullable(),
   content: z.string(),
+  /** 已累积的 reasoning（思考过程），无则空串。 */
+  reasoning: z.string(),
   status: z.enum(["streaming", "done", "interrupted"]),
 });
 export type InflightSnapshot = z.infer<typeof InflightSnapshotSchema>;
