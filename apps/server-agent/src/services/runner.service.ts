@@ -228,6 +228,15 @@ export class RunnerService implements OnModuleInit {
               `runOnce first-chunk session=${sessionId} +${Date.now() - runStartedAt}ms (LLM TTFT incl graph init)`,
             );
           }
+          // 在 chunk 阶段同步更新 inflight 快照（messageId 首次出现时设、content
+          // 累加），让 ws 订阅 handleSubscribe 的 replay 能在流式中途也拼出已收
+          // 到的部分。否则 inflight.messageId 要等到 assistant_done 才有，订阅时
+          // 「之前的输出」都看不到。
+          if (run.messageId !== event.messageId) {
+            run.messageId = event.messageId;
+            run.content = "";
+          }
+          run.content += event.delta;
           this.emitter.emit(SESSION_WS_EVENTS.runChunk, {
             sessionId,
             messageId: event.messageId,

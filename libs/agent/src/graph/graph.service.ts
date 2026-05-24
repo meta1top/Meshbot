@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import type { BaseMessage } from "@langchain/core/messages";
@@ -85,6 +86,13 @@ export type StreamChunk =
 export class GraphService {
   private checkpointer: ReturnType<typeof createSqliteCheckpointer>;
   private graph: ReturnType<typeof buildSupervisorGraph>;
+  /**
+   * 当前活跃模型的 provider/model meta，用于 usage 事件标注。
+   *
+   * 当前实现：单例字段，resolveModel() 时刷新。本地轨同一时刻只有一个 enabled
+   * model（model_configs 唯一启用），并发 run 拿到的 modelMeta 相同 → 安全。
+   * 未来支持多模型并发时，要么挪进 runCtx，要么 inline 到 usage emit。
+   */
   private modelMeta: { providerType: string; model: string };
   /**
    * 缓存 chat model 实例。key 由 provider/model/baseUrl/apiKey 拼成，配置变化
@@ -92,14 +100,19 @@ export class GraphService {
    */
   private modelCache = new Map<string, BaseChatModel>();
   /**
-   * 当前活跃 run 的上下文引用。单 run 串行假设（未来并发需 AsyncLocalStorage）。
-   * streamMessage / resumeStream 进入时设置，finally 清空。
+   * 每个并发 run 的上下文。用 AsyncLocalStorage 把 ctx 绑到调用栈，让多个
+   * session 同时跑时各自的 toolsNode getCtx() 拿到的是本 run 的 ctx，不会串。
+   * 之前用单例 ctxRef 字段，后开的 run 会覆盖前一个 → tools 路由错误 / 事件
+   * emit 到错 session。
+   *
+   * messageId 是 mutable 的（每轮 LLM 切换时 runGraphStream 内更新），所以
+   * 包了一层对象 ref，让 toolsNode 总能拿到最新值。
    */
-  private ctxRef: {
+  private readonly runCtx = new AsyncLocalStorage<{
     sessionId: string;
     messageId: string;
     signal: AbortSignal;
-  } | null = null;
+  }>();
 
   constructor(
     private configService: MeshbotConfigService,
@@ -118,16 +131,17 @@ export class GraphService {
       provider,
       this.toolRegistry,
       () => {
-        if (!this.ctxRef) {
+        const ctx = this.runCtx.getStore();
+        if (!ctx) {
           throw new Error(
-            "toolsNode called without active run (ctxRef is null)",
+            "toolsNode called without active run (AsyncLocalStorage 未绑定 ctx)",
           );
         }
         return {
-          sessionId: this.ctxRef.sessionId,
-          messageId: this.ctxRef.messageId,
+          sessionId: ctx.sessionId,
+          messageId: ctx.messageId,
           emitter: this.eventEmitter,
-          signal: this.ctxRef.signal,
+          signal: ctx.signal,
         } satisfies Omit<ToolContext, "toolCallId">;
       },
     );
@@ -184,35 +198,43 @@ export class GraphService {
     signal?: AbortSignal,
   ): AsyncGenerator<StreamChunk> {
     const abortSignal = signal ?? new AbortController().signal;
-    this.ctxRef = { sessionId: threadId, messageId: "", signal: abortSignal };
-    try {
-      this.promptService.reloadIfChanged();
-      const systemPrompt = this.promptService.getPrompt("system");
-      const state = await this.graph.getState({
-        configurable: { thread_id: threadId },
-      });
-      const hasHistory =
-        Array.isArray((state.values as GraphState)?.messages) &&
-        (state.values as GraphState).messages.length > 0;
-      const inputMessages: BaseMessage[] = [];
-      if (systemPrompt && !hasHistory) {
-        inputMessages.push(new SystemMessage(systemPrompt));
-      }
-      for (const input of inputs) {
-        inputMessages.push(
-          new HumanMessage({ content: input.content, id: input.id }),
-        );
-      }
-      // 先把本批次 user 消息以 human 事件 yield 出去，runner 据此 emit run.human，
-      // 让 frontend 在 chunk 到达之前把 user 气泡从 pending 区迁到聊天区末尾，
-      // 保证 user → assistant 视觉顺序与 checkpointer 状态一致。
-      for (const input of inputs) {
-        yield { kind: "human", messageId: input.id };
-      }
-      yield* this.runGraphStream(threadId, { messages: inputMessages }, signal);
-    } finally {
-      this.ctxRef = null;
+    const ctx = { sessionId: threadId, messageId: "", signal: abortSignal };
+    // ALS.run 包整个 generator —— toolsNode getCtx() / runGraphStream 内
+    // 更新 messageId 都走同一份 ctx 引用。多 session 并发互不干扰。
+    yield* this.runCtx.run(ctx, () =>
+      this.streamMessageImpl(threadId, inputs, signal),
+    );
+  }
+
+  private async *streamMessageImpl(
+    threadId: ThreadId,
+    inputs: { id: string; content: string }[],
+    signal?: AbortSignal,
+  ): AsyncGenerator<StreamChunk> {
+    this.promptService.reloadIfChanged();
+    const systemPrompt = this.promptService.getPrompt("system");
+    const state = await this.graph.getState({
+      configurable: { thread_id: threadId },
+    });
+    const hasHistory =
+      Array.isArray((state.values as GraphState)?.messages) &&
+      (state.values as GraphState).messages.length > 0;
+    const inputMessages: BaseMessage[] = [];
+    if (systemPrompt && !hasHistory) {
+      inputMessages.push(new SystemMessage(systemPrompt));
     }
+    for (const input of inputs) {
+      inputMessages.push(
+        new HumanMessage({ content: input.content, id: input.id }),
+      );
+    }
+    // 先把本批次 user 消息以 human 事件 yield 出去，runner 据此 emit run.human，
+    // 让 frontend 在 chunk 到达之前把 user 气泡从 pending 区迁到聊天区末尾，
+    // 保证 user → assistant 视觉顺序与 checkpointer 状态一致。
+    for (const input of inputs) {
+      yield { kind: "human", messageId: input.id };
+    }
+    yield* this.runGraphStream(threadId, { messages: inputMessages }, signal);
   }
 
   /**
@@ -230,12 +252,10 @@ export class GraphService {
     signal?: AbortSignal,
   ): AsyncGenerator<StreamChunk> {
     const abortSignal = signal ?? new AbortController().signal;
-    this.ctxRef = { sessionId: threadId, messageId: "", signal: abortSignal };
-    try {
-      yield* this.runGraphStream(threadId, { messages: [] }, signal);
-    } finally {
-      this.ctxRef = null;
-    }
+    const ctx = { sessionId: threadId, messageId: "", signal: abortSignal };
+    yield* this.runCtx.run(ctx, () =>
+      this.runGraphStream(threadId, { messages: [] }, signal),
+    );
   }
 
   /**
@@ -333,7 +353,8 @@ export class GraphService {
       }
       currentId = messageId;
       currentAcc = currentAcc === undefined ? msg : currentAcc.concat(msg);
-      if (this.ctxRef) this.ctxRef.messageId = messageId;
+      const ctx = this.runCtx.getStore();
+      if (ctx) ctx.messageId = messageId;
       const reasoningDelta =
         typeof msg.additional_kwargs?.reasoning_content === "string"
           ? msg.additional_kwargs.reasoning_content
