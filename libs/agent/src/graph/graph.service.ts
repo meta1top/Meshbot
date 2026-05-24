@@ -1,4 +1,3 @@
-import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import type { BaseMessage } from "@langchain/core/messages";
@@ -91,7 +90,7 @@ export class GraphService {
    *
    * 当前实现：单例字段，resolveModel() 时刷新。本地轨同一时刻只有一个 enabled
    * model（model_configs 唯一启用），并发 run 拿到的 modelMeta 相同 → 安全。
-   * 未来支持多模型并发时，要么挪进 runCtx，要么 inline 到 usage emit。
+   * 未来支持多模型并发时，要么挪进 ctxRef，要么 inline 到 usage emit。
    */
   private modelMeta: { providerType: string; model: string };
   /**
@@ -100,19 +99,25 @@ export class GraphService {
    */
   private modelCache = new Map<string, BaseChatModel>();
   /**
-   * 每个并发 run 的上下文。用 AsyncLocalStorage 把 ctx 绑到调用栈，让多个
-   * session 同时跑时各自的 toolsNode getCtx() 拿到的是本 run 的 ctx，不会串。
-   * 之前用单例 ctxRef 字段，后开的 run 会覆盖前一个 → tools 路由错误 / 事件
-   * emit 到错 session。
+   * 当前活跃 run 的上下文引用。
    *
-   * messageId 是 mutable 的（每轮 LLM 切换时 runGraphStream 内更新），所以
-   * 包了一层对象 ref，让 toolsNode 总能拿到最新值。
+   * 设计假设：runner.kickAndWait 用 per-session `running` Set 保证一个 session
+   * 同一时刻只跑一个 run；本地轨当前未启多 session 并发 runner，所以全局
+   * 至多一个 ctxRef 同时活，单例字段足够。
+   *
+   * **不要换成 AsyncLocalStorage** —— LangGraph 内部用 Pregel runner 在自己的
+   * Promise 链上 dispatch toolsNode 调用，会脱离我们 streamMessage 的 ALS frame
+   * → `getStore()` 返 undefined，toolsNode 直接抛「未绑定 ctx」错。
+   *
+   * 当未来真要支持多 session 并发跑（不同 runner 同 GraphService 实例），需要
+   * 走 LangGraph configurable 把 sessionId/messageId/signal 经 stream config
+   * 一路传到 toolsNode，而不是依赖外层闭包。
    */
-  private readonly runCtx = new AsyncLocalStorage<{
+  private ctxRef: {
     sessionId: string;
     messageId: string;
     signal: AbortSignal;
-  }>();
+  } | null = null;
 
   constructor(
     private configService: MeshbotConfigService,
@@ -131,17 +136,16 @@ export class GraphService {
       provider,
       this.toolRegistry,
       () => {
-        const ctx = this.runCtx.getStore();
-        if (!ctx) {
+        if (!this.ctxRef) {
           throw new Error(
-            "toolsNode called without active run (AsyncLocalStorage 未绑定 ctx)",
+            "toolsNode called without active run (ctxRef is null)",
           );
         }
         return {
-          sessionId: ctx.sessionId,
-          messageId: ctx.messageId,
+          sessionId: this.ctxRef.sessionId,
+          messageId: this.ctxRef.messageId,
           emitter: this.eventEmitter,
-          signal: ctx.signal,
+          signal: this.ctxRef.signal,
         } satisfies Omit<ToolContext, "toolCallId">;
       },
     );
@@ -206,12 +210,12 @@ export class GraphService {
     signal?: AbortSignal,
   ): AsyncGenerator<StreamChunk> {
     const abortSignal = signal ?? new AbortController().signal;
-    const ctx = { sessionId: threadId, messageId: "", signal: abortSignal };
-    // ALS.run 包整个 generator —— toolsNode getCtx() / runGraphStream 内
-    // 更新 messageId 都走同一份 ctx 引用。多 session 并发互不干扰。
-    yield* this.runCtx.run(ctx, () =>
-      this.streamMessageImpl(threadId, inputs, signal),
-    );
+    this.ctxRef = { sessionId: threadId, messageId: "", signal: abortSignal };
+    try {
+      yield* this.streamMessageImpl(threadId, inputs, signal);
+    } finally {
+      this.ctxRef = null;
+    }
   }
 
   private async *streamMessageImpl(
@@ -260,10 +264,12 @@ export class GraphService {
     signal?: AbortSignal,
   ): AsyncGenerator<StreamChunk> {
     const abortSignal = signal ?? new AbortController().signal;
-    const ctx = { sessionId: threadId, messageId: "", signal: abortSignal };
-    yield* this.runCtx.run(ctx, () =>
-      this.runGraphStream(threadId, { messages: [] }, signal),
-    );
+    this.ctxRef = { sessionId: threadId, messageId: "", signal: abortSignal };
+    try {
+      yield* this.runGraphStream(threadId, { messages: [] }, signal);
+    } finally {
+      this.ctxRef = null;
+    }
   }
 
   /**
@@ -361,8 +367,7 @@ export class GraphService {
       }
       currentId = messageId;
       currentAcc = currentAcc === undefined ? msg : currentAcc.concat(msg);
-      const ctx = this.runCtx.getStore();
-      if (ctx) ctx.messageId = messageId;
+      if (this.ctxRef) this.ctxRef.messageId = messageId;
       const reasoningDelta =
         typeof msg.additional_kwargs?.reasoning_content === "string"
           ? msg.additional_kwargs.reasoning_content
