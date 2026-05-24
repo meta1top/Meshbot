@@ -96,15 +96,6 @@ export function MessageList({
                 durationMs={m.reasoningDurationMs}
               />
             ) : null}
-            {m.role === "assistant" &&
-              m.toolCalls &&
-              m.toolCalls.length > 0 && (
-                <div className="flex flex-col gap-1.5">
-                  {m.toolCalls.map((tc) => (
-                    <ToolCallBlock key={tc.toolCallId} tool={tc} />
-                  ))}
-                </div>
-              )}
             {/*
               推理流期间 content 还是空、loading 也没有 → 隐藏空气泡。
               只要有内容、loading、streaming、failed 或 toolCalls 之一，气泡就该出现。
@@ -151,6 +142,15 @@ export function MessageList({
                   )}
               </div>
             )}
+            {m.role === "assistant" &&
+              m.toolCalls &&
+              m.toolCalls.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  {m.toolCalls.map((tc) => (
+                    <ToolCallBlock key={tc.toolCallId} tool={tc} />
+                  ))}
+                </div>
+              )}
             {m.role === "user" && (
               <UserMessageActions
                 sessionId={sessionId}
