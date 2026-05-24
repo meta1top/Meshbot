@@ -133,13 +133,6 @@ export function MessageList({
                     )}
                   </>
                 )}
-                {m.role === "assistant" &&
-                  m.content &&
-                  usageByMessage?.[m.id] && (
-                    <div className="mt-2 text-[11px] text-muted-foreground/70">
-                      {renderUsageLine(usageByMessage[m.id])}
-                    </div>
-                  )}
               </div>
             )}
             {m.role === "assistant" &&
@@ -151,6 +144,11 @@ export function MessageList({
                   ))}
                 </div>
               )}
+            {m.role === "assistant" && m.content && usageByMessage?.[m.id] && (
+              <div className="text-[11px] text-muted-foreground/70">
+                {renderUsageLine(usageByMessage[m.id])}
+              </div>
+            )}
             {m.role === "user" && (
               <UserMessageActions
                 sessionId={sessionId}
