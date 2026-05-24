@@ -44,7 +44,10 @@ export interface Message {
  * - human：本批次每条 user 消息以 HumanMessage 形式写入 checkpointer 时各 yield 一次；
  * - reasoning：单个 reasoning token（DeepSeek 等推理模型先吐 reasoning 再吐 content）；
  * - chunk：单个 assistant content token；
- * - tool_calls：LLM 本轮调用的全部工具调用（流结束后一次性 yield）；
+ * - tool_calls：LLM 本轮调用的全部工具调用（本轮 LLM 结束、tools 节点开跑前 yield）；
+ * - assistant_done：本轮 LLM 完整结束（finish=stop 或 finish=tool_calls）。runner 据此
+ *   持久化一条 session_messages.assistant；ReAct 多轮里会 emit 多次（每轮一次）。
+ *   usage 跟随同一轮的 assistant_done 之后立即 yield。
  * - usage：调用结束的 token 用量。
  */
 export type StreamChunk =
@@ -56,6 +59,13 @@ export type StreamChunk =
       messageId: string;
       /** LangChain AIMessage.tool_calls 原始数组（含 id/name/args）。 */
       toolCalls: unknown[];
+    }
+  | {
+      kind: "assistant_done";
+      messageId: string;
+      content: string;
+      reasoning: string;
+      toolCalls: unknown[] | null;
     }
   | {
       kind: "usage";
@@ -254,23 +264,76 @@ export class GraphService {
     if (timing) {
       console.log(`[graph timing] thread=${threadId} stream-init=${initMs}ms`);
     }
-    let lastMessageId: string | null = null;
-    let accumulated: AIMessageChunk | undefined;
+    // 每轮 LLM 单独累加：同一轮 chunk 共享 msg.id；msg.id 变化即轮次切换 → flush 上一轮。
+    // 这样 ReAct 多轮里每轮独立 emit assistant_done + usage，runner 按轮写
+    // session_messages，避免不同轮 reasoning 被合并到同一条 assistant。
+    let currentId: string | null = null;
+    let currentAcc: AIMessageChunk | undefined;
+    let currentRoundStartedAt = startedAt;
     let firstChunkAt = 0;
     let firstReasoningAt = 0;
     let lastChunkAt = 0;
     let chunkCount = 0;
     let reasoningCount = 0;
+    const flushRound = function* (this: GraphService): Generator<StreamChunk> {
+      if (currentId === null || currentAcc === undefined) return;
+      const content =
+        typeof currentAcc.content === "string" ? currentAcc.content : "";
+      const reasoning =
+        typeof currentAcc.additional_kwargs?.reasoning_content === "string"
+          ? currentAcc.additional_kwargs.reasoning_content
+          : "";
+      const toolCalls = currentAcc.tool_calls ?? [];
+      if (toolCalls.length > 0) {
+        yield {
+          kind: "tool_calls",
+          messageId: currentId,
+          toolCalls,
+        };
+      }
+      yield {
+        kind: "assistant_done",
+        messageId: currentId,
+        content,
+        reasoning,
+        toolCalls: toolCalls.length > 0 ? toolCalls : null,
+      };
+      const extracted = extractUsage(currentAcc);
+      if (extracted) {
+        yield {
+          kind: "usage",
+          messageId: currentId,
+          providerType: this.modelMeta.providerType,
+          model: this.modelMeta.model,
+          inputTokens: extracted.inputTokens,
+          outputTokens: extracted.outputTokens,
+          totalTokens: extracted.totalTokens,
+          cacheReadTokens: extracted.cacheReadTokens,
+          cacheCreationTokens: extracted.cacheCreationTokens,
+          reasoningTokens: extracted.reasoningTokens,
+          durationMs: Date.now() - currentRoundStartedAt,
+        };
+      } else {
+        console.warn(
+          `LLM provider ${this.modelMeta.providerType} (${this.modelMeta.model}) 未上报 usage（usage_metadata / response_metadata.usage / additional_kwargs.usage 均缺失）, thread=${threadId} msg=${currentId}`,
+        );
+      }
+    }.bind(this);
+
     for await (const part of stream) {
       // streamMode:"messages" 产出 [BaseMessage, metadata] 元组
       const msg = Array.isArray(part) ? part[0] : part;
       if (!(msg instanceof AIMessageChunk)) continue;
-      accumulated = accumulated === undefined ? msg : accumulated.concat(msg);
       const messageId = msg.id ?? randomUUID();
-      lastMessageId = messageId;
+      // 轮次切换：flush 上一轮，重置累加
+      if (currentId !== null && currentId !== messageId) {
+        yield* flushRound();
+        currentAcc = undefined;
+        currentRoundStartedAt = Date.now();
+      }
+      currentId = messageId;
+      currentAcc = currentAcc === undefined ? msg : currentAcc.concat(msg);
       if (this.ctxRef) this.ctxRef.messageId = messageId;
-      // DeepSeek 等推理模型先吐 reasoning_content（额外字段），再吐 content。
-      // 同一个 chunk 不会同时有两者，分别处理。
       const reasoningDelta =
         typeof msg.additional_kwargs?.reasoning_content === "string"
           ? msg.additional_kwargs.reasoning_content
@@ -301,6 +364,8 @@ export class GraphService {
       chunkCount += 1;
       yield { kind: "chunk", messageId, delta };
     }
+    // 流结束：flush 最后一轮
+    yield* flushRound();
     const streamClosedAt = Date.now();
     if (timing) {
       const lastChunkOffset = lastChunkAt ? lastChunkAt - startedAt : -1;
@@ -309,40 +374,6 @@ export class GraphService {
         : -1;
       console.log(
         `[graph timing] thread=${threadId} reasoning=${reasoningCount} chunks=${chunkCount} last-chunk=${lastChunkOffset}ms stream-close=${streamClosedAt - startedAt}ms (after-last-chunk=${closeAfterLastChunk}ms)`,
-      );
-    }
-    // 流结束：若 LLM 本轮调用了工具，yield tool_calls 事件（runner 缓存后写 session_messages）。
-    if (
-      lastMessageId &&
-      accumulated &&
-      (accumulated.tool_calls?.length ?? 0) > 0
-    ) {
-      yield {
-        kind: "tool_calls",
-        messageId: lastMessageId,
-        toolCalls: accumulated.tool_calls ?? [],
-      };
-    }
-    // 流结束：先取 LangChain 标准 usage_metadata，缺失则按多个兜底字段（OpenAI 兼容
-    // 路径如 deepseek-v4-pro 把 token 信息放 response_metadata.usage / tokenUsage）提取。
-    const extracted = extractUsage(accumulated);
-    if (extracted && lastMessageId) {
-      yield {
-        kind: "usage",
-        messageId: lastMessageId,
-        providerType: this.modelMeta.providerType,
-        model: this.modelMeta.model,
-        inputTokens: extracted.inputTokens,
-        outputTokens: extracted.outputTokens,
-        totalTokens: extracted.totalTokens,
-        cacheReadTokens: extracted.cacheReadTokens,
-        cacheCreationTokens: extracted.cacheCreationTokens,
-        reasoningTokens: extracted.reasoningTokens,
-        durationMs: Date.now() - startedAt,
-      };
-    } else if (lastMessageId) {
-      console.warn(
-        `LLM provider ${this.modelMeta.providerType} (${this.modelMeta.model}) 未上报 usage（usage_metadata / response_metadata.usage / additional_kwargs.usage 均缺失）, thread=${threadId}`,
       );
     }
   }

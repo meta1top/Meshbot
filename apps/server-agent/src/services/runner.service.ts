@@ -12,12 +12,10 @@ import { SessionService } from "./session.service";
 
 /** 进程内 run 的内存状态。 */
 interface InflightRun {
+  /** 最后一轮 assistant 的 messageId（用于 runDone / runInterrupted 事件标识）。 */
   messageId: string | null;
+  /** 最后一轮 assistant 的内容（用于 runDone 事件）。 */
   content: string;
-  /** 推理内容累积（DeepSeek 等推理模型）；非推理模型保持空串。 */
-  reasoning: string;
-  /** 序列化好的 tool_calls JSON 字符串（若 LLM 调了工具）；否则 null。 */
-  toolCalls: string | null;
   status: "streaming" | "done" | "interrupted";
   abort: AbortController;
 }
@@ -172,8 +170,6 @@ export class RunnerService implements OnModuleInit {
     const run: InflightRun = {
       messageId: null,
       content: "",
-      reasoning: "",
-      toolCalls: null,
       status: "streaming",
       abort: new AbortController(),
     };
@@ -214,7 +210,6 @@ export class RunnerService implements OnModuleInit {
           continue;
         }
         if (event.kind === "reasoning") {
-          run.reasoning += event.delta;
           this.emitter.emit(SESSION_WS_EVENTS.runReasoning, {
             sessionId,
             messageId: event.messageId,
@@ -223,7 +218,7 @@ export class RunnerService implements OnModuleInit {
           continue;
         }
         if (event.kind === "tool_calls") {
-          run.toolCalls = JSON.stringify(event.toolCalls);
+          // tool_calls 在 assistant_done 里一并带过来，这里不需要单独处理
           continue;
         }
         if (event.kind === "chunk") {
@@ -233,13 +228,36 @@ export class RunnerService implements OnModuleInit {
               `runOnce first-chunk session=${sessionId} +${Date.now() - runStartedAt}ms (LLM TTFT incl graph init)`,
             );
           }
-          run.messageId = event.messageId;
-          run.content += event.delta;
           this.emitter.emit(SESSION_WS_EVENTS.runChunk, {
             sessionId,
             messageId: event.messageId,
             delta: event.delta,
           });
+          continue;
+        }
+        if (event.kind === "assistant_done") {
+          // 每轮 LLM 结束：立刻持久化一条 session_messages.assistant。
+          // ReAct 多轮里会触发多次，每条独立 messageId / reasoning / toolCalls。
+          run.messageId = event.messageId;
+          run.content = event.content;
+          const reasoning = event.reasoning ? event.reasoning : null;
+          const toolCallsJson = event.toolCalls
+            ? JSON.stringify(event.toolCalls)
+            : null;
+          this.sessionMessages
+            .recordAssistant({
+              id: event.messageId,
+              sessionId,
+              content: event.content,
+              reasoning,
+              toolCalls: toolCallsJson,
+            })
+            .catch((err) =>
+              this.logger.error(
+                `session_messages.recordAssistant 失败 msg=${event.messageId}`,
+                err,
+              ),
+            );
           continue;
         }
         // event.kind === "usage"
@@ -290,22 +308,6 @@ export class RunnerService implements OnModuleInit {
           messageId: run.messageId,
           content: run.content,
         });
-        // 双写 session_messages（fire-and-forget）
-        const reasoning = run.reasoning ? run.reasoning : null;
-        this.sessionMessages
-          .recordAssistant({
-            id: run.messageId,
-            sessionId,
-            content: run.content,
-            reasoning,
-            toolCalls: run.toolCalls,
-          })
-          .catch((err) =>
-            this.logger.error(
-              `session_messages.recordAssistant 失败 msg=${run.messageId}`,
-              err,
-            ),
-          );
       }
       this.logger.log(
         `runOnce done session=${sessionId} total=${streamEndedAt - runStartedAt}ms markProcessed=${markProcessedMs}ms`,
