@@ -28,6 +28,7 @@ function toSummary(s: Session): SessionSummary {
     status: s.status,
     pinned: s.pinnedAt !== null,
     pinnedAt: s.pinnedAt ? s.pinnedAt.toISOString() : null,
+    titleGenerated: s.titleGenerated,
     createdAt: s.createdAt.toISOString(),
     updatedAt: s.updatedAt.toISOString(),
   };
@@ -252,11 +253,34 @@ export class SessionService {
     input: { title?: string; pinned?: boolean },
   ): Promise<SessionSummary> {
     const changes: Partial<Session> = {};
-    if (input.title !== undefined) changes.title = input.title;
+    if (input.title !== undefined) {
+      changes.title = input.title;
+      changes.titleGenerated = true;
+    }
     if (input.pinned !== undefined) {
       changes.pinnedAt = input.pinned ? new Date() : null;
     }
     await this.sessionRepo.update({ id: sessionId }, changes);
+    const s = await this.findSessionOrFail(sessionId);
+    return toSummary(s);
+  }
+
+  /**
+   * 仅在 titleGenerated 仍为 false 时把 title 写入并 mark generated=true。
+   * 用户已手动改名时返回 null，调用方丢弃结果。单 update + WHERE 三件套
+   * 保证原子，无需事务。
+   *
+   * 给 SessionTitleService 用 —— 防止 LLM 生成期间用户改名被覆盖。
+   */
+  async patchIfNotGenerated(
+    sessionId: string,
+    title: string,
+  ): Promise<SessionSummary | null> {
+    const res = await this.sessionRepo.update(
+      { id: sessionId, titleGenerated: false },
+      { title, titleGenerated: true },
+    );
+    if (!res.affected) return null;
     const s = await this.findSessionOrFail(sessionId);
     return toSummary(s);
   }

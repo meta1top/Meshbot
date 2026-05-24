@@ -374,8 +374,43 @@ describe("SessionService", () => {
       expect(r.session.status).toBe("running");
       expect(r.session.pinned).toBe(false);
       expect(r.session.pinnedAt).toBeNull();
+      expect(r.session.titleGenerated).toBe(false);
       expect(typeof r.session.createdAt).toBe("string");
       expect(typeof r.session.updatedAt).toBe("string");
+    });
+  });
+
+  describe("patch / patchIfNotGenerated — title generation", () => {
+    it("patch({ title }) 同步 mark titleGenerated=true", async () => {
+      const { sessionId } = await service.createSession({ content: "old" });
+      const before = await service.findSessionOrFail(sessionId);
+      expect(before.titleGenerated).toBe(false);
+      const after = await service.patch(sessionId, { title: "new title" });
+      expect(after.title).toBe("new title");
+      expect(after.titleGenerated).toBe(true);
+    });
+
+    it("patch({ pinned }) 不改 titleGenerated", async () => {
+      const { sessionId } = await service.createSession({ content: "x" });
+      const r = await service.patch(sessionId, { pinned: true });
+      expect(r.titleGenerated).toBe(false);
+    });
+
+    it("patchIfNotGenerated：titleGenerated=false 时生效，返 SessionSummary + mark true", async () => {
+      const { sessionId } = await service.createSession({ content: "x" });
+      const r = await service.patchIfNotGenerated(sessionId, "LLM 生成");
+      expect(r).not.toBeNull();
+      expect(r?.title).toBe("LLM 生成");
+      expect(r?.titleGenerated).toBe(true);
+    });
+
+    it("patchIfNotGenerated：titleGenerated=true 时返 null，不改数据", async () => {
+      const { sessionId } = await service.createSession({ content: "x" });
+      await service.patch(sessionId, { title: "user 改的" });
+      const r = await service.patchIfNotGenerated(sessionId, "LLM 想覆盖");
+      expect(r).toBeNull();
+      const s = await service.findSessionOrFail(sessionId);
+      expect(s.title).toBe("user 改的");
     });
   });
 });
