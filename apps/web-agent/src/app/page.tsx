@@ -24,7 +24,7 @@ export default function Home() {
     if (sending) return;
     setSending(true);
     try {
-      const sessionId = await createSession(msg);
+      const { sessionId } = await createSession(msg);
       router.push(`/session?id=${sessionId}`);
     } catch (err) {
       console.error("创建会话失败", err);

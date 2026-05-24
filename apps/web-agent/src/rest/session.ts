@@ -1,9 +1,13 @@
 "use client";
 
 import type {
+  CreateSessionResponse,
   DeletePendingResponse,
   HistoryResponse,
   PendingResponse,
+  SessionDeleteResponse,
+  SessionListResponse,
+  SessionSummary,
 } from "@meshbot/types-agent";
 import { apiClient } from "@meshbot/web-common";
 
@@ -13,13 +17,18 @@ interface AppendMessagePayload {
   queued: boolean;
 }
 
-/** 创建会话，返回 sessionId。 */
-export async function createSession(content: string): Promise<string> {
-  const { data } = await apiClient.post<{ sessionId: string }>(
+/**
+ * 创建会话。返回完整 session 对象，前端用其 unshift 进 sessionsAtom，
+ * 避免再发一次 list。
+ */
+export async function createSession(
+  content: string,
+): Promise<CreateSessionResponse> {
+  const { data } = await apiClient.post<CreateSessionResponse>(
     "/api/sessions",
     { content },
   );
-  return data.sessionId;
+  return data;
 }
 
 /**
@@ -87,6 +96,34 @@ export async function deletePendingMessage(
 ): Promise<DeletePendingResponse> {
   const { data } = await apiClient.delete<DeletePendingResponse>(
     `/api/sessions/${sessionId}/pending-messages/${messageId}`,
+  );
+  return data;
+}
+
+/** 列出全部会话（已排序）。 */
+export async function listSessions(): Promise<SessionSummary[]> {
+  const { data } = await apiClient.get<SessionListResponse>("/api/sessions");
+  return data.sessions;
+}
+
+/** 更新会话 title / pinned。 */
+export async function patchSession(
+  id: string,
+  patch: { title?: string; pinned?: boolean },
+): Promise<SessionSummary> {
+  const { data } = await apiClient.patch<SessionSummary>(
+    `/api/sessions/${id}`,
+    patch,
+  );
+  return data;
+}
+
+/** 删除整条会话（级联清后端数据）。 */
+export async function deleteSession(
+  id: string,
+): Promise<SessionDeleteResponse> {
+  const { data } = await apiClient.delete<SessionDeleteResponse>(
+    `/api/sessions/${id}`,
   );
   return data;
 }

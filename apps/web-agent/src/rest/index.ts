@@ -13,6 +13,9 @@ export {
 export {
   appendMessage,
   createSession,
+  deleteSession,
   fetchHistory,
   fetchPending,
+  listSessions,
+  patchSession,
 } from "./session";
