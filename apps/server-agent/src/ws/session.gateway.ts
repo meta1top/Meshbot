@@ -80,6 +80,20 @@ export class SessionGateway extends BaseWebSocketGateway {
     }
   }
 
+  /**
+   * 取消订阅：leave 房间。客户端切换 session 时调，避免一直累加 room 订阅
+   * 导致每个新 session 跑起来时旧页面也收到推送（前端会按 sessionId 过滤
+   * 不显示，但仍浪费带宽 / CPU / 服务端 broadcast 成本）。
+   */
+  @UseGuards(WsAuthGuard)
+  @SubscribeMessage(SESSION_WS_EVENTS.unsubscribe)
+  handleUnsubscribe(
+    @MessageBody() body: SessionTopic,
+    @ConnectedSocket() client: Socket,
+  ): void {
+    client.leave(body.sessionId);
+  }
+
   /** 中断会话当前 run（内存操作，无需 socket 引用）。 */
   @UseGuards(WsAuthGuard)
   @SubscribeMessage(SESSION_WS_EVENTS.interrupt)

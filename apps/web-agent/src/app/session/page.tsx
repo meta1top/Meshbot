@@ -460,6 +460,9 @@ function SessionView() {
 
     return () => {
       cancelled = true;
+      // 离开旧 session：通知 gateway leave 房间，否则切换多个 session 后
+      // socket 同时订阅一堆 room，每个 session 跑起来都推送过来浪费带宽。
+      socket.emit(SESSION_WS_EVENTS.unsubscribe, { sessionId });
       socket.off("connect", subscribe);
       socket.off(SESSION_WS_EVENTS.runHuman, onHuman);
       socket.off(SESSION_WS_EVENTS.runReasoning, onReasoning);

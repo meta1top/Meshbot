@@ -316,6 +316,7 @@ export type RetryResponse = z.infer<typeof RetryResponseSchema>;
 export const SESSION_WS_NAMESPACE = "ws/session";
 export const SESSION_WS_EVENTS = {
   subscribe: "session.subscribe",
+  unsubscribe: "session.unsubscribe",
   interrupt: "session.interrupt",
   runHuman: "run.human",
   runReasoning: "run.reasoning",
