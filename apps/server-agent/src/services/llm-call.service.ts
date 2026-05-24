@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { In, Repository } from "typeorm";
+import { In, MoreThan, Repository } from "typeorm";
 import { LlmCall } from "../entities/llm-call.entity";
 
 /** LlmCallService.record 入参 —— 单次 LLM 调用的完整观测数据。 */
@@ -37,9 +37,17 @@ export class LlmCallService {
     private readonly llmCallRepo: Repository<LlmCall>,
   ) {}
 
-  /** 落一条 LLM 调用记录。 */
+  /**
+   * 落一条 LLM 调用记录。
+   *
+   * 显式传 `createdAt: new Date()`（毫秒精度）—— 不依赖 @CreateDateColumn
+   * 默认的 CURRENT_TIMESTAMP（仅秒精度）。同秒多条会被 deleteAfter 的
+   * MoreThan 漏剪，而 user 与 assistant 间隔常常小于 1s。
+   */
   async record(input: RecordLlmCallInput): Promise<void> {
-    await this.llmCallRepo.save(this.llmCallRepo.create(input));
+    await this.llmCallRepo.save(
+      this.llmCallRepo.create({ ...input, createdAt: new Date() }),
+    );
   }
 
   /** 列出某会话的全部 LLM 调用，按 createdAt 升序。 */
@@ -91,20 +99,11 @@ export class LlmCallService {
     await this.llmCallRepo.delete({ sessionId });
   }
 
-  /**
-   * 删某会话内 createdAt > cutoff 的所有 LLM 调用记录。供「重生成」剪 usage 用。
-   *
-   * 使用 QueryBuilder 而非 repo.delete()：后者在 better-sqlite3 下不透传
-   * transformer，导致 Date → integer 转换失效，WHERE 条件不命中。
-   */
+  /** 删某会话内 createdAt > cutoff 的所有 LLM 调用记录。供「重生成」剪 usage 用。 */
   async deleteAfter(sessionId: string, cutoff: Date): Promise<void> {
-    await this.llmCallRepo
-      .createQueryBuilder()
-      .delete()
-      .where("session_id = :sessionId AND created_at > :cutoffMs", {
-        sessionId,
-        cutoffMs: cutoff.getTime(),
-      })
-      .execute();
+    await this.llmCallRepo.delete({
+      sessionId,
+      createdAt: MoreThan(cutoff),
+    });
   }
 }
