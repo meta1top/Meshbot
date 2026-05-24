@@ -13,6 +13,7 @@ import {
   SessionPatchSchema,
   SessionStatus,
   SessionSummarySchema,
+  SessionTitleUpdatedEventSchema,
   SessionUsageSchema,
 } from "./session";
 
@@ -128,6 +129,7 @@ describe("session schemas — sidebar list", () => {
       status: "idle",
       pinned: false,
       pinnedAt: null,
+      titleGenerated: false,
       createdAt: "2026-05-24T00:00:00.000Z",
       updatedAt: "2026-05-24T00:00:00.000Z",
     });
@@ -164,6 +166,7 @@ describe("session schemas — sidebar list", () => {
         status: "running",
         pinned: false,
         pinnedAt: null,
+        titleGenerated: false,
         createdAt: "2026-05-24T00:00:00.000Z",
         updatedAt: "2026-05-24T00:00:00.000Z",
       },
@@ -178,5 +181,50 @@ describe("session schemas — sidebar list", () => {
     expect(() =>
       SessionDeleteResponseSchema.parse({ deleted: false }),
     ).toThrow();
+  });
+});
+
+describe("session schemas — title generation", () => {
+  it("SessionSummarySchema 含 titleGenerated 字段", () => {
+    const ok = SessionSummarySchema.parse({
+      id: "s1",
+      title: "hi",
+      status: "idle",
+      pinned: false,
+      pinnedAt: null,
+      titleGenerated: true,
+      createdAt: "2026-05-24T00:00:00.000Z",
+      updatedAt: "2026-05-24T00:00:00.000Z",
+    });
+    expect(ok.titleGenerated).toBe(true);
+  });
+
+  it("SessionSummarySchema 缺 titleGenerated 直接 reject", () => {
+    expect(() =>
+      SessionSummarySchema.parse({
+        id: "s1",
+        title: "hi",
+        status: "idle",
+        pinned: false,
+        pinnedAt: null,
+        createdAt: "2026-05-24T00:00:00.000Z",
+        updatedAt: "2026-05-24T00:00:00.000Z",
+      }),
+    ).toThrow();
+  });
+
+  it("SessionTitleUpdatedEventSchema 必传 sessionId + title", () => {
+    const ok = SessionTitleUpdatedEventSchema.parse({
+      sessionId: "s1",
+      title: "Title",
+    });
+    expect(ok).toEqual({ sessionId: "s1", title: "Title" });
+    expect(() =>
+      SessionTitleUpdatedEventSchema.parse({ sessionId: "s1" }),
+    ).toThrow();
+  });
+
+  it("SESSION_WS_EVENTS.titleUpdated 常量存在", () => {
+    expect(SESSION_WS_EVENTS.titleUpdated).toBe("session.title_updated");
   });
 });

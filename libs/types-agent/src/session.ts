@@ -13,6 +13,11 @@ export const SessionSummarySchema = z.object({
   pinned: z.boolean(),
   /** ISO datetime；非 null 即已固定，值用于客户端排序与未来重排。 */
   pinnedAt: z.string().datetime().nullable(),
+  /**
+   * 是否「有过明确标题」：LLM 自动生成成功 或 用户手动改过。
+   * false = title 仍是创会话时的「首条前 30 字」fallback。
+   */
+  titleGenerated: z.boolean(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -312,12 +317,25 @@ export const RetryResponseSchema = z.object({
 });
 export type RetryResponse = z.infer<typeof RetryResponseSchema>;
 
+/**
+ * socket: session.title_updated —— SessionTitleService 后台 LLM 生成完成。
+ * Gateway namespace 广播；前端 sidebar / sessions atom 局部更新 title。
+ */
+export const SessionTitleUpdatedEventSchema = z.object({
+  sessionId: z.string(),
+  title: z.string(),
+});
+export type SessionTitleUpdatedEvent = z.infer<
+  typeof SessionTitleUpdatedEventSchema
+>;
+
 /** WS namespace 与事件名常量。 */
 export const SESSION_WS_NAMESPACE = "ws/session";
 export const SESSION_WS_EVENTS = {
   subscribe: "session.subscribe",
   unsubscribe: "session.unsubscribe",
   interrupt: "session.interrupt",
+  titleUpdated: "session.title_updated",
   runHuman: "run.human",
   runReasoning: "run.reasoning",
   runChunk: "run.chunk",
