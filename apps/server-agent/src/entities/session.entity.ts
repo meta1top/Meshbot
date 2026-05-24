@@ -28,6 +28,14 @@ export class Session {
   @Column({ name: "pinned_at", type: "datetime", nullable: true })
   pinnedAt!: Date | null;
 
+  /**
+   * 是否「有过明确标题」：LLM 自动生成成功 或 用户手动改过。
+   * 用一个字段同时挡住两件事：title 生成任务避免覆盖用户改名 + 未来「重生成
+   * 标题」入口判断是否已生成。createSession 默认 false。
+   */
+  @Column({ name: "title_generated", default: false })
+  titleGenerated!: boolean;
+
   @CreateDateColumn({ name: "created_at" })
   createdAt!: Date;
 
