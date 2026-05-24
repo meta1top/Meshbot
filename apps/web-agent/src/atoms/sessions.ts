@@ -135,18 +135,19 @@ export const togglePinAtom = atom(
 );
 
 /** 删除（乐观）。失败回插原位。 */
+/**
+ * 删除：等接口成功再从 list 移除（不做乐观更新）。
+ *
+ * 原因：调用方 SessionListItem 持有 dialog 的 deleting state；若乐观先移除，
+ * SessionListItem 会立刻卸载，dialog 跟着销毁，用户看不到 loading + 失败回退
+ * 等中间态。delete 是 destructive + 不可逆操作，慢一点（等服务端确认）比
+ * 「闪一下」更可信。
+ */
 export const deleteSessionAtom = atom(null, async (get, set, id: string) => {
-  const arr = get(sessionsAtom);
-  const target = arr.find((s) => s.id === id);
-  if (!target) return;
+  if (!get(sessionsAtom).some((s) => s.id === id)) return;
+  await deleteSessionApi(id);
   set(
     sessionsAtom,
-    arr.filter((s) => s.id !== id),
+    get(sessionsAtom).filter((s) => s.id !== id),
   );
-  try {
-    await deleteSessionApi(id);
-  } catch (err) {
-    set(sessionsAtom, sortSessions([...get(sessionsAtom), target]));
-    throw err;
-  }
 });
