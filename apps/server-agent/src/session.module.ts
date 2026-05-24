@@ -11,6 +11,7 @@ import { LlmCallService } from "./services/llm-call.service";
 import { SessionMessageService } from "./services/session-message.service";
 import { RunnerService } from "./services/runner.service";
 import { SessionService } from "./services/session.service";
+import { SessionTitleService } from "./services/session-title.service";
 import { AuthModule } from "./auth.module";
 import { SessionGateway } from "./ws/session.gateway";
 
@@ -34,6 +35,7 @@ import { SessionGateway } from "./ws/session.gateway";
     SessionGateway,
     LlmCallService,
     SessionMessageService,
+    SessionTitleService,
   ],
   exports: [
     CheckpointerCleanupService,
@@ -41,6 +43,7 @@ import { SessionGateway } from "./ws/session.gateway";
     RunnerService,
     LlmCallService,
     SessionMessageService,
+    SessionTitleService,
   ],
 })
 export class SessionModule {}

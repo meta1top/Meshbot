@@ -1,0 +1,93 @@
+import { GraphService, PromptService } from "@meshbot/agent";
+import {
+  SESSION_WS_EVENTS,
+  type SessionTitleUpdatedEvent,
+} from "@meshbot/types-agent";
+import { Injectable, Logger } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
+import { SessionService } from "./session.service";
+
+const TITLE_MAX = 30;
+
+/** Prompt 模板未定义时的 fallback —— 让 dev 环境不依赖 prompt 文件铺设。 */
+const FALLBACK_PROMPT =
+  "You are a chat title generator. Given the first user message of a " +
+  "conversation, write a concise 5–15 character (CJK or English) title " +
+  "summarizing the topic.\n\n" +
+  "Rules:\n" +
+  "- Output ONLY the title text; no quotes, no punctuation, no prefix.\n" +
+  "- Use the same language as the user message.\n" +
+  "- No emoji unless the user message itself is mostly emoji.\n\n" +
+  "User message:\n{{content}}";
+
+/**
+ * 会话标题自动生成服务 —— SessionController.create 后 fire-and-forget。
+ *
+ * 流程：findSession 看 titleGenerated → 调 LLM → sanitize → patchIfNotGenerated
+ * 条件 update → emit ws 事件 → gateway 广播 → 前端 sidebar atom 局部 patch。
+ *
+ * 失败 / race 处理：开始前 short-circuit；patchIfNotGenerated 原子条件防
+ * race；LLM 异常 catch 仅 log；返空 / 全空白不写库。
+ */
+@Injectable()
+export class SessionTitleService {
+  private readonly logger = new Logger(SessionTitleService.name);
+
+  constructor(
+    private readonly graph: GraphService,
+    private readonly sessions: SessionService,
+    private readonly prompt: PromptService,
+    private readonly emitter: EventEmitter2,
+  ) {}
+
+  /** fire-and-forget 入队；setImmediate 让 controller 立即返回。 */
+  schedule(sessionId: string, firstMessageContent: string): void {
+    setImmediate(() => {
+      this.generate(sessionId, firstMessageContent).catch((err) => {
+        this.logger.warn(
+          `session-title 生成失败 session=${sessionId}：${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+    });
+  }
+
+  private async generate(sessionId: string, content: string): Promise<void> {
+    const cur = await this.sessions.findSessionOrFail(sessionId);
+    if (cur.titleGenerated) return;
+
+    const model = await this.graph.getModel();
+    const promptText = this.buildPrompt(content);
+    const res = await model.invoke(promptText);
+    const raw = typeof res.content === "string" ? res.content : "";
+    const title = sanitizeTitle(raw);
+    if (!title) {
+      this.logger.warn(`session-title LLM 返回空 session=${sessionId}`);
+      return;
+    }
+
+    const updated = await this.sessions.patchIfNotGenerated(sessionId, title);
+    if (!updated) return;
+
+    this.emitter.emit(SESSION_WS_EVENTS.titleUpdated, {
+      sessionId,
+      title: updated.title,
+    } satisfies SessionTitleUpdatedEvent);
+  }
+
+  private buildPrompt(content: string): string {
+    const template = this.prompt.getPrompt("session-title") ?? FALLBACK_PROMPT;
+    return template.replace("{{content}}", content);
+  }
+}
+
+/**
+ * 清洗 LLM 输出 —— trim、合并空白、剥首尾常见引号、硬截 30 字。
+ * 空串返空串（调用方判空决定是否写库）。
+ */
+function sanitizeTitle(raw: string): string {
+  let s = raw.trim().replace(/\s+/g, " ");
+  s = s.replace(/^[`'"「『《]+/, "").replace(/[`'"」』》]+$/, "");
+  s = s.trim();
+  if (s.length > TITLE_MAX) s = s.slice(0, TITLE_MAX);
+  return s;
+}
