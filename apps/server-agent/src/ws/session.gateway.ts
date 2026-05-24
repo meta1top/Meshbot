@@ -70,13 +70,23 @@ export class SessionGateway extends BaseWebSocketGateway {
     const inflight = this.runner.getInflight(body.sessionId);
     // 仅在已分配 messageId 时才 replay，否则会发一条 messageId="" 的空 chunk，
     // 前端按 id 索引 upsert 会创建一条永远卡住的空气泡（其后真实 chunk 用真实
-    // id，无法替换）。
+    // id，无法替换）。先 reasoning 后 chunk，与流式顺序一致 —— 前端的 reasoning
+    // / chunk handler 都是「按 messageId 累加全量」，replay 一次即拼回。
     if (inflight?.messageId) {
-      client.emit(SESSION_WS_EVENTS.runChunk, {
-        sessionId: body.sessionId,
-        messageId: inflight.messageId,
-        delta: inflight.content,
-      });
+      if (inflight.reasoning) {
+        client.emit(SESSION_WS_EVENTS.runReasoning, {
+          sessionId: body.sessionId,
+          messageId: inflight.messageId,
+          delta: inflight.reasoning,
+        });
+      }
+      if (inflight.content) {
+        client.emit(SESSION_WS_EVENTS.runChunk, {
+          sessionId: body.sessionId,
+          messageId: inflight.messageId,
+          delta: inflight.content,
+        });
+      }
     }
   }
 

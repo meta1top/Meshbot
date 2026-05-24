@@ -12,18 +12,21 @@ import { SessionService } from "./session.service";
 
 /** 进程内 run 的内存状态。 */
 interface InflightRun {
-  /** 最后一轮 assistant 的 messageId（用于 runDone / runInterrupted 事件标识）。 */
+  /** 当前轮 assistant 的 messageId（流式过程中切轮就替换）。 */
   messageId: string | null;
-  /** 最后一轮 assistant 的内容（用于 runDone 事件）。 */
+  /** 当前轮 assistant 累加的 content（chunk 阶段 += delta；切轮清空）。 */
   content: string;
+  /** 当前轮累加的 reasoning（reasoning 事件 += delta；切轮清空）。 */
+  reasoning: string;
   status: "streaming" | "done" | "interrupted";
   abort: AbortController;
 }
 
-/** getInflight 对外快照。 */
+/** getInflight 对外快照（subscribe replay 用）。 */
 export interface InflightView {
   messageId: string | null;
   content: string;
+  reasoning: string;
   status: "streaming" | "done" | "interrupted";
 }
 
@@ -87,6 +90,7 @@ export class RunnerService implements OnModuleInit {
     return {
       messageId: run.messageId,
       content: run.content,
+      reasoning: run.reasoning,
       status: run.status,
     };
   }
@@ -170,6 +174,7 @@ export class RunnerService implements OnModuleInit {
     const run: InflightRun = {
       messageId: null,
       content: "",
+      reasoning: "",
       status: "streaming",
       abort: new AbortController(),
     };
@@ -210,6 +215,14 @@ export class RunnerService implements OnModuleInit {
           continue;
         }
         if (event.kind === "reasoning") {
+          // 同步更新 inflight reasoning 快照，让 subscribe 中途接入也能 replay
+          // 已收到的思考内容（多轮 ReAct 切轮时 messageId 变化会清空旧 reasoning）。
+          if (run.messageId !== event.messageId) {
+            run.messageId = event.messageId;
+            run.content = "";
+            run.reasoning = "";
+          }
+          run.reasoning += event.delta;
           this.emitter.emit(SESSION_WS_EVENTS.runReasoning, {
             sessionId,
             messageId: event.messageId,
@@ -231,10 +244,12 @@ export class RunnerService implements OnModuleInit {
           // 在 chunk 阶段同步更新 inflight 快照（messageId 首次出现时设、content
           // 累加），让 ws 订阅 handleSubscribe 的 replay 能在流式中途也拼出已收
           // 到的部分。否则 inflight.messageId 要等到 assistant_done 才有，订阅时
-          // 「之前的输出」都看不到。
+          // 「之前的输出」都看不到。轮切换时一并清 reasoning，避免上一轮 reasoning
+          // 残留（与 reasoning handler 同款逻辑）。
           if (run.messageId !== event.messageId) {
             run.messageId = event.messageId;
             run.content = "";
+            run.reasoning = "";
           }
           run.content += event.delta;
           this.emitter.emit(SESSION_WS_EVENTS.runChunk, {
