@@ -50,7 +50,6 @@ import {
   deletePendingMessage,
   fetchHistory,
   fetchPending,
-  retrySession,
 } from "@/rest/session";
 
 function SessionView() {
@@ -626,16 +625,6 @@ function SessionView() {
     [sessionId, draft, apply],
   );
 
-  /** 失败消息「重试」：调 retry 接口，结果经 socket 事件回流。 */
-  const handleRetry = useCallback(async () => {
-    if (!sessionId) return;
-    try {
-      await retrySession(sessionId);
-    } catch (err) {
-      console.error("重试失败", err);
-    }
-  }, [sessionId]);
-
   /**
    * 滚动到顶部触发：拉早于当前最旧消息的下一批 history。
    * - 锚定视口：prepend 前后 scrollTop 自动补偿，使用户当前看的消息不动
@@ -718,7 +707,15 @@ function SessionView() {
         )}
         <MessageList
           messages={timelineMessages}
-          onRetry={handleRetry}
+          sessionId={sessionId ?? ""}
+          running={running}
+          onRegenerateOptimisticCut={(messageId) => {
+            apply((prev) => {
+              const idx = prev.findIndex((m) => m.id === messageId);
+              if (idx < 0) return prev;
+              return prev.slice(0, idx + 1);
+            });
+          }}
           usageByMessage={usageByMessage}
         />
         <div ref={bottomRef} />

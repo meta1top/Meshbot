@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { formatTokens } from "@/lib/format-tokens";
 import { MarkdownContent } from "./markdown-content";
 import { ToolCallBlock } from "./tool-call-block";
+import { UserMessageActions } from "./user-message-actions";
 
 export interface ToolCallView {
   toolCallId: string;
@@ -48,8 +49,14 @@ export interface TimelineMessage {
 
 interface MessageListProps {
   messages: TimelineMessage[];
-  /** 失败消息「重试」按钮回调。 */
-  onRetry?: () => void;
+  /** 当前会话 id。供 UserMessageActions 调 regenerate 端点用。 */
+  sessionId: string;
+  /** 会话是否有 inflight run。重试按钮按这个 disable。 */
+  running: boolean;
+  /**
+   * 用户点重试时，父组件截断 timeline 到该消息（含），实现乐观反馈。
+   */
+  onRegenerateOptimisticCut: (messageId: string) => void;
   /** 按消息 ID 索引的单次 LLM 调用用量，仅 assistant 消息使用。 */
   usageByMessage?: Record<string, MessageUsage>;
 }
@@ -65,7 +72,9 @@ interface MessageListProps {
  */
 export function MessageList({
   messages,
-  onRetry,
+  sessionId,
+  running,
+  onRegenerateOptimisticCut,
   usageByMessage,
 }: MessageListProps) {
   return (
@@ -76,7 +85,7 @@ export function MessageList({
           <div
             key={m.id}
             className={cn(
-              "flex max-w-[80%] flex-col gap-2",
+              "group flex max-w-[80%] flex-col gap-2",
               m.role === "user" ? "self-end items-end" : "self-start",
             )}
           >
@@ -112,7 +121,10 @@ export function MessageList({
                 className={cn(
                   "text-sm leading-relaxed",
                   m.role === "user"
-                    ? "bg-foreground/8 px-3.5 py-2 text-foreground whitespace-pre-wrap"
+                    ? cn(
+                        "px-3.5 py-2 text-foreground whitespace-pre-wrap",
+                        m.failed ? "bg-destructive/8" : "bg-foreground/8",
+                      )
                     : "text-foreground",
                 )}
               >
@@ -130,18 +142,6 @@ export function MessageList({
                     )}
                   </>
                 )}
-                {m.failed && (
-                  <span className="ml-2 text-xs text-destructive">
-                    失败
-                    <button
-                      type="button"
-                      onClick={onRetry}
-                      className="ml-1 underline hover:text-destructive/80"
-                    >
-                      重试
-                    </button>
-                  </span>
-                )}
                 {m.role === "assistant" &&
                   m.content &&
                   usageByMessage?.[m.id] && (
@@ -150,6 +150,16 @@ export function MessageList({
                     </div>
                   )}
               </div>
+            )}
+            {m.role === "user" && (
+              <UserMessageActions
+                sessionId={sessionId}
+                messageId={m.id}
+                content={m.content}
+                failed={m.failed}
+                running={running}
+                onOptimisticCut={() => onRegenerateOptimisticCut(m.id)}
+              />
             )}
           </div>
         ))}
