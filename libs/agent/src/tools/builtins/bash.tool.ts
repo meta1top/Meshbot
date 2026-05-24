@@ -33,7 +33,7 @@ export class BashTool implements MeshbotTool<BashArgs, string> {
   readonly name = "bash";
   readonly description =
     "Run a shell command in the meshbot workspace. " +
-    "cwd is locked to ~/.meshbot/workspace (production) or repo root (dev). " +
+    "cwd is locked to ~/.meshbot/workspace. " +
     "Output is streamed to the user; the result you receive is the first " +
     `${CONTEXT_LIMIT} chars of stdout+stderr. 2-minute timeout.`;
   readonly schema = BashArgsSchema;
