@@ -1,9 +1,11 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@meshbot/design";
+import { useSetAtom } from "jotai";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { addSessionAtom } from "@/atoms/sessions";
 import { ActivityHeatmap } from "@/components/common/activity-heatmap";
 import { ChatInput } from "@/components/common/chat-input";
 import { AppShellLayout } from "@/components/layouts/app-shell-layout";
@@ -16,6 +18,7 @@ const heatmapData = Array.from({ length: 96 }, (_, index) =>
 export default function Home() {
   const t = useTranslations("home");
   const router = useRouter();
+  const addSession = useSetAtom(addSessionAtom);
   const [sending, setSending] = useState(false);
   const [draft, setDraft] = useState("");
 
@@ -24,7 +27,8 @@ export default function Home() {
     if (sending) return;
     setSending(true);
     try {
-      const { sessionId } = await createSession(msg);
+      const { sessionId, session } = await createSession(msg);
+      addSession(session);
       router.push(`/session?id=${sessionId}`);
     } catch (err) {
       console.error("创建会话失败", err);
