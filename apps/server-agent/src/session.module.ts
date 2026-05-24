@@ -6,6 +6,7 @@ import { LlmCall } from "./entities/llm-call.entity";
 import { PendingMessage } from "./entities/pending-message.entity";
 import { Session } from "./entities/session.entity";
 import { SessionMessage } from "./entities/session-message.entity";
+import { CheckpointerCleanupService } from "./services/checkpointer-cleanup.service";
 import { LlmCallService } from "./services/llm-call.service";
 import { SessionMessageService } from "./services/session-message.service";
 import { RunnerService } from "./services/runner.service";
@@ -27,6 +28,7 @@ import { SessionGateway } from "./ws/session.gateway";
   ],
   controllers: [SessionController],
   providers: [
+    CheckpointerCleanupService,
     SessionService,
     RunnerService,
     SessionGateway,
@@ -34,6 +36,7 @@ import { SessionGateway } from "./ws/session.gateway";
     SessionMessageService,
   ],
   exports: [
+    CheckpointerCleanupService,
     SessionService,
     RunnerService,
     LlmCallService,
