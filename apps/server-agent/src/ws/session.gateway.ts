@@ -16,6 +16,7 @@ import {
   type RunUsageEvent,
   SESSION_WS_EVENTS,
   SESSION_WS_NAMESPACE,
+  type SessionTitleUpdatedEvent,
   type SessionTopic,
 } from "@meshbot/types-agent";
 import { UseFilters, UseGuards } from "@nestjs/common";
@@ -184,5 +185,14 @@ export class SessionGateway extends BaseWebSocketGateway {
     this.server
       .to(payload.sessionId)
       .emit(SESSION_WS_EVENTS.runToolCallEnd, wireOut);
+  }
+
+  /**
+   * SessionTitleService → session.title_updated → namespace 广播。
+   * 不路由到 session room：sidebar 是全局 UI、所有 socket（本地轨单用户）都应收到。
+   */
+  @OnEvent(SESSION_WS_EVENTS.titleUpdated)
+  onTitleUpdated(payload: SessionTitleUpdatedEvent): void {
+    this.server.emit(SESSION_WS_EVENTS.titleUpdated, payload);
   }
 }

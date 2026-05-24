@@ -28,6 +28,7 @@ import {
 import { LlmCallService } from "../services/llm-call.service";
 import { RunnerService } from "../services/runner.service";
 import { SessionMessageService } from "../services/session-message.service";
+import { SessionTitleService } from "../services/session-title.service";
 import { SessionService } from "../services/session.service";
 
 /** 会话 REST 端点。瘦 Controller —— 业务在 SessionService / RunnerService。 */
@@ -38,6 +39,7 @@ export class SessionController {
     private readonly runner: RunnerService,
     private readonly llmCalls: LlmCallService,
     private readonly sessionMessages: SessionMessageService,
+    private readonly titleService: SessionTitleService,
   ) {}
 
   /** 创建会话：写库后异步发起 run，立即返回 sessionId + session 完整对象。 */
@@ -45,6 +47,7 @@ export class SessionController {
   async create(@Body() dto: CreateSessionDto): Promise<CreateSessionResponse> {
     const result = await this.sessions.createSession(dto);
     this.runner.kick(result.sessionId);
+    this.titleService.schedule(result.sessionId, dto.content);
     return result;
   }
 
