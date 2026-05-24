@@ -46,6 +46,7 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
   const [editing, setEditing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   // 会话页路由是 /session?id=<sid>（query string），不是 /session/<sid>
   const active =
@@ -89,12 +90,17 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
   );
 
   const handleDeleteConfirm = useCallback(async () => {
-    setConfirmOpen(false);
+    setDeleting(true);
     try {
       await removeSession(session.id);
+      // 成功才关 dialog；失败留着让用户看到状态（atom 内已回滚列表，dialog
+      // 显示「请重试或取消」由用户决定）。
+      setConfirmOpen(false);
       if (active) router.push("/");
     } catch {
       // atom 内已回滚
+    } finally {
+      setDeleting(false);
     }
   }, [removeSession, session.id, active, router]);
 
@@ -199,6 +205,7 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
       <SessionDeleteDialog
         open={confirmOpen}
         title={session.title}
+        loading={deleting}
         onCancel={() => setConfirmOpen(false)}
         onConfirm={handleDeleteConfirm}
       />
