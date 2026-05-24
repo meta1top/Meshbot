@@ -126,12 +126,56 @@ const debugCallback =
 export async function createChatModel(
   config: ActiveModelConfig,
 ): Promise<BaseChatModel> {
+  const configuration: Record<string, unknown> = {};
+  if (config.baseUrl) configuration.baseURL = config.baseUrl;
+  // 临时验证：deepseek thinking 模式要求每条 assistant 消息带 reasoning_content，
+  // 但 @langchain/openai 序列化 message 时不会回写。拦截 fetch 给 assistant
+  // 消息补一个空字段，验证占位能否绕过 deepseek 服务端校验。
+  if (config.providerType === "deepseek") {
+    configuration.fetch = patchedFetchForDeepseek(globalThis.fetch);
+  }
   return (await initChatModel(config.model, {
     modelProvider:
       PROVIDER_MODEL_NAME[config.providerType] ?? config.providerType,
     apiKey: config.apiKey,
-    ...(config.baseUrl ? { configuration: { baseURL: config.baseUrl } } : {}),
+    ...(Object.keys(configuration).length > 0 ? { configuration } : {}),
     streaming: true,
     ...(debugCallback ? { callbacks: [debugCallback] } : {}),
   })) as BaseChatModel;
+}
+
+/**
+ * Wrap fetch：检测 POST /chat/completions JSON body，给 role=assistant 且
+ * 缺 reasoning_content 的消息补一个空 reasoning_content。临时验证用，确认
+ * 占位能否过 deepseek thinking 校验后再抽架构。
+ */
+function patchedFetchForDeepseek(base: typeof fetch): typeof fetch {
+  return async function patchedFetch(input, init) {
+    if (!init?.body || typeof init.body !== "string") {
+      return base(input, init);
+    }
+    let body: { messages?: Array<Record<string, unknown>> };
+    try {
+      body = JSON.parse(init.body);
+    } catch {
+      return base(input, init);
+    }
+    if (!Array.isArray(body.messages)) {
+      return base(init === undefined ? input : input, init);
+    }
+    let patched = false;
+    for (const msg of body.messages) {
+      if (msg.role === "assistant" && msg.reasoning_content === undefined) {
+        msg.reasoning_content = "";
+        patched = true;
+      }
+    }
+    if (!patched) {
+      return base(input, init);
+    }
+    console.log(
+      `[deepseek-patch] injected reasoning_content="" into ${body.messages.filter((m) => m.role === "assistant").length} assistant message(s)`,
+    );
+    return base(input, { ...init, body: JSON.stringify(body) });
+  };
 }
