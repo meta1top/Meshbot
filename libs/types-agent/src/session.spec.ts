@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@jest/globals";
 import {
+  CreateSessionResponseSchema,
   CreateSessionSchema,
   HistoryResponseSchema,
   PendingMessageStatus,
@@ -7,7 +8,11 @@ import {
   RunChunkEventSchema,
   RunUsageEventSchema,
   SESSION_WS_EVENTS,
+  SessionDeleteResponseSchema,
+  SessionListResponseSchema,
+  SessionPatchSchema,
   SessionStatus,
+  SessionSummarySchema,
   SessionUsageSchema,
 } from "./session";
 
@@ -114,14 +119,6 @@ describe("session schemas", () => {
     expect(SESSION_WS_EVENTS.runUsage).toBe("run.usage");
   });
 });
-
-import {
-  CreateSessionResponseSchema,
-  SessionDeleteResponseSchema,
-  SessionListResponseSchema,
-  SessionPatchSchema,
-  SessionSummarySchema,
-} from "./session";
 
 describe("session schemas — sidebar list", () => {
   it("SessionSummarySchema 通过基本字段", () => {

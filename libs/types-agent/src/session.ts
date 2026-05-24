@@ -11,10 +11,10 @@ export const SessionSummarySchema = z.object({
   status: SessionStatus,
   /** 派生：pinnedAt != null。客户端用做语义判断，避免每处都比较 pinnedAt。 */
   pinned: z.boolean(),
-  /** ISO 时间字符串；非 null 即已固定，值用于客户端排序与未来重排。 */
-  pinnedAt: z.string().nullable(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
+  /** ISO datetime；非 null 即已固定，值用于客户端排序与未来重排。 */
+  pinnedAt: z.string().datetime().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
 });
 export type SessionSummary = z.infer<typeof SessionSummarySchema>;
 
