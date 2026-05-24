@@ -51,6 +51,10 @@ export class SessionMessageService {
   /**
    * 记录一条 user 消息。幂等：id 已存在视为成功，不覆盖原内容。
    * 单表写入，无需事务。
+   *
+   * 显式传 `createdAt: new Date()`（毫秒精度）—— 不依赖 DB 默认值的
+   * `datetime('now')`（仅秒精度）。否则连发的 user 与 assistant 同秒会
+   * 排序不稳定，导致 history 顺序错乱。
    */
   async recordUser(input: RecordUserInput): Promise<void> {
     const exists = await this.repo.findOneBy({ id: input.id });
@@ -63,6 +67,7 @@ export class SessionMessageService {
       reasoning: null,
       toolCalls: null,
       toolCallId: null,
+      createdAt: new Date(),
     });
   }
 
@@ -80,6 +85,7 @@ export class SessionMessageService {
       reasoning: input.reasoning,
       toolCalls: input.toolCalls ?? null,
       toolCallId: null,
+      createdAt: new Date(),
     });
   }
 
@@ -97,6 +103,7 @@ export class SessionMessageService {
       reasoning: null,
       toolCalls: null,
       toolCallId: input.toolCallId,
+      createdAt: new Date(),
     });
   }
 
@@ -128,7 +135,9 @@ export class SessionMessageService {
         sessionId,
         ...(anchorDate ? { createdAt: LessThan(anchorDate) } : {}),
       },
-      order: { createdAt: "DESC" },
+      // id 作 tie-breaker：同 createdAt（旧数据秒精度同秒、新数据毫秒精度极少
+      // 同毫秒）时保证稳定排序，避免不同请求顺序不一致
+      order: { createdAt: "DESC", id: "DESC" },
       take: opts.limit + 1,
     });
     const hasMore = rows.length > opts.limit;
@@ -145,7 +154,8 @@ export class SessionMessageService {
         .where("m.session_id = :sessionId", { sessionId })
         .andWhere("m.created_at > :cutoff", { cutoff: lastInSlice.createdAt })
         .andWhere("m.role = :role", { role: "tool" })
-        .orderBy("m.created_at", "ASC");
+        .orderBy("m.created_at", "ASC")
+        .addOrderBy("m.id", "ASC");
       if (anchorDate) {
         qb.andWhere("m.created_at < :anchor", { anchor: anchorDate });
       }
