@@ -15,6 +15,7 @@ import { CheckpointerCleanupService } from "../../src/services/checkpointer-clea
 import { LlmCallService } from "../../src/services/llm-call.service";
 import { RunnerService } from "../../src/services/runner.service";
 import { SessionMessageService } from "../../src/services/session-message.service";
+import { SessionTitleService } from "../../src/services/session-title.service";
 import { SessionService } from "../../src/services/session.service";
 
 describe("Session e2e", () => {
@@ -45,6 +46,7 @@ describe("Session e2e", () => {
         LlmCallService,
         SessionMessageService,
         CheckpointerCleanupService,
+        SessionTitleService,
       ],
     }).compile();
     app = moduleRef.createNestApplication();
