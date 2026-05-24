@@ -1,10 +1,14 @@
 import {
+  type CreateSessionResponse,
   type DeletePendingResponse,
   type HistoryResponse,
   type HistoryToolCall,
   HistoryQuerySchema,
   type MessageUsage,
   type PendingResponse,
+  type SessionDeleteResponse,
+  type SessionListResponse,
+  type SessionSummary,
 } from "@meshbot/types-agent";
 import {
   Body,
@@ -12,10 +16,15 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   Query,
 } from "@nestjs/common";
-import { AppendMessageDto, CreateSessionDto } from "../dto/session.dto";
+import {
+  AppendMessageDto,
+  CreateSessionDto,
+  SessionPatchDto,
+} from "../dto/session.dto";
 import { LlmCallService } from "../services/llm-call.service";
 import { RunnerService } from "../services/runner.service";
 import { SessionMessageService } from "../services/session-message.service";
@@ -31,9 +40,9 @@ export class SessionController {
     private readonly sessionMessages: SessionMessageService,
   ) {}
 
-  /** 创建会话：写库后异步发起 run，立即返回 sessionId。 */
+  /** 创建会话：写库后异步发起 run，立即返回 sessionId + session 完整对象。 */
   @Post()
-  async create(@Body() dto: CreateSessionDto): Promise<{ sessionId: string }> {
+  async create(@Body() dto: CreateSessionDto): Promise<CreateSessionResponse> {
     const result = await this.sessions.createSession(dto);
     this.runner.kick(result.sessionId);
     return result;
@@ -176,5 +185,30 @@ export class SessionController {
       messageId,
     );
     return { deleted: true, content };
+  }
+
+  /** GET /api/sessions —— 全量已排序，首屏前端一次性加载。 */
+  @Get()
+  async list(): Promise<SessionListResponse> {
+    const sessions = await this.sessions.listAllSorted();
+    return { sessions };
+  }
+
+  /** PATCH /api/sessions/:id —— title / pinned 至少传一项。 */
+  @Patch(":id")
+  async patch(
+    @Param("id") id: string,
+    @Body() dto: SessionPatchDto,
+  ): Promise<SessionSummary> {
+    await this.sessions.findSessionOrFail(id);
+    return this.sessions.patch(id, dto);
+  }
+
+  /** DELETE /api/sessions/:id —— 级联清四张表 + checkpointer 两表；先 abort inflight。 */
+  @Delete(":id")
+  async remove(@Param("id") id: string): Promise<SessionDeleteResponse> {
+    this.runner.interrupt(id);
+    await this.sessions.deleteSession(id);
+    return { deleted: true };
   }
 }
