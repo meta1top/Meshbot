@@ -5,7 +5,9 @@ import type {
   SessionStatus,
   SessionSummary,
 } from "@meshbot/types-agent";
+import { GraphService } from "@meshbot/agent";
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -45,6 +47,7 @@ export class SessionService {
     private readonly llmCalls: LlmCallService,
     private readonly sessionMessages: SessionMessageService,
     private readonly checkpointer: CheckpointerCleanupService,
+    private readonly graph: GraphService,
   ) {}
 
   /**
@@ -305,5 +308,29 @@ export class SessionService {
     await this.sessionMessages.deleteBySession(sessionId);
     await this.pendingRepo.delete({ sessionId });
     await this.sessionRepo.delete({ id: sessionId });
+  }
+
+  /**
+   * 重生成入口：找到 user 消息后，删该消息后的所有 session_messages /
+   * llm_calls / checkpointer state。cutoff user 消息本身保留，调用方接着
+   * 调 runner.kickResume 触发 LLM 重跑。
+   *
+   * 不删 pending_messages：该 user 消息已 processed；pending 表是独立的
+   * 入队队列，与 checkpointer state 解耦。
+   */
+  async regenerateAfter(sessionId: string, messageId: string): Promise<void> {
+    await this.findSessionOrFail(sessionId);
+    const msg = await this.sessionMessages.findByIdOrFail(messageId);
+    if (msg.sessionId !== sessionId) {
+      throw new NotFoundException(
+        `SessionMessage ${messageId} not in session ${sessionId}`,
+      );
+    }
+    if (msg.role !== "user") {
+      throw new BadRequestException("仅 user 消息支持重生成");
+    }
+    await this.sessionMessages.deleteAfter(sessionId, msg.createdAt);
+    await this.llmCalls.deleteAfter(sessionId, msg.createdAt);
+    await this.graph.cutMessagesAfter(sessionId, messageId);
   }
 }

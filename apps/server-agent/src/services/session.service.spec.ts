@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { ConflictException, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from "@nestjs/common";
+import { GraphService } from "@meshbot/agent";
 import { DataSource } from "typeorm";
 import { LlmCall } from "../entities/llm-call.entity";
 import { PendingMessage } from "../entities/pending-message.entity";
@@ -46,15 +51,28 @@ describe("SessionService", () => {
       ds.getRepository(SessionMessage),
     );
     const checkpointer = new CheckpointerCleanupService(ds);
+    // 假 GraphService：cutMessagesAfter 只记调用，验证 regenerateAfter 触达 graph
+    const fakeGraph = {
+      __cuts: [] as Array<{ threadId: string; cutoff: string }>,
+      async cutMessagesAfter(threadId: string, cutoffMessageId: string) {
+        this.__cuts.push({ threadId, cutoff: cutoffMessageId });
+      },
+    };
     service = new SessionService(
       ds.getRepository(Session),
       ds.getRepository(PendingMessage),
       llmCalls,
       sessionMessages,
       checkpointer,
+      fakeGraph as unknown as GraphService,
     );
-    // 暴露给 deleteSession 测试用
-    (service as unknown as { __ds: DataSource }).__ds = ds;
+    // 暴露给 deleteSession / regenerateAfter 测试用
+    (
+      service as unknown as { __ds: DataSource; __graph: typeof fakeGraph }
+    ).__ds = ds;
+    (
+      service as unknown as { __ds: DataSource; __graph: typeof fakeGraph }
+    ).__graph = fakeGraph;
   });
 
   afterEach(async () => {
@@ -411,6 +429,79 @@ describe("SessionService", () => {
       expect(r).toBeNull();
       const s = await service.findSessionOrFail(sessionId);
       expect(s.title).toBe("user 改的");
+    });
+  });
+
+  describe("regenerateAfter", () => {
+    async function seedSession(sessionId: string): Promise<void> {
+      const ds = (service as unknown as { __ds: DataSource }).__ds;
+      await ds.query(
+        `INSERT INTO session_messages (id, session_id, role, content, created_at) VALUES (?, ?, 'user', '你好', datetime('now', '-3 seconds'))`,
+        [`u1-${sessionId}`, sessionId],
+      );
+      await ds.query(
+        `INSERT INTO session_messages (id, session_id, role, content, created_at) VALUES (?, ?, 'assistant', '回复', datetime('now', '-2 seconds'))`,
+        [`a1-${sessionId}`, sessionId],
+      );
+      await ds.query(
+        `INSERT INTO session_messages (id, session_id, role, content, created_at) VALUES (?, ?, 'user', '再问', datetime('now', '-1 seconds'))`,
+        [`u2-${sessionId}`, sessionId],
+      );
+      await ds.query(
+        `INSERT INTO llm_calls (id, session_id, message_id, provider_type, model, input_tokens, output_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, reasoning_tokens, duration_ms, created_at) VALUES (?, ?, 'a1', 'p', 'm', 1, 1, 2, 0, 0, 0, 1, datetime('now', '-2 seconds'))`,
+        [`call-a1-${sessionId}`, sessionId],
+      );
+    }
+
+    it("regenerateAfter 删 cutoff 之后所有 session_messages + llm_calls", async () => {
+      const { sessionId } = await service.createSession({ content: "x" });
+      await seedSession(sessionId);
+      await service.regenerateAfter(sessionId, `u1-${sessionId}`);
+      const ds = (service as unknown as { __ds: DataSource }).__ds;
+      const remain = await ds.query(
+        `SELECT id FROM session_messages WHERE session_id = ? ORDER BY created_at`,
+        [sessionId],
+      );
+      expect(remain.map((r: { id: string }) => r.id)).toEqual([
+        `u1-${sessionId}`,
+      ]);
+      const calls = await ds.query(
+        `SELECT id FROM llm_calls WHERE session_id = ?`,
+        [sessionId],
+      );
+      expect(calls).toHaveLength(0);
+      const graph = (
+        service as unknown as {
+          __graph: { __cuts: Array<{ threadId: string; cutoff: string }> };
+        }
+      ).__graph;
+      expect(graph.__cuts).toEqual([
+        { threadId: sessionId, cutoff: `u1-${sessionId}` },
+      ]);
+    });
+
+    it("regenerateAfter 不存在 messageId 抛 NotFoundException", async () => {
+      const { sessionId } = await service.createSession({ content: "x" });
+      await expect(service.regenerateAfter(sessionId, "nope")).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it("regenerateAfter messageId 不属于该 session 抛 NotFoundException", async () => {
+      const a = await service.createSession({ content: "a" });
+      const b = await service.createSession({ content: "b" });
+      await seedSession(a.sessionId);
+      await expect(
+        service.regenerateAfter(b.sessionId, `u1-${a.sessionId}`),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it("regenerateAfter role != user 抛 BadRequestException", async () => {
+      const { sessionId } = await service.createSession({ content: "x" });
+      await seedSession(sessionId);
+      await expect(
+        service.regenerateAfter(sessionId, `a1-${sessionId}`),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 });
