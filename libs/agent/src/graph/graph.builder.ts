@@ -1,4 +1,4 @@
-import type { BaseMessage } from "@langchain/core/messages";
+import { type BaseMessage, RemoveMessage } from "@langchain/core/messages";
 import { END, START, StateGraph } from "@langchain/langgraph";
 import type { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import type { ToolRegistry } from "../tools/tool-registry";
@@ -36,7 +36,17 @@ export function buildSupervisorGraph(
   return new StateGraph<GraphState>({
     channels: {
       messages: {
-        value: (x: BaseMessage[], y: BaseMessage[]) => x.concat(y),
+        // 默认 append；遇到 RemoveMessage(id) 则从 base 删该 id（让 sanitize
+        // 能剪掉孤儿 tool_calls 等脏 trailing message，让 retry 不再循环挂）。
+        value: (x: BaseMessage[], y: BaseMessage[]) => {
+          const removeIds = new Set<string>();
+          for (const m of y) {
+            if (m instanceof RemoveMessage && m.id) removeIds.add(m.id);
+          }
+          const kept = x.filter((m) => !m.id || !removeIds.has(m.id));
+          const appended = y.filter((m) => !(m instanceof RemoveMessage));
+          return kept.concat(appended);
+        },
         default: () => [],
       },
     },

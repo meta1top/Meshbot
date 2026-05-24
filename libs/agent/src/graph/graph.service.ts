@@ -4,6 +4,7 @@ import type { BaseMessage } from "@langchain/core/messages";
 import {
   AIMessageChunk,
   HumanMessage,
+  RemoveMessage,
   SystemMessage,
 } from "@langchain/core/messages";
 import { Injectable, Optional } from "@nestjs/common";
@@ -225,6 +226,7 @@ export class GraphService {
   ): AsyncGenerator<StreamChunk> {
     this.promptService.reloadIfChanged();
     const systemPrompt = this.promptService.getPrompt("system");
+    await this.sanitizeOrphanToolCalls(threadId);
     const state = await this.graph.getState({
       configurable: { thread_id: threadId },
     });
@@ -250,6 +252,58 @@ export class GraphService {
   }
 
   /**
+   * 剪掉 checkpointer 里 trailing 的孤儿 tool_calls —— 即末尾 AIMessage 带
+   * `tool_calls` 但后面没有对应数量的 ToolMessage。
+   *
+   * 触发场景：上一次 run 在 supervisor emit tool_calls 之后、tools 节点完成之前
+   * 中断（abort / 进程崩 / 我们自己的 bug）。下次 resume 时 LLM 会校验
+   * 「tool_calls 必须有 ToolMessage 跟随」直接 400，会话彻底卡死。剪掉脏 tail
+   * 让 LLM 看到「user 消息后没有 pending 工具调用」自然重新决策。
+   *
+   * 用 RemoveMessage + updateState：reducer 识别 RemoveMessage 后从 state 里删
+   * 对应 id（messages.reducer 已扩展过）。
+   */
+  private async sanitizeOrphanToolCalls(threadId: ThreadId): Promise<void> {
+    const snapshot = await this.graph.getState({
+      configurable: { thread_id: threadId },
+    });
+    const msgs = (snapshot.values as GraphState | undefined)?.messages;
+    if (!Array.isArray(msgs) || msgs.length === 0) return;
+    const toRemove: string[] = [];
+    // 从末尾向前找：连续的「带 tool_calls 但没有对应 ToolMessage 收尾」AIMessage
+    // 都剪掉，直到遇到一个干净的（非 AIMessage 或 tool_calls 已被 ToolMessage 满足）。
+    let i = msgs.length - 1;
+    while (i >= 0) {
+      const m = msgs[i] as BaseMessage & { tool_calls?: unknown[] };
+      const toolCalls = Array.isArray(m.tool_calls) ? m.tool_calls : [];
+      if (m._getType() !== "ai" || toolCalls.length === 0) break;
+      // 这条 AI 带 tool_calls；看它后面的 ToolMessage 是否覆盖所有 tool_call_id
+      const expectedIds = new Set(
+        toolCalls
+          .map((c) => (c as { id?: string }).id)
+          .filter((id): id is string => typeof id === "string"),
+      );
+      for (let j = i + 1; j < msgs.length; j++) {
+        const after = msgs[j] as BaseMessage & { tool_call_id?: string };
+        if (after._getType() === "tool" && after.tool_call_id) {
+          expectedIds.delete(after.tool_call_id);
+        }
+      }
+      if (expectedIds.size === 0) break; // 已全覆盖，干净
+      if (m.id) toRemove.push(m.id);
+      i--;
+    }
+    if (toRemove.length === 0) return;
+    console.warn(
+      `[graph] sanitizeOrphanToolCalls thread=${threadId} 剪掉 ${toRemove.length} 条孤儿 tool_calls AI 消息：${toRemove.join(", ")}`,
+    );
+    await this.graph.updateState(
+      { configurable: { thread_id: threadId } },
+      { messages: toRemove.map((id) => new RemoveMessage({ id })) },
+    );
+  }
+
+  /**
    * 不加新消息，从 checkpointer 现有状态恢复并流式产出 assistant 回复。
    *
    * 用于重试 —— failed 消息的 HumanMessage 已在会话里（最后一条），
@@ -266,6 +320,7 @@ export class GraphService {
     const abortSignal = signal ?? new AbortController().signal;
     this.ctxRef = { sessionId: threadId, messageId: "", signal: abortSignal };
     try {
+      await this.sanitizeOrphanToolCalls(threadId);
       yield* this.runGraphStream(threadId, { messages: [] }, signal);
     } finally {
       this.ctxRef = null;
