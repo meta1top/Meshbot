@@ -97,17 +97,16 @@ export function MessageList({
               />
             ) : null}
             {/*
-              推理流期间 content 还是空、loading 也没有 → 隐藏空气泡。
-              只要有内容、loading、streaming、failed 或 toolCalls 之一，气泡就该出现。
-              usage 不算独立显示理由 —— 中间决策轮（reasoning+toolCalls 但 content 空）
-              不该只为了挂个 token 行而出气泡。
+              气泡仅在「有可见正文 / loading / streaming / failed」时出现。
+              中间决策轮（仅 reasoning + toolCalls、content 空）不出气泡 —— 否则
+              空 div 也算 flex gap-2 一个 item，让「思考过程 ↔ tool 块」之间多一段空白。
+              toolCalls 自身有独立块（下方渲染），不靠这里撑场。
             */}
             {(m.role === "user" ||
               m.content ||
               m.loading ||
               m.streaming ||
-              m.failed ||
-              (m.toolCalls && m.toolCalls.length > 0)) && (
+              m.failed) && (
               <div
                 className={cn(
                   "text-sm leading-relaxed",
