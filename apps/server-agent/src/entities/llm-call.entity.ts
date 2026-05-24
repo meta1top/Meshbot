@@ -1,9 +1,12 @@
-import {
-  Column,
-  CreateDateColumn,
-  Entity,
-  PrimaryGeneratedColumn,
-} from "typeorm";
+import { Column, Entity, PrimaryGeneratedColumn } from "typeorm";
+
+/** epoch ms ↔ Date transformer，使 SQLite integer 列可与 Date 对象互转。 */
+const epochMsTransformer = {
+  to: (value: Date | number | undefined): number =>
+    value instanceof Date ? value.getTime() : (value ?? Date.now()),
+  from: (value: number | null): Date =>
+    value !== null ? new Date(value) : new Date(),
+};
 
 /**
  * 一次 LLM 调用的观测记录。
@@ -54,6 +57,12 @@ export class LlmCall {
   @Column({ name: "duration_ms", type: "integer", default: 0 })
   durationMs!: number;
 
-  @CreateDateColumn({ name: "created_at" })
+  /** 创建时间，存储为 epoch ms integer（毫秒精度，供 MoreThan 比较用）。 */
+  @Column({
+    name: "created_at",
+    type: "integer",
+    default: () => Date.now().toString(),
+    transformer: epochMsTransformer,
+  })
   createdAt!: Date;
 }

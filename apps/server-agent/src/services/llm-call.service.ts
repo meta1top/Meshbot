@@ -90,4 +90,21 @@ export class LlmCallService {
   async deleteBySession(sessionId: string): Promise<void> {
     await this.llmCallRepo.delete({ sessionId });
   }
+
+  /**
+   * 删某会话内 createdAt > cutoff 的所有 LLM 调用记录。供「重生成」剪 usage 用。
+   *
+   * 使用 QueryBuilder 而非 repo.delete()：后者在 better-sqlite3 下不透传
+   * transformer，导致 Date → integer 转换失效，WHERE 条件不命中。
+   */
+  async deleteAfter(sessionId: string, cutoff: Date): Promise<void> {
+    await this.llmCallRepo
+      .createQueryBuilder()
+      .delete()
+      .where("session_id = :sessionId AND created_at > :cutoffMs", {
+        sessionId,
+        cutoffMs: cutoff.getTime(),
+      })
+      .execute();
+  }
 }

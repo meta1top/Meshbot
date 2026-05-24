@@ -326,6 +326,37 @@ export class GraphService {
   }
 
   /**
+   * 从 checkpointer state 里剪掉 cutoff message 之后的所有消息（含 assistant
+   * / tool / 后续轮 user）。cutoff 本身保留。供「重生成」流程用。
+   *
+   * 用 RemoveMessage + updateState（messages reducer 已支持 RemoveMessage）。
+   * 找不到 cutoff message 时静默 no-op，让上层决定怎么处理。
+   */
+  async cutMessagesAfter(
+    threadId: ThreadId,
+    cutoffMessageId: string,
+  ): Promise<void> {
+    const snapshot = await this.graph.getState({
+      configurable: { thread_id: threadId },
+    });
+    const msgs = (snapshot.values as GraphState | undefined)?.messages ?? [];
+    const idx = msgs.findIndex((m) => m.id === cutoffMessageId);
+    if (idx < 0) return;
+    const toRemove = msgs
+      .slice(idx + 1)
+      .map((m) => m.id)
+      .filter((id): id is string => typeof id === "string");
+    if (toRemove.length === 0) return;
+    console.warn(
+      `[graph] cutMessagesAfter thread=${threadId} cutoff=${cutoffMessageId} 剪掉 ${toRemove.length} 条后续消息：${toRemove.join(", ")}`,
+    );
+    await this.graph.updateState(
+      { configurable: { thread_id: threadId } },
+      { messages: toRemove.map((id) => new RemoveMessage({ id })) },
+    );
+  }
+
+  /**
    * 不加新消息，从 checkpointer 现有状态恢复并流式产出 assistant 回复。
    *
    * 用于重试 —— failed 消息的 HumanMessage 已在会话里（最后一条），

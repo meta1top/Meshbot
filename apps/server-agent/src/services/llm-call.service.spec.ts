@@ -155,4 +155,39 @@ describe("LlmCallService", () => {
     expect(remain1).toHaveLength(0);
     expect(remain2).toHaveLength(1);
   });
+
+  it("deleteAfter 删 createdAt > cutoff 的 LLM 调用", async () => {
+    await service.record({
+      sessionId: "s1",
+      messageId: "m1",
+      providerType: "p",
+      model: "m",
+      inputTokens: 1,
+      outputTokens: 1,
+      totalTokens: 2,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      reasoningTokens: 0,
+      durationMs: 1,
+    });
+    await new Promise((r) => setTimeout(r, 10));
+    const cutoff = new Date();
+    await new Promise((r) => setTimeout(r, 10));
+    await service.record({
+      sessionId: "s1",
+      messageId: "m2",
+      providerType: "p",
+      model: "m",
+      inputTokens: 1,
+      outputTokens: 1,
+      totalTokens: 2,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      reasoningTokens: 0,
+      durationMs: 1,
+    });
+    await service.deleteAfter("s1", cutoff);
+    const rows = await service.listBySession("s1");
+    expect(rows.map((r) => r.messageId)).toEqual(["m1"]);
+  });
 });
