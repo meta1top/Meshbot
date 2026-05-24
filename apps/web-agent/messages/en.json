@@ -172,5 +172,9 @@
   "saveAndStart": "Save and start",
   "description": "Description",
   "cancel": "Cancel",
-  "confirm": "Confirm"
+  "confirm": "Confirm",
+  "rename": "",
+  "unpin": "",
+  "pin": "",
+  "delete": ""
 }
