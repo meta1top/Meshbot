@@ -230,12 +230,12 @@ export class SessionService {
     sessionId: string,
     input: { title?: string; pinned?: boolean },
   ): Promise<Session> {
-    const patch: Partial<Session> = {};
-    if (input.title !== undefined) patch.title = input.title;
+    const changes: Partial<Session> = {};
+    if (input.title !== undefined) changes.title = input.title;
     if (input.pinned !== undefined) {
-      patch.pinnedAt = input.pinned ? new Date() : null;
+      changes.pinnedAt = input.pinned ? new Date() : null;
     }
-    await this.sessionRepo.update({ id: sessionId }, patch);
+    await this.sessionRepo.update({ id: sessionId }, changes);
     return this.findSessionOrFail(sessionId);
   }
 }
