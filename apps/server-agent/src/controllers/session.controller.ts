@@ -161,6 +161,22 @@ export class SessionController {
     return { retried: hasFailed };
   }
 
+  /**
+   * 从某条 user 消息重生成：删该消息后的所有 session_messages / llm_calls /
+   * checkpointer state，然后 resume 触发 LLM 重跑该 user 消息。
+   *
+   * 失败 user 消息也走这里 —— 此时后面没东西可删，等价于纯 resume。
+   */
+  @Post(":sessionId/messages/:messageId/regenerate")
+  async regenerate(
+    @Param("sessionId") sessionId: string,
+    @Param("messageId") messageId: string,
+  ): Promise<{ regenerated: true }> {
+    await this.sessions.regenerateAfter(sessionId, messageId);
+    this.runner.kickResume(sessionId);
+    return { regenerated: true };
+  }
+
   /** 取排队中 / 处理中的用户消息。 */
   @Get(":id/pending")
   async pending(@Param("id") id: string): Promise<PendingResponse> {
