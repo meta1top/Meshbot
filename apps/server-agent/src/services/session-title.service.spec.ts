@@ -173,6 +173,36 @@ describe("SessionTitleService", () => {
     ).toBeUndefined();
   });
 
+  it("LLM 期间外部 mark titleGenerated=true → patchIfNotGenerated 返 null → 不 emit", async () => {
+    const sess = fakeSessionService();
+    const { emitter, events } = spyEmitter();
+    // 模拟 race：findSessionOrFail 看到 false 通过、然后 LLM invoke 期间用户改名
+    // → patchIfNotGenerated 看到 titleGenerated=true 返 null → 不 emit。
+    const svc = new SessionTitleService(
+      {
+        async getModel() {
+          return {
+            async invoke(_prompt: string) {
+              // LLM "调用" 期间外部改 titleGenerated=true（模拟用户改名落库）
+              sess.summary.titleGenerated = true;
+              sess.summary.title = "user 改的";
+              return { content: "LLM 想覆盖" };
+            },
+          };
+        },
+      } as never,
+      sess as never,
+      fakePromptService() as never,
+      emitter,
+    );
+    svc.schedule("s1", "content");
+    await flushPromises();
+    expect(sess.summary.title).toBe("user 改的");
+    expect(
+      events.find((e) => e.name === SESSION_WS_EVENTS.titleUpdated),
+    ).toBeUndefined();
+  });
+
   it("LLM 抛错 → schedule 不抛、不 emit", async () => {
     const sess = fakeSessionService();
     const { emitter, events } = spyEmitter();

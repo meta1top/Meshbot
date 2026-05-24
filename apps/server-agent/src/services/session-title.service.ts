@@ -76,7 +76,7 @@ export class SessionTitleService {
 
   private buildPrompt(content: string): string {
     const template = this.prompt.getPrompt("session-title") ?? FALLBACK_PROMPT;
-    return template.replace("{{content}}", content);
+    return template.replaceAll("{{content}}", content);
   }
 }
 
