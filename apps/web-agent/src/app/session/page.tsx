@@ -108,19 +108,20 @@ function SessionView() {
       apply((prev) => {
         const idx = prev.findIndex((m) => m.id === messageId);
         if (idx === -1) return prev;
+        // 同 batch 多条 user 时（onHuman 连发多次），第一次会 append loading，
+        // 后续每次必须把 loading 重新抽出再附到末尾，否则后到的 user 会被插在
+        // loading 上面，loading 卡在用户消息中间。
         const target = { ...prev[idx], pending: false };
-        const rest = [...prev.slice(0, idx), ...prev.slice(idx + 1)];
-        const next = [...rest, target];
-        if (next.some((m) => m.loading)) return next;
-        return [
-          ...next,
-          {
-            id: `loading-${messageId}`,
-            role: "assistant" as const,
-            content: "",
-            loading: true,
-          },
-        ];
+        const withoutTarget = [...prev.slice(0, idx), ...prev.slice(idx + 1)];
+        const existingLoading = withoutTarget.find((m) => m.loading);
+        const withoutLoading = withoutTarget.filter((m) => !m.loading);
+        const loading = existingLoading ?? {
+          id: `loading-${messageId}`,
+          role: "assistant" as const,
+          content: "",
+          loading: true,
+        };
+        return [...withoutLoading, target, loading];
       });
     },
     [apply],
