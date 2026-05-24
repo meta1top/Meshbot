@@ -115,3 +115,72 @@ describe("session schemas", () => {
     expect(SESSION_WS_EVENTS.runUsage).toBe("run.usage");
   });
 });
+
+import {
+  CreateSessionResponseSchema,
+  SessionDeleteResponseSchema,
+  SessionListResponseSchema,
+  SessionPatchSchema,
+  SessionSummarySchema,
+} from "./session";
+
+describe("session schemas — sidebar list", () => {
+  it("SessionSummarySchema 通过基本字段", () => {
+    const ok = SessionSummarySchema.parse({
+      id: "s1",
+      title: "hi",
+      status: "idle",
+      pinned: false,
+      pinnedAt: null,
+      createdAt: "2026-05-24T00:00:00.000Z",
+      updatedAt: "2026-05-24T00:00:00.000Z",
+    });
+    expect(ok.pinned).toBe(false);
+  });
+
+  it("SessionPatchSchema 至少传 title 或 pinned 之一", () => {
+    expect(() => SessionPatchSchema.parse({})).toThrow();
+    expect(SessionPatchSchema.parse({ title: "x" }).title).toBe("x");
+    expect(SessionPatchSchema.parse({ pinned: true }).pinned).toBe(true);
+    expect(SessionPatchSchema.parse({ title: "x", pinned: true }).title).toBe(
+      "x",
+    );
+  });
+
+  it("SessionPatchSchema 限制 title 长度 1..200", () => {
+    expect(() => SessionPatchSchema.parse({ title: "" })).toThrow();
+    expect(() =>
+      SessionPatchSchema.parse({ title: "x".repeat(201) }),
+    ).toThrow();
+  });
+
+  it("SessionListResponseSchema 是 sessions 数组", () => {
+    const ok = SessionListResponseSchema.parse({ sessions: [] });
+    expect(ok.sessions).toEqual([]);
+  });
+
+  it("CreateSessionResponseSchema 同时带 sessionId 和 session", () => {
+    const r = CreateSessionResponseSchema.parse({
+      sessionId: "s1",
+      session: {
+        id: "s1",
+        title: "hi",
+        status: "running",
+        pinned: false,
+        pinnedAt: null,
+        createdAt: "2026-05-24T00:00:00.000Z",
+        updatedAt: "2026-05-24T00:00:00.000Z",
+      },
+    });
+    expect(r.sessionId).toBe("s1");
+  });
+
+  it("SessionDeleteResponseSchema 必须 deleted=true", () => {
+    expect(SessionDeleteResponseSchema.parse({ deleted: true }).deleted).toBe(
+      true,
+    );
+    expect(() =>
+      SessionDeleteResponseSchema.parse({ deleted: false }),
+    ).toThrow();
+  });
+});

@@ -4,6 +4,47 @@ import { z } from "zod";
 export const SessionStatus = z.enum(["idle", "running"]);
 export type SessionStatus = z.infer<typeof SessionStatus>;
 
+/** 侧边栏 + 创会话接口共用的会话概要。 */
+export const SessionSummarySchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  status: SessionStatus,
+  /** 派生：pinnedAt != null。客户端用做语义判断，避免每处都比较 pinnedAt。 */
+  pinned: z.boolean(),
+  /** ISO 时间字符串；非 null 即已固定，值用于客户端排序与未来重排。 */
+  pinnedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type SessionSummary = z.infer<typeof SessionSummarySchema>;
+
+/** GET /api/sessions 出参。 */
+export const SessionListResponseSchema = z.object({
+  sessions: z.array(SessionSummarySchema),
+});
+export type SessionListResponse = z.infer<typeof SessionListResponseSchema>;
+
+/**
+ * PATCH /api/sessions/:id 入参。title / pinned 至少传一个。
+ * - pinned=true 会写当前时间到 pinned_at（最近固定的排到顶）。
+ * - pinned=false 会把 pinned_at 置 null。
+ */
+export const SessionPatchSchema = z
+  .object({
+    title: z.string().min(1).max(200).optional(),
+    pinned: z.boolean().optional(),
+  })
+  .refine((d) => d.title !== undefined || d.pinned !== undefined, {
+    message: "至少传 title 或 pinned 之一",
+  });
+export type SessionPatchInput = z.infer<typeof SessionPatchSchema>;
+
+/** DELETE /api/sessions/:id 出参。 */
+export const SessionDeleteResponseSchema = z.object({
+  deleted: z.literal(true),
+});
+export type SessionDeleteResponse = z.infer<typeof SessionDeleteResponseSchema>;
+
 /** 待处理用户消息状态。 */
 export const PendingMessageStatus = z.enum([
   "pending",
@@ -18,6 +59,16 @@ export const CreateSessionSchema = z.object({
   content: z.string().min(1),
 });
 export type CreateSessionInput = z.infer<typeof CreateSessionSchema>;
+
+/**
+ * POST /api/sessions 出参。兼容老调用方：保留顶层 sessionId 不变，追加 session
+ * 字段，前端用 session 完整对象插入 sessionsAtom（无需二次 GET）。
+ */
+export const CreateSessionResponseSchema = z.object({
+  sessionId: z.string(),
+  session: SessionSummarySchema,
+});
+export type CreateSessionResponse = z.infer<typeof CreateSessionResponseSchema>;
 
 /**
  * POST /api/sessions/:id/messages 入参。
