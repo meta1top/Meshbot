@@ -1,5 +1,9 @@
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
-import type { AIMessageChunk, BaseMessage } from "@langchain/core/messages";
+import {
+  AIMessage,
+  type AIMessageChunk,
+  type BaseMessage,
+} from "@langchain/core/messages";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
 export interface SupervisorState {
@@ -44,6 +48,25 @@ export function createSupervisorNode(
     if (accumulated === undefined) {
       throw new Error("supervisor 节点：LLM 流未产出任何内容");
     }
-    return { messages: [accumulated] };
+    // 剥掉 reasoning_content —— 否则下一轮回发时 deepseek thinking 模式会校验
+    // 「reasoning_content 必须回传」，而 @langchain/openai 不会把
+    // additional_kwargs.reasoning_content 塞回 messages[].reasoning_content。
+    // reasoning 已实时流到前端 + 落库 session_messages，state 里无需保留。
+    //
+    // 重新 new AIMessage 而非 mutate accumulated.additional_kwargs：上游对 chunk
+    // 引用/序列化路径不可控，直接构造一个干净对象最稳。
+    const { reasoning_content, ...cleanKwargs } =
+      (accumulated.additional_kwargs ?? {}) as Record<string, unknown>;
+    void reasoning_content;
+    const clean = new AIMessage({
+      content: accumulated.content,
+      tool_calls: accumulated.tool_calls,
+      additional_kwargs: cleanKwargs,
+      response_metadata: accumulated.response_metadata,
+      id: accumulated.id,
+      name: accumulated.name,
+      usage_metadata: accumulated.usage_metadata,
+    });
+    return { messages: [clean] };
   };
 }

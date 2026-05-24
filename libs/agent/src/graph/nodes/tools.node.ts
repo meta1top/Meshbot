@@ -1,8 +1,17 @@
-import { AIMessage, ToolMessage } from "@langchain/core/messages";
+import { type BaseMessage, ToolMessage } from "@langchain/core/messages";
 import { SESSION_WS_EVENTS } from "@meshbot/types-agent";
 import type { ToolRegistry } from "../../tools/tool-registry";
 import type { ToolContext } from "../../tools/tool.types";
 import type { GraphState } from "../graph.builder";
+
+/** AIMessage/AIMessageChunk 共享的 tool_calls 结构（按字段判，不用 instanceof）。 */
+interface MessageWithToolCalls {
+  tool_calls?: Array<{
+    id?: string;
+    name: string;
+    args: unknown;
+  }>;
+}
 
 const RESULT_PREVIEW_LIMIT = 200;
 
@@ -22,13 +31,19 @@ export function createToolsNode(
   return async function toolsNode(
     state: GraphState,
   ): Promise<Partial<GraphState>> {
-    const last = state.messages[state.messages.length - 1];
-    if (!(last instanceof AIMessage) || !(last.tool_calls?.length ?? 0)) {
+    // 用字段判 tool_calls，不用 instanceof —— monorepo 下 @langchain/core 可能
+    // 多版本/多打包路径加载，AIMessageChunk 不会通过这边 import 的 AIMessage
+    // instanceof，导致带 tool_calls 的消息被当作终态、tools 节点直接 noop。
+    const last = state.messages[state.messages.length - 1] as
+      | (BaseMessage & MessageWithToolCalls)
+      | undefined;
+    const toolCalls = last?.tool_calls ?? [];
+    if (toolCalls.length === 0) {
       return {};
     }
     const ctxBase = ctxGetter();
     const results: ToolMessage[] = [];
-    for (const call of last.tool_calls ?? []) {
+    for (const call of toolCalls) {
       const toolCallId = call.id ?? "";
       const tool = registry.get(call.name);
       if (!tool) {

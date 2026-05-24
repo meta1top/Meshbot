@@ -1,4 +1,4 @@
-import { AIMessage, type BaseMessage } from "@langchain/core/messages";
+import type { BaseMessage } from "@langchain/core/messages";
 import { END, START, StateGraph } from "@langchain/langgraph";
 import type { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import type { ToolRegistry } from "../tools/tool-registry";
@@ -49,9 +49,17 @@ export function buildSupervisorGraph(
     .compile({ checkpointer });
 }
 
+/**
+ * 用结构字段判 tool_calls，不用 `instanceof AIMessage` —— monorepo 下
+ * @langchain/core 可能被多版本/多打包路径加载，AIMessageChunk 与上层 import
+ * 的 AIMessage 不同源时 instanceof 会假阴性，导致带 tool_calls 的消息被
+ * 误判为终态、跳到 END，tools 节点永远不会被触发。
+ */
 function routeAfterSupervisor(state: GraphState): "tools" | typeof END {
-  const last = state.messages[state.messages.length - 1];
-  if (last instanceof AIMessage && (last.tool_calls?.length ?? 0) > 0) {
+  const last = state.messages[state.messages.length - 1] as
+    | (BaseMessage & { tool_calls?: unknown[] })
+    | undefined;
+  if (last && Array.isArray(last.tool_calls) && last.tool_calls.length > 0) {
     return "tools";
   }
   return END;
