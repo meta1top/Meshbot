@@ -7,9 +7,18 @@ import { RunnerService } from "./runner.service";
 function fakeSessionService() {
   const store: PendingMessage[] = [];
   let seq = 0;
+  let claimPendingCalls = 0;
+  let claimFailedCalls = 0;
   return {
     store,
+    get claimPendingCalls() {
+      return claimPendingCalls;
+    },
+    get claimFailedCalls() {
+      return claimFailedCalls;
+    },
     async claimPending(sessionId: string) {
+      claimPendingCalls++;
       const rows = store.filter(
         (m) => m.sessionId === sessionId && m.status === "pending",
       );
@@ -26,6 +35,7 @@ function fakeSessionService() {
       for (const m of store) if (ids.includes(m.id)) m.status = "failed";
     },
     async claimFailed(sessionId: string) {
+      claimFailedCalls++;
       const rows = store.filter(
         (m) => m.sessionId === sessionId && m.status === "failed",
       );
@@ -333,5 +343,26 @@ describe("RunnerService", () => {
     expect(usageEvents).toHaveLength(1);
     expect((usageEvents[0] as { messageId: string }).messageId).toBe("msg-1");
     expect((usageEvents[0] as { sessionId: string }).sessionId).toBe("s1");
+  });
+
+  it("kickResumeAndWait：不 claim pending/failed，直接 resume 跑一次", async () => {
+    const sess = fakeSessionService();
+    const emitter = new EventEmitter2();
+    const events: string[] = [];
+    emitter.onAny((name) => events.push(String(name)));
+    const llmCalls = fakeLlmCallService();
+    // 注意：不 enqueue 任何 pending / failed
+    const runner = new RunnerService(
+      sess as never,
+      fakeGraphService() as never,
+      emitter,
+      llmCalls as never,
+      fakeSessionMessageService() as never,
+    );
+    await runner.kickResumeAndWait("s1");
+    expect(events).toContain("run.done");
+    // 没调 claimPending / claimFailed（因为 kickResume 不取批）
+    expect(sess.claimPendingCalls).toBe(0);
+    expect(sess.claimFailedCalls).toBe(0);
   });
 });

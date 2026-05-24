@@ -157,6 +157,34 @@ export class RunnerService implements OnModuleInit {
   }
 
   /**
+   * 触发 resume：不 claim pending_messages，直接走 resumeStream（checkpointer
+   * 现有 state 重新跑一轮）。供「重生成」用 —— 该 user 消息已是 checkpointer
+   * 最后一条，resume 会从该点重新调 LLM。
+   *
+   * running 哨兵防双 kick。runOnce 抛错时记录日志后退出，不无限循环。
+   */
+  kickResume(sessionId: string): void {
+    if (this.running.has(sessionId)) return;
+    void this.kickResumeAndWait(sessionId).catch((err) => {
+      this.logger.error(`resume loop crashed for ${sessionId}`, err);
+    });
+  }
+
+  async kickResumeAndWait(sessionId: string): Promise<void> {
+    if (this.running.has(sessionId)) return;
+    this.running.add(sessionId);
+    await this.sessions.setStatus(sessionId, "running");
+    try {
+      await this.runOnce(sessionId, [], true);
+    } catch (err) {
+      this.logger.warn(`resume runOnce 失败：${sessionId}`, err);
+    } finally {
+      this.running.delete(sessionId);
+      await this.sessions.setStatus(sessionId, "idle");
+    }
+  }
+
+  /**
    * 跑一次 run —— 流式产出一批消息的应答；逐 chunk 发 runChunk；
    * 完成发 runDone 并 markProcessed；被中断发 runInterrupted；
    * 其他错误把消息标 failed（HumanMessage 已在 checkpointer，不回滚 pending）、
