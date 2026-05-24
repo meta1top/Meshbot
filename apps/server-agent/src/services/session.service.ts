@@ -13,6 +13,9 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { In, Repository } from "typeorm";
 import { PendingMessage } from "../entities/pending-message.entity";
 import { Session } from "../entities/session.entity";
+import { CheckpointerCleanupService } from "./checkpointer-cleanup.service";
+import { LlmCallService } from "./llm-call.service";
+import { SessionMessageService } from "./session-message.service";
 
 const TITLE_MAX = 30;
 
@@ -24,6 +27,9 @@ export class SessionService {
     private readonly sessionRepo: Repository<Session>,
     @InjectRepository(PendingMessage)
     private readonly pendingRepo: Repository<PendingMessage>,
+    private readonly llmCalls: LlmCallService,
+    private readonly sessionMessages: SessionMessageService,
+    private readonly checkpointer: CheckpointerCleanupService,
   ) {}
 
   /**
@@ -237,5 +243,27 @@ export class SessionService {
     }
     await this.sessionRepo.update({ id: sessionId }, changes);
     return this.findSessionOrFail(sessionId);
+  }
+
+  /**
+   * 级联删除整条会话：先确认存在抛 404，再事务内按顺序删
+   * llm_calls / session_messages / pending_messages / sessions，
+   * 事务外删 checkpointer 两张表（不在 TxTypeOrm 注册范围）。
+   *
+   * 这里没 interrupt inflight：在 controller 层处理（先 runner.interrupt 再调本方法），
+   * 让 service 保持「纯数据层」。
+   */
+  async deleteSession(sessionId: string): Promise<void> {
+    await this.findSessionOrFail(sessionId);
+    await this.deleteSessionInTx(sessionId);
+    await this.checkpointer.deleteThread(sessionId);
+  }
+
+  @Transactional()
+  private async deleteSessionInTx(sessionId: string): Promise<void> {
+    await this.llmCalls.deleteBySession(sessionId);
+    await this.sessionMessages.deleteBySession(sessionId);
+    await this.pendingRepo.delete({ sessionId });
+    await this.sessionRepo.delete({ id: sessionId });
   }
 }

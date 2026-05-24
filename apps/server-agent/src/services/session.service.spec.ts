@@ -1,8 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { ConflictException, NotFoundException } from "@nestjs/common";
 import { DataSource } from "typeorm";
+import { LlmCall } from "../entities/llm-call.entity";
 import { PendingMessage } from "../entities/pending-message.entity";
 import { Session } from "../entities/session.entity";
+import { SessionMessage } from "../entities/session-message.entity";
+import { CheckpointerCleanupService } from "./checkpointer-cleanup.service";
+import { LlmCallService } from "./llm-call.service";
+import { SessionMessageService } from "./session-message.service";
 import { SessionService } from "./session.service";
 
 describe("SessionService", () => {
@@ -13,14 +18,43 @@ describe("SessionService", () => {
     ds = new DataSource({
       type: "better-sqlite3",
       database: ":memory:",
-      entities: [Session, PendingMessage],
+      entities: [Session, PendingMessage, LlmCall, SessionMessage],
       synchronize: true,
     });
     await ds.initialize();
+    // checkpointer 两张表手工建（生产由集成包自建）
+    await ds.query(`
+      CREATE TABLE checkpoints (
+        thread_id TEXT NOT NULL,
+        checkpoint_ns TEXT NOT NULL DEFAULT '',
+        checkpoint_id TEXT NOT NULL,
+        PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id)
+      )
+    `);
+    await ds.query(`
+      CREATE TABLE writes (
+        thread_id TEXT NOT NULL,
+        checkpoint_ns TEXT NOT NULL DEFAULT '',
+        checkpoint_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        idx INTEGER NOT NULL,
+        PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id, task_id, idx)
+      )
+    `);
+    const llmCalls = new LlmCallService(ds.getRepository(LlmCall));
+    const sessionMessages = new SessionMessageService(
+      ds.getRepository(SessionMessage),
+    );
+    const checkpointer = new CheckpointerCleanupService(ds);
     service = new SessionService(
       ds.getRepository(Session),
       ds.getRepository(PendingMessage),
+      llmCalls,
+      sessionMessages,
+      checkpointer,
     );
+    // 暴露给 deleteSession 测试用
+    (service as unknown as { __ds: DataSource }).__ds = ds;
   });
 
   afterEach(async () => {
@@ -254,6 +288,78 @@ describe("SessionService", () => {
 
     it("不存在的 id 抛 NotFoundException", async () => {
       await expect(service.patch("nope", { title: "x" })).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe("deleteSession", () => {
+    async function seedAll(sessionId: string): Promise<void> {
+      const ds = (service as unknown as { __ds: DataSource }).__ds;
+      await ds.query(
+        `INSERT INTO session_messages (id, session_id, role, content) VALUES (?, ?, 'user', 'x')`,
+        [`msg-${sessionId}`, sessionId],
+      );
+      await ds.query(
+        `INSERT INTO llm_calls (id, session_id, message_id, provider_type, model, input_tokens, output_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, reasoning_tokens, duration_ms) VALUES (?, ?, 'm', 'p', 'mo', 0, 0, 0, 0, 0, 0, 0)`,
+        [`call-${sessionId}`, sessionId],
+      );
+      await ds.query(
+        `INSERT INTO checkpoints (thread_id, checkpoint_id) VALUES (?, 'c')`,
+        [sessionId],
+      );
+      await ds.query(
+        `INSERT INTO writes (thread_id, checkpoint_id, task_id, idx) VALUES (?, 'c', 't', 0)`,
+        [sessionId],
+      );
+    }
+    it("级联删 sessions + pending + session_messages + llm_calls + checkpointer", async () => {
+      const { sessionId } = await service.createSession({ content: "x" });
+      await seedAll(sessionId);
+      await service.deleteSession(sessionId);
+      const ds = (service as unknown as { __ds: DataSource }).__ds;
+      expect(
+        await ds.query(`SELECT 1 FROM sessions WHERE id = ?`, [sessionId]),
+      ).toHaveLength(0);
+      expect(
+        await ds.query(`SELECT 1 FROM pending_messages WHERE session_id = ?`, [
+          sessionId,
+        ]),
+      ).toHaveLength(0);
+      expect(
+        await ds.query(`SELECT 1 FROM session_messages WHERE session_id = ?`, [
+          sessionId,
+        ]),
+      ).toHaveLength(0);
+      expect(
+        await ds.query(`SELECT 1 FROM llm_calls WHERE session_id = ?`, [
+          sessionId,
+        ]),
+      ).toHaveLength(0);
+      expect(
+        await ds.query(`SELECT 1 FROM checkpoints WHERE thread_id = ?`, [
+          sessionId,
+        ]),
+      ).toHaveLength(0);
+      expect(
+        await ds.query(`SELECT 1 FROM writes WHERE thread_id = ?`, [sessionId]),
+      ).toHaveLength(0);
+    });
+
+    it("不影响其他 session", async () => {
+      const s1 = await service.createSession({ content: "a" });
+      const s2 = await service.createSession({ content: "b" });
+      await seedAll(s1.sessionId);
+      await seedAll(s2.sessionId);
+      await service.deleteSession(s1.sessionId);
+      const ds = (service as unknown as { __ds: DataSource }).__ds;
+      expect(
+        await ds.query(`SELECT 1 FROM sessions WHERE id = ?`, [s2.sessionId]),
+      ).toHaveLength(1);
+    });
+
+    it("不存在 id 抛 NotFoundException", async () => {
+      await expect(service.deleteSession("nope")).rejects.toThrow(
         NotFoundException,
       );
     });
