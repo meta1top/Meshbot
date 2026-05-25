@@ -52,6 +52,16 @@ export class MeshbotConfigService {
     return path.join(this.meshbotDir, "prompt");
   }
 
+  /** Skills 根目录：<meshbotDir>/skills；每个子目录一个 skill，含 SKILL.md。 */
+  getSkillsDir(): string {
+    return path.join(this.meshbotDir, "skills");
+  }
+
+  /** MCP 配置：<meshbotDir>/mcp.json；不存在视作无 MCP server。 */
+  getMcpConfigPath(): string {
+    return path.join(this.meshbotDir, "mcp.json");
+  }
+
   getDatabasePath(): string {
     return path.join(this.meshbotDir, "agent.db");
   }

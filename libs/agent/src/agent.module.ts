@@ -5,9 +5,13 @@ import { MeshbotConfigModule } from "./config/meshbot-config.module";
 import { MeshbotConfigService } from "./config/meshbot-config.service";
 import { GraphService } from "./graph/graph.service";
 import { PromptService } from "./prompt/prompt.service";
+import { McpService } from "./mcp/mcp.service";
+import { SkillService } from "./skills/skill.service";
 import { ToolRegistry } from "./tools/tool-registry";
 import { BashTool } from "./tools/builtins/bash.tool";
 import { DateTool } from "./tools/builtins/date.tool";
+import { SkillListTool } from "./tools/builtins/skill-list.tool";
+import { SkillLoadTool } from "./tools/builtins/skill-load.tool";
 
 @Module({
   // EventEmitterModule.forRoot() 在 app 层（apps/server-agent app.module）也调；
@@ -19,6 +23,10 @@ import { DateTool } from "./tools/builtins/date.tool";
     ToolRegistry,
     BashTool,
     DateTool,
+    SkillService,
+    SkillListTool,
+    SkillLoadTool,
+    McpService,
     {
       provide: PromptService,
       useFactory: (configService: MeshbotConfigService) => {
@@ -28,6 +36,12 @@ import { DateTool } from "./tools/builtins/date.tool";
     },
     GraphService,
   ],
-  exports: [GraphService, PromptService, ToolRegistry],
+  exports: [
+    GraphService,
+    PromptService,
+    ToolRegistry,
+    SkillService,
+    McpService,
+  ],
 })
 export class AgentModule {}

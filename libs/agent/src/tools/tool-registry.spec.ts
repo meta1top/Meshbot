@@ -85,4 +85,37 @@ describe("ToolRegistry", () => {
     registry.onModuleInit();
     expect(registry.get("nonexistent")).toBeUndefined();
   });
+
+  it("register 动态加入 tool；unregister 移除", () => {
+    const registry = new ToolRegistry(fakeDiscovery([new FakeAlphaTool()]));
+    registry.onModuleInit();
+    const gamma: MeshbotTool<{ z: string }, string> = {
+      name: "gamma",
+      description: "Gamma tool",
+      schema: z.object({ z: z.string() }),
+      async execute(args) {
+        return `gamma:${args.z}`;
+      },
+    };
+    registry.register(gamma);
+    expect(registry.get("gamma")).toBe(gamma);
+    expect(registry.asLangChainBindable()).toHaveLength(2);
+    registry.unregister("gamma");
+    expect(registry.get("gamma")).toBeUndefined();
+    expect(registry.asLangChainBindable()).toHaveLength(1);
+  });
+
+  it("register 重名抛错", () => {
+    const registry = new ToolRegistry(fakeDiscovery([new FakeAlphaTool()]));
+    registry.onModuleInit();
+    const dup: MeshbotTool<{ x: number }, string> = {
+      name: "alpha",
+      description: "dup",
+      schema: z.object({ x: z.number() }),
+      async execute() {
+        return "x";
+      },
+    };
+    expect(() => registry.register(dup)).toThrow(/Duplicate tool name: alpha/);
+  });
 });
