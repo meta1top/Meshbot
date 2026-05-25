@@ -24,6 +24,34 @@ export const EnvSchema = z.object({
 
   /** JWT 签名密钥（本地登录用），默认开发兜底值 */
   MESHBOT_JWT_SECRET: z.string().min(8).optional(),
+
+  /**
+   * LangGraph ReAct 递归上限（一次 supervisor↔tools 往返算 2 个 super-step）。
+   * 不设默认 100；长会话 + 多轮 tool 调用建议 100~200。
+   */
+  MESHBOT_GRAPH_RECURSION_LIMIT: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(100),
+
+  /**
+   * LangSmith 可观测性 —— 由 `@langchain/core` 内部 SDK 直读 process.env 自动启用，
+   * 这里仅做"显式声明 + Zod 校验"，无需任何业务代码改动。
+   *
+   * 在 .env 中设置以下变量后，supervisor / tools 节点的 LLM 调用与图执行
+   * 会被自动上报到 LangSmith：
+   *   LANGSMITH_TRACING=true
+   *   LANGSMITH_API_KEY=ls__xxx
+   *   LANGSMITH_PROJECT=meshbot-dev          # 可选，缺省 "default"
+   *   LANGSMITH_ENDPOINT=https://api.smith.langchain.com  # 可选，自托管才需要
+   */
+  LANGSMITH_TRACING: z
+    .union([z.literal("true"), z.literal("false")])
+    .optional(),
+  LANGSMITH_API_KEY: z.string().optional(),
+  LANGSMITH_PROJECT: z.string().optional(),
+  LANGSMITH_ENDPOINT: z.string().url().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

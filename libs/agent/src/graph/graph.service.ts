@@ -401,6 +401,9 @@ export class GraphService {
       configurable: { thread_id: threadId },
       streamMode: "messages",
       signal,
+      // LangGraph 默认 recursionLimit=25，长会话 + 频繁 tool 调用容易撞墙
+      // （报 GraphRecursionError）。可通过 MESHBOT_GRAPH_RECURSION_LIMIT 调整。
+      recursionLimit: resolveRecursionLimit(),
     });
     const initMs = Date.now() - startedAt;
     if (timing) {
@@ -679,4 +682,19 @@ function extractUsage(msg: AIMessageChunk | undefined): ExtractedUsage | null {
   }
 
   return null;
+}
+
+/**
+ * 从环境变量解析 LangGraph recursion 上限。默认 100（够应付绝大多数 ReAct
+ * 长链 + 多 tool 串调）。非法值（NaN / <=0）回落默认值。
+ *
+ * 一次 supervisor↔tools 往返算 2 个 super-step；25 默认上限只能撑 ~12 轮
+ * tool 调用，长会话很容易撞 GraphRecursionError。
+ */
+function resolveRecursionLimit(): number {
+  const raw = process.env.MESHBOT_GRAPH_RECURSION_LIMIT;
+  if (!raw) return 100;
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n) || n <= 0) return 100;
+  return n;
 }
