@@ -16,6 +16,7 @@ import {
 import { useAtomValue, useSetAtom } from "jotai";
 import { ArrowDown } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import {
   Suspense,
   useCallback,
@@ -53,6 +54,7 @@ import {
 } from "@/rest/session";
 
 function SessionView() {
+  const t = useTranslations("session");
   const searchParams = useSearchParams();
   const router = useRouter();
   const sessionId = searchParams.get("id");
@@ -592,14 +594,14 @@ function SessionView() {
         if (status === 404) {
           apply((prev) => prev.filter((m) => m.id !== id));
         } else if (status === 409) {
-          window.alert("消息已开始处理，无法删除");
+          window.alert(t("cannotDeleteWhileProcessing"));
         } else {
           console.error("删除 pending 失败", err);
-          window.alert("网络错误，请重试");
+          window.alert(t("networkError"));
         }
       }
     },
-    [sessionId, apply],
+    [sessionId, apply, t],
   );
 
   /**
@@ -609,7 +611,7 @@ function SessionView() {
   const handleEditPending = useCallback(
     async (id: string) => {
       if (!sessionId) return;
-      if (draft.trim() && !window.confirm("覆盖当前输入框内容？")) return;
+      if (draft.trim() && !window.confirm(t("confirmOverwriteDraft"))) return;
       try {
         const { content } = await deletePendingMessage(sessionId, id);
         apply((prev) => prev.filter((m) => m.id !== id));
@@ -628,14 +630,14 @@ function SessionView() {
         if (status === 404) {
           apply((prev) => prev.filter((m) => m.id !== id));
         } else if (status === 409) {
-          window.alert("消息已开始处理，无法编辑");
+          window.alert(t("cannotEditWhileProcessing"));
         } else {
           console.error("编辑 pending 失败", err);
-          window.alert("网络错误，请重试");
+          window.alert(t("networkError"));
         }
       }
     },
-    [sessionId, draft, apply],
+    [sessionId, draft, apply, t],
   );
 
   /**
@@ -758,7 +760,7 @@ function SessionView() {
         {!stickToBottom && (
           <button
             type="button"
-            aria-label="滚动到底部"
+            aria-label={t("scrollToBottom")}
             className="absolute right-2 -top-12 flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background text-foreground shadow-sm hover:bg-muted"
             onClick={() => {
               setStickToBottom(true);

@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2, Pencil, Trash2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import type { TimelineMessage } from "./message-list";
 
@@ -19,6 +20,7 @@ interface PendingListProps {
  * 删除图标变为转圈，避免重复点击。
  */
 export function PendingList({ messages, onDelete, onEdit }: PendingListProps) {
+  const t = useTranslations("session");
   const [inFlight, setInFlight] = useState<Set<string>>(new Set());
 
   const run = async (id: string, fn?: (id: string) => Promise<void>) => {
@@ -50,7 +52,7 @@ export function PendingList({ messages, onDelete, onEdit }: PendingListProps) {
             <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
               <button
                 type="button"
-                aria-label="编辑"
+                aria-label={t("editPending")}
                 disabled={busy}
                 className="p-1 text-muted-foreground/60 hover:text-foreground disabled:opacity-40 disabled:hover:text-muted-foreground/60"
                 onClick={() => run(m.id, onEdit)}
@@ -59,7 +61,7 @@ export function PendingList({ messages, onDelete, onEdit }: PendingListProps) {
               </button>
               <button
                 type="button"
-                aria-label="删除"
+                aria-label={t("deletePending")}
                 disabled={busy}
                 className="p-1 text-muted-foreground/60 hover:text-destructive disabled:opacity-40 disabled:hover:text-muted-foreground/60"
                 onClick={() => run(m.id, onDelete)}

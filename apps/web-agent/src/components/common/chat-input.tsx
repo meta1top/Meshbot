@@ -2,6 +2,7 @@
 
 import { cn, Tooltip, TooltipContent, TooltipTrigger } from "@meshbot/design";
 import { Paperclip, Send, Square } from "lucide-react";
+import { useTranslations } from "next-intl";
 import {
   forwardRef,
   useCallback,
@@ -61,6 +62,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     },
     ref,
   ) {
+    const tChat = useTranslations("chatInput");
+    const tSession = useTranslations("session");
     const editorRef = useRef<HTMLDivElement>(null);
 
     // 当外部 value 与 DOM innerText 不一致时同步（外部灌 draft 时触发）
@@ -168,7 +171,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               type="button"
               onClick={handleInterrupt}
               className="flex h-8 w-8 shrink-0 items-center justify-center text-destructive transition-colors hover:text-destructive/80"
-              title="Stop generating"
+              title={tChat("interrupt")}
             >
               <Square className="h-4 w-4 fill-current" />
             </button>
@@ -183,7 +186,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
                 ? "text-foreground hover:text-foreground/80"
                 : "text-muted-foreground",
             )}
-            title="Send message"
+            title={tChat("send")}
           >
             <Send className="h-4 w-4" />
           </button>
@@ -193,7 +196,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           <button
             type="button"
             className="flex h-5 w-5 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-            title="添加附件"
+            title={tChat("attachment")}
           >
             <Paperclip className="h-3.5 w-3.5" />
           </button>
@@ -236,20 +239,27 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
                   {tokenUsage.breakdown ? (
                     <div className="space-y-0.5 text-xs">
                       <div>
-                        总计 {formatTokens(tokenUsage.current)} /{" "}
+                        {tSession("usage.totalLabel")}{" "}
+                        {formatTokens(tokenUsage.current)} /{" "}
                         {formatTokens(tokenUsage.max)}
                       </div>
                       <div>
-                        输入 {formatTokens(tokenUsage.breakdown.inputTokens)}
+                        {tSession("usage.inputLabel")}{" "}
+                        {formatTokens(tokenUsage.breakdown.inputTokens)}
                         {tokenUsage.breakdown.cacheReadTokens > 0 &&
-                          `（缓存 ${formatTokens(tokenUsage.breakdown.cacheReadTokens)}）`}
+                          `（${tSession("usage.cacheLabel")} ${formatTokens(tokenUsage.breakdown.cacheReadTokens)}）`}
                       </div>
                       <div>
-                        输出 {formatTokens(tokenUsage.breakdown.outputTokens)}
+                        {tSession("usage.outputLabel")}{" "}
+                        {formatTokens(tokenUsage.breakdown.outputTokens)}
                         {tokenUsage.breakdown.reasoningTokens > 0 &&
-                          `（推理 ${formatTokens(tokenUsage.breakdown.reasoningTokens)}）`}
+                          `（${tSession("usage.reasoningLabel")} ${formatTokens(tokenUsage.breakdown.reasoningTokens)}）`}
                       </div>
-                      <div>{tokenUsage.breakdown.callCount} 次调用</div>
+                      <div>
+                        {tSession("usage.callCount", {
+                          count: tokenUsage.breakdown.callCount,
+                        })}
+                      </div>
                     </div>
                   ) : (
                     <>

@@ -90,6 +90,30 @@
     "interrupt": "中断",
     "attachment": "添加附件"
   },
+  "schedule": {
+    "title": "计划任务"
+  },
+  "session": {
+    "scrollToBottom": "滚动到底部",
+    "generatingReply": "正在生成回复",
+    "editPending": "编辑",
+    "deletePending": "删除",
+    "cannotDeleteWhileProcessing": "消息已开始处理，无法删除",
+    "cannotEditWhileProcessing": "消息已开始处理，无法编辑",
+    "networkError": "网络错误，请重试",
+    "confirmOverwriteDraft": "覆盖当前输入框内容？",
+    "reasoningProcess": "思考过程",
+    "reasoningThinking": "思考中 {seconds}s",
+    "reasoningThought": "已思考 {seconds}s",
+    "usage": {
+      "inputLabel": "输入",
+      "outputLabel": "输出",
+      "cacheLabel": "缓存",
+      "reasoningLabel": "推理",
+      "totalLabel": "总计",
+      "callCount": "{count} 次调用"
+    }
+  },
   "home": {
     "title": "接下来做什么？",
     "overview": "概览",
@@ -177,5 +201,22 @@
   "sessions": "",
   "loadFailed": "",
   "retry": "",
-  "sessionsEmpty": ""
+  "sessionsEmpty": "",
+  "cannotDeleteWhileProcessing": "",
+  "networkError": "",
+  "confirmOverwriteDraft": "",
+  "cannotEditWhileProcessing": "",
+  "scrollToBottom": "",
+  "generatingReply": "",
+  "reasoningThinking": "",
+  "reasoningThought": "",
+  "reasoningProcess": "",
+  "usage": {
+    "inputLabel": "",
+    "cacheLabel": "",
+    "outputLabel": "",
+    "reasoningLabel": ""
+  },
+  "editPending": "",
+  "deletePending": ""
 }

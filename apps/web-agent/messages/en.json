@@ -90,6 +90,30 @@
     "interrupt": "Interrupt",
     "attachment": "Add attachment"
   },
+  "schedule": {
+    "title": "Scheduled tasks"
+  },
+  "session": {
+    "scrollToBottom": "Scroll to bottom",
+    "generatingReply": "Generating reply",
+    "editPending": "Edit",
+    "deletePending": "Delete",
+    "cannotDeleteWhileProcessing": "Message is already being processed and cannot be deleted",
+    "cannotEditWhileProcessing": "Message is already being processed and cannot be edited",
+    "networkError": "Network error, please retry",
+    "confirmOverwriteDraft": "Overwrite the current draft?",
+    "reasoningProcess": "Reasoning",
+    "reasoningThinking": "Thinking {seconds}s",
+    "reasoningThought": "Thought for {seconds}s",
+    "usage": {
+      "inputLabel": "Input",
+      "outputLabel": "Output",
+      "cacheLabel": "cache",
+      "reasoningLabel": "reasoning",
+      "totalLabel": "Total",
+      "callCount": "{count} calls"
+    }
+  },
   "home": {
     "title": "What's up next?",
     "overview": "Overview",
@@ -177,5 +201,22 @@
   "sessions": "",
   "loadFailed": "",
   "retry": "",
-  "sessionsEmpty": ""
+  "sessionsEmpty": "",
+  "cannotDeleteWhileProcessing": "",
+  "networkError": "",
+  "confirmOverwriteDraft": "",
+  "cannotEditWhileProcessing": "",
+  "scrollToBottom": "",
+  "generatingReply": "",
+  "reasoningThinking": "",
+  "reasoningThought": "",
+  "reasoningProcess": "",
+  "usage": {
+    "inputLabel": "",
+    "cacheLabel": "",
+    "outputLabel": "",
+    "reasoningLabel": ""
+  },
+  "editPending": "",
+  "deletePending": ""
 }
