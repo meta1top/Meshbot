@@ -3,6 +3,7 @@
 import { cn } from "@meshbot/design";
 import type { MessageUsage } from "@meshbot/types-agent";
 import { ChevronRight } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { formatTokens } from "@/lib/format-tokens";
 import { MarkdownContent } from "./markdown-content";
@@ -77,16 +78,21 @@ export function MessageList({
   onRegenerateOptimisticCut,
   usageByMessage,
 }: MessageListProps) {
+  const t = useTranslations("session");
   return (
-    <div className="flex flex-col gap-6 pb-6">
+    <div className="flex flex-col gap-8 pb-6">
       {messages
         .filter((m) => m.role !== "system")
         .map((m) => (
           <div
             key={m.id}
             className={cn(
-              "group relative flex max-w-[80%] flex-col gap-2",
-              m.role === "user" ? "self-end items-end" : "self-start",
+              "group relative flex flex-col gap-3",
+              // assistant 固定宽 80%：避免表格 / 长行内容触发容器宽度跳动；
+              // user 保持 max-w-[80%] 让气泡贴右沿、按内容自适应
+              m.role === "user"
+                ? "max-w-[80%] self-end items-end"
+                : "w-[80%] self-start",
             )}
           >
             {m.role === "assistant" && m.reasoning ? (
@@ -137,15 +143,15 @@ export function MessageList({
             {m.role === "assistant" &&
               m.toolCalls &&
               m.toolCalls.length > 0 && (
-                <div className="flex flex-col gap-1.5">
+                <div className="flex flex-col gap-2">
                   {m.toolCalls.map((tc) => (
                     <ToolCallBlock key={tc.toolCallId} tool={tc} />
                   ))}
                 </div>
               )}
             {m.role === "assistant" && m.content && usageByMessage?.[m.id] && (
-              <div className="text-[11px] text-muted-foreground/70">
-                {renderUsageLine(usageByMessage[m.id])}
+              <div className="text-[11px] text-muted-foreground">
+                {renderUsageLine(usageByMessage[m.id], t)}
               </div>
             )}
             {m.role === "user" && (
@@ -166,10 +172,11 @@ export function MessageList({
 
 /** "..." 三点跳动 loading 指示器（等首个 chunk 时显示）。颜色调淡避免视觉重量。 */
 function TypingDots() {
+  const t = useTranslations("session");
   return (
     <span
       role="status"
-      aria-label="正在生成回复"
+      aria-label={t("generatingReply")}
       className="inline-flex items-center gap-1 align-middle"
     >
       <span className="h-1 w-1 animate-bounce rounded-full bg-muted-foreground/40 [animation-delay:-0.3s]" />
@@ -192,6 +199,7 @@ function ReasoningBlock({
   startedAt?: number;
   durationMs?: number;
 }) {
+  const t = useTranslations("session");
   const isThinking = durationMs === undefined && startedAt !== undefined;
   // 思考中默认展开；思考一结束自动收起。用户点击切换会覆盖这个默认，
   // 但 isThinking 再变化时会再次同步（下一次新的推理流又会展开）。
@@ -210,16 +218,16 @@ function ReasoningBlock({
     ? Date.now() - (startedAt ?? Date.now())
     : (durationMs ?? 0);
   const label = isThinking
-    ? `思考中 ${(elapsed / 1000).toFixed(1)}s`
+    ? t("reasoningThinking", { seconds: (elapsed / 1000).toFixed(1) })
     : elapsed > 0
-      ? `已思考 ${(elapsed / 1000).toFixed(1)}s`
-      : "思考过程";
+      ? t("reasoningThought", { seconds: (elapsed / 1000).toFixed(1) })
+      : t("reasoningProcess");
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-2">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 self-start text-xs text-muted-foreground/80 hover:text-muted-foreground"
+        className="flex items-center gap-1 self-start text-xs text-muted-foreground hover:text-foreground"
         aria-expanded={open}
       >
         <ChevronRight
@@ -228,7 +236,7 @@ function ReasoningBlock({
         <span>{label}</span>
       </button>
       {open && (
-        <div className="border-l-2 border-border/60 pl-3 text-[12px] leading-relaxed text-muted-foreground/80 whitespace-pre-wrap">
+        <div className="whitespace-pre-wrap border-l border-border pl-3 text-xs leading-relaxed text-muted-foreground">
           {text}
         </div>
       )}
@@ -236,16 +244,19 @@ function ReasoningBlock({
   );
 }
 
-function renderUsageLine(u: MessageUsage): string {
+function renderUsageLine(
+  u: MessageUsage,
+  t: ReturnType<typeof useTranslations<"session">>,
+): string {
   const parts: string[] = [u.model];
-  let inputPart = `输入 ${formatTokens(u.inputTokens)}`;
+  let inputPart = `${t("usage.inputLabel")} ${formatTokens(u.inputTokens)}`;
   if (u.cacheReadTokens > 0) {
-    inputPart += `（缓存 ${formatTokens(u.cacheReadTokens)}）`;
+    inputPart += `（${t("usage.cacheLabel")} ${formatTokens(u.cacheReadTokens)}）`;
   }
   parts.push(inputPart);
-  let outputPart = `输出 ${formatTokens(u.outputTokens)}`;
+  let outputPart = `${t("usage.outputLabel")} ${formatTokens(u.outputTokens)}`;
   if (u.reasoningTokens > 0) {
-    outputPart += `（推理 ${formatTokens(u.reasoningTokens)}）`;
+    outputPart += `（${t("usage.reasoningLabel")} ${formatTokens(u.reasoningTokens)}）`;
   }
   parts.push(outputPart);
   return parts.join(" · ");

@@ -20,6 +20,7 @@ export function ToolCallBlock({ tool }: { tool: ToolCallView }) {
   const argsJson = formatJson(tool.args);
   const argsSummary = formatArgsSummary(tool.args);
   const output = tool.progress || tool.result || "";
+  const { server, name: displayName } = parseToolName(tool.name);
   const dotColor =
     tool.status === "running"
       ? "bg-primary/70"
@@ -31,18 +32,23 @@ export function ToolCallBlock({ tool }: { tool: ToolCallView }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="group flex w-full items-center gap-2 text-left text-xs text-muted-foreground hover:text-foreground/80"
+        className="group -mx-1.5 flex w-full items-center gap-2 px-1.5 py-1 text-left text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground"
         aria-expanded={open}
       >
         <span
-          className={cn(
-            "inline-block h-1.5 w-1.5 shrink-0 rounded-full",
-            dotColor,
-          )}
+          className={cn("inline-block h-2 w-2 shrink-0 rounded-full", dotColor)}
         />
-        <span className="font-mono text-foreground/80">{tool.name}</span>
+        <span className="flex shrink-0 items-center gap-1 whitespace-nowrap font-mono">
+          {server && (
+            <>
+              <span className="text-muted-foreground">{server}</span>
+              <span className="text-muted-foreground/50">/</span>
+            </>
+          )}
+          <span className="text-foreground">{displayName}</span>
+        </span>
         {argsSummary && (
-          <span className="truncate font-mono text-muted-foreground/60">
+          <span className="min-w-0 truncate font-mono text-muted-foreground/70">
             ({argsSummary})
           </span>
         )}
@@ -58,9 +64,9 @@ export function ToolCallBlock({ tool }: { tool: ToolCallView }) {
         />
       </button>
       {open && (
-        <div className="mt-1.5 ml-[14px] flex flex-col gap-2">
+        <div className="mt-2 ml-[3px] flex flex-col gap-3 border-l border-border pl-3">
           <ToolSection label="请求">
-            <pre className="overflow-auto whitespace-pre-wrap bg-foreground/3 px-2.5 py-1.5 font-mono text-[11px] leading-relaxed text-foreground/80">
+            <pre className="overflow-auto whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-foreground">
               {argsJson}
             </pre>
           </ToolSection>
@@ -69,16 +75,16 @@ export function ToolCallBlock({ tool }: { tool: ToolCallView }) {
               {output ? (
                 <pre
                   className={cn(
-                    "max-h-64 overflow-auto whitespace-pre-wrap bg-foreground/3 px-2.5 py-1.5 font-mono text-[11px] leading-relaxed",
+                    "max-h-64 overflow-auto whitespace-pre-wrap font-mono text-[11px] leading-relaxed",
                     tool.status === "error"
                       ? "text-destructive"
-                      : "text-foreground/80",
+                      : "text-foreground",
                   )}
                 >
                   {output}
                 </pre>
               ) : (
-                <span className="bg-foreground/3 px-2.5 py-1.5 font-mono text-[11px] text-muted-foreground/60">
+                <span className="font-mono text-[11px] text-muted-foreground">
                   …
                 </span>
               )}
@@ -98,8 +104,8 @@ function ToolSection({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-0.5">
-      <div className="text-[10px] text-muted-foreground/60">{label}</div>
+    <div className="flex flex-col gap-1">
+      <div className="text-[11px] text-muted-foreground">{label}</div>
       {children}
     </div>
   );
@@ -128,6 +134,19 @@ function formatArgsSummary(args: unknown): string {
   });
   const text = parts.join(", ");
   return text.length > 60 ? `${text.slice(0, 57)}…` : text;
+}
+
+/**
+ * 把 `mcp__<server>__<tool>` 拆成 `{ server, name }`，方便分两段渲染；
+ * 内建工具（无 `mcp__` 前缀）返 `{ server: null, name: tool.name }`。
+ *
+ * 用 non-greedy + 第一个 `__` 分割：server 取一段（如 `chrome-devtools`），
+ * 余下整体视为 tool name（哪怕里面再含 `__` 也保留）。
+ */
+function parseToolName(raw: string): { server: string | null; name: string } {
+  const m = raw.match(/^mcp__(.+?)__(.+)$/);
+  if (!m) return { server: null, name: raw };
+  return { server: m[1], name: m[2] };
 }
 
 function formatJson(value: unknown): string {
