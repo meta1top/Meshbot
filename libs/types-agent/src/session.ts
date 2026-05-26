@@ -150,6 +150,8 @@ export type MessageUsage = z.infer<typeof MessageUsageSchema>;
 /** 会话累计：所有 LLM 调用的求和。 */
 export const SessionTotalsSchema = TokenBreakdownSchema.extend({
   callCount: z.number(),
+  /** 最近一次 LLM 调用的 input_tokens；空 session = 0。用于进度环显示「下次请求估算 / ctx 上限」。 */
+  lastInputTokens: z.number(),
 });
 export type SessionTotals = z.infer<typeof SessionTotalsSchema>;
 
@@ -299,6 +301,37 @@ export const RunToolCallEndEventSchema = z.object({
 });
 export type RunToolCallEndEvent = z.infer<typeof RunToolCallEndEventSchema>;
 
+/** socket: run.compaction_start —— 压缩开始通知。 */
+export const RunCompactionStartEventSchema = z.object({
+  sessionId: z.string(),
+  /** "threshold" = pre-check 触发；"ctx-exceeded" = LLM 报错后兜底触发。 */
+  reason: z.enum(["threshold", "ctx-exceeded"]),
+});
+export type RunCompactionStartEvent = z.infer<
+  typeof RunCompactionStartEventSchema
+>;
+
+/** socket: run.compaction_done —— 压缩完成。 */
+export const RunCompactionDoneEventSchema = z.object({
+  sessionId: z.string(),
+  /** 被压缩进摘要的原 messages 条数。 */
+  removedCount: z.number(),
+  /** 摘要文本的前 200 字预览，便于前端 banner 顺手展示。 */
+  summaryPreview: z.string(),
+});
+export type RunCompactionDoneEvent = z.infer<
+  typeof RunCompactionDoneEventSchema
+>;
+
+/** socket: run.compaction_error —— 压缩失败。 */
+export const RunCompactionErrorEventSchema = z.object({
+  sessionId: z.string(),
+  error: z.string(),
+});
+export type RunCompactionErrorEvent = z.infer<
+  typeof RunCompactionErrorEventSchema
+>;
+
 /**
  * DELETE /api/sessions/:sessionId/pending-messages/:messageId 响应载荷。
  * 返回 content 让前端在「编辑」场景下回填输入框。
@@ -348,4 +381,7 @@ export const SESSION_WS_EVENTS = {
   runToolCallStart: "run.tool_call_start",
   runToolCallProgress: "run.tool_call_progress",
   runToolCallEnd: "run.tool_call_end",
+  runCompactionStart: "run.compaction_start",
+  runCompactionDone: "run.compaction_done",
+  runCompactionError: "run.compaction_error",
 } as const;

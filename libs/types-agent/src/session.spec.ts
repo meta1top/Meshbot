@@ -6,6 +6,9 @@ import {
   PendingMessageStatus,
   RetryResponseSchema,
   RunChunkEventSchema,
+  RunCompactionDoneEventSchema,
+  RunCompactionErrorEventSchema,
+  RunCompactionStartEventSchema,
   RunUsageEventSchema,
   SESSION_WS_EVENTS,
   SessionDeleteResponseSchema,
@@ -14,6 +17,7 @@ import {
   SessionStatus,
   SessionSummarySchema,
   SessionTitleUpdatedEventSchema,
+  SessionTotalsSchema,
   SessionUsageSchema,
 } from "./session";
 
@@ -62,6 +66,7 @@ describe("session schemas", () => {
         cacheCreationTokens: 5,
         reasoningTokens: 0,
         callCount: 2,
+        lastInputTokens: 100,
       },
       byMessage: {
         "msg-1": {
@@ -110,6 +115,7 @@ describe("session schemas", () => {
         cacheCreationTokens: 0,
         reasoningTokens: 0,
         callCount: 0,
+        lastInputTokens: 0,
       },
       byMessage: {},
     };
@@ -226,5 +232,58 @@ describe("session schemas — title generation", () => {
 
   it("SESSION_WS_EVENTS.titleUpdated 常量存在", () => {
     expect(SESSION_WS_EVENTS.titleUpdated).toBe("session.title_updated");
+  });
+});
+
+describe("Context compaction WS events", () => {
+  it("RunCompactionStartEvent: reason 必须是 threshold 或 ctx-exceeded", () => {
+    expect(
+      RunCompactionStartEventSchema.parse({
+        sessionId: "s1",
+        reason: "threshold",
+      }),
+    ).toEqual({ sessionId: "s1", reason: "threshold" });
+    expect(() =>
+      RunCompactionStartEventSchema.parse({ sessionId: "s1", reason: "bogus" }),
+    ).toThrow();
+  });
+
+  it("RunCompactionDoneEvent 含 removedCount + summaryPreview", () => {
+    const v = RunCompactionDoneEventSchema.parse({
+      sessionId: "s1",
+      removedCount: 12,
+      summaryPreview: "用户问了酒店评价…",
+    });
+    expect(v.removedCount).toBe(12);
+    expect(v.summaryPreview).toBe("用户问了酒店评价…");
+  });
+
+  it("RunCompactionErrorEvent 仅 sessionId + error 字符串", () => {
+    expect(
+      RunCompactionErrorEventSchema.parse({
+        sessionId: "s1",
+        error: "timeout",
+      }),
+    ).toEqual({ sessionId: "s1", error: "timeout" });
+  });
+
+  it("SESSION_WS_EVENTS 包含三个 compaction 事件名", () => {
+    expect(SESSION_WS_EVENTS.runCompactionStart).toBe("run.compaction_start");
+    expect(SESSION_WS_EVENTS.runCompactionDone).toBe("run.compaction_done");
+    expect(SESSION_WS_EVENTS.runCompactionError).toBe("run.compaction_error");
+  });
+
+  it("SessionTotalsSchema 含 lastInputTokens 字段", () => {
+    const t = SessionTotalsSchema.parse({
+      inputTokens: 100,
+      outputTokens: 50,
+      totalTokens: 150,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      reasoningTokens: 0,
+      callCount: 1,
+      lastInputTokens: 100,
+    });
+    expect(t.lastInputTokens).toBe(100);
   });
 });
