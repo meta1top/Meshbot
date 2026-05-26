@@ -28,6 +28,16 @@ export interface RecordToolResultInput {
   content: string;
 }
 
+/** 写 compaction 占位行入参。id 调用方自行生成（建议 `comp-${uuid}` 或时间戳）。 */
+export interface RecordCompactionPlaceholderInput {
+  id: string;
+  sessionId: string;
+  summary: string;
+  removedCount: number;
+  fromMessageId: string;
+  toMessageId: string;
+}
+
 /** listPage 返回。 */
 export interface SessionMessagePage {
   messages: SessionMessage[];
@@ -103,6 +113,36 @@ export class SessionMessageService {
       reasoning: null,
       toolCalls: null,
       toolCallId: input.toolCallId,
+      createdAt: new Date(),
+    });
+  }
+
+  /**
+   * 写一条 compaction 占位行（role=system，metadata 标 kind=compaction）。
+   * 幂等：同 id 已存在直接返回。
+   *
+   * UI 在 message-list 渲染时识别 metadata.kind === "compaction" 走折叠组件，
+   * 不当普通系统消息显示。
+   */
+  async recordCompactionPlaceholder(
+    input: RecordCompactionPlaceholderInput,
+  ): Promise<void> {
+    const exists = await this.repo.findOneBy({ id: input.id });
+    if (exists) return;
+    await this.repo.insert({
+      id: input.id,
+      sessionId: input.sessionId,
+      role: "system",
+      content: input.summary,
+      reasoning: null,
+      toolCalls: null,
+      toolCallId: null,
+      metadata: JSON.stringify({
+        kind: "compaction",
+        removedCount: input.removedCount,
+        fromMessageId: input.fromMessageId,
+        toMessageId: input.toMessageId,
+      }),
       createdAt: new Date(),
     });
   }

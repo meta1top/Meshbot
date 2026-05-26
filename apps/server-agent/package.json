@@ -55,6 +55,7 @@
   },
   "devDependencies": {
     "@nestjs/cli": "^11",
+    "@nestjs/testing": "^11",
     "@types/bcrypt": "^6.0.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/jsonwebtoken": "^9.0.10",

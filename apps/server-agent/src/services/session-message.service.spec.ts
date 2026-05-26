@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { NotFoundException } from "@nestjs/common";
-import { DataSource } from "typeorm";
+import { Test } from "@nestjs/testing";
+import { getRepositoryToken } from "@nestjs/typeorm";
+import { DataSource, type Repository } from "typeorm";
 import { SessionMessage } from "../entities/session-message.entity";
 import { SessionMessageService } from "./session-message.service";
 
@@ -245,5 +247,62 @@ describe("findByIdOrFail / deleteAfter", () => {
     await service.deleteAfter("s1", cutoff.createdAt);
     const p = await service.listPage("s2", { limit: 10 });
     expect(p.messages.map((m) => m.id)).toEqual(["y1"]);
+  });
+});
+
+describe("SessionMessageService.recordCompactionPlaceholder", () => {
+  let service: SessionMessageService;
+  let repo: jest.Mocked<Repository<SessionMessage>>;
+
+  beforeEach(async () => {
+    repo = {
+      findOneBy: jest.fn(),
+      insert: jest.fn(),
+    } as unknown as jest.Mocked<Repository<SessionMessage>>;
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        SessionMessageService,
+        { provide: getRepositoryToken(SessionMessage), useValue: repo },
+      ],
+    }).compile();
+    service = moduleRef.get(SessionMessageService);
+  });
+
+  it("插入一行 role=system + content=summary + metadata JSON", async () => {
+    repo.findOneBy.mockResolvedValue(null);
+    await service.recordCompactionPlaceholder({
+      id: "comp-1",
+      sessionId: "s1",
+      summary: "用户问了 X，已尝试 Y",
+      removedCount: 5,
+      fromMessageId: "m1",
+      toMessageId: "m5",
+    });
+    expect(repo.insert).toHaveBeenCalledTimes(1);
+    const arg = repo.insert.mock.calls[0][0] as Partial<SessionMessage>;
+    expect(arg.id).toBe("comp-1");
+    expect(arg.sessionId).toBe("s1");
+    expect(arg.role).toBe("system");
+    expect(arg.content).toBe("用户问了 X，已尝试 Y");
+    const meta = JSON.parse(arg.metadata as string);
+    expect(meta).toEqual({
+      kind: "compaction",
+      removedCount: 5,
+      fromMessageId: "m1",
+      toMessageId: "m5",
+    });
+  });
+
+  it("id 已存在视为幂等成功，不重复 insert", async () => {
+    repo.findOneBy.mockResolvedValue({ id: "comp-1" } as SessionMessage);
+    await service.recordCompactionPlaceholder({
+      id: "comp-1",
+      sessionId: "s1",
+      summary: "x",
+      removedCount: 1,
+      fromMessageId: "a",
+      toMessageId: "b",
+    });
+    expect(repo.insert).not.toHaveBeenCalled();
   });
 });

@@ -45,6 +45,18 @@ export class SessionMessage {
   @Column({ name: "tool_call_id", type: "varchar", nullable: true })
   toolCallId!: string | null;
 
+  /**
+   * 元信息 JSON 字符串。普通消息为 null。
+   *
+   * Compaction 占位行 metadata 形如：
+   *   { kind: "compaction", removedCount: 12, fromMessageId, toMessageId }
+   * 摘要文本本身落在 `content` 字段，不重复进 metadata。
+   *
+   * 解析责任在调用方（service 读出后 JSON.parse；写入前 JSON.stringify）。
+   */
+  @Column({ type: "text", nullable: true })
+  metadata!: string | null;
+
   @CreateDateColumn({ name: "created_at" })
   createdAt!: Date;
 }
