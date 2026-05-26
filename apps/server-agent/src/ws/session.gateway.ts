@@ -5,6 +5,9 @@ import {
 } from "@meshbot/common";
 import {
   type RunChunkEvent,
+  type RunCompactionDoneEvent,
+  type RunCompactionErrorEvent,
+  type RunCompactionStartEvent,
   type RunDoneEvent,
   type RunErrorEvent,
   type RunHumanEvent,
@@ -194,5 +197,29 @@ export class SessionGateway extends BaseWebSocketGateway {
   @OnEvent(SESSION_WS_EVENTS.titleUpdated)
   onTitleUpdated(payload: SessionTitleUpdatedEvent): void {
     this.server.emit(SESSION_WS_EVENTS.titleUpdated, payload);
+  }
+
+  /** ContextCompactor → run.compaction_start → 转发到房间，触发前端 banner 显示。 */
+  @OnEvent(SESSION_WS_EVENTS.runCompactionStart)
+  onRunCompactionStart(payload: RunCompactionStartEvent): void {
+    this.server
+      .to(payload.sessionId)
+      .emit(SESSION_WS_EVENTS.runCompactionStart, payload);
+  }
+
+  /** ContextCompactor → run.compaction_done → 转发到房间，前端撤掉 banner。 */
+  @OnEvent(SESSION_WS_EVENTS.runCompactionDone)
+  onRunCompactionDone(payload: RunCompactionDoneEvent): void {
+    this.server
+      .to(payload.sessionId)
+      .emit(SESSION_WS_EVENTS.runCompactionDone, payload);
+  }
+
+  /** ContextCompactor → run.compaction_error → 转发到房间，前端撤 banner + toast。 */
+  @OnEvent(SESSION_WS_EVENTS.runCompactionError)
+  onRunCompactionError(payload: RunCompactionErrorEvent): void {
+    this.server
+      .to(payload.sessionId)
+      .emit(SESSION_WS_EVENTS.runCompactionError, payload);
   }
 }
