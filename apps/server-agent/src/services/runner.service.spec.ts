@@ -120,6 +120,9 @@ function fakeLlmCallService() {
     async record(input: unknown) {
       records.push(input);
     },
+    async getLastBySession(_sessionId: string) {
+      return null;
+    },
   };
 }
 
@@ -128,6 +131,45 @@ function fakeSessionMessageService() {
   return {
     async recordUser(_input: unknown) {},
     async recordAssistant(_input: unknown) {},
+  };
+}
+
+/** ContextCompactor 替身。 */
+function fakeCompactor() {
+  return {
+    shouldCompactReturns: false,
+    compactCalls: [] as { sessionId: string; opts?: unknown }[],
+    compactError: null as Error | null,
+    shouldCompact(_lastInput: number, _ctx: number) {
+      return this.shouldCompactReturns;
+    },
+    async compact(sessionId: string, opts?: unknown) {
+      this.compactCalls.push({ sessionId, opts });
+      if (this.compactError) throw this.compactError;
+      return { removedCount: 5, summary: "S" };
+    },
+  };
+}
+
+/** ModelConfigService 替身。 */
+function fakeModelConfig() {
+  return {
+    async findEnabled() {
+      return { contextWindow: 100_000 };
+    },
+  };
+}
+
+/** LlmCallService 替身（带 getLastBySession）。 */
+function fakeLlmCallServiceWithLast(lastInput: number) {
+  return {
+    records: [] as unknown[],
+    async record(input: unknown) {
+      this.records.push(input);
+    },
+    async getLastBySession() {
+      return { inputTokens: lastInput };
+    },
   };
 }
 
@@ -147,6 +189,8 @@ describe("RunnerService", () => {
       emitter,
       llmCalls as never,
       fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
     );
     await runner.kickAndWait("s1");
     expect(
@@ -173,6 +217,8 @@ describe("RunnerService", () => {
       emitter,
       llmCalls as never,
       fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
     );
     await runner.kickAndWait("s1");
     expect(sess.store).toHaveLength(2);
@@ -190,6 +236,8 @@ describe("RunnerService", () => {
       emitter,
       llmCalls as never,
       fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
     );
     // 第一轮：消费 first，循环排空退出
     await runner.kickAndWait("s1");
@@ -215,6 +263,8 @@ describe("RunnerService", () => {
       emitter,
       llmCalls as never,
       fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
     );
     await runner.kickAndWait("s1");
     expect(errs).toHaveLength(1);
@@ -235,6 +285,8 @@ describe("RunnerService", () => {
       emitter,
       llmCalls as never,
       fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
     );
     await runner.kickRetryAndWait("s1");
     expect(sess.store[0].status).toBe("processed");
@@ -253,6 +305,8 @@ describe("RunnerService", () => {
       emitter,
       llmCalls as never,
       fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
     );
     emitter.on("run.chunk", () => {
       snapshotDuringRun = runner.getInflight("s1");
@@ -285,6 +339,8 @@ describe("RunnerService", () => {
       emitter,
       llmCalls as never,
       fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
     );
     emitter.on("run.chunk", () => runner.interrupt("s1"));
     await runner.kickAndWait("s1");
@@ -309,6 +365,8 @@ describe("RunnerService", () => {
       new EventEmitter2(),
       llmCalls as never,
       fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
     );
     await runner.onModuleInit();
     expect(rolledBack).toBe(3);
@@ -327,6 +385,8 @@ describe("RunnerService", () => {
       emitter,
       llmCalls as never,
       fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
     );
     await runner.kickAndWait("s1");
     expect(llmCalls.records).toHaveLength(1);
@@ -358,11 +418,225 @@ describe("RunnerService", () => {
       emitter,
       llmCalls as never,
       fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
     );
     await runner.kickResumeAndWait("s1");
     expect(events).toContain("run.done");
     // 没调 claimPending / claimFailed（因为 kickResume 不取批）
     expect(sess.claimPendingCalls).toBe(0);
     expect(sess.claimFailedCalls).toBe(0);
+  });
+});
+
+describe("RunnerService context compaction integration", () => {
+  /**
+   * fakeGraphService 模拟"首次 streamMessage 抛 ctx_exceeded，重试改走
+   * resumeStream 正常出"：runner 的 ctx-exceeded 兜底重试用 resume 模式
+   * （HumanMessage 第一次调用时已写入 checkpointer，避免重写）。
+   */
+  function fakeGraphServiceCtxThenOk() {
+    let streamCount = 0;
+    let resumeCount = 0;
+    return {
+      async *streamMessage(): AsyncGenerator<unknown> {
+        streamCount++;
+        // 抛错前必须有一个 yield 占位（TS 才能把它推为 generator），生成器
+        // 在抛错前不会 yield 出去；但函数声明需要 yield 才合法
+        if (streamCount < 0) yield {};
+        throw { error: { code: "context_length_exceeded" } };
+      },
+      async *resumeStream(): AsyncGenerator<unknown> {
+        resumeCount++;
+        yield { kind: "chunk", messageId: "msg-retry", delta: "OK" };
+        yield {
+          kind: "assistant_done",
+          messageId: "msg-retry",
+          content: "OK",
+          reasoning: "",
+          toolCalls: null,
+        };
+        yield {
+          kind: "usage",
+          messageId: "msg-retry",
+          providerType: "deepseek",
+          model: "deepseek-chat",
+          inputTokens: 100,
+          outputTokens: 1,
+          totalTokens: 101,
+          cacheReadTokens: 0,
+          cacheCreationTokens: 0,
+          reasoningTokens: 0,
+          durationMs: 50,
+        };
+      },
+      get streamCount() {
+        return streamCount;
+      },
+      get resumeCount() {
+        return resumeCount;
+      },
+    };
+  }
+
+  it("pre-check 命中阈值 → 调 compactor.compact 后才进 streamMessage", async () => {
+    const sess = fakeSessionService();
+    const emitter = new EventEmitter2();
+    const llmCalls = fakeLlmCallServiceWithLast(95_000);
+    const compactor = fakeCompactor();
+    compactor.shouldCompactReturns = true;
+    sess.enqueue("s1", "hi");
+    const runner = new RunnerService(
+      sess as never,
+      fakeGraphService() as never,
+      emitter,
+      llmCalls as never,
+      fakeSessionMessageService() as never,
+      compactor as never,
+      fakeModelConfig() as never,
+    );
+    await runner.kickAndWait("s1");
+    expect(compactor.compactCalls).toHaveLength(1);
+    expect(compactor.compactCalls[0].opts).toEqual({ reason: "threshold" });
+    expect(sess.store.every((m) => m.status === "processed")).toBe(true);
+  });
+
+  it("pre-check 比例 < 阈值 → 不调 compact", async () => {
+    const sess = fakeSessionService();
+    const emitter = new EventEmitter2();
+    const llmCalls = fakeLlmCallServiceWithLast(1_000);
+    const compactor = fakeCompactor();
+    compactor.shouldCompactReturns = false;
+    sess.enqueue("s1", "hi");
+    const runner = new RunnerService(
+      sess as never,
+      fakeGraphService() as never,
+      emitter,
+      llmCalls as never,
+      fakeSessionMessageService() as never,
+      compactor as never,
+      fakeModelConfig() as never,
+    );
+    await runner.kickAndWait("s1");
+    expect(compactor.compactCalls).toHaveLength(0);
+  });
+
+  it("pre-check compact 抛错 → 不进 streamMessage + 标 message failed", async () => {
+    const sess = fakeSessionService();
+    const emitter = new EventEmitter2();
+    const llmCalls = fakeLlmCallServiceWithLast(95_000);
+    const compactor = fakeCompactor();
+    compactor.shouldCompactReturns = true;
+    compactor.compactError = new Error("compact boom");
+    sess.enqueue("s1", "hi");
+    const events: { name: string; payload: unknown }[] = [];
+    emitter.onAny((name, payload) =>
+      events.push({ name: String(name), payload }),
+    );
+    const graph = fakeGraphService();
+    const streamSpy = jest.spyOn(graph, "streamMessage");
+    const runner = new RunnerService(
+      sess as never,
+      graph as never,
+      emitter,
+      llmCalls as never,
+      fakeSessionMessageService() as never,
+      compactor as never,
+      fakeModelConfig() as never,
+    );
+    await runner.kickAndWait("s1");
+    expect(streamSpy).not.toHaveBeenCalled();
+    expect(sess.store.every((m) => m.status === "failed")).toBe(true);
+    expect(events.map((e) => e.name)).toContain(SESSION_WS_EVENTS.runError);
+  });
+
+  it("streamMessage 抛 ctx_exceeded → 强制 compact + 重试一次成功", async () => {
+    const sess = fakeSessionService();
+    const emitter = new EventEmitter2();
+    const llmCalls = fakeLlmCallServiceWithLast(1_000); // pre-check 未命中
+    const compactor = fakeCompactor();
+    compactor.shouldCompactReturns = false;
+    const graph = fakeGraphServiceCtxThenOk();
+    sess.enqueue("s1", "hi");
+    const runner = new RunnerService(
+      sess as never,
+      graph as never,
+      emitter,
+      llmCalls as never,
+      fakeSessionMessageService() as never,
+      compactor as never,
+      fakeModelConfig() as never,
+    );
+    await runner.kickAndWait("s1");
+    expect(compactor.compactCalls).toHaveLength(1);
+    expect(compactor.compactCalls[0].opts).toEqual({
+      force: true,
+      reason: "ctx-exceeded",
+    });
+    expect(graph.streamCount).toBe(1); // 首次 streamMessage 抛 ctx_exceeded
+    expect(graph.resumeCount).toBe(1); // 重试改走 resumeStream（HumanMessage 已在 checkpointer）
+    expect(sess.store.every((m) => m.status === "processed")).toBe(true);
+  });
+
+  it("streamMessage 抛非 ctx 错 → 不触发兜底，原样抛", async () => {
+    const sess = fakeSessionService();
+    const emitter = new EventEmitter2();
+    const llmCalls = fakeLlmCallServiceWithLast(1_000);
+    const compactor = fakeCompactor();
+    sess.enqueue("s1", "hi");
+    const runner = new RunnerService(
+      sess as never,
+      fakeGraphService({ throwErr: true }) as never,
+      emitter,
+      llmCalls as never,
+      fakeSessionMessageService() as never,
+      compactor as never,
+      fakeModelConfig() as never,
+    );
+    await runner.kickAndWait("s1");
+    expect(compactor.compactCalls).toHaveLength(0); // 兜底未触发
+    expect(sess.store.every((m) => m.status === "failed")).toBe(true);
+  });
+
+  it("ctx_exceeded → 兜底压缩本身也失败 → 报 compactErr，messages markFailed", async () => {
+    const sess = fakeSessionService();
+    const emitter = new EventEmitter2();
+    const llmCalls = fakeLlmCallServiceWithLast(1_000); // pre-check 未命中
+    const compactor = fakeCompactor();
+    compactor.shouldCompactReturns = false;
+    compactor.compactError = new Error("compact pipeline boom");
+    const graph = fakeGraphServiceCtxThenOk();
+    sess.enqueue("s1", "hi");
+    const events: { name: string; payload: unknown }[] = [];
+    emitter.onAny((name, payload) =>
+      events.push({ name: String(name), payload }),
+    );
+    const runner = new RunnerService(
+      sess as never,
+      graph as never,
+      emitter,
+      llmCalls as never,
+      fakeSessionMessageService() as never,
+      compactor as never,
+      fakeModelConfig() as never,
+    );
+    await runner.kickAndWait("s1");
+    // 兜底压缩被调一次（force=true, ctx-exceeded）
+    expect(compactor.compactCalls).toHaveLength(1);
+    expect(compactor.compactCalls[0].opts).toEqual({
+      force: true,
+      reason: "ctx-exceeded",
+    });
+    // streamMessage 调一次抛错；resumeStream 没机会进
+    expect(graph.streamCount).toBe(1);
+    expect(graph.resumeCount).toBe(0);
+    // 消息标 failed
+    expect(sess.store.every((m) => m.status === "failed")).toBe(true);
+    // runError 报的是 compactErr.message（更新鲜，指向真实失败点），不是 ctx_exceeded
+    const errEvent = events.find((e) => e.name === SESSION_WS_EVENTS.runError);
+    expect(errEvent).toBeDefined();
+    expect((errEvent?.payload as { error: string } | undefined)?.error).toBe(
+      "compact pipeline boom",
+    );
   });
 });

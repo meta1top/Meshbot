@@ -6,7 +6,10 @@ import {
 import { Injectable, Logger, type OnModuleInit } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
 import { EventEmitter2 } from "@nestjs/event-emitter";
+import { ContextCompactor } from "./context-compactor.service";
+import { isContextLengthError } from "./context-compactor.utils";
 import { LlmCallService } from "./llm-call.service";
+import { ModelConfigService } from "./model-config.service";
 import { SessionMessageService } from "./session-message.service";
 import { SessionService } from "./session.service";
 
@@ -20,6 +23,8 @@ interface InflightRun {
   reasoning: string;
   status: "streaming" | "done" | "interrupted";
   abort: AbortController;
+  /** ctx-exceeded 兜底重试标记；防止同一 run 重复触发兜底。 */
+  retried?: boolean;
 }
 
 /** getInflight 对外快照（subscribe replay 用）。 */
@@ -49,6 +54,8 @@ export class RunnerService implements OnModuleInit {
     private readonly emitter: EventEmitter2,
     private readonly llmCalls: LlmCallService,
     private readonly sessionMessages: SessionMessageService,
+    private readonly compactor: ContextCompactor,
+    private readonly modelConfig: ModelConfigService,
   ) {}
 
   /** 启动时把遗留的 processing 消息退回 pending（重启 inflight 丢失后可重跑）。 */
@@ -211,145 +218,45 @@ export class RunnerService implements OnModuleInit {
     this.logger.log(
       `runOnce start session=${sessionId} batch=${ids.length} resume=${resume}`,
     );
-    let firstHumanLogged = false;
-    let firstChunkLogged = false;
-    try {
-      const stream = resume
-        ? this.graph.resumeStream(sessionId, run.abort.signal)
-        : this.graph.streamMessage(sessionId, batch, run.abort.signal);
-      for await (const event of stream) {
-        if (event.kind === "human") {
-          if (!firstHumanLogged) {
-            firstHumanLogged = true;
-            this.logger.log(
-              `runOnce first-human session=${sessionId} +${Date.now() - runStartedAt}ms`,
-            );
-          }
-          this.emitter.emit(SESSION_WS_EVENTS.runHuman, {
-            sessionId,
-            messageId: event.messageId,
-          });
-          // 双写 session_messages（fire-and-forget，写失败仅 log）
-          const content =
-            batch.find((b) => b.id === event.messageId)?.content ?? "";
-          this.sessionMessages
-            .recordUser({ id: event.messageId, sessionId, content })
-            .catch((err) =>
-              this.logger.error(
-                `session_messages.recordUser 失败 msg=${event.messageId}`,
-                err,
-              ),
-            );
-          continue;
-        }
-        if (event.kind === "reasoning") {
-          // 同步更新 inflight reasoning 快照，让 subscribe 中途接入也能 replay
-          // 已收到的思考内容（多轮 ReAct 切轮时 messageId 变化会清空旧 reasoning）。
-          if (run.messageId !== event.messageId) {
-            run.messageId = event.messageId;
-            run.content = "";
-            run.reasoning = "";
-          }
-          run.reasoning += event.delta;
-          this.emitter.emit(SESSION_WS_EVENTS.runReasoning, {
-            sessionId,
-            messageId: event.messageId,
-            delta: event.delta,
-          });
-          continue;
-        }
-        if (event.kind === "tool_calls") {
-          // tool_calls 在 assistant_done 里一并带过来，这里不需要单独处理
-          continue;
-        }
-        if (event.kind === "chunk") {
-          if (!firstChunkLogged) {
-            firstChunkLogged = true;
-            this.logger.log(
-              `runOnce first-chunk session=${sessionId} +${Date.now() - runStartedAt}ms (LLM TTFT incl graph init)`,
-            );
-          }
-          // 在 chunk 阶段同步更新 inflight 快照（messageId 首次出现时设、content
-          // 累加），让 ws 订阅 handleSubscribe 的 replay 能在流式中途也拼出已收
-          // 到的部分。否则 inflight.messageId 要等到 assistant_done 才有，订阅时
-          // 「之前的输出」都看不到。轮切换时一并清 reasoning，避免上一轮 reasoning
-          // 残留（与 reasoning handler 同款逻辑）。
-          if (run.messageId !== event.messageId) {
-            run.messageId = event.messageId;
-            run.content = "";
-            run.reasoning = "";
-          }
-          run.content += event.delta;
-          this.emitter.emit(SESSION_WS_EVENTS.runChunk, {
-            sessionId,
-            messageId: event.messageId,
-            delta: event.delta,
-          });
-          continue;
-        }
-        if (event.kind === "assistant_done") {
-          // 每轮 LLM 结束：立刻持久化一条 session_messages.assistant。
-          // ReAct 多轮里会触发多次，每条独立 messageId / reasoning / toolCalls。
-          run.messageId = event.messageId;
-          run.content = event.content;
-          const reasoning = event.reasoning ? event.reasoning : null;
-          const toolCallsJson = event.toolCalls
-            ? JSON.stringify(event.toolCalls)
-            : null;
-          this.sessionMessages
-            .recordAssistant({
-              id: event.messageId,
-              sessionId,
-              content: event.content,
-              reasoning,
-              toolCalls: toolCallsJson,
-            })
-            .catch((err) =>
-              this.logger.error(
-                `session_messages.recordAssistant 失败 msg=${event.messageId}`,
-                err,
-              ),
-            );
-          continue;
-        }
-        // event.kind === "usage"
-        try {
-          await this.llmCalls.record({
-            sessionId,
-            messageId: event.messageId,
-            providerType: event.providerType,
-            model: event.model,
-            inputTokens: event.inputTokens,
-            outputTokens: event.outputTokens,
-            totalTokens: event.totalTokens,
-            cacheReadTokens: event.cacheReadTokens,
-            cacheCreationTokens: event.cacheCreationTokens,
-            reasoningTokens: event.reasoningTokens,
-            durationMs: event.durationMs,
-          });
-        } catch (err) {
-          this.logger.error(
-            `LLM 调用观测落库失败 session=${sessionId} msg=${event.messageId}`,
-            err,
+
+    // === pre-check：resume 模式跳过（checkpointer 现有状态，阈值不适用） ===
+    if (!resume) {
+      try {
+        const lastCall = await this.llmCalls.getLastBySession(sessionId);
+        const model = await this.modelConfig.findEnabled();
+        if (
+          lastCall &&
+          model &&
+          this.compactor.shouldCompact(
+            lastCall.inputTokens,
+            model.contextWindow,
+          )
+        ) {
+          this.logger.log(
+            `pre-check 命中阈值 session=${sessionId} input=${lastCall.inputTokens} ctx=${model.contextWindow} → 同步压缩`,
           );
+          await this.compactor.compact(sessionId, { reason: "threshold" });
         }
-        this.logger.log(
-          `LLM call session=${sessionId} msg=${event.messageId} provider=${event.providerType} model=${event.model} in=${event.inputTokens}(cache_read=${event.cacheReadTokens} cache_creation=${event.cacheCreationTokens}) out=${event.outputTokens}(reasoning=${event.reasoningTokens}) total=${event.totalTokens} dur=${event.durationMs}ms`,
+      } catch (preErr) {
+        this.logger.warn(
+          `pre-check 压缩失败 session=${sessionId}：${preErr instanceof Error ? preErr.message : String(preErr)}`,
         );
-        this.emitter.emit(SESSION_WS_EVENTS.runUsage, {
+        // 顺序：先 delete inflight（同步、不可失败），再 markFailed（异步可失败）。
+        // 反过来若 markFailed 抛错，inflight 会泄漏成 stale streaming 状态。
+        this.inflight.delete(sessionId);
+        await this.sessions.markFailed(ids);
+        this.emitter.emit(SESSION_WS_EVENTS.runError, {
           sessionId,
-          messageId: event.messageId,
-          providerType: event.providerType,
-          model: event.model,
-          inputTokens: event.inputTokens,
-          outputTokens: event.outputTokens,
-          totalTokens: event.totalTokens,
-          cacheReadTokens: event.cacheReadTokens,
-          cacheCreationTokens: event.cacheCreationTokens,
-          reasoningTokens: event.reasoningTokens,
-          durationMs: event.durationMs,
+          messageId: null,
+          pendingIds: ids,
+          error: preErr instanceof Error ? preErr.message : String(preErr),
         });
+        throw preErr;
       }
+    }
+
+    try {
+      await this.consumeRunStream(sessionId, batch, run, resume, runStartedAt);
       run.status = "done";
       const streamEndedAt = Date.now();
       await this.sessions.markProcessed(ids);
@@ -365,6 +272,80 @@ export class RunnerService implements OnModuleInit {
         `runOnce done session=${sessionId} total=${streamEndedAt - runStartedAt}ms markProcessed=${markProcessedMs}ms`,
       );
     } catch (err) {
+      // === ctx-exceeded 兜底：强制压缩 + 重试一次 ===
+      // 只对非 resume 情况启用（resume 拿不到 batch 文本，没法重发）；
+      // run.abort.signal 已 aborted 时不兜底（用户主动 stop）；
+      // 只重试一次：run.retried flag 防止递归。
+      if (
+        !resume &&
+        !run.abort.signal.aborted &&
+        isContextLengthError(err) &&
+        !run.retried
+      ) {
+        this.logger.warn(
+          `ctx_exceeded session=${sessionId}; 强制压缩并重试一次`,
+        );
+        try {
+          await this.compactor.compact(sessionId, {
+            force: true,
+            reason: "ctx-exceeded",
+          });
+        } catch (compactErr) {
+          this.logger.warn(
+            `兜底压缩失败 session=${sessionId}：${compactErr instanceof Error ? compactErr.message : String(compactErr)}`,
+          );
+          // 压缩兜底失败：报 compactErr（更新鲜，指向真实失败点），
+          // 不再屏蔽 ctx_exceeded 这个最初触发原因。
+          await this.sessions.markFailed(ids);
+          this.emitter.emit(SESSION_WS_EVENTS.runError, {
+            sessionId,
+            messageId: run.messageId,
+            pendingIds: ids,
+            error:
+              compactErr instanceof Error
+                ? compactErr.message
+                : String(compactErr),
+          });
+          throw compactErr;
+        }
+        run.retried = true;
+        // 重试一次走 resume 模式：第一次 streamMessage 已经把 batch 的
+        // HumanMessage 写进 checkpointer 了；compact 完成后 batch 的 user
+        // 消息仍在保留区（最近 N 条之内）。若用 streamMessage 重发会重复
+        // 写一条同 id 的 HumanMessage（reducer 不去重），并把 run.human
+        // 事件再发一次让前端 user 气泡跳位。
+        try {
+          await this.consumeRunStream(sessionId, [], run, true, runStartedAt);
+          run.status = "done";
+          const streamEndedAt = Date.now();
+          await this.sessions.markProcessed(ids);
+          const markProcessedMs = Date.now() - streamEndedAt;
+          this.logger.log(
+            `runOnce retry 成功 session=${sessionId} markProcessed=${markProcessedMs}ms`,
+          );
+          if (run.messageId) {
+            this.emitter.emit(SESSION_WS_EVENTS.runDone, {
+              sessionId,
+              messageId: run.messageId,
+              content: run.content,
+            });
+          }
+          return;
+        } catch (retryErr) {
+          // 重试也失败 → 走原失败路径，抛 retryErr（更新鲜）
+          await this.sessions.markFailed(ids);
+          this.emitter.emit(SESSION_WS_EVENTS.runError, {
+            sessionId,
+            messageId: run.messageId,
+            pendingIds: ids,
+            error:
+              retryErr instanceof Error ? retryErr.message : String(retryErr),
+          });
+          throw retryErr;
+        }
+      }
+
+      // 原有 catch 逻辑（abort vs 失败）保持不变
       if (run.abort.signal.aborted) {
         run.status = "interrupted";
         this.emitter.emit(SESSION_WS_EVENTS.runInterrupted, {
@@ -383,6 +364,157 @@ export class RunnerService implements OnModuleInit {
       }
     } finally {
       this.inflight.delete(sessionId);
+    }
+  }
+
+  /**
+   * stream 消费内循环：创建 stream（streamMessage 或 resumeStream）并逐事件处理。
+   * 机械提取自原 runOnce try 块，语义完全等价。供 ctx-exceeded 兜底重试复用。
+   */
+  private async consumeRunStream(
+    sessionId: string,
+    batch: { id: string; content: string }[],
+    run: InflightRun,
+    resume: boolean,
+    runStartedAt: number,
+  ): Promise<void> {
+    let firstHumanLogged = false;
+    let firstChunkLogged = false;
+    const stream = resume
+      ? this.graph.resumeStream(sessionId, run.abort.signal)
+      : this.graph.streamMessage(sessionId, batch, run.abort.signal);
+    for await (const event of stream) {
+      if (event.kind === "human") {
+        if (!firstHumanLogged) {
+          firstHumanLogged = true;
+          this.logger.log(
+            `runOnce first-human session=${sessionId} +${Date.now() - runStartedAt}ms`,
+          );
+        }
+        this.emitter.emit(SESSION_WS_EVENTS.runHuman, {
+          sessionId,
+          messageId: event.messageId,
+        });
+        // 双写 session_messages（fire-and-forget，写失败仅 log）
+        const content =
+          batch.find((b) => b.id === event.messageId)?.content ?? "";
+        this.sessionMessages
+          .recordUser({ id: event.messageId, sessionId, content })
+          .catch((err) =>
+            this.logger.error(
+              `session_messages.recordUser 失败 msg=${event.messageId}`,
+              err,
+            ),
+          );
+        continue;
+      }
+      if (event.kind === "reasoning") {
+        // 同步更新 inflight reasoning 快照，让 subscribe 中途接入也能 replay
+        // 已收到的思考内容（多轮 ReAct 切轮时 messageId 变化会清空旧 reasoning）。
+        if (run.messageId !== event.messageId) {
+          run.messageId = event.messageId;
+          run.content = "";
+          run.reasoning = "";
+        }
+        run.reasoning += event.delta;
+        this.emitter.emit(SESSION_WS_EVENTS.runReasoning, {
+          sessionId,
+          messageId: event.messageId,
+          delta: event.delta,
+        });
+        continue;
+      }
+      if (event.kind === "tool_calls") {
+        // tool_calls 在 assistant_done 里一并带过来，这里不需要单独处理
+        continue;
+      }
+      if (event.kind === "chunk") {
+        if (!firstChunkLogged) {
+          firstChunkLogged = true;
+          this.logger.log(
+            `runOnce first-chunk session=${sessionId} +${Date.now() - runStartedAt}ms (LLM TTFT incl graph init)`,
+          );
+        }
+        // 在 chunk 阶段同步更新 inflight 快照（messageId 首次出现时设、content
+        // 累加），让 ws 订阅 handleSubscribe 的 replay 能在流式中途也拼出已收
+        // 到的部分。否则 inflight.messageId 要等到 assistant_done 才有，订阅时
+        // 「之前的输出」都看不到。轮切换时一并清 reasoning，避免上一轮 reasoning
+        // 残留（与 reasoning handler 同款逻辑）。
+        if (run.messageId !== event.messageId) {
+          run.messageId = event.messageId;
+          run.content = "";
+          run.reasoning = "";
+        }
+        run.content += event.delta;
+        this.emitter.emit(SESSION_WS_EVENTS.runChunk, {
+          sessionId,
+          messageId: event.messageId,
+          delta: event.delta,
+        });
+        continue;
+      }
+      if (event.kind === "assistant_done") {
+        // 每轮 LLM 结束：立刻持久化一条 session_messages.assistant。
+        // ReAct 多轮里会触发多次，每条独立 messageId / reasoning / toolCalls。
+        run.messageId = event.messageId;
+        run.content = event.content;
+        const reasoning = event.reasoning ? event.reasoning : null;
+        const toolCallsJson = event.toolCalls
+          ? JSON.stringify(event.toolCalls)
+          : null;
+        this.sessionMessages
+          .recordAssistant({
+            id: event.messageId,
+            sessionId,
+            content: event.content,
+            reasoning,
+            toolCalls: toolCallsJson,
+          })
+          .catch((err) =>
+            this.logger.error(
+              `session_messages.recordAssistant 失败 msg=${event.messageId}`,
+              err,
+            ),
+          );
+        continue;
+      }
+      // event.kind === "usage"
+      try {
+        await this.llmCalls.record({
+          sessionId,
+          messageId: event.messageId,
+          providerType: event.providerType,
+          model: event.model,
+          inputTokens: event.inputTokens,
+          outputTokens: event.outputTokens,
+          totalTokens: event.totalTokens,
+          cacheReadTokens: event.cacheReadTokens,
+          cacheCreationTokens: event.cacheCreationTokens,
+          reasoningTokens: event.reasoningTokens,
+          durationMs: event.durationMs,
+        });
+      } catch (err) {
+        this.logger.error(
+          `LLM 调用观测落库失败 session=${sessionId} msg=${event.messageId}`,
+          err,
+        );
+      }
+      this.logger.log(
+        `LLM call session=${sessionId} msg=${event.messageId} provider=${event.providerType} model=${event.model} in=${event.inputTokens}(cache_read=${event.cacheReadTokens} cache_creation=${event.cacheCreationTokens}) out=${event.outputTokens}(reasoning=${event.reasoningTokens}) total=${event.totalTokens} dur=${event.durationMs}ms`,
+      );
+      this.emitter.emit(SESSION_WS_EVENTS.runUsage, {
+        sessionId,
+        messageId: event.messageId,
+        providerType: event.providerType,
+        model: event.model,
+        inputTokens: event.inputTokens,
+        outputTokens: event.outputTokens,
+        totalTokens: event.totalTokens,
+        cacheReadTokens: event.cacheReadTokens,
+        cacheCreationTokens: event.cacheCreationTokens,
+        reasoningTokens: event.reasoningTokens,
+        durationMs: event.durationMs,
+      });
     }
   }
 
