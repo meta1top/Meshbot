@@ -37,7 +37,6 @@ import { SessionMessage } from "./entities/session-message.entity";
 import { Setting } from "./entities/setting.entity";
 import { User } from "./entities/user.entity";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
-import { ModelConfigService } from "./services/model-config.service";
 import { SettingService } from "./services/setting.service";
 import { SessionModule } from "./session.module";
 import { StaticModule } from "./static.module";
@@ -97,7 +96,7 @@ const meshbotDir = resolveMeshbotDir();
         db.pragma("busy_timeout = 5000");
       },
     }),
-    TxTypeOrmModule.forFeature([ModelConfig, Setting]),
+    TxTypeOrmModule.forFeature([Setting]),
     // Phase 5 Track B3：限流（本地轨较宽，单进程仅做防风暴）
     ThrottlerModule.forRoot([
       { name: "short", ttl: 1000, limit: 50 },
@@ -117,7 +116,6 @@ const meshbotDir = resolveMeshbotDir();
     SetupController,
   ],
   providers: [
-    ModelConfigService,
     SettingService,
     RedisHealthIndicator,
     // 注意：guard 注册顺序 = 执行顺序（先 throttle、后 jwt）

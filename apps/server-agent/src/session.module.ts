@@ -3,11 +3,13 @@ import { TxTypeOrmModule } from "@meshbot/common";
 import { Module } from "@nestjs/common";
 import { SessionController } from "./controllers/session.controller";
 import { LlmCall } from "./entities/llm-call.entity";
+import { ModelConfig } from "./entities/model-config.entity";
 import { PendingMessage } from "./entities/pending-message.entity";
 import { Session } from "./entities/session.entity";
 import { SessionMessage } from "./entities/session-message.entity";
 import { CheckpointerCleanupService } from "./services/checkpointer-cleanup.service";
 import { LlmCallService } from "./services/llm-call.service";
+import { ModelConfigService } from "./services/model-config.service";
 import { SessionMessageService } from "./services/session-message.service";
 import { RunnerService } from "./services/runner.service";
 import { SessionService } from "./services/session.service";
@@ -23,6 +25,7 @@ import { SessionGateway } from "./ws/session.gateway";
       PendingMessage,
       LlmCall,
       SessionMessage,
+      ModelConfig,
     ]),
     AgentModule,
     AuthModule,
@@ -36,6 +39,7 @@ import { SessionGateway } from "./ws/session.gateway";
     LlmCallService,
     SessionMessageService,
     SessionTitleService,
+    ModelConfigService,
   ],
   exports: [
     CheckpointerCleanupService,
@@ -44,6 +48,7 @@ import { SessionGateway } from "./ws/session.gateway";
     LlmCallService,
     SessionMessageService,
     SessionTitleService,
+    ModelConfigService,
   ],
 })
 export class SessionModule {}
