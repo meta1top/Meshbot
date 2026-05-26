@@ -6,6 +6,7 @@ export type {
   StreamChunk,
   ThreadId,
 } from "./graph/graph.service";
+export { COMPACTION_SYSTEM_PROMPT } from "./prompt/compactor.prompt";
 export { GraphService } from "./graph/graph.service";
 export type { ModelProvider } from "./graph/nodes/supervisor.node";
 export { McpService } from "./mcp/mcp.service";
