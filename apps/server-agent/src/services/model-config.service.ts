@@ -19,6 +19,12 @@ export class ModelConfigService {
     return this.repo.find({ where: { enabled: true } });
   }
 
+  /** 取第一条已启用的 ModelConfig；无则返 null。供 ContextCompactor 使用。 */
+  async findEnabled(): Promise<ModelConfig | null> {
+    const rows = await this.findAllEnabled();
+    return rows[0] ?? null;
+  }
+
   findAll(): Promise<ModelConfig[]> {
     return this.repo.find();
   }

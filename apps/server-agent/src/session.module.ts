@@ -8,6 +8,7 @@ import { PendingMessage } from "./entities/pending-message.entity";
 import { Session } from "./entities/session.entity";
 import { SessionMessage } from "./entities/session-message.entity";
 import { CheckpointerCleanupService } from "./services/checkpointer-cleanup.service";
+import { ContextCompactor } from "./services/context-compactor.service";
 import { LlmCallService } from "./services/llm-call.service";
 import { ModelConfigService } from "./services/model-config.service";
 import { SessionMessageService } from "./services/session-message.service";
@@ -33,6 +34,7 @@ import { SessionGateway } from "./ws/session.gateway";
   controllers: [SessionController],
   providers: [
     CheckpointerCleanupService,
+    ContextCompactor,
     SessionService,
     RunnerService,
     SessionGateway,
@@ -43,6 +45,7 @@ import { SessionGateway } from "./ws/session.gateway";
   ],
   exports: [
     CheckpointerCleanupService,
+    ContextCompactor,
     SessionService,
     RunnerService,
     LlmCallService,
