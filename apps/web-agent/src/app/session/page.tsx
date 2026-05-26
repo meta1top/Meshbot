@@ -37,6 +37,7 @@ import {
   ChatInput,
   type ChatInputHandle,
 } from "@/components/common/chat-input";
+import { CompactionBanner } from "@/components/common/compaction-banner";
 import { AppShellLayout } from "@/components/layouts/app-shell-layout";
 import {
   MessageList,
@@ -68,6 +69,10 @@ function SessionView() {
   const hasMoreHistoryRef = useRef(true);
   const loadingMoreRef = useRef(false);
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
+  /** 压缩进行中标记。null = 未压缩；string = 压缩原因（用于 banner 文案）。 */
+  const [compacting, setCompacting] = useState<
+    null | "threshold" | "ctx-exceeded"
+  >(null);
   const topSentinelRef = useRef<HTMLDivElement>(null);
   /**
    * 是否吸附到底部：决定流式输出时是否自动滚到底。
@@ -470,6 +475,34 @@ function SessionView() {
     socket.on(SESSION_WS_EVENTS.runToolCallProgress, onToolProgress);
     socket.on(SESSION_WS_EVENTS.runToolCallEnd, onToolEnd);
 
+    // === Compaction 三事件 —— banner 状态 + 完成后触发 history 重新拉取 ===
+    const onCompactionStart = (payload: {
+      sessionId: string;
+      reason: "threshold" | "ctx-exceeded";
+    }) => {
+      if (payload.sessionId !== sessionId) return;
+      setCompacting(payload.reason);
+    };
+    const onCompactionDone = (payload: { sessionId: string }) => {
+      if (payload.sessionId !== sessionId) return;
+      setCompacting(null);
+      // 注：history 不是 react-query 管理，没法直接 invalidate。新插入的
+      // compaction 占位行要等用户下次进入 session 或滚动加载时才出现。
+      // v1 接受；v2 可加 fetchHistory 然后 merge 进 messages atom。
+    };
+    const onCompactionError = (payload: {
+      sessionId: string;
+      error: string;
+    }) => {
+      if (payload.sessionId !== sessionId) return;
+      setCompacting(null);
+      // 暂无统一 toast 库；用 console.warn 占位，banner 自然撤掉即可
+      console.warn(`[compaction] error: ${payload.error}`);
+    };
+    socket.on(SESSION_WS_EVENTS.runCompactionStart, onCompactionStart);
+    socket.on(SESSION_WS_EVENTS.runCompactionDone, onCompactionDone);
+    socket.on(SESSION_WS_EVENTS.runCompactionError, onCompactionError);
+
     return () => {
       cancelled = true;
       // 离开旧 session：通知 gateway leave 房间，否则切换多个 session 后
@@ -486,6 +519,9 @@ function SessionView() {
       socket.off(SESSION_WS_EVENTS.runToolCallStart, onToolStart);
       socket.off(SESSION_WS_EVENTS.runToolCallProgress, onToolProgress);
       socket.off(SESSION_WS_EVENTS.runToolCallEnd, onToolEnd);
+      socket.off(SESSION_WS_EVENTS.runCompactionStart, onCompactionStart);
+      socket.off(SESSION_WS_EVENTS.runCompactionDone, onCompactionDone);
+      socket.off(SESSION_WS_EVENTS.runCompactionError, onCompactionError);
     };
   }, [
     sessionId,
@@ -718,6 +754,10 @@ function SessionView() {
             会话开头
           </div>
         )}
+        <CompactionBanner
+          visible={!!compacting}
+          reason={compacting ?? undefined}
+        />
         <MessageList
           messages={timelineMessages}
           sessionId={sessionId ?? ""}
@@ -785,7 +825,10 @@ function SessionView() {
           onInterrupt={handleInterrupt}
           isLoading={running}
           tokenUsage={{
-            current: sessionTotals.totalTokens,
+            // 「下次请求估算 / ctx 上限」—— 用 lastInputTokens 作为代理：
+            // 这是上一轮 LLM 真实计数，下一轮 input 约等于这个（用户新输入
+            // 通常远小于历史）。比 sum(input+output) 量纲更对。
+            current: sessionTotals.lastInputTokens,
             max: contextWindow,
             breakdown: {
               inputTokens: sessionTotals.inputTokens,
@@ -793,6 +836,7 @@ function SessionView() {
               cacheReadTokens: sessionTotals.cacheReadTokens,
               reasoningTokens: sessionTotals.reasoningTokens,
               callCount: sessionTotals.callCount,
+              cumulativeTokens: sessionTotals.totalTokens,
             },
           }}
         />

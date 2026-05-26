@@ -106,6 +106,19 @@ export const HistoryMessageSchema = z.object({
   /** 推理模型的思考过程（持久化在 checkpointer 的 additional_kwargs.reasoning_content）。 */
   reasoning: z.string().optional(),
   toolCalls: z.array(HistoryToolCallSchema).optional(),
+  /**
+   * 结构化附加元数据（JSON 反序列化后）。压缩占位行携带 kind="compaction" 以供前端
+   * 渲染 CompactionRow 替代普通系统消息。
+   */
+  metadata: z
+    .object({
+      kind: z.literal("compaction"),
+      removedCount: z.number(),
+      fromMessageId: z.string(),
+      toMessageId: z.string(),
+    })
+    .nullable()
+    .optional(),
 });
 export type HistoryMessage = z.infer<typeof HistoryMessageSchema>;
 

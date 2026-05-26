@@ -12,11 +12,14 @@ import { PendingMessage } from "../../src/entities/pending-message.entity";
 import { Session } from "../../src/entities/session.entity";
 import { SessionMessage } from "../../src/entities/session-message.entity";
 import { CheckpointerCleanupService } from "../../src/services/checkpointer-cleanup.service";
+import { ContextCompactor } from "../../src/services/context-compactor.service";
 import { LlmCallService } from "../../src/services/llm-call.service";
+import { ModelConfigService } from "../../src/services/model-config.service";
 import { RunnerService } from "../../src/services/runner.service";
 import { SessionMessageService } from "../../src/services/session-message.service";
 import { SessionTitleService } from "../../src/services/session-title.service";
 import { SessionService } from "../../src/services/session.service";
+import { ModelConfig } from "../../src/entities/model-config.entity";
 
 describe("Session e2e", () => {
   let app: INestApplication;
@@ -28,7 +31,13 @@ describe("Session e2e", () => {
         TypeOrmModule.forRoot({
           type: "better-sqlite3",
           database: ":memory:",
-          entities: [Session, PendingMessage, LlmCall, SessionMessage],
+          entities: [
+            Session,
+            PendingMessage,
+            LlmCall,
+            SessionMessage,
+            ModelConfig,
+          ],
           synchronize: true,
         }),
         TxTypeOrmModule.forFeature([
@@ -36,6 +45,7 @@ describe("Session e2e", () => {
           PendingMessage,
           LlmCall,
           SessionMessage,
+          ModelConfig,
         ]),
         AgentModule,
       ],
@@ -47,6 +57,8 @@ describe("Session e2e", () => {
         SessionMessageService,
         CheckpointerCleanupService,
         SessionTitleService,
+        ContextCompactor,
+        ModelConfigService,
       ],
     }).compile();
     app = moduleRef.createNestApplication();

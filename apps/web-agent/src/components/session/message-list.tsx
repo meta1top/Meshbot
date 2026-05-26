@@ -6,6 +6,7 @@ import { ChevronRight } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { formatTokens } from "@/lib/format-tokens";
+import { CompactionRow } from "./compaction-row";
 import { MarkdownContent } from "./markdown-content";
 import { ToolCallBlock } from "./tool-call-block";
 import { UserMessageActions } from "./user-message-actions";
@@ -46,6 +47,15 @@ export interface TimelineMessage {
   /** 推理结束耗时（毫秒，仅 assistant）。设值后认为推理已结束。 */
   reasoningDurationMs?: number;
   toolCalls?: ToolCallView[];
+  /**
+   * 结构化元数据（来自 session_message.metadata JSON 列）。
+   * 压缩占位行携带 kind="compaction"；其余消息为 null / undefined。
+   */
+  metadata?: {
+    kind: string;
+    removedCount?: number;
+    [key: string]: unknown;
+  } | null;
 }
 
 interface MessageListProps {
@@ -82,90 +92,106 @@ export function MessageList({
   return (
     <div className="flex flex-col gap-8 pb-6">
       {messages
-        .filter((m) => m.role !== "system")
-        .map((m) => (
-          <div
-            key={m.id}
-            className={cn(
-              "group relative flex flex-col gap-3",
-              // assistant 固定宽 80%：避免表格 / 长行内容触发容器宽度跳动；
-              // user 保持 max-w-[80%] 让气泡贴右沿、按内容自适应
-              m.role === "user"
-                ? "max-w-[80%] self-end items-end"
-                : "w-[80%] self-start",
-            )}
-          >
-            {m.role === "assistant" && m.reasoning ? (
-              <ReasoningBlock
-                text={m.reasoning}
-                startedAt={m.reasoningStartedAt}
-                durationMs={m.reasoningDurationMs}
+        .filter(
+          (m) => !(m.role === "system" && m.metadata?.kind !== "compaction"),
+        )
+        .map((m) => {
+          // 压缩占位行：role=system + metadata.kind="compaction"
+          if (m.role === "system" && m.metadata?.kind === "compaction") {
+            return (
+              <CompactionRow
+                key={m.id}
+                removedCount={(m.metadata.removedCount as number) ?? 0}
+                summary={m.content}
               />
-            ) : null}
-            {/*
+            );
+          }
+          return (
+            <div
+              key={m.id}
+              className={cn(
+                "group relative flex flex-col gap-3",
+                // assistant 固定宽 80%：避免表格 / 长行内容触发容器宽度跳动；
+                // user 保持 max-w-[80%] 让气泡贴右沿、按内容自适应
+                m.role === "user"
+                  ? "max-w-[80%] self-end items-end"
+                  : "w-[80%] self-start",
+              )}
+            >
+              {m.role === "assistant" && m.reasoning ? (
+                <ReasoningBlock
+                  text={m.reasoning}
+                  startedAt={m.reasoningStartedAt}
+                  durationMs={m.reasoningDurationMs}
+                />
+              ) : null}
+              {/*
               气泡仅在「有可见正文 / loading / streaming / failed」时出现。
               中间决策轮（仅 reasoning + toolCalls、content 空）不出气泡 —— 否则
               空 div 也算 flex gap-2 一个 item，让「思考过程 ↔ tool 块」之间多一段空白。
               toolCalls 自身有独立块（下方渲染），不靠这里撑场。
             */}
-            {(m.role === "user" ||
-              m.content ||
-              m.loading ||
-              m.streaming ||
-              m.failed) && (
-              <div
-                className={cn(
-                  "text-sm leading-relaxed",
-                  m.role === "user"
-                    ? cn(
-                        "px-3.5 py-2 text-foreground whitespace-pre-wrap",
-                        m.failed ? "bg-destructive/8" : "bg-foreground/8",
-                      )
-                    : "text-foreground",
-                )}
-              >
-                {m.loading ? (
-                  <TypingDots />
-                ) : m.role === "assistant" ? (
-                  <MarkdownContent text={m.content} streaming={m.streaming} />
-                ) : (
-                  <>
-                    {m.content}
-                    {m.streaming && (
-                      <span className="ml-0.5 inline-block w-[2px] animate-pulse bg-muted-foreground/60 align-middle">
-                        &nbsp;
-                      </span>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
-            {m.role === "assistant" &&
-              m.toolCalls &&
-              m.toolCalls.length > 0 && (
-                <div className="flex flex-col gap-2">
-                  {m.toolCalls.map((tc) => (
-                    <ToolCallBlock key={tc.toolCallId} tool={tc} />
-                  ))}
+              {(m.role === "user" ||
+                m.content ||
+                m.loading ||
+                m.streaming ||
+                m.failed) && (
+                <div
+                  className={cn(
+                    "text-sm leading-relaxed",
+                    m.role === "user"
+                      ? cn(
+                          "px-3.5 py-2 text-foreground whitespace-pre-wrap",
+                          m.failed ? "bg-destructive/8" : "bg-foreground/8",
+                        )
+                      : "text-foreground",
+                  )}
+                >
+                  {m.loading ? (
+                    <TypingDots />
+                  ) : m.role === "assistant" ? (
+                    <MarkdownContent text={m.content} streaming={m.streaming} />
+                  ) : (
+                    <>
+                      {m.content}
+                      {m.streaming && (
+                        <span className="ml-0.5 inline-block w-[2px] animate-pulse bg-muted-foreground/60 align-middle">
+                          &nbsp;
+                        </span>
+                      )}
+                    </>
+                  )}
                 </div>
               )}
-            {m.role === "assistant" && m.content && usageByMessage?.[m.id] && (
-              <div className="text-[11px] text-muted-foreground">
-                {renderUsageLine(usageByMessage[m.id], t)}
-              </div>
-            )}
-            {m.role === "user" && (
-              <UserMessageActions
-                sessionId={sessionId}
-                messageId={m.id}
-                content={m.content}
-                failed={m.failed}
-                running={running}
-                onOptimisticCut={() => onRegenerateOptimisticCut(m.id)}
-              />
-            )}
-          </div>
-        ))}
+              {m.role === "assistant" &&
+                m.toolCalls &&
+                m.toolCalls.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    {m.toolCalls.map((tc) => (
+                      <ToolCallBlock key={tc.toolCallId} tool={tc} />
+                    ))}
+                  </div>
+                )}
+              {m.role === "assistant" &&
+                m.content &&
+                usageByMessage?.[m.id] && (
+                  <div className="text-[11px] text-muted-foreground">
+                    {renderUsageLine(usageByMessage[m.id], t)}
+                  </div>
+                )}
+              {m.role === "user" && (
+                <UserMessageActions
+                  sessionId={sessionId}
+                  messageId={m.id}
+                  content={m.content}
+                  failed={m.failed}
+                  running={running}
+                  onOptimisticCut={() => onRegenerateOptimisticCut(m.id)}
+                />
+              )}
+            </div>
+          );
+        })}
     </div>
   );
 }

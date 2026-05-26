@@ -23,6 +23,10 @@ interface ChatInputProps {
   placeholder?: string;
   modelName?: string;
   tokenUsage?: {
+    /**
+     * 进度环主显示分子。语义：「下次 LLM 请求预估 input token」
+     * （= 最近一次 LlmCall.input_tokens，作为下次请求的代理）。
+     */
     current: number;
     max: number;
     /** 分项明细（可选）—— 提供时 Tooltip 展示详细分解。 */
@@ -32,6 +36,8 @@ interface ChatInputProps {
       cacheReadTokens: number;
       reasoningTokens: number;
       callCount: number;
+      /** 会话累计 token（所有调用 input+output 之和）；只在 tooltip 辅助行显示。 */
+      cumulativeTokens?: number;
     };
   };
 }
@@ -239,7 +245,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
                   {tokenUsage.breakdown ? (
                     <div className="space-y-0.5 text-xs">
                       <div>
-                        {tSession("usage.totalLabel")}{" "}
+                        {tSession("usage.nextRequestLabel")}{" "}
                         {formatTokens(tokenUsage.current)} /{" "}
                         {formatTokens(tokenUsage.max)}
                       </div>
@@ -255,6 +261,12 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
                         {tokenUsage.breakdown.reasoningTokens > 0 &&
                           `（${tSession("usage.reasoningLabel")} ${formatTokens(tokenUsage.breakdown.reasoningTokens)}）`}
                       </div>
+                      {tokenUsage.breakdown.cumulativeTokens !== undefined && (
+                        <div>
+                          {tSession("usage.cumulativeLabel")}{" "}
+                          {formatTokens(tokenUsage.breakdown.cumulativeTokens)}
+                        </div>
+                      )}
                       <div>
                         {tSession("usage.callCount", {
                           count: tokenUsage.breakdown.callCount,

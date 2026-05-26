@@ -115,7 +115,17 @@
       "cacheLabel": "cache",
       "reasoningLabel": "reasoning",
       "totalLabel": "Total",
-      "callCount": "{count} calls"
+      "callCount": "{count} calls",
+      "nextRequestLabel": "Next request",
+      "cumulativeLabel": "Cumulative"
+    },
+    "compaction": {
+      "bannerThreshold": "Compacting conversation history…",
+      "bannerCtxExceeded": "Context full; compacting to continue…",
+      "rowTitle": "Compacted {count} earlier messages",
+      "rowExpand": "Show summary",
+      "rowCollapse": "Hide",
+      "toastError": "Compaction failed: {message}"
     }
   },
   "home": {
@@ -226,5 +236,8 @@
   "deletePending": "",
   "contextWindow": "",
   "contextWindowPlaceholder": "",
-  "contextWindowHint": ""
+  "contextWindowHint": "",
+  "bannerCtxExceeded": "",
+  "bannerThreshold": "",
+  "rowTitle": ""
 }

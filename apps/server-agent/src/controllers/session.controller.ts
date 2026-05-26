@@ -114,6 +114,14 @@ export class SessionController {
           role: r.role as "user" | "assistant" | "system",
           content: r.content,
           ...(r.reasoning ? { reasoning: r.reasoning } : {}),
+          metadata: r.metadata
+            ? (JSON.parse(r.metadata) as {
+                kind: "compaction";
+                removedCount: number;
+                fromMessageId: string;
+                toMessageId: string;
+              })
+            : null,
         };
         if (r.role !== "assistant" || !r.toolCalls) return base;
         try {
