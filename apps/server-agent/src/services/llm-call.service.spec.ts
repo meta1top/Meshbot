@@ -88,6 +88,7 @@ describe("LlmCallService", () => {
       cacheCreationTokens: 0,
       reasoningTokens: 0,
       callCount: 0,
+      lastInputTokens: 0,
     });
   });
 
@@ -189,5 +190,106 @@ describe("LlmCallService", () => {
     await service.deleteAfter("s1", cutoff);
     const rows = await service.listBySession("s1");
     expect(rows.map((r) => r.messageId)).toEqual(["m1"]);
+  });
+});
+
+describe("getSessionTotals lastInputTokens", () => {
+  let ds: DataSource;
+  let service: LlmCallService;
+
+  beforeEach(async () => {
+    ds = new DataSource({
+      type: "better-sqlite3",
+      database: ":memory:",
+      entities: [LlmCall],
+      synchronize: true,
+    });
+    await ds.initialize();
+    service = new LlmCallService(ds.getRepository(LlmCall));
+  });
+
+  afterEach(async () => {
+    await ds.destroy();
+  });
+
+  it("空 session 返 lastInputTokens=0", async () => {
+    const totals = await service.getSessionTotals("empty-session");
+    expect(totals.lastInputTokens).toBe(0);
+  });
+
+  it("多条 LlmCall 时 lastInputTokens = 最新 createdAt 那行的 inputTokens", async () => {
+    await service.record({
+      sessionId: "s1",
+      messageId: "m1",
+      providerType: "x",
+      model: "y",
+      inputTokens: 100,
+      outputTokens: 10,
+      totalTokens: 110,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      reasoningTokens: 0,
+      durationMs: 100,
+    });
+    await new Promise((r) => setTimeout(r, 5)); // 保证 createdAt 不同
+    await service.record({
+      sessionId: "s1",
+      messageId: "m2",
+      providerType: "x",
+      model: "y",
+      inputTokens: 250,
+      outputTokens: 20,
+      totalTokens: 270,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      reasoningTokens: 0,
+      durationMs: 100,
+    });
+    const totals = await service.getSessionTotals("s1");
+    expect(totals.lastInputTokens).toBe(250);
+    expect(totals.inputTokens).toBe(350); // sum 仍正确
+    expect(totals.callCount).toBe(2);
+  });
+});
+
+describe("getLastBySession", () => {
+  let ds: DataSource;
+  let service: LlmCallService;
+
+  beforeEach(async () => {
+    ds = new DataSource({
+      type: "better-sqlite3",
+      database: ":memory:",
+      entities: [LlmCall],
+      synchronize: true,
+    });
+    await ds.initialize();
+    service = new LlmCallService(ds.getRepository(LlmCall));
+  });
+
+  afterEach(async () => {
+    await ds.destroy();
+  });
+
+  it("空 session 返 null", async () => {
+    expect(await service.getLastBySession("empty")).toBeNull();
+  });
+
+  it("有调用时返最新一行", async () => {
+    await service.record({
+      sessionId: "s2",
+      messageId: "m1",
+      providerType: "x",
+      model: "y",
+      inputTokens: 50,
+      outputTokens: 5,
+      totalTokens: 55,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      reasoningTokens: 0,
+      durationMs: 10,
+    });
+    const row = await service.getLastBySession("s2");
+    expect(row?.inputTokens).toBe(50);
   });
 });

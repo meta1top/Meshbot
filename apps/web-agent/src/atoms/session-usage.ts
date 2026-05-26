@@ -16,10 +16,19 @@ const EMPTY_TOTALS: SessionTotals = {
   cacheCreationTokens: 0,
   reasoningTokens: 0,
   callCount: 0,
+  lastInputTokens: 0,
 };
 
-/** 从 byMessage 重算 sessionTotals。 */
-function computeTotals(byMessage: Record<string, MessageUsage>): SessionTotals {
+/**
+ * 从 byMessage 重算 sessionTotals。
+ *
+ * byMessage 是 Record 无顺序，没法从里面算「最后一次」；调用方需要把服务端
+ * 报告的 lastInputTokens 显式传入（来自 SessionUsage.sessionTotals）。
+ */
+function computeTotals(
+  byMessage: Record<string, MessageUsage>,
+  lastInputTokens: number,
+): SessionTotals {
   let inputTokens = 0;
   let outputTokens = 0;
   let totalTokens = 0;
@@ -44,6 +53,7 @@ function computeTotals(byMessage: Record<string, MessageUsage>): SessionTotals {
     cacheCreationTokens,
     reasoningTokens,
     callCount,
+    lastInputTokens,
   };
 }
 
@@ -62,8 +72,12 @@ export const setInitialUsageAtom = atom(null, (get, set, u: SessionUsage) => {
     merged[id] = m;
   }
   set(usageByMessageAtom, merged);
-  // sessionTotals 从合并后的 byMessage 求和重算，避免双计或丢计
-  set(sessionTotalsAtom, computeTotals(merged));
+  // sessionTotals 从合并后的 byMessage 求和重算（避免双计或丢计）；
+  // lastInputTokens 信任服务端：byMessage 无顺序拿不到，server SessionTotals 是源。
+  set(
+    sessionTotalsAtom,
+    computeTotals(merged, u.sessionTotals.lastInputTokens),
+  );
 });
 
 /** socket run.usage 增量 —— 单条 + 累加（同 messageId 幂等跳过）。 */
@@ -95,6 +109,7 @@ export const appendUsageAtom = atom(null, (get, set, u: RunUsageEvent) => {
     cacheCreationTokens: t.cacheCreationTokens + u.cacheCreationTokens,
     reasoningTokens: t.reasoningTokens + u.reasoningTokens,
     callCount: t.callCount + 1,
+    lastInputTokens: u.inputTokens,
   });
 });
 

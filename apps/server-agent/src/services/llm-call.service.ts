@@ -27,6 +27,8 @@ export interface SessionTotals {
   cacheCreationTokens: number;
   reasoningTokens: number;
   callCount: number;
+  /** 最近一次 LLM 调用的 input_tokens；空 session = 0。 */
+  lastInputTokens: number;
 }
 
 /** LlmCall 表的归属 Service —— LLM 调用观测的数据层。 */
@@ -58,10 +60,13 @@ export class LlmCallService {
     });
   }
 
-  /** 会话累计 —— 各 token 字段 SUM + callCount。 */
+  /** 会话累计 —— 各 token 字段 SUM + callCount + lastInputTokens。 */
   async getSessionTotals(sessionId: string): Promise<SessionTotals> {
-    const rows = await this.llmCallRepo.find({ where: { sessionId } });
-    return rows.reduce<SessionTotals>(
+    const rows = await this.llmCallRepo.find({
+      where: { sessionId },
+      order: { createdAt: "ASC" },
+    });
+    const base = rows.reduce(
       (acc, r) => ({
         inputTokens: acc.inputTokens + r.inputTokens,
         outputTokens: acc.outputTokens + r.outputTokens,
@@ -81,6 +86,10 @@ export class LlmCallService {
         callCount: 0,
       },
     );
+    return {
+      ...base,
+      lastInputTokens: rows.at(-1)?.inputTokens ?? 0,
+    };
   }
 
   /**
@@ -105,5 +114,14 @@ export class LlmCallService {
       sessionId,
       createdAt: MoreThan(cutoff),
     });
+  }
+
+  /** 拿某会话最新一行 LlmCall（按 createdAt 倒序取 1）。供 ContextCompactor pre-check 用。 */
+  async getLastBySession(sessionId: string): Promise<LlmCall | null> {
+    const row = await this.llmCallRepo.findOne({
+      where: { sessionId },
+      order: { createdAt: "DESC" },
+    });
+    return row ?? null;
   }
 }
