@@ -100,6 +100,11 @@ export class GraphService {
    */
   private modelCache = new Map<string, BaseChatModel>();
   /**
+   * 最终使用的 ModelProvider（注入的 or resolveModel 包装）。
+   * summarize 等非 graph 路径通过此字段调 invoke，避免重复走 DB 读取。
+   */
+  private readonly modelProvider: ModelProvider;
+  /**
    * 当前活跃 run 的上下文引用。
    *
    * 设计假设：runner.kickAndWait 用 per-session `running` Set 保证一个 session
@@ -119,7 +124,6 @@ export class GraphService {
     messageId: string;
     signal: AbortSignal;
   } | null = null;
-
   constructor(
     private configService: MeshbotConfigService,
     private promptService: PromptService,
@@ -130,11 +134,10 @@ export class GraphService {
   ) {
     const dbPath = this.configService.getDatabasePath();
     this.checkpointer = createSqliteCheckpointer(dbPath);
-    const provider: ModelProvider =
-      modelProvider ?? (() => this.resolveModel());
+    this.modelProvider = modelProvider ?? (() => this.resolveModel());
     this.graph = buildSupervisorGraph(
       this.checkpointer,
-      provider,
+      this.modelProvider,
       this.toolRegistry,
       () => {
         if (!this.ctxRef) {
@@ -353,6 +356,73 @@ export class GraphService {
     await this.graph.updateState(
       { configurable: { thread_id: threadId } },
       { messages: toRemove.map((id) => new RemoveMessage({ id })) },
+    );
+  }
+
+  /**
+   * 拿出 checkpointer 里当前 thread 的 messages 数组快照。
+   *
+   * 给 ContextCompactor 用于切分计算。返回空数组表示线程没历史。
+   */
+  async getMessagesSnapshot(threadId: ThreadId): Promise<BaseMessage[]> {
+    const snapshot = await this.graph.getState({
+      configurable: { thread_id: threadId },
+    });
+    const msgs = (snapshot.values as GraphState | undefined)?.messages;
+    return Array.isArray(msgs) ? msgs : [];
+  }
+
+  /**
+   * 调摘要 LLM。serialized 已经是拍扁的对话文本（含 [user]/[assistant]/[tool]
+   * 前缀、tool result 截断等），由调用方负责。这里只关心把 system prompt +
+   * 用户串组合后丢给 enabled model invoke，并截 maxTokens。
+   *
+   * 用 AbortController 实现 timeoutMs；超时直接抛 Error("Summarize timeout")。
+   */
+  async summarize(
+    serialized: string,
+    opts: { systemPrompt: string; timeoutMs: number; maxTokens: number },
+  ): Promise<string> {
+    const model = await this.modelProvider();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), opts.timeoutMs);
+    try {
+      const resp = await model.invoke(
+        [new SystemMessage(opts.systemPrompt), new HumanMessage(serialized)],
+        { signal: controller.signal, maxTokens: opts.maxTokens } as never,
+      );
+      const content = resp.content;
+      return typeof content === "string" ? content : JSON.stringify(content);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * 一次性 updateState：删 removeIds 指定的 messages + 注入一条新 SystemMessage
+   * （内容 = summaryText）。messages reducer 已支持 RemoveMessage 与 append。
+   *
+   * 注入的 SystemMessage 落在 messages 数组末尾（reducer `kept.concat(appended)`
+   * 行为：先 filter 掉 removeIds 命中的，再把新条目 append 到末尾）。LLM 实际
+   * 看到的顺序是 [原始 system prompt（首条）] [保留区 messages] [新摘要 system]，
+   * 摘要紧贴下一轮用户输入之前，回答时注意力直接覆盖到摘要。
+   */
+  async applyCompaction(
+    threadId: ThreadId,
+    params: { removeIds: string[]; summaryText: string },
+  ): Promise<void> {
+    const ops: BaseMessage[] = params.removeIds.map(
+      (id) => new RemoveMessage({ id }),
+    );
+    ops.push(
+      new SystemMessage({
+        content: `[Earlier conversation summary]\n${params.summaryText}`,
+        id: `compaction-summary-${Date.now()}`,
+      }),
+    );
+    await this.graph.updateState(
+      { configurable: { thread_id: threadId } },
+      { messages: ops },
     );
   }
 
