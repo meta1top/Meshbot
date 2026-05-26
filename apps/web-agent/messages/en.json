@@ -52,11 +52,15 @@
     "custom": "Custom",
     "apiKey": "API Key",
     "apiEndpoint": "API endpoint",
+    "contextWindow": "Context window",
+    "contextWindowHint": "Leave blank to use built-in default for the selected model",
+    "contextWindowPlaceholder": "e.g. 128000",
     "saving": "Saving...",
     "saveAndStart": "Save and start",
     "validation": {
       "modelRequired": "Please select or enter a model",
-      "apiKeyRequired": "Please enter API Key"
+      "apiKeyRequired": "Please enter API Key",
+      "contextWindowPositive": "Context window must be a positive integer"
     }
   },
   "appShell": {
@@ -155,7 +159,8 @@
     "confirmPasswordRequired": "Please confirm your password",
     "passwordNotMatch": "Passwords do not match",
     "modelRequired": "Please select a model",
-    "apiKeyRequired": "API Key is required"
+    "apiKeyRequired": "API Key is required",
+    "contextWindowPositive": ""
   },
   "registerFailed": "Registration failed",
   "getStarted": "Get started",
@@ -218,5 +223,8 @@
     "reasoningLabel": ""
   },
   "editPending": "",
-  "deletePending": ""
+  "deletePending": "",
+  "contextWindow": "",
+  "contextWindowPlaceholder": "",
+  "contextWindowHint": ""
 }

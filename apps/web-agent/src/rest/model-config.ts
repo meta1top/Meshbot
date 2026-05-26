@@ -10,6 +10,8 @@ export interface ModelConfig {
   apiKey: string;
   baseUrl: string;
   enabled: boolean;
+  /** 上下文窗口（token），后端按 MODEL_SPECS 或用户覆盖解析后固化。 */
+  contextWindow: number;
   createdAt: string;
   updatedAt: string;
 }

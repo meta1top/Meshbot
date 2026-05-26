@@ -1,3 +1,4 @@
+import { resolveContextWindow } from "@meshbot/types-agent";
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
@@ -36,13 +37,26 @@ export class ModelConfigService {
       apiKey: dto.apiKey,
       baseUrl: dto.baseUrl ?? "",
       enabled: true,
+      contextWindow: resolveContextWindow(dto.model, dto.contextWindow),
     });
     return this.repo.save(entity);
   }
 
+  /**
+   * 更新策略（contextWindow 解析）：
+   * - dto.contextWindow 显式给值 → 直接覆盖
+   * - 未给但 dto.model 变了 → 按新 model 重新解析（spec 自动跟进）
+   * - 未给且 model 没变 → 保留原值（不动）
+   */
   async update(id: string, dto: UpdateModelConfigDto): Promise<ModelConfig> {
     const entity = await this.findOneOrFail(id);
+    const modelChanged = dto.model !== undefined && dto.model !== entity.model;
     Object.assign(entity, dto);
+    if (dto.contextWindow !== undefined) {
+      entity.contextWindow = dto.contextWindow;
+    } else if (modelChanged) {
+      entity.contextWindow = resolveContextWindow(entity.model);
+    }
     return this.repo.save(entity);
   }
 

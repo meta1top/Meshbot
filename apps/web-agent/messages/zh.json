@@ -52,11 +52,15 @@
     "custom": "自定义",
     "apiKey": "API Key",
     "apiEndpoint": "API 端点",
+    "contextWindow": "上下文窗口",
+    "contextWindowHint": "留空使用所选模型的内置默认值",
+    "contextWindowPlaceholder": "如 128000",
     "saving": "保存中...",
     "saveAndStart": "保存并开始",
     "validation": {
       "modelRequired": "请选择或输入模型",
-      "apiKeyRequired": "请输入 API Key"
+      "apiKeyRequired": "请输入 API Key",
+      "contextWindowPositive": "上下文窗口必须是正整数"
     }
   },
   "appShell": {
@@ -155,7 +159,8 @@
     "confirmPasswordRequired": "请再次输入密码",
     "passwordNotMatch": "两次密码不一致",
     "modelRequired": "请选择模型",
-    "apiKeyRequired": "请填写 API Key"
+    "apiKeyRequired": "请填写 API Key",
+    "contextWindowPositive": ""
   },
   "registerFailed": "注册失败",
   "getStarted": "开始使用",
@@ -218,5 +223,8 @@
     "reasoningLabel": ""
   },
   "editPending": "",
-  "deletePending": ""
+  "deletePending": "",
+  "contextWindow": "",
+  "contextWindowPlaceholder": "",
+  "contextWindowHint": ""
 }

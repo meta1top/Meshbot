@@ -1,7 +1,6 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { ModelConfigInput, ProviderDef } from "@meshbot/web-common";
 import {
   Alert,
   AlertDescription,
@@ -19,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@meshbot/design";
+import type { ModelConfigInput, ProviderDef } from "@meshbot/web-common";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -29,6 +29,8 @@ type ModelConfigFormValues = {
   model: string;
   apiKey: string;
   baseUrl?: string;
+  /** 表单里以字符串收，提交时转 number；留空表示由后端按 spec 解析。 */
+  contextWindow?: string;
 };
 
 interface ModelFormProps {
@@ -51,6 +53,14 @@ export default function ModelForm({
     model: z.string().min(1, t("validation.modelRequired")),
     apiKey: z.string().min(1, t("validation.apiKeyRequired")),
     baseUrl: z.string().optional(),
+    // 表单收字符串：留空 → 由后端按 spec 解析；非空必须是正整数
+    contextWindow: z
+      .string()
+      .optional()
+      .refine(
+        (v) => !v || (/^\d+$/.test(v) && Number(v) > 0),
+        t("validation.contextWindowPositive"),
+      ),
   });
 
   const form = useForm<ModelConfigFormValues>({
@@ -60,6 +70,7 @@ export default function ModelForm({
       model: provider.models[0] ?? "",
       apiKey: "",
       baseUrl: provider.default_base_url,
+      contextWindow: "",
     },
   });
 
@@ -72,6 +83,9 @@ export default function ModelForm({
       model: values.model,
       apiKey: values.apiKey,
       baseUrl: values.baseUrl || undefined,
+      contextWindow: values.contextWindow
+        ? Number(values.contextWindow)
+        : undefined,
     });
   };
 
@@ -172,6 +186,32 @@ export default function ModelForm({
               <FormControl>
                 <Input placeholder={provider.default_base_url} {...field} />
               </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="contextWindow"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>
+                {t("contextWindow")}{" "}
+                <span className="text-muted-foreground">({t("optional")})</span>
+              </FormLabel>
+              <FormControl>
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  placeholder={t("contextWindowPlaceholder")}
+                  {...field}
+                />
+              </FormControl>
+              <p className="text-xs text-muted-foreground">
+                {t("contextWindowHint")}
+              </p>
               <FormMessage />
             </FormItem>
           )}

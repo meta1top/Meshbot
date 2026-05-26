@@ -73,6 +73,11 @@ export const modelConfigSchema = z.object({
   model: z.string().min(1, "请输入或选择模型"),
   apiKey: z.string().min(1, "请输入 API Key"),
   baseUrl: z.string().optional(),
+  /**
+   * 用户显式覆盖的上下文窗口（token）。不填则后端按 model 名查 MODEL_SPECS
+   * 自动解析。冷门 / 私有模型或仓库 spec 滞后时填这里。
+   */
+  contextWindow: z.number().int().positive().optional(),
 });
 
 export type ModelConfigInput = z.infer<typeof modelConfigSchema>;

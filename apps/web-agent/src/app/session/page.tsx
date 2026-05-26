@@ -43,7 +43,6 @@ import {
   type TimelineMessage,
 } from "@/components/session/message-list";
 import { PendingList } from "@/components/session/pending-list";
-import { getModelContextWindow } from "@/lib/model-context-window";
 import { getSessionSocket } from "@/lib/socket";
 import { useModelConfigs } from "@/rest/model-config";
 import {
@@ -86,9 +85,8 @@ function SessionView() {
   const resetUsage = useSetAtom(resetUsageAtom);
   const { data: modelConfigs } = useModelConfigs();
   const enabledModel = modelConfigs?.find((c) => c.enabled);
-  const contextWindow = enabledModel
-    ? getModelContextWindow(enabledModel.model)
-    : 128_000;
+  // contextWindow 由后端在配置入库时按 MODEL_SPECS 解析后固化（用户可覆盖），前端直接读
+  const contextWindow = enabledModel?.contextWindow ?? 128_000;
 
   /** 单一写入口：同步更新 ref 与 state。 */
   const apply = useCallback(
