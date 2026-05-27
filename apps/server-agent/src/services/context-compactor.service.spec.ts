@@ -69,9 +69,15 @@ describe("ContextCompactor", () => {
     const applyArg = graph.applyCompaction.mock.calls[0][1] as {
       removeIds: string[];
       summaryText: string;
+      keep: unknown[];
     };
     expect(applyArg.removeIds.length).toBeGreaterThan(0);
     expect(applyArg.summaryText).toBe("MOCK_SUMMARY");
+    // 保留区非空，且会被重排到摘要之后
+    expect(Array.isArray(applyArg.keep)).toBe(true);
+    expect(applyArg.keep.length).toBeGreaterThan(0);
+    // removeIds 应覆盖全部带 id 的消息（摘要区 + 保留区），不只摘要区
+    expect(applyArg.removeIds.length).toBe(20);
     expect(sessionMessages.recordCompactionPlaceholder).toHaveBeenCalledTimes(
       1,
     );

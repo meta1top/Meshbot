@@ -399,17 +399,26 @@ export class GraphService {
   }
 
   /**
-   * 一次性 updateState：删 removeIds 指定的 messages + 注入一条新 SystemMessage
-   * （内容 = summaryText）。messages reducer 已支持 RemoveMessage 与 append。
+   * 一次性 updateState 重排压缩结果，让 LLM 看到的顺序是：
+   *   [原系统提示词（若有，无 id 不会被删，自动留在最前）] [新摘要 system] [保留区 messages]
    *
-   * 注入的 SystemMessage 落在 messages 数组末尾（reducer `kept.concat(appended)`
-   * 行为：先 filter 掉 removeIds 命中的，再把新条目 append 到末尾）。LLM 实际
-   * 看到的顺序是 [原始 system prompt（首条）] [保留区 messages] [新摘要 system]，
-   * 摘要紧贴下一轮用户输入之前，回答时注意力直接覆盖到摘要。
+   * 实现：reducer 是 `kept.concat(appended)`，只能 append、不能插中间。所以：
+   * - removeIds 传入「所有带 id 的消息」（摘要区 + 保留区），把它们从 state 删掉；
+   * - 系统提示词由 `new SystemMessage(prompt)` 创建时无 id，reducer 的 `!m.id`
+   *   分支让它无条件保留在原位（首条），不需要也无法 remove；
+   * - 然后按 [摘要, ...保留区原对象] 顺序 append。保留区消息复用原对象（id 不变），
+   *   被删后又重新加回 → 等效"移动到摘要之后"。
+   *
+   * 最终 state = [system(留), summary, ...keep]，摘要位于保留区之前，时序正确，
+   * 且 system 仍在最前（跨 provider 友好）。
    */
   async applyCompaction(
     threadId: ThreadId,
-    params: { removeIds: string[]; summaryText: string },
+    params: {
+      removeIds: string[];
+      summaryText: string;
+      keep: BaseMessage[];
+    },
   ): Promise<void> {
     const ops: BaseMessage[] = params.removeIds.map(
       (id) => new RemoveMessage({ id }),
@@ -417,9 +426,10 @@ export class GraphService {
     ops.push(
       new SystemMessage({
         content: `[Earlier conversation summary]\n${params.summaryText}`,
-        id: `compaction-summary-${Date.now()}`,
+        id: `compaction-summary-${randomUUID()}`,
       }),
     );
+    ops.push(...params.keep);
     await this.graph.updateState(
       { configurable: { thread_id: threadId } },
       { messages: ops },

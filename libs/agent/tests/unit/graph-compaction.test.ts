@@ -77,36 +77,54 @@ describe("GraphService compaction hooks", () => {
     expect(invokeCalls[0].messages[1].content).toContain("hi");
   });
 
-  it("applyCompaction 删指定 id + 注入新 SystemMessage", async () => {
+  it("applyCompaction：摘要排在保留区之前，删掉摘要区、保留区移到摘要后", async () => {
     const threadId = await graphService.startSession({ model: "fake" });
+    // 跑两轮，制造多条 messages
     for await (const _ of graphService.streamMessage(threadId, [
-      { id: "h1", content: "hi" },
+      { id: "h1", content: "first" },
+    ])) {
+      // drain
+    }
+    for await (const _ of graphService.streamMessage(threadId, [
+      { id: "h2", content: "second" },
     ])) {
       // drain
     }
     const before = await graphService.getMessagesSnapshot(threadId);
-    const ids = before
+    // 假设保留最后 2 条，前面的都压缩
+    const splitIdx = before.length - 2;
+    const toSummarize = before.slice(0, splitIdx);
+    const keep = before.slice(splitIdx);
+    const removeIds = before
       .map((m) => m.id)
       .filter((id): id is string => typeof id === "string");
-    expect(ids.length).toBeGreaterThan(0);
 
     await graphService.applyCompaction(threadId, {
-      removeIds: ids,
+      removeIds,
       summaryText: "COMPRESSED_SUMMARY",
+      keep,
     });
 
     const after = await graphService.getMessagesSnapshot(threadId);
-    // 原 messages 已被 RemoveMessage 删，只剩注入的 SystemMessage
-    const summaryRows = after.filter(
+    // 恰好一条摘要 SystemMessage
+    const summaryIdx = after.findIndex(
       (m) =>
         m._getType() === "system" &&
         typeof m.content === "string" &&
         m.content.includes("COMPRESSED_SUMMARY"),
     );
-    expect(summaryRows.length).toBe(1);
-    // 原 id 应该不在 after 里
-    for (const id of ids) {
-      expect(after.find((m) => m.id === id)).toBeUndefined();
+    expect(summaryIdx).toBeGreaterThanOrEqual(0);
+    // 保留区的消息都在摘要之后
+    for (const k of keep) {
+      const idx = after.findIndex((m) => m.id === k.id);
+      expect(idx).toBeGreaterThan(summaryIdx);
+    }
+    // 被压缩的（不在 keep 里的带 id 消息）不应再出现
+    const keepIds = new Set(keep.map((m) => m.id));
+    for (const m of toSummarize) {
+      if (m.id && !keepIds.has(m.id)) {
+        expect(after.find((x) => x.id === m.id)).toBeUndefined();
+      }
     }
   });
 });
