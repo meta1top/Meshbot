@@ -124,4 +124,36 @@ export class LlmCallService {
     });
     return row ?? null;
   }
+
+  /** 范围内 total_tokens 求和。since 为 null 表示全部。 */
+  async sumTotalTokensSince(since: Date | null): Promise<number> {
+    const qb = this.llmCallRepo
+      .createQueryBuilder("c")
+      .select("COALESCE(SUM(c.total_tokens), 0)", "sum");
+    if (since) {
+      qb.where("datetime(c.created_at) >= datetime(:since)", {
+        since: since.toISOString(),
+      });
+    }
+    const row = await qb.getRawOne<{ sum: number | string }>();
+    return Number(row?.sum ?? 0);
+  }
+
+  /** 范围内出现次数最多的 model；无记录返回 null。 */
+  async topModelSince(since: Date | null): Promise<string | null> {
+    const qb = this.llmCallRepo
+      .createQueryBuilder("c")
+      .select("c.model", "model")
+      .addSelect("COUNT(*)", "count")
+      .groupBy("c.model")
+      .orderBy("count", "DESC")
+      .limit(1);
+    if (since) {
+      qb.where("datetime(c.created_at) >= datetime(:since)", {
+        since: since.toISOString(),
+      });
+    }
+    const row = await qb.getRawOne<{ model: string; count: number | string }>();
+    return row?.model ?? null;
+  }
 }

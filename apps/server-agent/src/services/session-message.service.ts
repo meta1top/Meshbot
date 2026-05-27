@@ -1,3 +1,4 @@
+import type { HeatmapCell } from "@meshbot/types-agent";
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { LessThan, MoreThan, Repository } from "typeorm";
@@ -229,5 +230,45 @@ export class SessionMessageService {
       sessionId,
       createdAt: MoreThan(cutoff),
     });
+  }
+
+  /**
+   * 范围内消息活跃度聚合：总数 + 按本地日分桶（热力图/活跃天/连续天数来源）
+   * + 按本地小时分桶（高峰时段来源）。since 为 null 表示全部。
+   */
+  async activitySince(
+    since: Date | null,
+  ): Promise<{ total: number; byDate: HeatmapCell[]; byHour: number[] }> {
+    const base = () => {
+      const qb = this.repo.createQueryBuilder("m");
+      if (since) {
+        qb.where("datetime(m.created_at) >= datetime(:since)", {
+          since: since.toISOString(),
+        });
+      }
+      return qb;
+    };
+    const total = await base().getCount();
+    const dayRows = await base()
+      .select("strftime('%Y-%m-%d', m.created_at, 'localtime')", "date")
+      .addSelect("COUNT(*)", "count")
+      .groupBy("date")
+      .orderBy("date", "ASC")
+      .getRawMany<{ date: string; count: number | string }>();
+    const byDate: HeatmapCell[] = dayRows.map((r) => ({
+      date: r.date,
+      count: Number(r.count),
+    }));
+    const hourRows = await base()
+      .select(
+        "CAST(strftime('%H', m.created_at, 'localtime') AS INTEGER)",
+        "hour",
+      )
+      .addSelect("COUNT(*)", "count")
+      .groupBy("hour")
+      .getRawMany<{ hour: number | string; count: number | string }>();
+    const byHour = Array.from({ length: 24 }, () => 0);
+    for (const r of hourRows) byHour[Number(r.hour)] = Number(r.count);
+    return { total, byDate, byHour };
   }
 }

@@ -310,6 +310,17 @@ export class SessionService {
     await this.sessionRepo.delete({ id: sessionId });
   }
 
+  /** 范围内创建的会话数。since 为 null 表示全部。 */
+  async countCreatedSince(since: Date | null): Promise<number> {
+    const qb = this.sessionRepo.createQueryBuilder("s");
+    if (since) {
+      qb.where("datetime(s.created_at) >= datetime(:since)", {
+        since: since.toISOString(),
+      });
+    }
+    return qb.getCount();
+  }
+
   /**
    * 重生成入口：找到 user 消息后，删该消息后的所有 session_messages /
    * llm_calls / checkpointer state。cutoff user 消息本身保留，调用方接着
