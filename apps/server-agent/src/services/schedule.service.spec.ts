@@ -144,3 +144,64 @@ describe("ScheduleService CRUD", () => {
     expect(after.lastFiredAt?.getTime()).toBe(now.getTime());
   });
 });
+
+describe("ScheduleService registry sink", () => {
+  let ds: DataSource;
+  let svc: ScheduleService;
+  const calls: Array<["reg" | "dereg", string]> = [];
+
+  beforeEach(async () => {
+    ds = new DataSource({
+      type: "better-sqlite3",
+      database: ":memory:",
+      entities: [CronJob],
+      synchronize: true,
+    });
+    await ds.initialize();
+    svc = new ScheduleService(ds.getRepository(CronJob));
+    calls.length = 0;
+    svc.setRegistrySink({
+      register: (j) => {
+        calls.push(["reg", j.id]);
+      },
+      deregister: (id) => {
+        calls.push(["dereg", id]);
+      },
+    });
+  });
+
+  afterEach(async () => {
+    await ds.destroy();
+  });
+
+  it("create → sink.register；delete → sink.deregister", async () => {
+    const job = await svc.create({
+      sessionId: "s1",
+      title: "t",
+      prompt: "p",
+      kind: "cron",
+      cronExpr: "0 7 * * *",
+      timezone: "UTC",
+    });
+    expect(calls).toContainEqual(["reg", job.id]);
+    await svc.delete(job.id);
+    expect(calls).toContainEqual(["dereg", job.id]);
+  });
+
+  it("setEnabled(true→false) → deregister；(false→true) → register", async () => {
+    const job = await svc.create({
+      sessionId: "s1",
+      title: "t",
+      prompt: "p",
+      kind: "cron",
+      cronExpr: "0 7 * * *",
+      timezone: "UTC",
+    });
+    calls.length = 0;
+    await svc.setEnabled(job.id, false);
+    expect(calls).toEqual([["dereg", job.id]]);
+    calls.length = 0;
+    await svc.setEnabled(job.id, true);
+    expect(calls).toEqual([["reg", job.id]]);
+  });
+});

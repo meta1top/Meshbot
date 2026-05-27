@@ -6,6 +6,21 @@ import { Repository } from "typeorm";
 import type { CreateCronJobInput } from "@meshbot/types-agent";
 import { CronJob } from "../entities/cron-job.entity";
 
+/**
+ * 写入路径上通知 SchedulerRegistry 同步的钩子。
+ * 由 ScheduleExecutor 在 bootstrap 阶段挂载，避免 Service / Executor 互相注入的循环依赖。
+ */
+export interface ScheduleRegistrySink {
+  register(job: {
+    id: string;
+    kind: "cron" | "once";
+    cronExpr: string | null;
+    timezone: string | null;
+    runAt: Date | null;
+  }): Promise<void> | void;
+  deregister(jobId: string): void;
+}
+
 /** ScheduleService CRUD —— SchedulerRegistry 同步在 ScheduleExecutor 接入。 */
 @Injectable()
 export class ScheduleService {
@@ -13,6 +28,13 @@ export class ScheduleService {
     @InjectRepository(CronJob)
     private readonly repo: Repository<CronJob>,
   ) {}
+
+  private sink: ScheduleRegistrySink | null = null;
+
+  /** 由 ScheduleExecutor 启动时挂载。 */
+  setRegistrySink(sink: ScheduleRegistrySink): void {
+    this.sink = sink;
+  }
 
   /** 计算下次触发时刻（cron / once 通用入口）。 */
   static computeNextFireAt(
@@ -46,6 +68,7 @@ export class ScheduleService {
       nextFireAt,
     });
     await this.repo.save(entity);
+    if (entity.enabled) await this.sink?.register(entity);
     return entity;
   }
 
@@ -69,6 +92,8 @@ export class ScheduleService {
     const row = await this.findById(id);
     row.enabled = enabled;
     await this.repo.save(row);
+    if (enabled) await this.sink?.register(row);
+    else this.sink?.deregister(row.id);
     return row;
   }
 
@@ -82,11 +107,14 @@ export class ScheduleService {
 
   /** 删除单条任务。 */
   async delete(id: string): Promise<void> {
+    this.sink?.deregister(id);
     await this.repo.delete({ id });
   }
 
   /** 删除某 session 下的全部任务。 */
   async deleteBySession(sessionId: string): Promise<void> {
+    const rows = await this.repo.find({ where: { sessionId } });
+    for (const r of rows) this.sink?.deregister(r.id);
     await this.repo.delete({ sessionId });
   }
 

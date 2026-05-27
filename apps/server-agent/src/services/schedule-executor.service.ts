@@ -26,6 +26,10 @@ export class ScheduleExecutor implements OnApplicationBootstrap {
 
   /** 启动时把所有 enabled job 注册到 SchedulerRegistry；过期 once 自动 disable。 */
   async onApplicationBootstrap(): Promise<void> {
+    this.schedule.setRegistrySink({
+      register: (job) => this.register(job),
+      deregister: (id) => this.deregister(id),
+    });
     const all = await this.schedule.list();
     for (const job of all) {
       if (!job.enabled) continue;
