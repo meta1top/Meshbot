@@ -59,7 +59,7 @@ export function SuggestionChips({ onPick }: SuggestionChipsProps) {
           key={s}
           type="button"
           onClick={() => onPick(s)}
-          className="rounded-full bg-accent px-3 py-1 text-[13px] text-foreground transition-colors hover:bg-accent/80"
+          className="rounded-full bg-accent px-3 py-1 text-[13px] text-accent-foreground transition-colors hover:bg-accent/80"
         >
           {s}
         </button>

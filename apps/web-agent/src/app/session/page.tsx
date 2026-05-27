@@ -55,6 +55,7 @@ import {
 
 function SessionView() {
   const t = useTranslations("session");
+  const tHome = useTranslations("home");
   const searchParams = useSearchParams();
   const router = useRouter();
   const sessionId = searchParams.get("id");
@@ -64,6 +65,16 @@ function SessionView() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState("");
   const chatInputRef = useRef<ChatInputHandle>(null);
+
+  // 输入框 placeholder：挂载后从同一组文案随机选一条（与首页一致，避免单调）
+  const placeholders = (tHome.raw("inputPlaceholders") as string[]) ?? [];
+  const [phIdx, setPhIdx] = useState(0);
+  useEffect(() => {
+    if (placeholders.length > 1) {
+      setPhIdx(Math.floor(Math.random() * placeholders.length));
+    }
+  }, [placeholders.length]);
+  const inputPlaceholder = placeholders[phIdx];
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const oldestMessageIdRef = useRef<string | null>(null);
   const hasMoreHistoryRef = useRef(true);
@@ -824,6 +835,7 @@ function SessionView() {
           onSend={handleSend}
           onInterrupt={handleInterrupt}
           isLoading={running}
+          placeholder={inputPlaceholder}
           tokenUsage={{
             // 「下次请求估算 / ctx 上限」—— 用 lastInputTokens 作为代理：
             // 这是上一轮 LLM 真实计数，下一轮 input 约等于这个（用户新输入

@@ -40,6 +40,16 @@ export default function Home() {
   }, [titles.length]);
   const title = titles[titleIdx] ?? t("title");
 
+  // 输入框 placeholder：同样客户端挂载后随机选一条（首页才随机，session 视图用默认）
+  const placeholders = (t.raw("inputPlaceholders") as string[]) ?? [];
+  const [phIdx, setPhIdx] = useState(0);
+  useEffect(() => {
+    if (placeholders.length > 1) {
+      setPhIdx(Math.floor(Math.random() * placeholders.length));
+    }
+  }, [placeholders.length]);
+  const inputPlaceholder = placeholders[phIdx];
+
   // 真实 stats + range 筛选
   const [range, setRange] = useState<StatsRange>("all");
   const [stats, setStats] = useState<StatsResponse | null>(null);
@@ -136,7 +146,7 @@ export default function Home() {
                     onClick={() => setRange(r)}
                     className={
                       r === range
-                        ? "rounded-md bg-accent px-2 py-1 font-medium text-foreground"
+                        ? "rounded-md bg-accent px-2 py-1 font-medium text-accent-foreground"
                         : "px-1 py-1 text-foreground/70 hover:text-foreground"
                     }
                   >
@@ -152,9 +162,9 @@ export default function Home() {
               {metrics.map((item) => (
                 <div
                   key={item.label}
-                  className="min-w-0 overflow-hidden rounded-[6px] bg-accent px-2.5 py-2 text-foreground"
+                  className="min-w-0 overflow-hidden rounded-[6px] bg-accent px-2.5 py-2 text-accent-foreground"
                 >
-                  <p className="text-[11px] text-card-foreground">
+                  <p className="text-[11px] text-accent-foreground/80">
                     {item.label}
                   </p>
                   <p
@@ -178,6 +188,7 @@ export default function Home() {
           onChange={setDraft}
           onSend={handleSend}
           isLoading={sending}
+          placeholder={inputPlaceholder}
         />
       </div>
     </AppShellLayout>

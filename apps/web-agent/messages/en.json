@@ -89,7 +89,7 @@
     "sessionsEmpty": "No sessions yet"
   },
   "chatInput": {
-    "placeholder": "Describe a task or ask a question",
+    "placeholder": "Type here",
     "send": "Send",
     "interrupt": "Interrupt",
     "attachment": "Add attachment"
@@ -141,6 +141,13 @@
       "Help me plan today's tasks",
       "Explain a snippet of code",
       "Draft a technical proposal"
+    ],
+    "inputPlaceholders": [
+      "Enter a task or question",
+      "What would you like to do?",
+      "Describe what you need",
+      "What are you working on?",
+      "Got an idea?"
     ],
     "overview": "Overview",
     "models": "Models",
