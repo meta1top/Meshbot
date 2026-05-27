@@ -569,9 +569,11 @@ function SessionView() {
    * 首次触发（initialScrollDoneRef=false）走 instant：history fetch 完成后
    * 视口直接到底，无「先看顶 → 滑下来」闪烁。之后才用 smooth 跟流。
    */
-  // biome-ignore lint/correctness/useExhaustiveDependencies: timelineMessages 仅作触发依赖，effect 体不直接读取
   useEffect(() => {
     if (!stickToBottom) return;
+    // 消息还没就位（fetchHistory 未 resolve）：跳过；避免空 timeline
+    // 那次 effect 提前把首次哨兵置 true，导致下一次有内容时已走 smooth。
+    if (timelineMessages.length === 0) return;
     if (!initialScrollDoneRef.current) {
       initialScrollDoneRef.current = true;
       bottomRef.current?.scrollIntoView({
