@@ -1,14 +1,23 @@
 "use client";
 
 import type { CronJobDto } from "@meshbot/types-agent";
+import { useAtomValue } from "jotai";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
+import { sessionsAtom } from "@/atoms/sessions";
 import { AppShellLayout } from "@/components/layouts/app-shell-layout";
 import { CronJobCard } from "@/components/schedule/cron-job-card";
-import { deleteCronJob, listCronJobs, patchCronJob } from "@/rest/cron-jobs";
+import { CronJobForm } from "@/components/schedule/cron-job-form";
+import {
+  createCronJob,
+  deleteCronJob,
+  listCronJobs,
+  patchCronJob,
+} from "@/rest/cron-jobs";
 
 export default function SchedulePage() {
   const t = useTranslations("schedule");
+  const sessions = useAtomValue(sessionsAtom);
   const [jobs, setJobs] = useState<CronJobDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -70,9 +79,16 @@ export default function SchedulePage() {
         </div>
 
         {formOpen && (
-          <div className="mb-4 rounded-md border border-border bg-card p-3 text-sm text-muted-foreground">
-            {/* Task 14 接入完整 CronJobForm */}
-            (form placeholder)
+          <div className="mb-4">
+            <CronJobForm
+              sessions={sessions}
+              onCancel={() => setFormOpen(false)}
+              onSubmit={async (input) => {
+                await createCronJob(input);
+                setFormOpen(false);
+                await reload();
+              }}
+            />
           </div>
         )}
 

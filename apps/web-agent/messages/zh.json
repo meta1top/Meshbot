@@ -226,7 +226,10 @@
     "passwordNotMatch": "两次密码不一致",
     "modelRequired": "请选择模型",
     "apiKeyRequired": "请填写 API Key",
-    "contextWindowPositive": ""
+    "contextWindowPositive": "",
+    "cronInvalid": "",
+    "runAtRequired": "",
+    "runAtPast": ""
   },
   "registerFailed": "注册失败",
   "getStarted": "开始使用",
@@ -309,5 +312,16 @@
   "empty": "",
   "nextFire": "",
   "enabled": "",
-  "disabled": ""
+  "disabled": "",
+  "jobTitle": "",
+  "jobTitlePlaceholder": "",
+  "kindCron": "",
+  "kindOnce": "",
+  "cronExpr": "",
+  "cronPlaceholder": "",
+  "timezone": "",
+  "runAt": "",
+  "prompt": "",
+  "promptPlaceholder": "",
+  "save": ""
 }

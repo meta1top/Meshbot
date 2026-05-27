@@ -226,7 +226,10 @@
     "passwordNotMatch": "Passwords do not match",
     "modelRequired": "Please select a model",
     "apiKeyRequired": "API Key is required",
-    "contextWindowPositive": ""
+    "contextWindowPositive": "",
+    "cronInvalid": "",
+    "runAtRequired": "",
+    "runAtPast": ""
   },
   "registerFailed": "Registration failed",
   "getStarted": "Get started",
@@ -309,5 +312,16 @@
   "empty": "",
   "nextFire": "",
   "enabled": "",
-  "disabled": ""
+  "disabled": "",
+  "jobTitle": "",
+  "jobTitlePlaceholder": "",
+  "kindCron": "",
+  "kindOnce": "",
+  "cronExpr": "",
+  "cronPlaceholder": "",
+  "timezone": "",
+  "runAt": "",
+  "prompt": "",
+  "promptPlaceholder": "",
+  "save": ""
 }
