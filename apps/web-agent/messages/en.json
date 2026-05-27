@@ -130,6 +130,18 @@
   },
   "home": {
     "title": "What's up next?",
+    "titles": [
+      "What's up next?",
+      "What are we working on?",
+      "Where shall we start?",
+      "What can I help with?",
+      "Ready when you are."
+    ],
+    "defaultSuggestions": [
+      "Help me plan today's tasks",
+      "Explain a snippet of code",
+      "Draft a technical proposal"
+    ],
     "overview": "Overview",
     "models": "Models",
     "all": "All",
