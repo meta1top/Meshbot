@@ -19,4 +19,5 @@ export {
   listSessions,
   patchSession,
   regenerateMessage,
+  setMessageFeedback,
 } from "./session";

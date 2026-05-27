@@ -139,3 +139,16 @@ export async function regenerateMessage(
   );
   return data;
 }
+
+/** 设置 assistant 消息反馈（点赞 up / 不喜欢 down / 取消 null）。 */
+export async function setMessageFeedback(
+  sessionId: string,
+  messageId: string,
+  feedback: "up" | "down" | null,
+): Promise<{ feedback: "up" | "down" | null }> {
+  const { data } = await apiClient.post<{ feedback: "up" | "down" | null }>(
+    `/api/sessions/${sessionId}/messages/${messageId}/feedback`,
+    { feedback },
+  );
+  return data;
+}
