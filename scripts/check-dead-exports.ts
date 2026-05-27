@@ -2,7 +2,7 @@
 /**
  * Dead Export Fence v0 — 静态围栏检测「跨文件死导出符号」
  *
- * 与 .cursor/rules/dev-workflow.mdc 「代码卫生」章节对齐，与 biome 的 noUnusedImports/noUnusedVariables（L1，单文件）
+ * 与 dev-workflow 技能（.claude/skills/dev-workflow/）「代码卫生」章节对齐，与 biome 的 noUnusedImports/noUnusedVariables（L1，单文件）
  * 互补：本脚本检测 L2，即 export 出去但全仓没有任何文件 import 的符号。
  *
  * 核心策略：保守优先，宁漏不误
@@ -180,7 +180,15 @@ const SKIP_PATH_FRAGMENTS = [
  */
 const EXTRA_SKIP_SUFFIXES = [".schema.ts"];
 
-type ExportKind = "class" | "function" | "const" | "let" | "var" | "type" | "interface" | "enum";
+type ExportKind =
+  | "class"
+  | "function"
+  | "const"
+  | "let"
+  | "var"
+  | "type"
+  | "interface"
+  | "enum";
 
 interface ExportRecord {
   file: string;
@@ -288,7 +296,11 @@ function shouldSkipFile(filePath: string): boolean {
   }
   const base = path.basename(rel);
   if (SKIP_FILENAMES.has(base)) return true;
-  if (rel.endsWith("/proxy.ts") || rel.endsWith("/page.tsx") || rel.endsWith("/layout.tsx")) {
+  if (
+    rel.endsWith("/proxy.ts") ||
+    rel.endsWith("/page.tsx") ||
+    rel.endsWith("/layout.tsx")
+  ) {
     return true;
   }
   return false;
@@ -429,7 +441,11 @@ function collectExports(
       if (!vs.isExported()) continue;
       if (nodeHasIgnoreComment(vs)) continue;
       const kind: ExportKind =
-        vs.getDeclarationKind() === "const" ? "const" : vs.getDeclarationKind() === "let" ? "let" : "var";
+        vs.getDeclarationKind() === "const"
+          ? "const"
+          : vs.getDeclarationKind() === "let"
+            ? "let"
+            : "var";
       for (const decl of vs.getDeclarations()) {
         const nameNode = decl.getNameNode();
         if (!Node.isIdentifier(nameNode)) continue;
@@ -544,7 +560,9 @@ function formatHumanTimestamp(d: Date): string {
 
 function buildMarkdownReport(issues: Issue[], meta: ReportMeta): string {
   const lines: string[] = [];
-  lines.push(`# dead-exports fence report ${formatReportTimestamp(meta.generatedAt)}`);
+  lines.push(
+    `# dead-exports fence report ${formatReportTimestamp(meta.generatedAt)}`,
+  );
   lines.push("");
   lines.push(`- **生成时间**: ${formatHumanTimestamp(meta.generatedAt)}`);
   lines.push(`- **扫描路径**: ${meta.paths.join(", ")}`);
@@ -555,24 +573,46 @@ function buildMarkdownReport(issues: Issue[], meta: ReportMeta): string {
   lines.push("");
   lines.push("## 设计原则");
   lines.push("");
-  lines.push("**保守优先，宁漏不误**：本围栏跳过所有可能被框架反射 / DI / 路由消费的导出，所以列出的 finding 都是「非框架装饰器修饰的纯业务符号」。");
+  lines.push(
+    "**保守优先，宁漏不误**：本围栏跳过所有可能被框架反射 / DI / 路由消费的导出，所以列出的 finding 都是「非框架装饰器修饰的纯业务符号」。",
+  );
   lines.push("");
   lines.push("自动跳过的范围：");
-  lines.push("- NestJS 装饰器类：`@Injectable` / `@Controller` / `@Module` / `@Processor` / `@Resolver` / `@WebSocketGateway` 等");
-  lines.push("- TypeORM 实体：`@Entity` / `@ViewEntity` / `MigrationInterface`");
+  lines.push(
+    "- NestJS 装饰器类：`@Injectable` / `@Controller` / `@Module` / `@Processor` / `@Resolver` / `@WebSocketGateway` 等",
+  );
+  lines.push(
+    "- TypeORM 实体：`@Entity` / `@ViewEntity` / `MigrationInterface`",
+  );
   lines.push("- Swagger 反射：`@ApiTags` / `@ApiExtraModels` / `@ObjectType`");
-  lines.push("- 框架文件后缀：`.module.ts` / `.controller.ts` / `.processor.ts` / `.gateway.ts` / `.entity.ts` / `.dto.ts` / `.config.ts` / `.guard.ts` / `.filter.ts` / `.schema.ts` / ...");
-  lines.push("- 入口文件：`main.ts` / `app.module.ts` / `next.config.ts` / `proxy.ts` / `instrumentation.ts` / `*.config.ts`");
-  lines.push("- 公共 SDK 类型包：`libs/types*` 系列（对外 API 暴露，即使无内部消费方也合理）");
-  lines.push("- 纯 barrel re-export 文件（所有顶层语句都是 `export ... from`）");
+  lines.push(
+    "- 框架文件后缀：`.module.ts` / `.controller.ts` / `.processor.ts` / `.gateway.ts` / `.entity.ts` / `.dto.ts` / `.config.ts` / `.guard.ts` / `.filter.ts` / `.schema.ts` / ...",
+  );
+  lines.push(
+    "- 入口文件：`main.ts` / `app.module.ts` / `next.config.ts` / `proxy.ts` / `instrumentation.ts` / `*.config.ts`",
+  );
+  lines.push(
+    "- 公共 SDK 类型包：`libs/types*` 系列（对外 API 暴露，即使无内部消费方也合理）",
+  );
+  lines.push(
+    "- 纯 barrel re-export 文件（所有顶层语句都是 `export ... from`）",
+  );
   lines.push("- `default export`（框架按文件路径加载常见）");
-  lines.push("- **同文件内消费**：export 名称在本文件其他位置被引用（如 zod 的 `z.enum(STATUSES)`、interface 内被 type 使用）");
-  lines.push("- 测试文件 (`.spec.ts` / `.e2e-spec.ts` / `__tests__/`)、迁移文件、scripts、openspec、web-* 应用");
+  lines.push(
+    "- **同文件内消费**：export 名称在本文件其他位置被引用（如 zod 的 `z.enum(STATUSES)`、interface 内被 type 使用）",
+  );
+  lines.push(
+    "- 测试文件 (`.spec.ts` / `.e2e-spec.ts` / `__tests__/`)、迁移文件、scripts、openspec、web-* 应用",
+  );
   lines.push("");
   lines.push("## 漏报说明");
   lines.push("");
-  lines.push("- **同名跨文件 export**：任一处被 import 即算活，可能漏报真正死的同名 export");
-  lines.push("- **命名空间 import** (`import * as ns`)：通过 `ns.X` 解析的属性视为消费 X，但跨文件解析仅在该 ns import 所在文件");
+  lines.push(
+    "- **同名跨文件 export**：任一处被 import 即算活，可能漏报真正死的同名 export",
+  );
+  lines.push(
+    "- **命名空间 import** (`import * as ns`)：通过 `ns.X` 解析的属性视为消费 X，但跨文件解析仅在该 ns import 所在文件",
+  );
   lines.push("- **动态 import** / 字符串路径 / `require()` 不识别");
   lines.push("");
 
@@ -614,8 +654,12 @@ function buildMarkdownReport(issues: Issue[], meta: ReportMeta): string {
   lines.push("对每条 finding，按以下顺序判定：");
   lines.push("");
   lines.push("1. **真死代码** → 直接删除（连带 export 关键字一起）");
-  lines.push("2. **被反射 / 字符串路径 / 动态 import 消费** → 在 export 上方加 `// dead-check: ignore` 或 JSDoc `@public-api`");
-  lines.push("3. **对外 API（如 packages/* 的对外导出）** → JSDoc 加 `@public-api` 表明意图");
+  lines.push(
+    "2. **被反射 / 字符串路径 / 动态 import 消费** → 在 export 上方加 `// dead-check: ignore` 或 JSDoc `@public-api`",
+  );
+  lines.push(
+    "3. **对外 API（如 packages/* 的对外导出）** → JSDoc 加 `@public-api` 表明意图",
+  );
   lines.push("");
   return lines.join("\n");
 }
@@ -659,10 +703,18 @@ function loadBaselineFingerprints(jsonPath: string): Set<string> | null {
   }
 }
 
-function diffAgainstBaseline(currentIssues: Issue[], absOutDir: string): BaselineDiff {
+function diffAgainstBaseline(
+  currentIssues: Issue[],
+  absOutDir: string,
+): BaselineDiff {
   const baselinePath = findLatestBaselineJson(absOutDir);
   if (!baselinePath) {
-    return { baselinePath: null, added: currentIssues, removed: [], unchanged: 0 };
+    return {
+      baselinePath: null,
+      added: currentIssues,
+      removed: [],
+      unchanged: 0,
+    };
   }
   const baselineFps = loadBaselineFingerprints(baselinePath);
   if (!baselineFps) {
@@ -796,7 +848,9 @@ function main() {
   const issues = diagnoseDeadExports(exportRecords, globalCounts, countsByFile);
 
   if (opts.json) {
-    process.stdout.write(`${JSON.stringify({ total: issues.length, issues }, null, 2)}\n`);
+    process.stdout.write(
+      `${JSON.stringify({ total: issues.length, issues }, null, 2)}\n`,
+    );
   } else {
     console.log(
       `[dead-check v0] 扫描 ${sourceFiles.length} 个源文件 (targets: ${opts.paths.join(", ")})；候选 export ${exportRecords.length} 个`,
@@ -807,17 +861,29 @@ function main() {
   if (opts.writeReport) {
     const isPartialScan = opts.pathsExplicit;
     const incrementalEnabled = !opts.forceReport && !isPartialScan;
-    const absOutDir = path.isAbsolute(opts.outDir) ? opts.outDir : path.join(ROOT, opts.outDir);
-    const diff = incrementalEnabled ? diffAgainstBaseline(issues, absOutDir) : null;
+    const absOutDir = path.isAbsolute(opts.outDir)
+      ? opts.outDir
+      : path.join(ROOT, opts.outDir);
+    const diff = incrementalEnabled
+      ? diffAgainstBaseline(issues, absOutDir)
+      : null;
 
     const shouldWrite =
-      opts.forceReport || isPartialScan || !diff || diff.added.length > 0 || diff.baselinePath === null;
+      opts.forceReport ||
+      isPartialScan ||
+      !diff ||
+      diff.added.length > 0 ||
+      diff.baselinePath === null;
 
     if (!shouldWrite && diff) {
       if (!opts.json) {
         console.log(`[dead-check v0] 增量判定: 无新增 finding，跳过写入报告`);
-        console.log(`  baseline: ${path.relative(ROOT, diff.baselinePath as string)}`);
-        console.log(`  unchanged=${diff.unchanged}  removed=${diff.removed.length}  added=0`);
+        console.log(
+          `  baseline: ${path.relative(ROOT, diff.baselinePath as string)}`,
+        );
+        console.log(
+          `  unchanged=${diff.unchanged}  removed=${diff.removed.length}  added=0`,
+        );
         if (diff.removed.length > 0) {
           console.log(
             `  ✓ 已修复 ${diff.removed.length} 条历史 finding（如需刷新 baseline，重跑加 --force-report）`,
@@ -835,13 +901,21 @@ function main() {
       const { mdPath, jsonPath } = writeReportFiles(issues, meta, opts.outDir);
       if (!opts.json) {
         if (diff && diff.baselinePath) {
-          console.log(`[dead-check v0] 增量判定: 检测到新增 finding，写入新报告`);
+          console.log(
+            `[dead-check v0] 增量判定: 检测到新增 finding，写入新报告`,
+          );
           console.log(`  baseline: ${path.relative(ROOT, diff.baselinePath)}`);
-          console.log(`  added=${diff.added.length}  removed=${diff.removed.length}  unchanged=${diff.unchanged}`);
+          console.log(
+            `  added=${diff.added.length}  removed=${diff.removed.length}  unchanged=${diff.unchanged}`,
+          );
         } else if (incrementalEnabled) {
-          console.log(`[dead-check v0] 增量判定: 未找到 baseline，写入首份报告`);
+          console.log(
+            `[dead-check v0] 增量判定: 未找到 baseline，写入首份报告`,
+          );
         } else if (isPartialScan) {
-          console.log(`[dead-check v0] 局部扫描（启用了 --paths），跳过增量判定，直接写报告`);
+          console.log(
+            `[dead-check v0] 局部扫描（启用了 --paths），跳过增量判定，直接写报告`,
+          );
         }
         console.log(`[dead-check v0] 报告已写入:`);
         console.log(`  ${path.relative(ROOT, mdPath)}`);

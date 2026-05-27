@@ -124,7 +124,7 @@ ExampleEntity               ⚠ 2 个归属:                  main
 
 - 该 Entity 已有归属 Service（`pnpm check:repo -- --map` 可查）→ 注入对应 Service，把数据访问逻辑搬到 Service 的公开方法里
 - 该 Entity 没有归属 Service（场景罕见，通常因为是新建 Entity）→ 先建归属 Service，再让 Controller/Processor 注入 Service
-- **无例外**：基础设施豁免必须在 `INFRA_WHITELIST` 中显式登记，并在 `service-repo-access.mdc` 同步说明
+- **无例外**：基础设施豁免必须在 `INFRA_WHITELIST` 中显式登记，并在 `service-repo-access` 技能同步说明
 
 ### CROSS_LIB_INJECT — Service 跨 lib 注入其他模块的 Entity Repository
 
@@ -240,7 +240,7 @@ diff <(jq -r '.issues[] | "\(.type)|\(.entity)|\(.file)|\(.className)"' <prev>.j
 
 | 阶段 | 工具 | 角色 |
 |---|---|---|
-| 写代码时 | `service-repo-access.mdc`、`service-tx-lock-cache.mdc` | 让 AI / 人按规范写 |
+| 写代码时 | `service-repo-access`、`service-tx-lock-cache` 技能 | 让 AI / 人按规范写 |
 | 写完后 | 本 skill + `pnpm check:repo` | 静态围栏验证产出是否合规 |
 | 找归属时 | `pnpm check:repo -- --map` | 取代过去的硬编码归属表 |
 | 联动检查 | `check-transactional` skill + `pnpm check:tx` | 事务装饰器合规性 |

@@ -256,7 +256,7 @@ pnpm check:tx & pnpm check:naming & pnpm check:lock-tx & wait
 
 | 阶段 | 工具 | 角色 |
 |---|---|---|
-| 写代码时 | `service-tx-lock-cache.mdc` 「严禁事务-锁倒置」 | 让 AI / 人按规范写 |
+| 写代码时 | `service-tx-lock-cache` 技能「严禁事务-锁倒置」 | 让 AI / 人按规范写 |
 | 写完后 | 本 skill + `pnpm check:lock-tx` | 静态围栏验证未引入倒置 |
 | 配套验证 | `pnpm check:tx` + `pnpm check:naming` | 验证事务装饰器使用本身合规 |
 

@@ -206,7 +206,7 @@ pnpm check:tx & pnpm check:naming & wait
 
 | 阶段 | 工具 | 角色 |
 |---|---|---|
-| 写代码时 | `service-tx-lock-cache.mdc` 「事务方法命名约定」 | 让 AI / 人按规范命名 |
+| 写代码时 | `service-tx-lock-cache` 技能「事务方法命名约定」 | 让 AI / 人按规范命名 |
 | 写完后 | 本 skill + `pnpm check:naming` | 静态围栏验证命名与装饰器是否一致 |
 | 配套验证 | `pnpm check:tx` | 验证装饰器使用本身是否合规 |
 

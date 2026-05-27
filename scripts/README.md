@@ -16,8 +16,9 @@
 | `check-method-naming.ts` | `pnpm check:naming` | 校验事务方法命名约定（`*InDb` / `*InTx` / `persist*`） |
 | `check-lock-tx.ts` | `pnpm check:lock-tx` | 校验事务-锁倒置漏洞（`@WithLock` 不可在 `@Transactional` 内） |
 | `check-repo-access.ts` | `pnpm check:repo` | 校验 Entity 唯一归属 + 跨 libs 注入 Repository 限制 |
+| `check-dead-exports.ts` | `pnpm check:dead` | 校验 named export 无人引用的死导出 |
+| `check-error-code.ts` | `pnpm check:error-code` | 校验错误码重复 / 越界 / 断号 |
 | `sync-locales.ts` | `pnpm sync:locales` | 扫描前后端 t() 调用对齐 locale JSON（missing/orphan/asymmetric）|
-| `sync-skills.ts` | `pnpm sync:skills` | 把 .cursor/rules/*.mdc 派生为 .claude/skills/<slug>/SKILL.md（单向） |
 
 一键全跑：`pnpm check`
 
@@ -28,13 +29,7 @@
 - `--write`：把 missing 在 zh/en 文件中补占位空字符串
 - `--prune`：删除 orphan（**危险**，PR 评审后再用）
 
-### sync-skills 模式
-
-- 默认：从 .cursor/rules/*.mdc 重新生成 .claude/skills/<slug>/SKILL.md
-- `--check`：只比对，不写；有漂移则 exit 1（pre-commit 用）
-- 检测 orphan SKILL.md（无对应 .mdc 源）并 warn
-
-注意：**唯一源是 .cursor/rules/**。永远不要手改 SKILL.md，改完会被覆盖。
+> 技能（`.claude/skills/*/SKILL.md`）现在是**直接维护的唯一源**——历史上由 `.cursor/rules/*.mdc` 经 `sync-skills` 派生，Cursor 弃用后该派生链已移除，直接编辑 SKILL.md 即可。
 
 ## 适用范围
 
@@ -48,7 +43,7 @@
 
 ## 增量基线模式
 
-五个 `check:*` 脚本（`tx` / `naming` / `lock-tx` / `repo` / `dead`）都支持**增量模式**。
+六个 `check:*` 脚本（`tx` / `naming` / `lock-tx` / `repo` / `dead` / `error-code`）都支持**增量模式**。
 运行时读取 `docs/audits/<fence-name>/` 下最新的 baseline JSON 报告，
 仅在以下情况输出新报告：
 
@@ -69,6 +64,7 @@ pnpm check:naming -- --force-report
 pnpm check:lock-tx -- --force-report
 pnpm check:repo -- --force-report
 pnpm check:dead -- --force-report
+pnpm check:error-code -- --force-report
 ```
 
 会强制把本次完整结果写一份新 JSON 到
