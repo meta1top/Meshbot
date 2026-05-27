@@ -62,7 +62,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       onSend,
       onInterrupt,
       isLoading = false,
-      placeholder = "Describe a task or ask a question",
+      placeholder,
       modelName,
       tokenUsage,
     },
@@ -154,7 +154,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           <div className="relative w-full">
             {!hasContent && (
               <div className="pointer-events-none absolute left-0 top-0 py-1.5 text-sm text-muted-foreground">
-                {placeholder}
+                {placeholder ?? tChat("placeholder")}
               </div>
             )}
             <div

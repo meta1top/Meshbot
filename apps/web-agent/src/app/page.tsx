@@ -76,7 +76,11 @@ export default function Home() {
     inputRef.current?.focus(text);
   };
 
-  const metrics = [
+  const metrics: Array<{
+    label: string;
+    value: string;
+    valueClassName?: string;
+  }> = [
     { label: t("metrics.sessions"), value: String(stats?.sessions ?? 0) },
     { label: t("metrics.messages"), value: String(stats?.messages ?? 0) },
     {
@@ -99,11 +103,10 @@ export default function Home() {
     {
       label: t("metrics.favoriteModel"),
       value: stats?.favoriteModel ?? "—",
+      // 模型名可能很长（如 deepseek-v4-pro），缩小字号 + 按词换行，避免溢出卡片
+      valueClassName: "text-[18px] leading-tight break-words",
     },
   ];
-
-  const heatmapData = (stats?.heatmap ?? []).map((c) => c.count);
-  const heatmapMax = Math.max(1, ...heatmapData);
 
   return (
     <AppShellLayout>
@@ -149,19 +152,21 @@ export default function Home() {
               {metrics.map((item) => (
                 <div
                   key={item.label}
-                  className="rounded-[6px] bg-accent px-2.5 py-2 text-foreground"
+                  className="min-w-0 overflow-hidden rounded-[6px] bg-accent px-2.5 py-2 text-foreground"
                 >
                   <p className="text-[11px] text-card-foreground">
                     {item.label}
                   </p>
-                  <p className="mt-1 text-[30px] leading-[0.95] font-medium tracking-tight">
+                  <p
+                    className={`mt-1 font-medium tracking-tight ${item.valueClassName ?? "text-[30px] leading-[0.95] truncate"}`}
+                  >
                     {item.value}
                   </p>
                 </div>
               ))}
             </div>
 
-            <ActivityHeatmap data={heatmapData} maxValue={heatmapMax} />
+            <ActivityHeatmap cells={stats?.heatmap ?? []} />
           </CardContent>
         </Card>
       </div>
