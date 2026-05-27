@@ -119,8 +119,16 @@ export const HistoryMessageSchema = z.object({
     })
     .nullable()
     .optional(),
+  /** assistant 消息反馈（点赞/不喜欢）；其余为 null/缺省。 */
+  feedback: z.enum(["up", "down"]).nullable().optional(),
 });
 export type HistoryMessage = z.infer<typeof HistoryMessageSchema>;
+
+/** 消息反馈：点赞 up / 不喜欢 down / 取消 null。 */
+export const MessageFeedbackSchema = z.object({
+  feedback: z.enum(["up", "down"]).nullable(),
+});
+export type MessageFeedbackInput = z.infer<typeof MessageFeedbackSchema>;
 
 /** 当前未完成 assistant 消息快照。 */
 export const InflightSnapshotSchema = z.object({
