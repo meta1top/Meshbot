@@ -114,6 +114,7 @@ export default function Home() {
             alt="meshbot"
             width={36}
             height={36}
+            unoptimized
             className="shrink-0"
           />
           <h1 className="text-[38px] leading-none font-medium tracking-[-0.015em] text-foreground">
