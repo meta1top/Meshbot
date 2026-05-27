@@ -576,10 +576,9 @@ function SessionView() {
     if (timelineMessages.length === 0) return;
     if (!initialScrollDoneRef.current) {
       initialScrollDoneRef.current = true;
-      bottomRef.current?.scrollIntoView({
-        behavior: "instant",
-        block: "end",
-      });
+      // 不传 block：与 smooth 跟随保持一致（默认 "start"，sticky 输入框
+      // 不会遮挡末尾消息）。
+      bottomRef.current?.scrollIntoView({ behavior: "instant" });
       return;
     }
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
