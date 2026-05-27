@@ -4,6 +4,7 @@ import {
   type HistoryResponse,
   type HistoryToolCall,
   HistoryQuerySchema,
+  MessageFeedbackSchema,
   type MessageUsage,
   type PendingResponse,
   type SessionDeleteResponse,
@@ -23,6 +24,7 @@ import {
 import {
   AppendMessageDto,
   CreateSessionDto,
+  MessageFeedbackDto,
   SessionPatchDto,
 } from "../dto/session.dto";
 import { LlmCallService } from "../services/llm-call.service";
@@ -109,19 +111,28 @@ export class SessionController {
     const messages = rows
       .filter((r) => r.role !== "tool")
       .map((r) => {
+        const meta = r.metadata
+          ? (JSON.parse(r.metadata) as Record<string, unknown>)
+          : null;
+        const fb =
+          meta && (meta.feedback === "up" || meta.feedback === "down")
+            ? (meta.feedback as "up" | "down")
+            : null;
         const base = {
           id: r.id,
           role: r.role as "user" | "assistant" | "system",
           content: r.content,
           ...(r.reasoning ? { reasoning: r.reasoning } : {}),
-          metadata: r.metadata
-            ? (JSON.parse(r.metadata) as {
-                kind: "compaction";
-                removedCount: number;
-                fromMessageId: string;
-                toMessageId: string;
-              })
-            : null,
+          metadata:
+            meta && meta.kind === "compaction"
+              ? (meta as unknown as {
+                  kind: "compaction";
+                  removedCount: number;
+                  fromMessageId: string;
+                  toMessageId: string;
+                })
+              : null,
+          feedback: fb,
         };
         if (r.role !== "assistant" || !r.toolCalls) return base;
         try {
@@ -183,6 +194,21 @@ export class SessionController {
     await this.sessions.regenerateAfter(sessionId, messageId);
     this.runner.kickResume(sessionId);
     return { regenerated: true };
+  }
+
+  /**
+   * 设置 assistant 消息反馈（点赞/不喜欢/取消）。
+   * 仅存储到 SessionMessage.metadata（与 compaction 占位行互不冲突）。
+   */
+  @Post(":sessionId/messages/:messageId/feedback")
+  async feedback(
+    @Param("sessionId") sessionId: string,
+    @Param("messageId") messageId: string,
+    @Body() body: MessageFeedbackDto,
+  ): Promise<{ feedback: "up" | "down" | null }> {
+    const { feedback } = MessageFeedbackSchema.parse(body);
+    await this.sessionMessages.setFeedback(sessionId, messageId, feedback);
+    return { feedback };
   }
 
   /** 取排队中 / 处理中的用户消息。 */
