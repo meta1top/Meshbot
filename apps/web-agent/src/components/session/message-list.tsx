@@ -173,15 +173,18 @@ export function MessageList({
                     ))}
                   </div>
                 )}
-              {m.role === "assistant" && m.content && !m.streaming && (
-                <AssistantMessageActions
-                  sessionId={sessionId}
-                  messageId={m.id}
-                  content={m.content}
-                  usage={usageByMessage?.[m.id]}
-                  feedback={m.feedback}
-                />
-              )}
+              {m.role === "assistant" &&
+                m.content &&
+                !m.streaming &&
+                !(m.toolCalls && m.toolCalls.length > 0) && (
+                  <AssistantMessageActions
+                    sessionId={sessionId}
+                    messageId={m.id}
+                    content={m.content}
+                    usage={usageByMessage?.[m.id]}
+                    feedback={m.feedback}
+                  />
+                )}
               {m.role === "user" && (
                 <UserMessageActions
                   sessionId={sessionId}
