@@ -92,6 +92,11 @@ function SessionView() {
    * - 用户滚回底部（或点「滚到底」按钮）→ bottomRef IO 报 intersecting → true
    */
   const [stickToBottom, setStickToBottom] = useState(true);
+  /**
+   * 首次进入会话的 instant 跳底哨兵：跟随 effect 第一次触发时用 instant（无动画）
+   * 直接到底，之后再用 smooth 跟流。切会话时（initSession effect）会被重置 false。
+   */
+  const initialScrollDoneRef = useRef(false);
 
   const usageByMessage = useAtomValue(usageByMessageAtom);
   const sessionTotals = useAtomValue(sessionTotalsAtom);
@@ -181,6 +186,7 @@ function SessionView() {
     oldestMessageIdRef.current = null;
     hasMoreHistoryRef.current = true;
     setHasMoreHistory(true);
+    initialScrollDoneRef.current = false;
     resetUsage();
     let cancelled = false;
 
@@ -559,10 +565,21 @@ function SessionView() {
   /**
    * 新消息或流式增量到达时，仅在 stickToBottom=true 时自动滚到底。
    * 用户主动滚离底部时停止跟随；点右下角按钮可恢复。
+   *
+   * 首次触发（initialScrollDoneRef=false）走 instant：history fetch 完成后
+   * 视口直接到底，无「先看顶 → 滑下来」闪烁。之后才用 smooth 跟流。
    */
   // biome-ignore lint/correctness/useExhaustiveDependencies: timelineMessages 仅作触发依赖，effect 体不直接读取
   useEffect(() => {
     if (!stickToBottom) return;
+    if (!initialScrollDoneRef.current) {
+      initialScrollDoneRef.current = true;
+      bottomRef.current?.scrollIntoView({
+        behavior: "instant",
+        block: "end",
+      });
+      return;
+    }
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [timelineMessages, stickToBottom]);
 
