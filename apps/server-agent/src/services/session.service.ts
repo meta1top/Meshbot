@@ -134,6 +134,11 @@ export class SessionService {
     return { content: row.content };
   }
 
+  /** 找会话，不存在返 null（不抛）。 */
+  findOrNull(sessionId: string): Promise<Session | null> {
+    return this.sessionRepo.findOneBy({ id: sessionId });
+  }
+
   /** 取会话，不存在抛 404。 */
   async findSessionOrFail(sessionId: string): Promise<Session> {
     const s = await this.sessionRepo.findOneBy({ id: sessionId });
