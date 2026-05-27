@@ -26,6 +26,17 @@ class FailingTool implements MeshbotTool<{ x: number }, string> {
   }
 }
 
+@Tool()
+class HugeTool implements MeshbotTool<Record<string, never>, string> {
+  readonly name = "huge";
+  readonly description = "Returns a giant result (模拟截图 base64)";
+  readonly schema = z.object({});
+  async execute(): Promise<string> {
+    // 50KB，超过 toolsNode 的 32KB LLM 上限
+    return `OK_PREFIX ${"A".repeat(50_000)}`;
+  }
+}
+
 function makeRegistry(tools: MeshbotTool[]): ToolRegistry {
   const fakeDisc = {
     getProviders: () => tools.map((t) => ({ instance: t })) as never,
@@ -98,6 +109,36 @@ describe("createToolsNode", () => {
     const end = events.find((e) => e.event === "run.tool_call_end");
     expect(end).toBeDefined();
     expect((end!.payload as { ok: boolean }).ok).toBe(false);
+  });
+
+  it("超大 tool 结果：给 LLM 的 ToolMessage 被截断，事件 content 仍是完整原文", async () => {
+    const emitter = new EventEmitter2();
+    const events: Array<{ event: string; payload: unknown }> = [];
+    emitter.onAny((event, payload) =>
+      events.push({ event: String(event), payload }),
+    );
+    const node = createToolsNode(makeRegistry([new HugeTool()]), () => ({
+      ...baseCtx,
+      emitter,
+    }));
+    const r = await node({
+      messages: [
+        new AIMessage({
+          content: "",
+          tool_calls: [{ id: "tc5", name: "huge", args: {} }],
+        }),
+      ],
+    });
+    const tm = r.messages![0] as ToolMessage;
+    const llmContent = String(tm.content);
+    // 给 LLM 的那份被截断（远小于 50KB），且保留了开头 + 截断提示
+    expect(llmContent.length).toBeLessThan(5_000);
+    expect(llmContent).toMatch(/^OK_PREFIX/);
+    expect(llmContent).toMatch(/已截断/);
+    // 但 run.tool_call_end 事件里的 content 是完整原文（落 session_messages 用）
+    const end = events.find((e) => e.event === "run.tool_call_end");
+    const fullContent = (end!.payload as { content: string }).content;
+    expect(fullContent.length).toBeGreaterThan(50_000);
   });
 
   it("emit run.tool_call_start 和 run.tool_call_end", async () => {
