@@ -1,19 +1,26 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@meshbot/design";
+import type { StatsRange, StatsResponse } from "@meshbot/types-agent";
 import { useSetAtom } from "jotai";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { addSessionAtom } from "@/atoms/sessions";
 import { ActivityHeatmap } from "@/components/common/activity-heatmap";
-import { ChatInput } from "@/components/common/chat-input";
+import {
+  ChatInput,
+  type ChatInputHandle,
+} from "@/components/common/chat-input";
+import { SuggestionChips } from "@/components/common/suggestion-chips";
 import { AppShellLayout } from "@/components/layouts/app-shell-layout";
+import { formatPeakHour, formatStreak } from "@/lib/format-stats";
+import { formatTokens } from "@/lib/format-tokens";
 import { createSession } from "@/rest/session";
+import { fetchStats } from "@/rest/stats";
 
-const heatmapData = Array.from({ length: 96 }, (_, index) =>
-  index === 79 ? 100 : index % 5 === 0 ? 50 : 0,
-);
+const RANGES: StatsRange[] = ["all", "30d", "7d"];
 
 export default function Home() {
   const t = useTranslations("home");
@@ -21,6 +28,34 @@ export default function Home() {
   const addSession = useSetAtom(addSessionAtom);
   const [sending, setSending] = useState(false);
   const [draft, setDraft] = useState("");
+  const inputRef = useRef<ChatInputHandle>(null);
+
+  // 随机标题：首帧用第 0 条，挂载后随机替换，避免 SSR/CSR hydration mismatch
+  const titles = (t.raw("titles") as string[]) ?? [t("title")];
+  const [titleIdx, setTitleIdx] = useState(0);
+  useEffect(() => {
+    if (titles.length > 1) {
+      setTitleIdx(Math.floor(Math.random() * titles.length));
+    }
+  }, [titles.length]);
+  const title = titles[titleIdx] ?? t("title");
+
+  // 真实 stats + range 筛选
+  const [range, setRange] = useState<StatsRange>("all");
+  const [stats, setStats] = useState<StatsResponse | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetchStats(range)
+      .then((s) => {
+        if (alive) setStats(s);
+      })
+      .catch(() => {
+        if (alive) setStats(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [range]);
 
   /** 发送消息：创建新会话并跳转到会话页 */
   const handleSend = async (msg: string) => {
@@ -36,23 +71,53 @@ export default function Home() {
     }
   };
 
+  const handlePickSuggestion = (text: string) => {
+    setDraft(text);
+    inputRef.current?.focus(text);
+  };
+
   const metrics = [
-    { label: t("metrics.sessions"), value: "3" },
-    { label: t("metrics.messages"), value: "947" },
-    { label: t("metrics.totalTokens"), value: "4.2M" },
-    { label: t("metrics.activeDays"), value: "1" },
-    { label: t("metrics.currentStreak"), value: "0d" },
-    { label: t("metrics.longestStreak"), value: "1d" },
-    { label: t("metrics.peakHour"), value: "6 PM" },
-    { label: t("metrics.favoriteModel"), value: "GPT-4o" },
+    { label: t("metrics.sessions"), value: String(stats?.sessions ?? 0) },
+    { label: t("metrics.messages"), value: String(stats?.messages ?? 0) },
+    {
+      label: t("metrics.totalTokens"),
+      value: stats ? formatTokens(stats.totalTokens) : "0",
+    },
+    { label: t("metrics.activeDays"), value: String(stats?.activeDays ?? 0) },
+    {
+      label: t("metrics.currentStreak"),
+      value: formatStreak(stats?.currentStreak ?? 0),
+    },
+    {
+      label: t("metrics.longestStreak"),
+      value: formatStreak(stats?.longestStreak ?? 0),
+    },
+    {
+      label: t("metrics.peakHour"),
+      value: formatPeakHour(stats?.peakHour ?? null),
+    },
+    {
+      label: t("metrics.favoriteModel"),
+      value: stats?.favoriteModel ?? "—",
+    },
   ];
+
+  const heatmapData = (stats?.heatmap ?? []).map((c) => c.count);
+  const heatmapMax = Math.max(1, ...heatmapData);
 
   return (
     <AppShellLayout>
       <div className="w-full max-w-[620px] flex-1">
-        <div className="mb-4 flex items-center gap-2 text-[38px] leading-none">
+        <div className="mb-4 flex items-center gap-3">
+          <Image
+            src="/logo.svg"
+            alt="meshbot"
+            width={36}
+            height={36}
+            className="shrink-0"
+          />
           <h1 className="text-[38px] leading-none font-medium tracking-[-0.015em] text-foreground">
-            {t("title")}
+            {title}
           </h1>
         </div>
 
@@ -60,11 +125,20 @@ export default function Home() {
           <CardHeader className="space-y-3 pb-2">
             <div className="flex items-center justify-end text-[12px] text-foreground/70">
               <div className="flex items-center gap-3">
-                <span className="rounded-md bg-accent px-2 py-1 font-medium text-foreground">
-                  {t("all")}
-                </span>
-                <span>30d</span>
-                <span>7d</span>
+                {RANGES.map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setRange(r)}
+                    className={
+                      r === range
+                        ? "rounded-md bg-accent px-2 py-1 font-medium text-foreground"
+                        : "px-1 py-1 text-foreground/70 hover:text-foreground"
+                    }
+                  >
+                    {r === "all" ? t("all") : r}
+                  </button>
+                ))}
               </div>
             </div>
             <CardTitle className="sr-only">{t("overviewMetrics")}</CardTitle>
@@ -86,12 +160,14 @@ export default function Home() {
               ))}
             </div>
 
-            <ActivityHeatmap data={heatmapData} maxValue={100} />
+            <ActivityHeatmap data={heatmapData} maxValue={heatmapMax} />
           </CardContent>
         </Card>
       </div>
       <div className="sticky bottom-4 mt-auto bg-background pt-4">
+        <SuggestionChips onPick={handlePickSuggestion} />
         <ChatInput
+          ref={inputRef}
           value={draft}
           onChange={setDraft}
           onSend={handleSend}
