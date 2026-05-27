@@ -5,7 +5,7 @@ import type { MessageUsage } from "@meshbot/types-agent";
 import { ChevronRight } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
-import { formatTokens } from "@/lib/format-tokens";
+import { AssistantMessageActions } from "./assistant-message-actions";
 import { CompactionRow } from "./compaction-row";
 import { MarkdownContent } from "./markdown-content";
 import { ToolCallBlock } from "./tool-call-block";
@@ -56,6 +56,8 @@ export interface TimelineMessage {
     removedCount?: number;
     [key: string]: unknown;
   } | null;
+  /** assistant 反馈态（来自 history）：up=点赞 down=不喜欢 null=未评价。 */
+  feedback?: "up" | "down" | null;
 }
 
 interface MessageListProps {
@@ -88,7 +90,6 @@ export function MessageList({
   onRegenerateOptimisticCut,
   usageByMessage,
 }: MessageListProps) {
-  const t = useTranslations("session");
   return (
     <div className="flex flex-col gap-8 pb-6">
       {messages
@@ -172,13 +173,15 @@ export function MessageList({
                     ))}
                   </div>
                 )}
-              {m.role === "assistant" &&
-                m.content &&
-                usageByMessage?.[m.id] && (
-                  <div className="text-[11px] text-muted-foreground">
-                    {renderUsageLine(usageByMessage[m.id], t)}
-                  </div>
-                )}
+              {m.role === "assistant" && m.content && !m.streaming && (
+                <AssistantMessageActions
+                  sessionId={sessionId}
+                  messageId={m.id}
+                  content={m.content}
+                  usage={usageByMessage?.[m.id]}
+                  feedback={m.feedback}
+                />
+              )}
               {m.role === "user" && (
                 <UserMessageActions
                   sessionId={sessionId}
@@ -268,22 +271,4 @@ function ReasoningBlock({
       )}
     </div>
   );
-}
-
-function renderUsageLine(
-  u: MessageUsage,
-  t: ReturnType<typeof useTranslations<"session">>,
-): string {
-  const parts: string[] = [u.model];
-  let inputPart = `${t("usage.inputLabel")} ${formatTokens(u.inputTokens)}`;
-  if (u.cacheReadTokens > 0) {
-    inputPart += `（${t("usage.cacheLabel")} ${formatTokens(u.cacheReadTokens)}）`;
-  }
-  parts.push(inputPart);
-  let outputPart = `${t("usage.outputLabel")} ${formatTokens(u.outputTokens)}`;
-  if (u.reasoningTokens > 0) {
-    outputPart += `（${t("usage.reasoningLabel")} ${formatTokens(u.reasoningTokens)}）`;
-  }
-  parts.push(outputPart);
-  return parts.join(" · ");
 }

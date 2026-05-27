@@ -208,6 +208,7 @@ function SessionView() {
                 })),
               }
             : {}),
+          feedback: m.feedback ?? null,
         }));
         const historyIds = new Set(history.messages.map((m) => m.id));
         if (history.inflight) {
