@@ -25,6 +25,7 @@ import {
   QueryResolver,
 } from "nestjs-i18n";
 import { AuthModule } from "./auth.module";
+import { CronJobModule } from "./cron-job.module";
 import { HealthController } from "./controllers/health.controller";
 import { ModelConfigController } from "./controllers/model-config.controller";
 import { SettingController } from "./controllers/setting.controller";
@@ -107,6 +108,7 @@ const meshbotDir = resolveMeshbotDir();
     // Phase 5 Track C1：结构化健康检查
     TerminusModule,
     AgentModule,
+    CronJobModule,
     SessionModule,
     AuthModule,
     StaticModule.forRoot(),

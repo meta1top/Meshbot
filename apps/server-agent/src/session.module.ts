@@ -1,13 +1,11 @@
-import { AgentModule, SCHEDULE_TOOLS_PORT } from "@meshbot/agent";
+import { AgentModule } from "@meshbot/agent";
 import { TxTypeOrmModule } from "@meshbot/common";
 import { Module } from "@nestjs/common";
 import { CheckpointerCleanupService } from "./services/checkpointer-cleanup.service";
 import { ContextCompactor } from "./services/context-compactor.service";
-import { CronJobController } from "./controllers/cron-job.controller";
 import { SessionController } from "./controllers/session.controller";
 import { StatsController } from "./controllers/stats.controller";
 import { SuggestionController } from "./controllers/suggestion.controller";
-import { CronJob } from "./entities/cron-job.entity";
 import { LlmCall } from "./entities/llm-call.entity";
 import { ModelConfig } from "./entities/model-config.entity";
 import { PendingMessage } from "./entities/pending-message.entity";
@@ -17,7 +15,6 @@ import { LlmCallService } from "./services/llm-call.service";
 import { ModelConfigService } from "./services/model-config.service";
 import { RunnerService } from "./services/runner.service";
 import { ScheduleExecutor } from "./services/schedule-executor.service";
-import { ScheduleService } from "./services/schedule.service";
 import { SessionMessageService } from "./services/session-message.service";
 import { SessionService } from "./services/session.service";
 import { SessionTitleService } from "./services/session-title.service";
@@ -35,17 +32,11 @@ import { SessionGateway } from "./ws/session.gateway";
       LlmCall,
       SessionMessage,
       ModelConfig,
-      CronJob,
     ]),
     AgentModule,
     AuthModule,
   ],
-  controllers: [
-    SessionController,
-    StatsController,
-    SuggestionController,
-    CronJobController,
-  ],
+  controllers: [SessionController, StatsController, SuggestionController],
   providers: [
     CheckpointerCleanupService,
     ContextCompactor,
@@ -58,21 +49,7 @@ import { SessionGateway } from "./ws/session.gateway";
     ModelConfigService,
     StatsService,
     SuggestionService,
-    ScheduleService,
     ScheduleExecutor,
-    {
-      provide: SCHEDULE_TOOLS_PORT,
-      useFactory: (svc: ScheduleService) => ({
-        create: (input: Parameters<ScheduleService["create"]>[0]) =>
-          svc
-            .create(input)
-            .then((j) => ({ id: j.id, nextFireAt: j.nextFireAt })),
-        listBySession: (sid: string) => svc.listBySession(sid),
-        findOwnedBy: (id: string, sid: string) => svc.findOwnedBy(id, sid),
-        delete: (id: string) => svc.delete(id),
-      }),
-      inject: [ScheduleService],
-    },
   ],
   exports: [
     CheckpointerCleanupService,
@@ -83,7 +60,6 @@ import { SessionGateway } from "./ws/session.gateway";
     SessionMessageService,
     SessionTitleService,
     ModelConfigService,
-    ScheduleService,
   ],
 })
 export class SessionModule {}
