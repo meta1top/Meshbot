@@ -166,7 +166,7 @@ export default function Home() {
               ))}
             </div>
 
-            <ActivityHeatmap cells={stats?.heatmap ?? []} weeks={14} />
+            <ActivityHeatmap cells={stats?.heatmap ?? []} weeks={26} />
           </CardContent>
         </Card>
       </div>
