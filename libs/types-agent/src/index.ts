@@ -11,5 +11,6 @@ export {
   registerSchema,
   type UserInfo,
 } from "./auth";
+export * from "./schedule";
 export * from "./session";
 export * from "./stats";
