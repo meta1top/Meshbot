@@ -137,25 +137,25 @@
   },
   "home": {
     "title": "What's up next?",
-    "titles": {
-      "0": "What's up next?",
-      "1": "What are we working on?",
-      "2": "Where shall we start?",
-      "3": "What can I help with?",
-      "4": "Ready when you are."
-    },
-    "defaultSuggestions": {
-      "0": "Help me plan today's tasks",
-      "1": "Explain a snippet of code",
-      "2": "Draft a technical proposal"
-    },
-    "inputPlaceholders": {
-      "0": "Enter a task or question",
-      "1": "What would you like to do?",
-      "2": "Describe what you need",
-      "3": "What are you working on?",
-      "4": "Got an idea?"
-    },
+    "titles": [
+      "What's up next?",
+      "What are we working on?",
+      "Where shall we start?",
+      "What can I help with?",
+      "Ready when you are."
+    ],
+    "defaultSuggestions": [
+      "Help me plan today's tasks",
+      "Explain a snippet of code",
+      "Draft a technical proposal"
+    ],
+    "inputPlaceholders": [
+      "Enter a task or question",
+      "What would you like to do?",
+      "Describe what you need",
+      "What are you working on?",
+      "Got an idea?"
+    ],
     "overview": "Overview",
     "models": "Models",
     "all": "All",
