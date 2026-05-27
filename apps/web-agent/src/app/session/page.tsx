@@ -563,7 +563,12 @@ function SessionView() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: timelineMessages 仅作触发依赖，effect 体不直接读取
   useEffect(() => {
     if (!stickToBottom) return;
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    // instant：流式 chunk 持续到达时多次重触发也不会动画堆叠；
+    // 与用户手势同帧争抢 scrollTop 的卡顿一并消除。
+    bottomRef.current?.scrollIntoView({
+      behavior: "instant",
+      block: "end",
+    });
   }, [timelineMessages, stickToBottom]);
 
   /**
@@ -814,7 +819,12 @@ function SessionView() {
             className="absolute right-2 -top-12 flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background text-foreground shadow-sm hover:bg-muted"
             onClick={() => {
               setStickToBottom(true);
-              bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+              // instant：流式期间点击时立刻贴底；后续 chunk 走同款 instant 跟随，
+              // 不再有「动画跟不上 chunk」的累积。
+              bottomRef.current?.scrollIntoView({
+                behavior: "instant",
+                block: "end",
+              });
             }}
           >
             <ArrowDown className="h-4 w-4" />
