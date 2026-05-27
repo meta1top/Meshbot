@@ -38,7 +38,6 @@
     "check:strict": "pnpm check:tx -- --strict && pnpm check:naming -- --strict && pnpm check:lock-tx -- --strict && pnpm check:repo -- --strict && pnpm check:dead -- --strict && pnpm check:error-code -- --strict",
     "check:parallel": "pnpm run \"/^check:(tx|naming|lock-tx|repo|dead|error-code)$/\"",
     "sync:locales": "tsx scripts/sync-locales.ts",
-    "sync:skills": "tsx scripts/sync-skills.ts",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "changeset publish",

@@ -84,7 +84,7 @@ export type ApiKeyCreateFormData = z.infer<typeof ApiKeyCreateFormSchema>;
 
 ### 4. 页面文案与标签（web-agent / web-main 均强制 i18n）
 
-- 页面可见字符串（标题、`label`、`placeholder`、按钮文字）使用 `useTranslation()` 的 `t("…")`，与 `useSchema` 共用同一套 i18n 资源（详见 `i18n-key-convention.mdc`）。
+- 页面可见字符串（标题、`label`、`placeholder`、按钮文字）使用 `useTranslation()` 的 `t("…")`，与 `useSchema` 共用同一套 i18n 资源（详见 `i18n-page` 技能）。
 
 ### 5. 提交与副作用
 

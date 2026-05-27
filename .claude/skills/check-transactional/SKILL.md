@@ -196,7 +196,7 @@ async create(...) { ... }
 
 | 阶段 | 工具 | 角色 |
 |---|---|---|
-| 写代码时 | `service-tx-lock-cache.mdc`、`service-repo-access.mdc` | 让 AI / 人按规范写 |
+| 写代码时 | `service-tx-lock-cache`、`service-repo-access` 技能 | 让 AI / 人按规范写 |
 | 写完后 | 本 skill + `pnpm check:tx` | 静态围栏验证产出是否合规 |
 | 重构验证 | 同上 + 单元测试 | 双保险 |
 

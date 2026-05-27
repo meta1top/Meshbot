@@ -67,12 +67,9 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Static fences (5, strict)
+      - name: Static fences (6, strict)
         # strict 模式：任意 finding ≥ 1 即 exit 1，不靠 baseline 增量
         run: pnpm check:strict
-
-      - name: Skills sync check
-        run: pnpm sync:skills -- --check
 
       - name: Locales sync check
         run: pnpm sync:locales -- --check

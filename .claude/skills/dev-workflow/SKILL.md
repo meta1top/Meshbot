@@ -9,7 +9,7 @@ description: "开发工作流规范：brainstorm → 编码 → 单元测试 →
 
 启动任何**创建功能 / 新增组件 / 修改行为**类的任务之前，**必须**先走一轮 brainstorm，不要上来就动代码。
 
-- 触发 superpowers 的 [`brainstorming` skill](mdc:.cursor/plugins/cache/cursor-public/superpowers/.../skills/brainstorming/SKILL.md)（或在没有 superpowers 环境时按其精神：先澄清意图、约束、边界与设计取舍）
+- 触发 superpowers 的 `brainstorming` 技能（或在没有 superpowers 环境时按其精神：先澄清意图、约束、边界与设计取舍）
 - 输出至少包含：要解决什么问题、关键设计决策、影响范围、可能的反例
 - **不要**把 brainstorm 输出沉淀为长 PRD 文档（项目已不再依赖 PRD 流程）；写在对话里、记在 commit 信息里、或必要时落到 `docs/audits/` 或邻近设计 README 中即可
 
@@ -54,10 +54,12 @@ description: "开发工作流规范：brainstorm → 编码 → 单元测试 →
 
 | Skill | 命令 | 检查内容 |
 |---|---|---|
-| [`check-transactional`](mdc:.cursor/skills/check-transactional/SKILL.md) | `pnpm check:tx` | `@Transactional()` 是否合规（MISSING / WRONG_IMPORT / REDUNDANT / BYPASS） |
-| [`check-method-naming`](mdc:.cursor/skills/check-method-naming/SKILL.md) | `pnpm check:naming` | 事务方法命名与 `@Transactional()` 是否一致（PRIVATE_TX_NAMING / MISSING_TX_ON_NAMED） |
-| [`check-lock-tx`](mdc:.cursor/skills/check-lock-tx/SKILL.md) | `pnpm check:lock-tx` | 事务-锁倒置（LOCK_INSIDE_TX_DECORATOR / LOCK_INSIDE_TX_CALL） |
-| [`check-repo-access`](mdc:.cursor/skills/check-repo-access/SKILL.md) | `pnpm check:repo` | Repository 注入是否合规（DUP_OWNER / NON_SERVICE_INJECT / CROSS_LIB_INJECT） |
+| `check-transactional` | `pnpm check:tx` | `@Transactional()` 是否合规（MISSING / WRONG_IMPORT / REDUNDANT / BYPASS） |
+| `check-method-naming` | `pnpm check:naming` | 事务方法命名与 `@Transactional()` 是否一致（PRIVATE_TX_NAMING / MISSING_TX_ON_NAMED） |
+| `check-lock-tx` | `pnpm check:lock-tx` | 事务-锁倒置（LOCK_INSIDE_TX_DECORATOR / LOCK_INSIDE_TX_CALL） |
+| `check-repo-access` | `pnpm check:repo` | Repository 注入是否合规（DUP_OWNER / NON_SERVICE_INJECT / CROSS_LIB_INJECT） |
+| `check-dead-exports` | `pnpm check:dead` | 没人引用的 named export |
+| `check-error-code` | `pnpm check:error-code` | 错误码重复 / 越界 / 断号 |
 
 四个脚本都是**默认增量写报告**——只有出现新增 finding 时才生成新的 `<YYYY-MM-DD-HHmm>.md` + `.json`：
 
@@ -146,11 +148,11 @@ description: "开发工作流规范：brainstorm → 编码 → 单元测试 →
 
 豁免时建议在 commit 信息或方法注释中写一句"重复调用安全，无需幂等键"等说明，方便 reviewer 快速判断；避免后续读者重新追问。
 
-### 与 `service-tx-lock-cache.mdc` 的关系
+### 与 `service-tx-lock-cache` 技能 的关系
 
 | 关注点 | 由谁约束 |
 |---|---|
-| 单方法内的事务边界（`@Transactional`） | `service-tx-lock-cache.mdc` + `pnpm check:tx` + `pnpm check:naming` + `pnpm check:lock-tx` |
+| 单方法内的事务边界（`@Transactional`） | `service-tx-lock-cache` 技能 + `pnpm check:tx` + `pnpm check:naming` + `pnpm check:lock-tx` |
 | 跨方法 / 跨服务的"重复执行 + 失败恢复" | **本节**（设计层，无静态检查兜底） |
 
 事务装饰器只保证"本地多写要么全成要么全败"，**不解决**"客户端重发 / MQ 重投 / 上游重试"问题——这是本节的职责。

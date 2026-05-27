@@ -82,8 +82,7 @@ pnpm install --frozen-lockfile
 pnpm dev:db:up                       # e2e 依赖 Postgres
 pnpm lint                            # Biome
 pnpm typecheck                       # 全包 TS 类型检查
-pnpm check:strict                    # 5 围栏（CI 用 strict；本地 pnpm check 走 baseline 增量亦可）
-pnpm sync:skills -- --check          # .cursor/rules ↔ .claude/skills 一致性
+pnpm check:strict                    # 6 围栏（CI 用 strict；本地 pnpm check 走 baseline 增量亦可）
 pnpm sync:locales -- --check         # i18n key 对齐
 pnpm test                            # Jest（含 server-main e2e）
 pnpm build                           # turbo run build

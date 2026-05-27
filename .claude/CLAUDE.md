@@ -9,7 +9,7 @@
 | 命令 | 说明 |
 |------|------|
 | `pnpm dev:server-agent` | 本地 Agent 后端（NestJS watch，端口 3100） |
-| `pnpm dev:server-main` | 云协同后端（NestJS watch，端口 3200，Phase 3 起有内容） |
+| `pnpm dev:server-main` | 云协同后端（NestJS watch，端口 3200） |
 | `pnpm dev:web-agent` | 桌面端 UI（Next.js，端口 3001） |
 | `pnpm dev:web-main` | 云协同前端（Next.js，端口 3002） |
 | `pnpm dev:desktop` | Electron 桌面壳 |
@@ -43,7 +43,7 @@ meshbot 是 **本地优先 + 云端协同** 的双形态 AI Agent 平台。
 ```
 apps/
 ├── server-agent/   NestJS 本地 Agent 后端（SQLite + LangGraph）
-├── server-main/    NestJS 云协同后端（Postgres，Phase 3 起步）
+├── server-main/    NestJS 云协同后端（Postgres）
 ├── web-agent/      Next.js 桌面端 UI
 ├── web-main/       Next.js 云协同前端
 ├── desktop/        Electron 壳（fork server-agent）
@@ -87,30 +87,30 @@ packages/
 
 ### 数据库规范
 
-- **本地轨**（SQLite）：当前用 `synchronize: true`（Phase 3 切换到迁移文件）；DataSource 启用 `journal_mode=WAL` + `busy_timeout=5000` 缓解 SQLITE_BUSY（通过 `prepareDatabase` 回调）
-- **云端轨**（Postgres，Phase 3 起）：迁移文件 + 幂等 SQL（`IF NOT EXISTS`）+ 索引 `CONCURRENTLY` + 列名 snake_case + 逻辑外键
+- **本地轨**（SQLite）：用 TypeORM 迁移文件管理 schema（`synchronize:false` + `migrationsRun:true`，启动自动跑迁移）；DataSource 启用 `journal_mode=WAL` + `busy_timeout=5000` 缓解 SQLITE_BUSY（通过 `prepareDatabase` 回调）
+- **云端轨**（Postgres）：迁移文件 + 幂等 SQL（`IF NOT EXISTS`）+ 索引 `CONCURRENTLY` + 列名 snake_case + 逻辑外键
 - 禁止数据库级别外键约束（不使用 `@ManyToOne`/`@OneToMany`/`@JoinColumn`）
 
 ### Zod / DTO（共享数据模型）
 
 - 跨域 schema 放 `libs/types`；域内 schema 放 `libs/types-<domain>`
 - `libs/types-*` **禁止依赖 NestJS / TypeORM**
-- 后端用 `createZodDto(schema)` 把 Zod 转 NestJS DTO 类（Phase 2 视决策升级为 i18n 版）
+- 后端用 `createZodDto(schema)` 把 Zod 转 NestJS DTO 类
 - Entity 与 Schema 分离：Entity 在业务代码或 `libs/<domain>/`，Schema 在 `libs/types-<domain>/`
 
-### 前端表单（Phase 2 补全）
+### 前端表单
 
-Phase 1 暂未引入 Form/FormItem 封装；现阶段写表单允许直接用 shadcn 组件。Phase 2 后必须走 `Form/FormItem` + `useSchema`。
+写表单走 `Form/FormItem` + `useSchema`（共享 Zod Schema + 多语言，详见 `web-form-convention` 技能）。
 
 ### 测试
 
 - 新代码默认 Jest；`libs/agent` 历史用 vitest，不强行统一
 - 装饰器、Provider、围栏脚本必须有单测
-- E2E 测试 Phase 3 起引入
+- E2E 测试覆盖 server-main（含 Postgres service）
 
 ### 其他
 
-- 数据库列名 snake_case（项目配置 `SnakeNamingStrategy`，Phase 3 落地）
+- 数据库列名 snake_case（项目配置 `SnakeNamingStrategy`）
 - 公开方法包含中文 JSDoc
 - 禁止在 `if` 前一行放置注释（Biome 格式化会破坏结构）
 - 不新建 PRD 文档，设计决策记在对话或 commit 中
@@ -127,11 +127,5 @@ Phase 1 暂未引入 Form/FormItem 封装；现阶段写表单允许直接用 sh
 
 | 应用 | 数据库 | 当前 Entity |
 |------|--------|-------------|
-| server-agent | `agent.db`（SQLite，`~/.meshbot/`，TypeORM 迁移管理） | `User` / `Setting` / `ModelConfig` / `Session` / `PendingMessage` |
-| server-main | Postgres（Phase 3，TypeORM 迁移管理） | `AppUser`（注册 / 登录框架基线；真实业务由 meshbot 自行扩展） |
-
-## Phase 进度
-
-Phase 1（地基）✅ / Phase 2（工程化 harness）✅ / Phase 3（云端轨框架基线）✅ / Phase 4（CI/CD + Redis + Docker + 发布工具链）✅ / Phase 5（错误码 + 响应 envelope + Trace ID + 限流 + Health + Swagger + Snowflake + 软删除）✅ / Phase 6（Throttler Redis storage + RedisLock watchdog + Snowflake auto NODE_ID + env Zod 校验 + WebSocket Gateway 框架）✅
-
-各 Phase 已完成范围、踩坑、设计依据见 [`docs/PHASE_HISTORY.md`](../docs/PHASE_HISTORY.md)。
+| server-agent | `agent.db`（SQLite，`~/.meshbot/`，TypeORM 迁移管理） | `User` / `Setting` / `ModelConfig` / `Session` / `SessionMessage` / `LlmCall` / `PendingMessage` |
+| server-main | Postgres（TypeORM 迁移管理） | `AppUser`（注册 / 登录框架基线；真实业务由 meshbot 自行扩展） |

@@ -28,7 +28,7 @@ pnpm dev:cli-agent            # CLI Agent 工具
 
 ## 提交 PR 前本地检查
 
-仓库已配置 husky pre-commit 自动跑：Biome（lint-staged） + 5 围栏 + sync:skills + sync:locales --check。
+仓库已配置 husky pre-commit 自动跑：Biome（lint-staged） + 6 围栏 + sync:locales --check。
 
 如果想手工完整复刻 CI（包括 strict 围栏 + 全量测试）：
 
@@ -38,15 +38,14 @@ pnpm dev:db:up
 pnpm lint
 pnpm typecheck
 pnpm check:strict             # 严格模式（CI 用）；本地 pnpm check 走 baseline 增量
-pnpm sync:skills -- --check
 pnpm sync:locales -- --check
 pnpm test
 pnpm build
 ```
 
-## 静态围栏（5 个）
+## 静态围栏（6 个）
 
-仓库通过 5 个静态围栏维护代码规约：
+仓库通过 6 个静态围栏维护代码规约：
 
 | 围栏 | 命令 | 检查内容 |
 |---|---|---|
@@ -55,6 +54,7 @@ pnpm build
 | `check:lock-tx` | `pnpm check:lock-tx` | 事务-锁倒置漏洞（`@WithLock` 不能在 `@Transactional` 内） |
 | `check:repo` | `pnpm check:repo` | Entity 唯一归属 Service / 非 Service 注入 Repository / 跨 lib 注入 |
 | `check:dead` | `pnpm check:dead` | 没人引用的 named export |
+| `check:error-code` | `pnpm check:error-code` | 错误码重复 / 越界 / 断号 |
 
 详见 [`.claude/CLAUDE.md`](.claude/CLAUDE.md) 「关键约定」节。
 
@@ -78,7 +78,7 @@ pnpm build
   # agent 同理：:agent 后缀
   ```
 
-- 迁移规约：snake_case 列名 / 逻辑外键 / 幂等 SQL（`IF NOT EXISTS`） / pgcrypto。详见 `.cursor/rules/migrations-ddl.mdc`
+- 迁移规约：snake_case 列名 / 逻辑外键 / 幂等 SQL（`IF NOT EXISTS`） / pgcrypto。详见 [`.claude/CLAUDE.md`](.claude/CLAUDE.md) 「数据库规范」节与 `shared-data-model` 技能
 
 ## 提交规范
 
