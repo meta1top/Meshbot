@@ -271,4 +271,25 @@ export class SessionMessageService {
     for (const r of hourRows) byHour[Number(r.hour)] = Number(r.count);
     return { total, byDate, byHour };
   }
+
+  /**
+   * 设置 assistant 消息反馈。feedback=null 清空。
+   * 校验 messageId 属于 sessionId（否则 NotFound）。metadata 单表 update。
+   */
+  async setFeedback(
+    sessionId: string,
+    messageId: string,
+    feedback: "up" | "down" | null,
+  ): Promise<void> {
+    const row = await this.repo.findOneBy({ id: messageId });
+    if (!row || row.sessionId !== sessionId) {
+      throw new NotFoundException(
+        `SessionMessage ${messageId} not found in session ${sessionId}`,
+      );
+    }
+    await this.repo.update(
+      { id: messageId },
+      { metadata: feedback ? JSON.stringify({ feedback }) : null },
+    );
+  }
 }
