@@ -95,7 +95,37 @@
     "attachment": "添加附件"
   },
   "schedule": {
-    "title": "计划任务"
+    "title": "计划任务",
+    "empty": "暂无计划任务，让 agent 帮你创建或点右上角「新建」",
+    "newJob": "新建",
+    "kindCron": "重复（cron）",
+    "kindOnce": "一次性",
+    "cronExpr": "cron 表达式",
+    "cronPlaceholder": "0 7 * * *",
+    "cronPreview": "下次：{next}",
+    "timezone": "时区",
+    "runAt": "执行时间",
+    "prompt": "投递内容",
+    "promptPlaceholder": "到点后会作为 user 消息发到所选会话",
+    "session": "目标会话",
+    "jobTitle": "任务名",
+    "jobTitlePlaceholder": "例：每日早报",
+    "save": "创建",
+    "cancel": "取消",
+    "delete": "删除",
+    "enable": "启用",
+    "disable": "停用",
+    "enabled": "启用中",
+    "disabled": "已停用",
+    "nextFire": "下次：{when}",
+    "lastFire": "上次：{when}",
+    "deleteConfirm": "确定删除「{title}」吗？",
+    "validation": {
+      "cronRequired": "请输入 cron 表达式",
+      "cronInvalid": "cron 表达式无效",
+      "runAtRequired": "请选择执行时间",
+      "runAtPast": "执行时间必须在未来"
+    }
   },
   "session": {
     "scrollToBottom": "滚动到底部",

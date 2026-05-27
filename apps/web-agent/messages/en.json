@@ -95,7 +95,37 @@
     "attachment": "Add attachment"
   },
   "schedule": {
-    "title": "Scheduled tasks"
+    "title": "Scheduled tasks",
+    "empty": "No scheduled tasks yet. Ask the agent to create one or click \"New\"",
+    "newJob": "New",
+    "kindCron": "Recurring (cron)",
+    "kindOnce": "One-shot",
+    "cronExpr": "Cron expression",
+    "cronPlaceholder": "0 7 * * *",
+    "cronPreview": "Next: {next}",
+    "timezone": "Timezone",
+    "runAt": "Run at",
+    "prompt": "Prompt",
+    "promptPlaceholder": "Sent as a user message to the target session when fired",
+    "session": "Target session",
+    "jobTitle": "Title",
+    "jobTitlePlaceholder": "e.g. Morning briefing",
+    "save": "Create",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "enable": "Enable",
+    "disable": "Disable",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "nextFire": "Next: {when}",
+    "lastFire": "Last: {when}",
+    "deleteConfirm": "Delete \"{title}\"?",
+    "validation": {
+      "cronRequired": "Cron expression required",
+      "cronInvalid": "Invalid cron expression",
+      "runAtRequired": "Run-at time required",
+      "runAtPast": "Run-at must be in the future"
+    }
   },
   "session": {
     "scrollToBottom": "Scroll to bottom",
