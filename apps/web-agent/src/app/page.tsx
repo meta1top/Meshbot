@@ -89,7 +89,6 @@ export default function Home() {
   const metrics: Array<{
     label: string;
     value: string;
-    valueClassName?: string;
   }> = [
     { label: t("metrics.sessions"), value: String(stats?.sessions ?? 0) },
     { label: t("metrics.messages"), value: String(stats?.messages ?? 0) },
@@ -113,8 +112,6 @@ export default function Home() {
     {
       label: t("metrics.favoriteModel"),
       value: stats?.favoriteModel ?? "—",
-      // 模型名可能很长（deepseek-v4-pro）—— 用 truncate 单行，hover 看全
-      valueClassName: "text-[15px] leading-tight truncate",
     },
   ];
 
@@ -162,9 +159,7 @@ export default function Home() {
               {metrics.map((item) => (
                 <div key={item.label} className="min-w-0">
                   <p className="text-[11px] text-foreground/55">{item.label}</p>
-                  <p
-                    className={`font-semibold tracking-tight text-foreground ${item.valueClassName ?? "text-[18px] leading-tight truncate"}`}
-                  >
+                  <p className="text-[18px] leading-tight font-semibold tracking-tight wrap-break-word text-foreground">
                     {item.value}
                   </p>
                 </div>
