@@ -15,7 +15,7 @@ import { SessionMessageService } from "./session-message.service";
 // === 配置常量（v1 hardcoded；v2 挪到 ModelConfig 列或单独配置） ===
 const COMPACTION_TRIGGER_RATIO = 0.9;
 const COMPACTION_RECENT_RATIO = 0.1;
-const COMPACTION_SUMMARY_MAX_TOKENS = 600;
+const COMPACTION_SUMMARY_MAX_TOKENS = 1500;
 const COMPACTION_SUMMARIZE_TIMEOUT_MS = 60_000;
 
 /** 触发场景标签，影响 WS 事件的 reason 字段。 */
@@ -127,6 +127,7 @@ export class ContextCompactor {
       return null;
     }
     const toSummarize = messages.slice(0, splitIdx);
+    const keep = messages.slice(splitIdx);
 
     // 发 start 事件
     this.emitter.emit(SESSION_WS_EVENTS.runCompactionStart, {
@@ -150,13 +151,16 @@ export class ContextCompactor {
       throw new CompactionError("Summarize LLM call failed", err);
     }
 
-    // 改写 checkpointer
+    // 改写 checkpointer。removeIds 传「所有带 id 的消息」（摘要区 + 保留区）：
+    // 摘要区删掉换摘要；保留区删掉后由 applyCompaction 按序重新 append 到摘要之后，
+    // 实现 [system, summary, ...keep] 的目标顺序。系统提示词无 id，不在此列、自动留最前。
     try {
       await this.graph.applyCompaction(sessionId, {
-        removeIds: toSummarize
+        removeIds: messages
           .map((m) => m.id)
           .filter((id): id is string => typeof id === "string"),
         summaryText,
+        keep,
       });
     } catch (err) {
       this.emitter.emit(SESSION_WS_EVENTS.runCompactionError, {
