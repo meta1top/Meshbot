@@ -1,4 +1,4 @@
-import { AgentModule } from "@meshbot/agent";
+import { AgentModule, SCHEDULE_TOOLS_PORT } from "@meshbot/agent";
 import { TxTypeOrmModule } from "@meshbot/common";
 import { Module } from "@nestjs/common";
 import { CheckpointerCleanupService } from "./services/checkpointer-cleanup.service";
@@ -60,6 +60,19 @@ import { SessionGateway } from "./ws/session.gateway";
     SuggestionService,
     ScheduleService,
     ScheduleExecutor,
+    {
+      provide: SCHEDULE_TOOLS_PORT,
+      useFactory: (svc: ScheduleService) => ({
+        create: (input: Parameters<ScheduleService["create"]>[0]) =>
+          svc
+            .create(input)
+            .then((j) => ({ id: j.id, nextFireAt: j.nextFireAt })),
+        listBySession: (sid: string) => svc.listBySession(sid),
+        findOwnedBy: (id: string, sid: string) => svc.findOwnedBy(id, sid),
+        delete: (id: string) => svc.delete(id),
+      }),
+      inject: [ScheduleService],
+    },
   ],
   exports: [
     CheckpointerCleanupService,

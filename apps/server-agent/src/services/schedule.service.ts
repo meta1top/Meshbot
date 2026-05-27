@@ -125,4 +125,16 @@ export class ScheduleService {
   ): Promise<void> {
     await this.repo.update({ id }, patch);
   }
+
+  /** 按 (id, sessionId) 查；仅返回属于该 session 的行（防越权工具用）。 */
+  async findOwnedBy(id: string, sessionId: string): Promise<CronJob | null> {
+    const row = await this.repo.findOneBy({ id });
+    if (!row || row.sessionId !== sessionId) return null;
+    return row;
+  }
+
+  /** ScheduleToolsPort 别名：列当前 session 任务。 */
+  listBySession(sessionId: string): Promise<CronJob[]> {
+    return this.list({ sessionId });
+  }
 }

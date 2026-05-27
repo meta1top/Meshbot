@@ -21,3 +21,8 @@ export type { SkillContent, SkillEntry } from "./skills/skill.types";
 export { ToolRegistry } from "./tools/tool-registry";
 export type { MeshbotTool, ToolContext } from "./tools/tool.types";
 export { Tool, TOOL_METADATA_KEY } from "./tools/tool.decorator";
+export {
+  SCHEDULE_TOOLS_PORT,
+  type ScheduleToolsPort,
+  type ScheduleJobView,
+} from "./tools/schedule-tools.port";

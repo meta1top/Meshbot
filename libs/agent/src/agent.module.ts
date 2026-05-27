@@ -10,6 +10,9 @@ import { SkillService } from "./skills/skill.service";
 import { ToolRegistry } from "./tools/tool-registry";
 import { BashTool } from "./tools/builtins/bash.tool";
 import { DateTool } from "./tools/builtins/date.tool";
+import { ScheduleCreateTool } from "./tools/builtins/schedule-create.tool";
+import { ScheduleDeleteTool } from "./tools/builtins/schedule-delete.tool";
+import { ScheduleListTool } from "./tools/builtins/schedule-list.tool";
 import { SkillListTool } from "./tools/builtins/skill-list.tool";
 import { SkillLoadTool } from "./tools/builtins/skill-load.tool";
 
@@ -23,6 +26,9 @@ import { SkillLoadTool } from "./tools/builtins/skill-load.tool";
     ToolRegistry,
     BashTool,
     DateTool,
+    ScheduleCreateTool,
+    ScheduleListTool,
+    ScheduleDeleteTool,
     SkillService,
     SkillListTool,
     SkillLoadTool,
