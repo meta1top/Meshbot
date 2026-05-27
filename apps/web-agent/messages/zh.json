@@ -119,6 +119,13 @@
       "nextRequestLabel": "下次预估",
       "cumulativeLabel": "累计"
     },
+    "actions": {
+      "copy": "复制",
+      "copied": "已复制",
+      "usage": "用量",
+      "like": "赞",
+      "dislike": "不喜欢"
+    },
     "compaction": {
       "bannerThreshold": "会话历史压缩中…",
       "bannerCtxExceeded": "上下文已满，正在压缩历史以继续…",

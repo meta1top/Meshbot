@@ -119,6 +119,13 @@
       "nextRequestLabel": "Next request",
       "cumulativeLabel": "Cumulative"
     },
+    "actions": {
+      "copy": "Copy",
+      "copied": "Copied",
+      "usage": "Usage",
+      "like": "Like",
+      "dislike": "Dislike"
+    },
     "compaction": {
       "bannerThreshold": "Compacting conversation history…",
       "bannerCtxExceeded": "Context full; compacting to continue…",
