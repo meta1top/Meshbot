@@ -58,6 +58,13 @@ describe("SessionService", () => {
         this.__cuts.push({ threadId, cutoff: cutoffMessageId });
       },
     };
+    // 假 ScheduleService：deleteBySession 只记调用，验证 deleteSession 触达 schedules
+    const fakeSchedules = {
+      __deletions: [] as string[],
+      async deleteBySession(sessionId: string) {
+        this.__deletions.push(sessionId);
+      },
+    };
     service = new SessionService(
       ds.getRepository(Session),
       ds.getRepository(PendingMessage),
@@ -65,6 +72,7 @@ describe("SessionService", () => {
       sessionMessages,
       checkpointer,
       fakeGraph as unknown as GraphService,
+      fakeSchedules as unknown as any,
     );
     // 暴露给 deleteSession / regenerateAfter 测试用
     (

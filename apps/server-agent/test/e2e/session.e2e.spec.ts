@@ -7,6 +7,7 @@ import { Test } from "@nestjs/testing";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import request from "supertest";
 import { SessionController } from "../../src/controllers/session.controller";
+import { CronJob } from "../../src/entities/cron-job.entity";
 import { LlmCall } from "../../src/entities/llm-call.entity";
 import { PendingMessage } from "../../src/entities/pending-message.entity";
 import { Session } from "../../src/entities/session.entity";
@@ -16,6 +17,7 @@ import { ContextCompactor } from "../../src/services/context-compactor.service";
 import { LlmCallService } from "../../src/services/llm-call.service";
 import { ModelConfigService } from "../../src/services/model-config.service";
 import { RunnerService } from "../../src/services/runner.service";
+import { ScheduleService } from "../../src/services/schedule.service";
 import { SessionMessageService } from "../../src/services/session-message.service";
 import { SessionTitleService } from "../../src/services/session-title.service";
 import { SessionService } from "../../src/services/session.service";
@@ -37,6 +39,7 @@ describe("Session e2e", () => {
             LlmCall,
             SessionMessage,
             ModelConfig,
+            CronJob,
           ],
           synchronize: true,
         }),
@@ -46,6 +49,7 @@ describe("Session e2e", () => {
           LlmCall,
           SessionMessage,
           ModelConfig,
+          CronJob,
         ]),
         AgentModule,
       ],
@@ -56,6 +60,7 @@ describe("Session e2e", () => {
         LlmCallService,
         SessionMessageService,
         CheckpointerCleanupService,
+        ScheduleService,
         SessionTitleService,
         ContextCompactor,
         ModelConfigService,

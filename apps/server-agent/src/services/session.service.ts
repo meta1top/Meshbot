@@ -18,6 +18,7 @@ import { PendingMessage } from "../entities/pending-message.entity";
 import { Session } from "../entities/session.entity";
 import { CheckpointerCleanupService } from "./checkpointer-cleanup.service";
 import { LlmCallService } from "./llm-call.service";
+import { ScheduleService } from "./schedule.service";
 import { SessionMessageService } from "./session-message.service";
 
 const TITLE_MAX = 30;
@@ -48,6 +49,7 @@ export class SessionService {
     private readonly sessionMessages: SessionMessageService,
     private readonly checkpointer: CheckpointerCleanupService,
     private readonly graph: GraphService,
+    private readonly schedules: ScheduleService,
   ) {}
 
   /**
@@ -304,6 +306,7 @@ export class SessionService {
   async deleteSession(sessionId: string): Promise<void> {
     await this.findSessionOrFail(sessionId);
     await this.deleteSessionInTx(sessionId);
+    await this.schedules.deleteBySession(sessionId);
     await this.checkpointer.deleteThread(sessionId);
   }
 
