@@ -6,9 +6,10 @@ const DateArgsSchema = z.object({
   timezone: z
     .string()
     .min(1)
+    .optional()
     .describe(
-      "IANA timezone, e.g. 'Asia/Shanghai'. REQUIRED. " +
-        "If you don't know the user's timezone, do NOT guess — ask the user first.",
+      "IANA timezone, e.g. 'Asia/Shanghai'. Defaults to server OS timezone. " +
+        "Pass explicitly to override.",
     ),
   format: z
     .enum(["iso", "rfc", "human"])
@@ -22,28 +23,30 @@ type DateArgs = z.input<typeof DateArgsSchema>;
 export class DateTool implements MeshbotTool<DateArgs, string> {
   readonly name = "date";
   readonly description =
-    "Return the current date/time in a specified IANA timezone. " +
-    "If user's timezone is unknown, ASK the user first — do NOT guess.";
+    "Return the current date/time. Defaults to the server's OS timezone; " +
+    "pass `timezone` (IANA) to override.";
   readonly schema = DateArgsSchema;
 
   /** 返回当前时间字符串，格式由 args.format 决定。 */
   async execute(args: DateArgs, _ctx: ToolContext): Promise<string> {
+    const tz =
+      args.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
     try {
-      new Intl.DateTimeFormat("en-US", { timeZone: args.timezone });
+      new Intl.DateTimeFormat("en-US", { timeZone: tz });
     } catch {
       return (
-        `Error: invalid IANA timezone "${args.timezone}". ` +
-        `Ask the user for the correct one (e.g. Asia/Shanghai, America/New_York, UTC).`
+        `Error: invalid IANA timezone "${tz}". ` +
+        `Try Asia/Shanghai, America/New_York, UTC.`
       );
     }
     const now = new Date();
     switch (args.format) {
       case "iso":
-        return formatIso(now, args.timezone);
+        return formatIso(now, tz);
       case "rfc":
-        return formatRfc(now, args.timezone);
+        return formatRfc(now, tz);
       default:
-        return formatHuman(now, args.timezone);
+        return formatHuman(now, tz);
     }
   }
 }

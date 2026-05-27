@@ -3,12 +3,22 @@ import { DateTool } from "./date.tool";
 describe("DateTool", () => {
   const tool = new DateTool();
 
-  it("非法 timezone 返 Error 字符串（让 LLM 重问）", async () => {
+  it("不传 timezone → 走 OS 默认，不抛、不 Error 前缀", async () => {
+    const out = await tool.execute({} as never, {} as never);
+    expect(out).not.toMatch(/^Error/);
+  });
+
+  it("传非法 timezone → 返回 Error 字串", async () => {
     const out = await tool.execute(
-      { timezone: "Not/AReal_TZ", format: "human" },
+      { timezone: "Not/AZone" } as never,
       {} as never,
     );
-    expect(out).toMatch(/^Error: invalid IANA timezone/);
+    expect(out).toMatch(/^Error/);
+  });
+
+  it("传 UTC → 走 UTC", async () => {
+    const out = await tool.execute({ timezone: "UTC" } as never, {} as never);
+    expect(out).toContain("UTC");
   });
 
   it("合法 timezone (Asia/Shanghai) 'human' 格式返 YYYY-MM-DD HH:mm:ss + tz", async () => {
