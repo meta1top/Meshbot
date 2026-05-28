@@ -14,7 +14,6 @@ import { MeshbotConfigService } from "../config/meshbot-config.service";
 import { readActiveModelConfig } from "../config/model-config.reader";
 import { PromptService } from "../prompt/prompt.service";
 import { ToolRegistry } from "../tools/tool-registry";
-import type { ToolContext } from "../tools/tool.types";
 import type { GraphState } from "./graph.builder";
 import { buildSupervisorGraph } from "./graph.builder";
 import { createChatModel } from "./llm.factory";
@@ -91,7 +90,7 @@ export class GraphService {
    *
    * 当前实现：单例字段，resolveModel() 时刷新。本地轨同一时刻只有一个 enabled
    * model（model_configs 唯一启用），并发 run 拿到的 modelMeta 相同 → 安全。
-   * 未来支持多模型并发时，要么挪进 ctxRef，要么 inline 到 usage emit。
+   * 未来支持多模型并发时，要么走 LangGraph configurable 透传，要么 inline 到 usage emit。
    */
   private modelMeta: { providerType: string; model: string };
   /**
@@ -104,26 +103,6 @@ export class GraphService {
    * summarize 等非 graph 路径通过此字段调 invoke，避免重复走 DB 读取。
    */
   private readonly modelProvider: ModelProvider;
-  /**
-   * 当前活跃 run 的上下文引用。
-   *
-   * 设计假设：runner.kickAndWait 用 per-session `running` Set 保证一个 session
-   * 同一时刻只跑一个 run；本地轨当前未启多 session 并发 runner，所以全局
-   * 至多一个 ctxRef 同时活，单例字段足够。
-   *
-   * **不要换成 AsyncLocalStorage** —— LangGraph 内部用 Pregel runner 在自己的
-   * Promise 链上 dispatch toolsNode 调用，会脱离我们 streamMessage 的 ALS frame
-   * → `getStore()` 返 undefined，toolsNode 直接抛「未绑定 ctx」错。
-   *
-   * 当未来真要支持多 session 并发跑（不同 runner 同 GraphService 实例），需要
-   * 走 LangGraph configurable 把 sessionId/messageId/signal 经 stream config
-   * 一路传到 toolsNode，而不是依赖外层闭包。
-   */
-  private ctxRef: {
-    sessionId: string;
-    messageId: string;
-    signal: AbortSignal;
-  } | null = null;
   constructor(
     private configService: MeshbotConfigService,
     private promptService: PromptService,
@@ -135,23 +114,15 @@ export class GraphService {
     const dbPath = this.configService.getDatabasePath();
     this.checkpointer = createSqliteCheckpointer(dbPath);
     this.modelProvider = modelProvider ?? (() => this.resolveModel());
+    // sessionId / messageId / signal 不再经由 GraphService 单例字段闭包传给
+    // toolsNode —— 而是 toolsNode 内部从 LangGraph 注入的 RunnableConfig 取
+    // (configurable.thread_id, config.signal) 和 state.messages[last].id。
+    // 这样多 session 并发跑同一 GraphService 实例不再相互覆盖 ctx。
     this.graph = buildSupervisorGraph(
       this.checkpointer,
       this.modelProvider,
       this.toolRegistry,
-      () => {
-        if (!this.ctxRef) {
-          throw new Error(
-            "toolsNode called without active run (ctxRef is null)",
-          );
-        }
-        return {
-          sessionId: this.ctxRef.sessionId,
-          messageId: this.ctxRef.messageId,
-          emitter: this.eventEmitter,
-          signal: this.ctxRef.signal,
-        } satisfies Omit<ToolContext, "toolCallId">;
-      },
+      this.eventEmitter,
     );
     this.modelMeta = modelMeta ?? { providerType: "unknown", model: "unknown" };
   }
@@ -235,13 +206,7 @@ export class GraphService {
     inputs: { id: string; content: string }[],
     signal?: AbortSignal,
   ): AsyncGenerator<StreamChunk> {
-    const abortSignal = signal ?? new AbortController().signal;
-    this.ctxRef = { sessionId: threadId, messageId: "", signal: abortSignal };
-    try {
-      yield* this.streamMessageImpl(threadId, inputs, signal);
-    } finally {
-      this.ctxRef = null;
-    }
+    yield* this.streamMessageImpl(threadId, inputs, signal);
   }
 
   private async *streamMessageImpl(
@@ -450,14 +415,8 @@ export class GraphService {
     threadId: ThreadId,
     signal?: AbortSignal,
   ): AsyncGenerator<StreamChunk> {
-    const abortSignal = signal ?? new AbortController().signal;
-    this.ctxRef = { sessionId: threadId, messageId: "", signal: abortSignal };
-    try {
-      await this.sanitizeOrphanToolCalls(threadId);
-      yield* this.runGraphStream(threadId, { messages: [] }, signal);
-    } finally {
-      this.ctxRef = null;
-    }
+    await this.sanitizeOrphanToolCalls(threadId);
+    yield* this.runGraphStream(threadId, { messages: [] }, signal);
   }
 
   /**
@@ -558,7 +517,6 @@ export class GraphService {
       }
       currentId = messageId;
       currentAcc = currentAcc === undefined ? msg : currentAcc.concat(msg);
-      if (this.ctxRef) this.ctxRef.messageId = messageId;
       const reasoningDelta =
         typeof msg.additional_kwargs?.reasoning_content === "string"
           ? msg.additional_kwargs.reasoning_content

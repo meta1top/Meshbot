@@ -1,8 +1,8 @@
 import { type BaseMessage, RemoveMessage } from "@langchain/core/messages";
 import { END, START, StateGraph } from "@langchain/langgraph";
 import type { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
+import type { EventEmitter2 } from "@nestjs/event-emitter";
 import type { ToolRegistry } from "../tools/tool-registry";
-import type { ToolContext } from "../tools/tool.types";
 import {
   createSupervisorNode,
   type ModelProvider,
@@ -20,19 +20,19 @@ export interface GraphState {
  *
  * @param modelProvider 每次 run 取最新 LLM
  * @param registry tool 注册表（启动期注册完毕）
- * @param toolsCtxGetter 由 GraphService 提供；返回当下 ctx base（不含 toolCallId，
- *   toolCallId 在 toolsNode 内按 tool_call 现取）
+ * @param emitter 进程内 EventEmitter（用于 toolsNode emit run.tool_call_* 事件，
+ *   session 无关 → 构造期一次性注入即可）
  */
 export function buildSupervisorGraph(
   checkpointer: SqliteSaver,
   modelProvider: ModelProvider,
   registry: ToolRegistry,
-  toolsCtxGetter: () => Omit<ToolContext, "toolCallId">,
+  emitter: EventEmitter2,
 ) {
   const supervisor = createSupervisorNode(modelProvider, () =>
     registry.asLangChainBindable(),
   );
-  const tools = createToolsNode(registry, toolsCtxGetter);
+  const tools = createToolsNode(registry, emitter);
   return new StateGraph<GraphState>({
     channels: {
       messages: {

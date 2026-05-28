@@ -103,7 +103,9 @@ pre code.hljs {
   animation: md-cursor-blink 1s steps(1) infinite;
 }
 @keyframes md-cursor-blink {
-  50% { opacity: 0; }
+  50% {
+    opacity: 0;
+  }
 }
 
 @source "../../../../packages/design/src";

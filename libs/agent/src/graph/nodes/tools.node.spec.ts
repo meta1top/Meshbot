@@ -1,4 +1,5 @@
 import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
+import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { z } from "zod";
 import { ToolRegistry } from "../../tools/tool-registry";
@@ -37,6 +38,26 @@ class HugeTool implements MeshbotTool<Record<string, never>, string> {
   }
 }
 
+/**
+ * 捕获 execute 时收到的 ctx —— 用来断言并发 / messageId 路径都按本次调用计算，
+ * 而不是从某个共享单例读出来。
+ */
+@Tool()
+class CtxCaptureTool implements MeshbotTool<Record<string, never>, string> {
+  readonly name = "capture";
+  readonly description = "Capture incoming ctx";
+  readonly schema = z.object({});
+  // biome-ignore lint/style/noNonNullAssertion: 测试桩，外部读取
+  public lastCtx: ToolContext = undefined!;
+  async execute(
+    _args: Record<string, never>,
+    ctx: ToolContext,
+  ): Promise<string> {
+    this.lastCtx = ctx;
+    return "captured";
+  }
+}
+
 function makeRegistry(tools: MeshbotTool[]): ToolRegistry {
   const fakeDisc = {
     getProviders: () => tools.map((t) => ({ instance: t })) as never,
@@ -46,31 +67,36 @@ function makeRegistry(tools: MeshbotTool[]): ToolRegistry {
   return r;
 }
 
-const baseCtx = {
-  sessionId: "s1",
-  messageId: "m1",
-  emitter: new EventEmitter2(),
-  signal: new AbortController().signal,
-};
+/** 测试用最小 RunnableConfig（thread_id + 可选 signal）。 */
+function cfg(threadId: string, signal?: AbortSignal): LangGraphRunnableConfig {
+  return { configurable: { thread_id: threadId }, signal };
+}
 
 describe("createToolsNode", () => {
   it("last 不是 AIMessage 或 tool_calls 为空 → 返空对象", async () => {
-    const node = createToolsNode(makeRegistry([new EchoTool()]), () => baseCtx);
-    const r1 = await node({ messages: [new HumanMessage("hi")] });
+    const node = createToolsNode(
+      makeRegistry([new EchoTool()]),
+      new EventEmitter2(),
+    );
+    const r1 = await node({ messages: [new HumanMessage("hi")] }, cfg("s1"));
     expect(r1).toEqual({});
-    const r2 = await node({
-      messages: [new AIMessage({ content: "no tool calls" })],
-    });
+    const r2 = await node(
+      { messages: [new AIMessage({ content: "no tool calls" })] },
+      cfg("s1"),
+    );
     expect(r2).toEqual({});
   });
 
   it("调对应 tool 返 ToolMessage", async () => {
-    const node = createToolsNode(makeRegistry([new EchoTool()]), () => baseCtx);
+    const node = createToolsNode(
+      makeRegistry([new EchoTool()]),
+      new EventEmitter2(),
+    );
     const ai = new AIMessage({
       content: "",
       tool_calls: [{ id: "tc1", name: "echo", args: { text: "hi" } }],
     });
-    const r = await node({ messages: [ai] });
+    const r = await node({ messages: [ai] }, cfg("s1"));
     expect(r.messages).toHaveLength(1);
     const tm = r.messages![0] as ToolMessage;
     expect(tm).toBeInstanceOf(ToolMessage);
@@ -79,12 +105,15 @@ describe("createToolsNode", () => {
   });
 
   it("未知 tool 返 error ToolMessage", async () => {
-    const node = createToolsNode(makeRegistry([new EchoTool()]), () => baseCtx);
+    const node = createToolsNode(
+      makeRegistry([new EchoTool()]),
+      new EventEmitter2(),
+    );
     const ai = new AIMessage({
       content: "",
       tool_calls: [{ id: "tc2", name: "nonexistent", args: {} }],
     });
-    const r = await node({ messages: [ai] });
+    const r = await node({ messages: [ai] }, cfg("s1"));
     const tm = r.messages![0] as ToolMessage;
     expect(String(tm.content)).toMatch(/Error: unknown tool nonexistent/);
   });
@@ -95,15 +124,12 @@ describe("createToolsNode", () => {
     emitter.onAny((event, payload) =>
       events.push({ event: String(event), payload }),
     );
-    const node = createToolsNode(makeRegistry([new FailingTool()]), () => ({
-      ...baseCtx,
-      emitter,
-    }));
+    const node = createToolsNode(makeRegistry([new FailingTool()]), emitter);
     const ai = new AIMessage({
       content: "",
       tool_calls: [{ id: "tc3", name: "boom", args: { x: 1 } }],
     });
-    const r = await node({ messages: [ai] });
+    const r = await node({ messages: [ai] }, cfg("s1"));
     const tm = r.messages![0] as ToolMessage;
     expect(String(tm.content)).toMatch(/Error: boom!/);
     const end = events.find((e) => e.event === "run.tool_call_end");
@@ -117,18 +143,18 @@ describe("createToolsNode", () => {
     emitter.onAny((event, payload) =>
       events.push({ event: String(event), payload }),
     );
-    const node = createToolsNode(makeRegistry([new HugeTool()]), () => ({
-      ...baseCtx,
-      emitter,
-    }));
-    const r = await node({
-      messages: [
-        new AIMessage({
-          content: "",
-          tool_calls: [{ id: "tc5", name: "huge", args: {} }],
-        }),
-      ],
-    });
+    const node = createToolsNode(makeRegistry([new HugeTool()]), emitter);
+    const r = await node(
+      {
+        messages: [
+          new AIMessage({
+            content: "",
+            tool_calls: [{ id: "tc5", name: "huge", args: {} }],
+          }),
+        ],
+      },
+      cfg("s1"),
+    );
     const tm = r.messages![0] as ToolMessage;
     const llmContent = String(tm.content);
     // 给 LLM 的那份被截断（远小于 50KB），且保留了开头 + 截断提示
@@ -145,19 +171,94 @@ describe("createToolsNode", () => {
     const emitter = new EventEmitter2();
     const events: string[] = [];
     emitter.onAny((event) => events.push(String(event)));
-    const node = createToolsNode(makeRegistry([new EchoTool()]), () => ({
-      ...baseCtx,
-      emitter,
-    }));
-    await node({
-      messages: [
-        new AIMessage({
-          content: "",
-          tool_calls: [{ id: "tc4", name: "echo", args: { text: "x" } }],
-        }),
-      ],
-    });
+    const node = createToolsNode(makeRegistry([new EchoTool()]), emitter);
+    await node(
+      {
+        messages: [
+          new AIMessage({
+            content: "",
+            tool_calls: [{ id: "tc4", name: "echo", args: { text: "x" } }],
+          }),
+        ],
+      },
+      cfg("s1"),
+    );
     expect(events).toContain("run.tool_call_start");
     expect(events).toContain("run.tool_call_end");
+  });
+
+  it("缺 config.configurable.thread_id 时直接抛错（防 ctx 错挂）", async () => {
+    const node = createToolsNode(
+      makeRegistry([new EchoTool()]),
+      new EventEmitter2(),
+    );
+    const ai = new AIMessage({
+      content: "",
+      tool_calls: [{ id: "tc-x", name: "echo", args: { text: "x" } }],
+    });
+    await expect(
+      node({ messages: [ai] }, { configurable: {} }),
+    ).rejects.toThrow(/thread_id/);
+  });
+
+  it("从 config + last 取上下文：sessionId/signal 走 config，messageId 走 last AIMessage.id", async () => {
+    const emitter = new EventEmitter2();
+    const tool = new CtxCaptureTool();
+    const node = createToolsNode(makeRegistry([tool]), emitter);
+    const ac = new AbortController();
+    const ai = new AIMessage({
+      id: "msg-xyz",
+      content: "",
+      tool_calls: [{ id: "tc-cap", name: "capture", args: {} }],
+    });
+    await node({ messages: [ai] }, cfg("session-xyz", ac.signal));
+    expect(tool.lastCtx.sessionId).toBe("session-xyz");
+    expect(tool.lastCtx.messageId).toBe("msg-xyz");
+    expect(tool.lastCtx.toolCallId).toBe("tc-cap");
+    expect(tool.lastCtx.signal).toBe(ac.signal);
+    expect(tool.lastCtx.emitter).toBe(emitter);
+  });
+
+  it("多 session 并发跑同一个 GraphService 也不串台（修 ctxRef 单例 bug 的回归用例）", async () => {
+    // 共享同一个 toolsNode（对应 GraphService 单例）—— 同时跑两份带不同 sessionId
+    // 的 graph.stream，验证 tool 事件 / ctx 都按本次 config 隔离，互不覆盖。
+    const emitter = new EventEmitter2();
+    const events: Array<{
+      event: string;
+      payload: { sessionId: string; messageId: string; toolCallId: string };
+    }> = [];
+    emitter.onAny((event, payload) =>
+      events.push({ event: String(event), payload: payload as never }),
+    );
+    const toolA = new CtxCaptureTool();
+    // 同 name 不能重复注册；两个 session 跑同一个 tool 实例就够验证 ctx 隔离
+    const node = createToolsNode(makeRegistry([toolA]), emitter);
+    const aiA = new AIMessage({
+      id: "msg-A",
+      content: "",
+      tool_calls: [{ id: "tc-A", name: "capture", args: {} }],
+    });
+    const aiB = new AIMessage({
+      id: "msg-B",
+      content: "",
+      tool_calls: [{ id: "tc-B", name: "capture", args: {} }],
+    });
+    await Promise.all([
+      node({ messages: [aiA] }, cfg("session-A")),
+      node({ messages: [aiB] }, cfg("session-B")),
+    ]);
+    // 两个 session 各自的 tool_call_start 都应带正确 sessionId / messageId
+    const startA = events.find(
+      (e) =>
+        e.event === "run.tool_call_start" && e.payload.toolCallId === "tc-A",
+    );
+    const startB = events.find(
+      (e) =>
+        e.event === "run.tool_call_start" && e.payload.toolCallId === "tc-B",
+    );
+    expect(startA?.payload.sessionId).toBe("session-A");
+    expect(startA?.payload.messageId).toBe("msg-A");
+    expect(startB?.payload.sessionId).toBe("session-B");
+    expect(startB?.payload.messageId).toBe("msg-B");
   });
 });

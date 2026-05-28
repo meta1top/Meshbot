@@ -1,5 +1,7 @@
 import { type BaseMessage, ToolMessage } from "@langchain/core/messages";
+import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { SESSION_WS_EVENTS } from "@meshbot/types-agent";
+import type { EventEmitter2 } from "@nestjs/event-emitter";
 import type { ToolRegistry } from "../../tools/tool-registry";
 import type { ToolContext } from "../../tools/tool.types";
 import type { GraphState } from "../graph.builder";
@@ -38,26 +40,44 @@ function capForLlm(content: string): string {
  * 不用 langgraph 内置 ToolNode：内置 ToolNode 期望 tools[] 直接传入，无法
  * 在每次调用时注入 toolCallId / messageId 等动态 ctx。
  *
- * @param ctxGetter 由 GraphService 提供；每次进入节点时调，返回当下 ctx base。
+ * sessionId / signal 从 LangGraph 在每次 graph.stream 注入的 RunnableConfig 取，
+ * messageId 直接从携带 tool_calls 的那条 AIMessage 取。**不再依赖 GraphService
+ * 上的单例 ctxRef**——后者在多 session 并发跑时会被覆盖，导致 tool 事件
+ * emit 到错 session、tool result 写到错 session_messages。
  */
 export function createToolsNode(
   registry: ToolRegistry,
-  ctxGetter: () => Omit<ToolContext, "toolCallId">,
+  emitter: EventEmitter2,
 ) {
   return async function toolsNode(
     state: GraphState,
+    config: LangGraphRunnableConfig,
   ): Promise<Partial<GraphState>> {
     // 用字段判 tool_calls，不用 instanceof —— monorepo 下 @langchain/core 可能
     // 多版本/多打包路径加载，AIMessageChunk 不会通过这边 import 的 AIMessage
     // instanceof，导致带 tool_calls 的消息被当作终态、tools 节点直接 noop。
     const last = state.messages[state.messages.length - 1] as
-      | (BaseMessage & MessageWithToolCalls)
+      | (BaseMessage & MessageWithToolCalls & { id?: string })
       | undefined;
     const toolCalls = last?.tool_calls ?? [];
     if (toolCalls.length === 0) {
       return {};
     }
-    const ctxBase = ctxGetter();
+    // sessionId 走 LangGraph 的 configurable.thread_id —— 调用方 streamMessage
+    // 里 `configurable: { thread_id: threadId }` 已经传了。
+    const sessionId = config?.configurable?.thread_id;
+    if (typeof sessionId !== "string" || !sessionId) {
+      throw new Error(
+        "toolsNode: config.configurable.thread_id 缺失或非字符串",
+      );
+    }
+    // signal 由 LangGraph 从 graph.stream(..., { signal }) 透传过来，触发 abort
+    // 时 tool 内的 await（含 MCP / 子进程）可以提前中断。fallback never-abort 仅
+    // 防御性，runner 一定会传。
+    const signal = config?.signal ?? new AbortController().signal;
+    // messageId 取自携带 tool_calls 的那条 AIMessage —— 同轮内多 tool_call 共享。
+    const messageId = last?.id ?? "";
+
     const results: ToolMessage[] = [];
     for (const call of toolCalls) {
       const toolCallId = call.id ?? "";
@@ -72,10 +92,16 @@ export function createToolsNode(
         );
         continue;
       }
-      const ctx: ToolContext = { ...ctxBase, toolCallId };
-      ctxBase.emitter.emit(SESSION_WS_EVENTS.runToolCallStart, {
-        sessionId: ctxBase.sessionId,
-        messageId: ctxBase.messageId,
+      const ctx: ToolContext = {
+        sessionId,
+        messageId,
+        toolCallId,
+        emitter,
+        signal,
+      };
+      emitter.emit(SESSION_WS_EVENTS.runToolCallStart, {
+        sessionId,
+        messageId,
         toolCallId,
         name: call.name,
         args: call.args,
@@ -93,9 +119,9 @@ export function createToolsNode(
       // content = 完整结果（→ run.tool_call_end → session_messages / UI）
       // llmContent = 截断后给 LLM 的那份（→ ToolMessage → checkpointer）
       const llmContent = capForLlm(content);
-      ctxBase.emitter.emit(SESSION_WS_EVENTS.runToolCallEnd, {
-        sessionId: ctxBase.sessionId,
-        messageId: ctxBase.messageId,
+      emitter.emit(SESSION_WS_EVENTS.runToolCallEnd, {
+        sessionId,
+        messageId,
         toolCallId,
         name: call.name,
         ok,

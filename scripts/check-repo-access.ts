@@ -39,11 +39,21 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { type ClassDeclaration, type Decorator, Project, type SourceFile } from "ts-morph";
+import {
+  type ClassDeclaration,
+  type Decorator,
+  Project,
+  type SourceFile,
+} from "ts-morph";
 
 const ROOT = path.resolve(__dirname, "..");
 
-const SKIP_CLASS_DECORATORS = new Set(["Controller", "Resolver", "Processor", "WebSocketGateway"]);
+const SKIP_CLASS_DECORATORS = new Set([
+  "Controller",
+  "Resolver",
+  "Processor",
+  "WebSocketGateway",
+]);
 
 const NON_SERVICE_FILE_PATTERNS = [
   /\.controller\.ts$/,
@@ -143,7 +153,11 @@ function parseArgs(argv: string[]): CliOptions {
           v
             .split(",")
             .map((s) => s.trim().toUpperCase() as IssueType)
-            .filter((s): s is IssueType => ["DUP_OWNER", "NON_SERVICE_INJECT", "CROSS_LIB_INJECT"].includes(s)),
+            .filter((s): s is IssueType =>
+              ["DUP_OWNER", "NON_SERVICE_INJECT", "CROSS_LIB_INJECT"].includes(
+                s,
+              ),
+            ),
         );
       }
     } else if (a === "--help" || a === "-h") {
@@ -183,13 +197,26 @@ Repo Access Fence v0
 function shouldSkipFile(filePath: string): boolean {
   const rel = path.relative(ROOT, filePath);
   if (rel.startsWith("node_modules") || rel.startsWith("dist")) return true;
-  if (rel.includes("/test/") || rel.includes("/tests/") || rel.includes("/__tests__/")) return true;
-  if (rel.endsWith(".spec.ts") || rel.endsWith(".e2e-spec.ts") || rel.endsWith(".test.ts")) return true;
+  if (
+    rel.includes("/test/") ||
+    rel.includes("/tests/") ||
+    rel.includes("/__tests__/")
+  )
+    return true;
+  if (
+    rel.endsWith(".spec.ts") ||
+    rel.endsWith(".e2e-spec.ts") ||
+    rel.endsWith(".test.ts")
+  )
+    return true;
   // meshbot 非 NestJS 服务层代码：前端、CLI、Agent 域（vitest）、桌面端
   if (rel.startsWith("apps/web-") || rel.includes("/apps/web-")) return true;
-  if (rel.startsWith("apps/cli-agent") || rel.includes("/apps/cli-agent/")) return true;
-  if (rel.startsWith("apps/desktop") || rel.includes("/apps/desktop/")) return true;
-  if (rel.startsWith("libs/agent/") || rel.includes("/libs/agent/")) return true;
+  if (rel.startsWith("apps/cli-agent") || rel.includes("/apps/cli-agent/"))
+    return true;
+  if (rel.startsWith("apps/desktop") || rel.includes("/apps/desktop/"))
+    return true;
+  if (rel.startsWith("libs/agent/") || rel.includes("/libs/agent/"))
+    return true;
   if (rel.startsWith("packages/") || rel.includes("/packages/")) return true;
   if (rel.endsWith(".d.ts")) return true;
   return false;
@@ -218,7 +245,10 @@ function detectLibName(absPath: string): string | null {
   return m ? m[1] : null;
 }
 
-function classifyClassKind(cls: ClassDeclaration, sourceFile: SourceFile): "service" | "non-service" | "infra" {
+function classifyClassKind(
+  cls: ClassDeclaration,
+  sourceFile: SourceFile,
+): "service" | "non-service" | "infra" {
   const filePath = sourceFile.getFilePath();
   if (isInfraWhitelisted(filePath)) return "infra";
 
@@ -277,7 +307,9 @@ function collectEntityDefs(sourceFile: SourceFile, defs: EntityDef[]) {
   const lib = detectLibName(filePath);
 
   for (const cls of sourceFile.getClasses()) {
-    const hasEntityDecorator = cls.getDecorators().some((d) => d.getName() === "Entity");
+    const hasEntityDecorator = cls
+      .getDecorators()
+      .some((d) => d.getName() === "Entity");
     if (!hasEntityDecorator) continue;
     const name = cls.getName();
     if (!name) continue;
@@ -285,7 +317,9 @@ function collectEntityDefs(sourceFile: SourceFile, defs: EntityDef[]) {
   }
 }
 
-function buildOwnershipMap(sites: InjectionSite[]): Map<string, InjectionSite[]> {
+function buildOwnershipMap(
+  sites: InjectionSite[],
+): Map<string, InjectionSite[]> {
   const map = new Map<string, InjectionSite[]>();
   for (const s of sites) {
     if (s.classKind !== "service") continue; // ownership 仅由 Service 注入定义
@@ -353,9 +387,16 @@ function detectIssues(
   return issues;
 }
 
-function printOwnershipMap(ownershipMap: Map<string, InjectionSite[]>, entityDefs: Map<string, EntityDef>) {
-  const sorted = Array.from(ownershipMap.entries()).sort(([a], [b]) => a.localeCompare(b));
-  console.log(`\n[repo-check v0] Entity → Service 归属映射 (共 ${sorted.length} 个 Entity)`);
+function printOwnershipMap(
+  ownershipMap: Map<string, InjectionSite[]>,
+  entityDefs: Map<string, EntityDef>,
+) {
+  const sorted = Array.from(ownershipMap.entries()).sort(([a], [b]) =>
+    a.localeCompare(b),
+  );
+  console.log(
+    `\n[repo-check v0] Entity → Service 归属映射 (共 ${sorted.length} 个 Entity)`,
+  );
   console.log("─".repeat(80));
   console.log("Entity".padEnd(40), "归属 Service".padEnd(30), "lib");
   console.log("─".repeat(80));
@@ -363,11 +404,22 @@ function printOwnershipMap(ownershipMap: Map<string, InjectionSite[]>, entityDef
     const def = entityDefs.get(entity);
     const libDisplay = def?.lib ?? "<unknown>";
     if (owners.length === 1) {
-      console.log(entity.padEnd(40), owners[0].className.padEnd(30), libDisplay);
+      console.log(
+        entity.padEnd(40),
+        owners[0].className.padEnd(30),
+        libDisplay,
+      );
     } else {
-      console.log(entity.padEnd(40), `⚠ ${owners.length} 个归属:`.padEnd(30), libDisplay);
+      console.log(
+        entity.padEnd(40),
+        `⚠ ${owners.length} 个归属:`.padEnd(30),
+        libDisplay,
+      );
       for (const o of owners) {
-        console.log("  ".padEnd(40), `  - ${o.className} (${getRelPath(o.file)}:${o.line})`);
+        console.log(
+          "  ".padEnd(40),
+          `  - ${o.className} (${getRelPath(o.file)}:${o.line})`,
+        );
       }
     }
   }
@@ -383,11 +435,21 @@ function printTextReport(issues: Issue[], filterTypes: Set<IssueType> | null) {
   for (const i of issues) grouped[i.type].push(i);
 
   console.log(`\n[repo-check v0] 共发现 ${issues.length} 个问题`);
-  console.log(`  DUP_OWNER:          ${grouped.DUP_OWNER.length}  同 Entity 在多 Service 中注入`);
-  console.log(`  NON_SERVICE_INJECT: ${grouped.NON_SERVICE_INJECT.length}  Controller/Processor/Gateway 等注入了 Repo`);
-  console.log(`  CROSS_LIB_INJECT:   ${grouped.CROSS_LIB_INJECT.length}  Service 跨 lib 注入其他域 Entity\n`);
+  console.log(
+    `  DUP_OWNER:          ${grouped.DUP_OWNER.length}  同 Entity 在多 Service 中注入`,
+  );
+  console.log(
+    `  NON_SERVICE_INJECT: ${grouped.NON_SERVICE_INJECT.length}  Controller/Processor/Gateway 等注入了 Repo`,
+  );
+  console.log(
+    `  CROSS_LIB_INJECT:   ${grouped.CROSS_LIB_INJECT.length}  Service 跨 lib 注入其他域 Entity\n`,
+  );
 
-  const order: IssueType[] = ["NON_SERVICE_INJECT", "CROSS_LIB_INJECT", "DUP_OWNER"];
+  const order: IssueType[] = [
+    "NON_SERVICE_INJECT",
+    "CROSS_LIB_INJECT",
+    "DUP_OWNER",
+  ];
   for (const type of order) {
     if (filterTypes && !filterTypes.has(type)) continue;
     const list = grouped[type];
@@ -448,9 +510,15 @@ function buildMarkdownReport(issues: Issue[], meta: ReportMeta): string {
   lines.push("");
   lines.push("| 类别 | 数量 | 含义 |");
   lines.push("| --- | ---: | --- |");
-  lines.push(`| NON_SERVICE_INJECT | ${grouped.NON_SERVICE_INJECT.length} | Controller/Processor/Gateway/Resolver/Tool 注入 Repo |`);
-  lines.push(`| CROSS_LIB_INJECT | ${grouped.CROSS_LIB_INJECT.length} | Service 跨 lib 注入其他域 Entity |`);
-  lines.push(`| DUP_OWNER | ${grouped.DUP_OWNER.length} | 同 Entity 在多 Service 中被 @InjectRepository |`);
+  lines.push(
+    `| NON_SERVICE_INJECT | ${grouped.NON_SERVICE_INJECT.length} | Controller/Processor/Gateway/Resolver/Tool 注入 Repo |`,
+  );
+  lines.push(
+    `| CROSS_LIB_INJECT | ${grouped.CROSS_LIB_INJECT.length} | Service 跨 lib 注入其他域 Entity |`,
+  );
+  lines.push(
+    `| DUP_OWNER | ${grouped.DUP_OWNER.length} | 同 Entity 在多 Service 中被 @InjectRepository |`,
+  );
   lines.push(`| **总计** | **${issues.length}** | |`);
   lines.push("");
 
@@ -464,7 +532,11 @@ function buildMarkdownReport(issues: Issue[], meta: ReportMeta): string {
 
   lines.push("## 详情");
   lines.push("");
-  const order: IssueType[] = ["NON_SERVICE_INJECT", "CROSS_LIB_INJECT", "DUP_OWNER"];
+  const order: IssueType[] = [
+    "NON_SERVICE_INJECT",
+    "CROSS_LIB_INJECT",
+    "DUP_OWNER",
+  ];
   for (const type of order) {
     if (meta.filterTypes && !meta.filterTypes.has(type)) continue;
     const list = grouped[type];
@@ -473,7 +545,9 @@ function buildMarkdownReport(issues: Issue[], meta: ReportMeta): string {
     lines.push("");
     for (const i of list) {
       const rel = getRelPath(i.file);
-      lines.push(`- **\`${rel}:${i.line}\`** — \`${i.className}\` / \`${i.entity}\``);
+      lines.push(
+        `- **\`${rel}:${i.line}\`** — \`${i.className}\` / \`${i.entity}\``,
+      );
       lines.push(`  - ${i.details}`);
       if (i.hint) {
         lines.push(`  - hint: ${i.hint}`);
@@ -526,10 +600,18 @@ function loadBaselineFingerprints(jsonPath: string): Set<string> | null {
   }
 }
 
-function diffAgainstBaseline(currentIssues: Issue[], absOutDir: string): BaselineDiff {
+function diffAgainstBaseline(
+  currentIssues: Issue[],
+  absOutDir: string,
+): BaselineDiff {
   const baselinePath = findLatestBaselineJson(absOutDir);
   if (!baselinePath) {
-    return { baselinePath: null, added: currentIssues, removed: [], unchanged: 0 };
+    return {
+      baselinePath: null,
+      added: currentIssues,
+      removed: [],
+      unchanged: 0,
+    };
   }
   const baselineFps = loadBaselineFingerprints(baselinePath);
   if (!baselineFps) {
@@ -561,7 +643,11 @@ function diffAgainstBaseline(currentIssues: Issue[], absOutDir: string): Baselin
   };
 }
 
-function writeReportFiles(issues: Issue[], meta: ReportMeta, outDir: string): { mdPath: string; jsonPath: string } {
+function writeReportFiles(
+  issues: Issue[],
+  meta: ReportMeta,
+  outDir: string,
+): { mdPath: string; jsonPath: string } {
   const absOutDir = path.isAbsolute(outDir) ? outDir : path.join(ROOT, outDir);
   fs.mkdirSync(absOutDir, { recursive: true });
 
@@ -636,15 +722,17 @@ function main() {
 
   if (opts.mapOnly) {
     if (opts.json) {
-      const out = Array.from(ownershipMap.entries()).map(([entity, owners]) => ({
-        entity,
-        lib: entityDefMap.get(entity)?.lib ?? null,
-        owners: owners.map((o) => ({
-          className: o.className,
-          file: getRelPath(o.file),
-          line: o.line,
-        })),
-      }));
+      const out = Array.from(ownershipMap.entries()).map(
+        ([entity, owners]) => ({
+          entity,
+          lib: entityDefMap.get(entity)?.lib ?? null,
+          owners: owners.map((o) => ({
+            className: o.className,
+            file: getRelPath(o.file),
+            line: o.line,
+          })),
+        }),
+      );
       process.stdout.write(`${JSON.stringify(out, null, 2)}\n`);
     } else {
       printOwnershipMap(ownershipMap, entityDefMap);
@@ -653,12 +741,18 @@ function main() {
   }
 
   const issues = detectIssues(sites, ownershipMap, entityDefMap);
-  const filtered = opts.types ? issues.filter((i) => opts.types?.has(i.type)) : issues;
+  const filtered = opts.types
+    ? issues.filter((i) => opts.types?.has(i.type))
+    : issues;
 
   if (opts.json) {
-    process.stdout.write(`${JSON.stringify({ total: filtered.length, issues: filtered }, null, 2)}\n`);
+    process.stdout.write(
+      `${JSON.stringify({ total: filtered.length, issues: filtered }, null, 2)}\n`,
+    );
   } else {
-    console.log(`[repo-check v0] 扫描 ${sourceFiles.length} 个 .ts 文件 (targets: ${opts.paths.join(", ")})`);
+    console.log(
+      `[repo-check v0] 扫描 ${sourceFiles.length} 个 .ts 文件 (targets: ${opts.paths.join(", ")})`,
+    );
     printTextReport(filtered, opts.types);
     if (filtered.length === 0) {
       printOwnershipMap(ownershipMap, entityDefMap);
@@ -669,19 +763,33 @@ function main() {
     const isPartialScan = opts.pathsExplicit || !!opts.types;
     const incrementalEnabled = !opts.forceReport && !isPartialScan;
 
-    const absOutDir = path.isAbsolute(opts.outDir) ? opts.outDir : path.join(ROOT, opts.outDir);
-    const diff = incrementalEnabled ? diffAgainstBaseline(filtered, absOutDir) : null;
+    const absOutDir = path.isAbsolute(opts.outDir)
+      ? opts.outDir
+      : path.join(ROOT, opts.outDir);
+    const diff = incrementalEnabled
+      ? diffAgainstBaseline(filtered, absOutDir)
+      : null;
 
     const shouldWrite =
-      opts.forceReport || isPartialScan || !diff || diff.added.length > 0 || diff.baselinePath === null;
+      opts.forceReport ||
+      isPartialScan ||
+      !diff ||
+      diff.added.length > 0 ||
+      diff.baselinePath === null;
 
     if (!shouldWrite && diff) {
       if (!opts.json) {
         console.log(`[repo-check v0] 增量判定: 无新增 finding，跳过写入报告`);
-        console.log(`  baseline: ${path.relative(ROOT, diff.baselinePath as string)}`);
-        console.log(`  unchanged=${diff.unchanged}  removed=${diff.removed.length}  added=0`);
+        console.log(
+          `  baseline: ${path.relative(ROOT, diff.baselinePath as string)}`,
+        );
+        console.log(
+          `  unchanged=${diff.unchanged}  removed=${diff.removed.length}  added=0`,
+        );
         if (diff.removed.length > 0) {
-          console.log(`  ✓ 已修复 ${diff.removed.length} 条历史 finding（如需刷新 baseline，重跑加 --force-report）`);
+          console.log(
+            `  ✓ 已修复 ${diff.removed.length} 条历史 finding（如需刷新 baseline，重跑加 --force-report）`,
+          );
         }
       }
     } else {
@@ -692,18 +800,32 @@ function main() {
         filterTypes: opts.types,
         strict: opts.strict,
       };
-      const { mdPath, jsonPath } = writeReportFiles(filtered, meta, opts.outDir);
+      const { mdPath, jsonPath } = writeReportFiles(
+        filtered,
+        meta,
+        opts.outDir,
+      );
       if (!opts.json) {
         if (diff && diff.baselinePath) {
-          console.log(`[repo-check v0] 增量判定: 检测到新增 finding，写入新报告`);
+          console.log(
+            `[repo-check v0] 增量判定: 检测到新增 finding，写入新报告`,
+          );
           console.log(`  baseline: ${path.relative(ROOT, diff.baselinePath)}`);
-          console.log(`  added=${diff.added.length}  removed=${diff.removed.length}  unchanged=${diff.unchanged}`);
+          console.log(
+            `  added=${diff.added.length}  removed=${diff.removed.length}  unchanged=${diff.unchanged}`,
+          );
         } else if (incrementalEnabled) {
-          console.log(`[repo-check v0] 增量判定: 未找到 baseline，写入首份报告`);
+          console.log(
+            `[repo-check v0] 增量判定: 未找到 baseline，写入首份报告`,
+          );
         } else if (isPartialScan) {
-          console.log(`[repo-check v0] 局部扫描（启用了 --paths/--types），跳过增量判定，直接写报告`);
+          console.log(
+            `[repo-check v0] 局部扫描（启用了 --paths/--types），跳过增量判定，直接写报告`,
+          );
         } else if (opts.forceReport) {
-          console.log(`[repo-check v0] --force-report 已开启，无视增量判定直接写报告`);
+          console.log(
+            `[repo-check v0] --force-report 已开启，无视增量判定直接写报告`,
+          );
         }
         console.log(`[repo-check v0] 报告已写入:`);
         console.log(`  ${path.relative(ROOT, mdPath)}`);

@@ -38,7 +38,13 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { type ClassDeclaration, type MethodDeclaration, Node, Project, type SourceFile } from "ts-morph";
+import {
+  type ClassDeclaration,
+  type MethodDeclaration,
+  Node,
+  Project,
+  type SourceFile,
+} from "ts-morph";
 
 const ROOT = path.resolve(__dirname, "..");
 
@@ -131,7 +137,13 @@ const READ_ONLY_PREFIXES = [
   "summarize",
 ];
 
-const SKIP_CLASS_DECORATORS = new Set(["Controller", "Resolver", "Processor", "WebSocketGateway", "EventPattern"]);
+const SKIP_CLASS_DECORATORS = new Set([
+  "Controller",
+  "Resolver",
+  "Processor",
+  "WebSocketGateway",
+  "EventPattern",
+]);
 
 const REPO_IDENT_REGEX = /(repo|repository)$/i;
 const SERVICE_IDENT_REGEX = /Service$/;
@@ -233,7 +245,9 @@ function parseArgs(argv: string[]): CliOptions {
           v
             .split(",")
             .map((s) => s.trim().toUpperCase() as IssueType)
-            .filter((s): s is IssueType => ["MISSING", "WRONG_IMPORT", "REDUNDANT", "BYPASS"].includes(s)),
+            .filter((s): s is IssueType =>
+              ["MISSING", "WRONG_IMPORT", "REDUNDANT", "BYPASS"].includes(s),
+            ),
         );
       }
     } else if (a === "--help" || a === "-h") {
@@ -267,17 +281,29 @@ Transactional Fence v0
 function shouldSkipFile(filePath: string): boolean {
   const rel = path.relative(ROOT, filePath);
   if (rel.startsWith("node_modules") || rel.startsWith("dist")) return true;
-  if (rel.includes("/test/") || rel.includes("/tests/") || rel.includes("/__tests__/")) return true;
-  if (rel.endsWith(".spec.ts") || rel.endsWith(".e2e-spec.ts") || rel.endsWith(".test.ts")) {
+  if (
+    rel.includes("/test/") ||
+    rel.includes("/tests/") ||
+    rel.includes("/__tests__/")
+  )
+    return true;
+  if (
+    rel.endsWith(".spec.ts") ||
+    rel.endsWith(".e2e-spec.ts") ||
+    rel.endsWith(".test.ts")
+  ) {
     return true;
   }
   if (rel.includes("/migrations/")) return true;
   if (rel.includes("/openspec/")) return true;
   // meshbot 非 NestJS 服务层代码：前端、CLI、Agent 域（vitest）、桌面端
   if (rel.startsWith("apps/web-") || rel.includes("/apps/web-")) return true;
-  if (rel.startsWith("apps/cli-agent") || rel.includes("/apps/cli-agent/")) return true;
-  if (rel.startsWith("apps/desktop") || rel.includes("/apps/desktop/")) return true;
-  if (rel.startsWith("libs/agent/") || rel.includes("/libs/agent/")) return true;
+  if (rel.startsWith("apps/cli-agent") || rel.includes("/apps/cli-agent/"))
+    return true;
+  if (rel.startsWith("apps/desktop") || rel.includes("/apps/desktop/"))
+    return true;
+  if (rel.startsWith("libs/agent/") || rel.includes("/libs/agent/"))
+    return true;
   if (rel.startsWith("packages/") || rel.includes("/packages/")) return true;
   if (rel.includes("/.next/")) return true;
   if (rel.endsWith(".d.ts")) return true;
@@ -298,7 +324,8 @@ function getDecoratorByName(method: MethodDeclaration, name: string) {
 function getTransactionalImportSource(sourceFile: SourceFile): string | null {
   for (const imp of sourceFile.getImportDeclarations()) {
     for (const ni of imp.getNamedImports()) {
-      if (ni.getName() === "Transactional") return imp.getModuleSpecifierValue();
+      if (ni.getName() === "Transactional")
+        return imp.getModuleSpecifierValue();
     }
   }
   return null;
@@ -331,7 +358,10 @@ function collectWriteSignals(method: MethodDeclaration): WriteSignal[] {
     if (Node.isPropertyAccessExpression(target)) {
       const targetPropName = target.getName();
 
-      if (REPO_IDENT_REGEX.test(targetPropName) && WRITE_REPO_METHODS.has(propName)) {
+      if (
+        REPO_IDENT_REGEX.test(targetPropName) &&
+        WRITE_REPO_METHODS.has(propName)
+      ) {
         signals.push({
           text: `${target.getText()}.${propName}(...)`,
           line: node.getStartLineNumber(),
@@ -340,7 +370,10 @@ function collectWriteSignals(method: MethodDeclaration): WriteSignal[] {
         return;
       }
 
-      if (SERVICE_IDENT_REGEX.test(targetPropName) && matchesWriteVerbPrefix(propName)) {
+      if (
+        SERVICE_IDENT_REGEX.test(targetPropName) &&
+        matchesWriteVerbPrefix(propName)
+      ) {
         signals.push({
           text: `${target.getText()}.${propName}(...)`,
           line: node.getStartLineNumber(),
@@ -352,7 +385,10 @@ function collectWriteSignals(method: MethodDeclaration): WriteSignal[] {
 
     if (Node.isIdentifier(target)) {
       const targetName = target.getText();
-      if (REPO_IDENT_REGEX.test(targetName) && WRITE_REPO_METHODS.has(propName)) {
+      if (
+        REPO_IDENT_REGEX.test(targetName) &&
+        WRITE_REPO_METHODS.has(propName)
+      ) {
         signals.push({
           text: `${targetName}.${propName}(...)`,
           line: node.getStartLineNumber(),
@@ -448,7 +484,11 @@ function collectBypassSignals(method: MethodDeclaration): BypassSignal[] {
   return signals;
 }
 
-function matchDataSourceCall(targetText: string, propName: string, callNode: Node): BypassSignal | null {
+function matchDataSourceCall(
+  targetText: string,
+  propName: string,
+  callNode: Node,
+): BypassSignal | null {
   const line = callNode.getStartLineNumber();
   if (propName === "transaction") {
     return {
@@ -494,7 +534,9 @@ function methodHasIgnoreComment(method: MethodDeclaration): boolean {
 }
 
 function fileHasIgnoreComment(sourceFile: SourceFile): boolean {
-  return /tx-check:\s*ignore-file\b/.test(sourceFile.getFullText().slice(0, 500));
+  return /tx-check:\s*ignore-file\b/.test(
+    sourceFile.getFullText().slice(0, 500),
+  );
 }
 
 function analyzeMethod(
@@ -588,7 +630,14 @@ function analyzeFile(sourceFile: SourceFile, out: Issue[]) {
     if (classHasSkipDecorator(cls)) continue;
     const className = cls.getName() ?? "<anonymous>";
     for (const m of cls.getMethods()) {
-      analyzeMethod(m, className, sourceFile, txImportSource, bypassEnabled, out);
+      analyzeMethod(
+        m,
+        className,
+        sourceFile,
+        txImportSource,
+        bypassEnabled,
+        out,
+      );
     }
   }
 }
@@ -626,10 +675,18 @@ function printTextReport(issues: Issue[], filterTypes: Set<IssueType> | null) {
 
   const total = issues.length;
   console.log(`\n[tx-check v0] 共发现 ${total} 个问题`);
-  console.log(`  WRONG_IMPORT: ${grouped.WRONG_IMPORT.length}  @Transactional 导入来源不合法`);
-  console.log(`  MISSING:      ${grouped.MISSING.length}  应挂 @Transactional() 但未挂`);
-  console.log(`  REDUNDANT:    ${grouped.REDUNDANT.length}  挂了 @Transactional() 但写动作 ≤1`);
-  console.log(`  BYPASS:       ${grouped.BYPASS.length}  绕过 TxTypeOrmModule Proxy / 自开事务\n`);
+  console.log(
+    `  WRONG_IMPORT: ${grouped.WRONG_IMPORT.length}  @Transactional 导入来源不合法`,
+  );
+  console.log(
+    `  MISSING:      ${grouped.MISSING.length}  应挂 @Transactional() 但未挂`,
+  );
+  console.log(
+    `  REDUNDANT:    ${grouped.REDUNDANT.length}  挂了 @Transactional() 但写动作 ≤1`,
+  );
+  console.log(
+    `  BYPASS:       ${grouped.BYPASS.length}  绕过 TxTypeOrmModule Proxy / 自开事务\n`,
+  );
 
   const order: IssueType[] = ["WRONG_IMPORT", "MISSING", "REDUNDANT", "BYPASS"];
   for (const type of order) {
@@ -699,10 +756,18 @@ function buildMarkdownReport(issues: Issue[], meta: ReportMeta): string {
   lines.push("");
   lines.push("| 类别 | 数量 | 含义 |");
   lines.push("| --- | ---: | --- |");
-  lines.push(`| WRONG_IMPORT | ${grouped.WRONG_IMPORT.length} | @Transactional 导入来源不合法 |`);
-  lines.push(`| MISSING | ${grouped.MISSING.length} | 应挂 @Transactional() 但未挂 |`);
-  lines.push(`| REDUNDANT | ${grouped.REDUNDANT.length} | 挂了 @Transactional() 但写动作 ≤ 1 |`);
-  lines.push(`| BYPASS | ${grouped.BYPASS.length} | 绕过 TxTypeOrmModule Proxy / 自开事务 |`);
+  lines.push(
+    `| WRONG_IMPORT | ${grouped.WRONG_IMPORT.length} | @Transactional 导入来源不合法 |`,
+  );
+  lines.push(
+    `| MISSING | ${grouped.MISSING.length} | 应挂 @Transactional() 但未挂 |`,
+  );
+  lines.push(
+    `| REDUNDANT | ${grouped.REDUNDANT.length} | 挂了 @Transactional() 但写动作 ≤ 1 |`,
+  );
+  lines.push(
+    `| BYPASS | ${grouped.BYPASS.length} | 绕过 TxTypeOrmModule Proxy / 自开事务 |`,
+  );
   lines.push(`| **总计** | **${issues.length}** | |`);
   lines.push("");
 
@@ -726,7 +791,9 @@ function buildMarkdownReport(issues: Issue[], meta: ReportMeta): string {
     for (const i of list) {
       const rel = path.relative(ROOT, i.file);
       const tag = i.subtype ? `[${i.subtype}] ` : "";
-      lines.push(`- **${tag}\`${rel}:${i.line}\`** — \`${i.className}.${i.methodName}\``);
+      lines.push(
+        `- **${tag}\`${rel}:${i.line}\`** — \`${i.className}.${i.methodName}\``,
+      );
       lines.push(`  - ${i.details}`);
       if (i.evidence?.length) {
         for (const e of i.evidence) lines.push(`  - evidence: \`${e}\``);
@@ -783,10 +850,18 @@ function loadBaselineFingerprints(jsonPath: string): Set<string> | null {
   }
 }
 
-function diffAgainstBaseline(currentIssues: Issue[], absOutDir: string): BaselineDiff {
+function diffAgainstBaseline(
+  currentIssues: Issue[],
+  absOutDir: string,
+): BaselineDiff {
   const baselinePath = findLatestBaselineJson(absOutDir);
   if (!baselinePath) {
-    return { baselinePath: null, added: currentIssues, removed: [], unchanged: 0 };
+    return {
+      baselinePath: null,
+      added: currentIssues,
+      removed: [],
+      unchanged: 0,
+    };
   }
   const baselineFps = loadBaselineFingerprints(baselinePath);
   if (!baselineFps) {
@@ -818,7 +893,11 @@ function diffAgainstBaseline(currentIssues: Issue[], absOutDir: string): Baselin
   };
 }
 
-function writeReportFiles(issues: Issue[], meta: ReportMeta, outDir: string): { mdPath: string; jsonPath: string } {
+function writeReportFiles(
+  issues: Issue[],
+  meta: ReportMeta,
+  outDir: string,
+): { mdPath: string; jsonPath: string } {
   const absOutDir = path.isAbsolute(outDir) ? outDir : path.join(ROOT, outDir);
   fs.mkdirSync(absOutDir, { recursive: true });
 
@@ -856,12 +935,18 @@ function main() {
   const issues: Issue[] = [];
   for (const sf of sourceFiles) analyzeFile(sf, issues);
 
-  const filtered = opts.types ? issues.filter((i) => opts.types?.has(i.type)) : issues;
+  const filtered = opts.types
+    ? issues.filter((i) => opts.types?.has(i.type))
+    : issues;
 
   if (opts.json) {
-    process.stdout.write(`${JSON.stringify({ total: filtered.length, issues: filtered }, null, 2)}\n`);
+    process.stdout.write(
+      `${JSON.stringify({ total: filtered.length, issues: filtered }, null, 2)}\n`,
+    );
   } else {
-    console.log(`[tx-check v0] 扫描 ${sourceFiles.length} 个 .ts 文件 (targets: ${opts.paths.join(", ")})`);
+    console.log(
+      `[tx-check v0] 扫描 ${sourceFiles.length} 个 .ts 文件 (targets: ${opts.paths.join(", ")})`,
+    );
     printTextReport(filtered, opts.types);
   }
 
@@ -869,18 +954,33 @@ function main() {
     const isPartialScan = opts.pathsExplicit || !!opts.types;
     const incrementalEnabled = !opts.forceReport && !isPartialScan;
 
-    const absOutDir = path.isAbsolute(opts.outDir) ? opts.outDir : path.join(ROOT, opts.outDir);
-    const diff = incrementalEnabled ? diffAgainstBaseline(filtered, absOutDir) : null;
+    const absOutDir = path.isAbsolute(opts.outDir)
+      ? opts.outDir
+      : path.join(ROOT, opts.outDir);
+    const diff = incrementalEnabled
+      ? diffAgainstBaseline(filtered, absOutDir)
+      : null;
 
-    const shouldWrite = opts.forceReport || isPartialScan || !diff || diff.added.length > 0 || diff.baselinePath === null;
+    const shouldWrite =
+      opts.forceReport ||
+      isPartialScan ||
+      !diff ||
+      diff.added.length > 0 ||
+      diff.baselinePath === null;
 
     if (!shouldWrite && diff) {
       if (!opts.json) {
         console.log(`[tx-check v0] 增量判定: 无新增 finding，跳过写入报告`);
-        console.log(`  baseline: ${path.relative(ROOT, diff.baselinePath as string)}`);
-        console.log(`  unchanged=${diff.unchanged}  removed=${diff.removed.length}  added=0`);
+        console.log(
+          `  baseline: ${path.relative(ROOT, diff.baselinePath as string)}`,
+        );
+        console.log(
+          `  unchanged=${diff.unchanged}  removed=${diff.removed.length}  added=0`,
+        );
         if (diff.removed.length > 0) {
-          console.log(`  ✓ 已修复 ${diff.removed.length} 条历史 finding（如需刷新 baseline，重跑加 --force-report）`);
+          console.log(
+            `  ✓ 已修复 ${diff.removed.length} 条历史 finding（如需刷新 baseline，重跑加 --force-report）`,
+          );
         }
       }
     } else {
@@ -891,16 +991,24 @@ function main() {
         filterTypes: opts.types,
         strict: opts.strict,
       };
-      const { mdPath, jsonPath } = writeReportFiles(filtered, meta, opts.outDir);
+      const { mdPath, jsonPath } = writeReportFiles(
+        filtered,
+        meta,
+        opts.outDir,
+      );
       if (!opts.json) {
         if (diff && diff.baselinePath) {
           console.log(`[tx-check v0] 增量判定: 检测到新增 finding，写入新报告`);
           console.log(`  baseline: ${path.relative(ROOT, diff.baselinePath)}`);
-          console.log(`  added=${diff.added.length}  removed=${diff.removed.length}  unchanged=${diff.unchanged}`);
+          console.log(
+            `  added=${diff.added.length}  removed=${diff.removed.length}  unchanged=${diff.unchanged}`,
+          );
         } else if (incrementalEnabled) {
           console.log(`[tx-check v0] 增量判定: 未找到 baseline，写入首份报告`);
         } else if (isPartialScan) {
-          console.log(`[tx-check v0] 局部扫描（启用了 --paths/--types），跳过增量判定，直接写报告`);
+          console.log(
+            `[tx-check v0] 局部扫描（启用了 --paths/--types），跳过增量判定，直接写报告`,
+          );
         }
         console.log(`[tx-check v0] 报告已写入:`);
         console.log(`  ${path.relative(ROOT, mdPath)}`);

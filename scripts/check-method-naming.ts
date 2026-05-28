@@ -41,14 +41,26 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { type ClassDeclaration, type MethodDeclaration, Project, type SourceFile, SyntaxKind } from "ts-morph";
+import {
+  type ClassDeclaration,
+  type MethodDeclaration,
+  Project,
+  type SourceFile,
+  SyntaxKind,
+} from "ts-morph";
 
 const ROOT = path.resolve(__dirname, "..");
 
 const SUFFIX_REGEX = /(InDb|InTx|InTransaction)$/;
 const PREFIX_REGEX = /^persist[A-Z]/;
 
-const SKIP_CLASS_DECORATORS = new Set(["Controller", "Resolver", "Processor", "WebSocketGateway", "EventPattern"]);
+const SKIP_CLASS_DECORATORS = new Set([
+  "Controller",
+  "Resolver",
+  "Processor",
+  "WebSocketGateway",
+  "EventPattern",
+]);
 
 type IssueType = "PRIVATE_TX_NAMING" | "MISSING_TX_ON_NAMED";
 
@@ -117,7 +129,9 @@ function parseArgs(argv: string[]): CliOptions {
           v
             .split(",")
             .map((s) => s.trim().toUpperCase() as IssueType)
-            .filter((s): s is IssueType => ["PRIVATE_TX_NAMING", "MISSING_TX_ON_NAMED"].includes(s)),
+            .filter((s): s is IssueType =>
+              ["PRIVATE_TX_NAMING", "MISSING_TX_ON_NAMED"].includes(s),
+            ),
         );
       }
     } else if (a === "--help" || a === "-h") {
@@ -156,17 +170,29 @@ Method Naming Fence v0
 function shouldSkipFile(filePath: string): boolean {
   const rel = path.relative(ROOT, filePath);
   if (rel.startsWith("node_modules") || rel.startsWith("dist")) return true;
-  if (rel.includes("/test/") || rel.includes("/tests/") || rel.includes("/__tests__/")) return true;
-  if (rel.endsWith(".spec.ts") || rel.endsWith(".e2e-spec.ts") || rel.endsWith(".test.ts")) {
+  if (
+    rel.includes("/test/") ||
+    rel.includes("/tests/") ||
+    rel.includes("/__tests__/")
+  )
+    return true;
+  if (
+    rel.endsWith(".spec.ts") ||
+    rel.endsWith(".e2e-spec.ts") ||
+    rel.endsWith(".test.ts")
+  ) {
     return true;
   }
   if (rel.includes("/migrations/")) return true;
   if (rel.includes("/openspec/")) return true;
   // meshbot 非 NestJS 服务层代码：前端、CLI、Agent 域（vitest）、桌面端
   if (rel.startsWith("apps/web-") || rel.includes("/apps/web-")) return true;
-  if (rel.startsWith("apps/cli-agent") || rel.includes("/apps/cli-agent/")) return true;
-  if (rel.startsWith("apps/desktop") || rel.includes("/apps/desktop/")) return true;
-  if (rel.startsWith("libs/agent/") || rel.includes("/libs/agent/")) return true;
+  if (rel.startsWith("apps/cli-agent") || rel.includes("/apps/cli-agent/"))
+    return true;
+  if (rel.startsWith("apps/desktop") || rel.includes("/apps/desktop/"))
+    return true;
+  if (rel.startsWith("libs/agent/") || rel.includes("/libs/agent/"))
+    return true;
   if (rel.startsWith("packages/") || rel.includes("/packages/")) return true;
   if (rel.includes("/.next/")) return true;
   if (rel.endsWith(".d.ts")) return true;
@@ -184,7 +210,9 @@ function getDecoratorByName(method: MethodDeclaration, name: string) {
   return method.getDecorators().find((d) => d.getName() === name);
 }
 
-function getMethodVisibility(method: MethodDeclaration): "public" | "private" | "protected" {
+function getMethodVisibility(
+  method: MethodDeclaration,
+): "public" | "private" | "protected" {
   for (const mod of method.getModifiers()) {
     const k = mod.getKind();
     if (k === SyntaxKind.PrivateKeyword) return "private";
@@ -204,14 +232,21 @@ function methodHasIgnoreComment(method: MethodDeclaration): boolean {
 }
 
 function fileHasIgnoreComment(sourceFile: SourceFile): boolean {
-  return /naming-check:\s*ignore-file\b/.test(sourceFile.getFullText().slice(0, 500));
+  return /naming-check:\s*ignore-file\b/.test(
+    sourceFile.getFullText().slice(0, 500),
+  );
 }
 
 function matchesNamingConvention(name: string): boolean {
   return SUFFIX_REGEX.test(name) || PREFIX_REGEX.test(name);
 }
 
-function analyzeMethod(method: MethodDeclaration, className: string, sourceFile: SourceFile, out: Issue[]) {
+function analyzeMethod(
+  method: MethodDeclaration,
+  className: string,
+  sourceFile: SourceFile,
+  out: Issue[],
+) {
   const methodName = method.getName();
   if (!methodName) return;
   if (methodHasIgnoreComment(method)) return;
@@ -235,7 +270,11 @@ function analyzeMethod(method: MethodDeclaration, className: string, sourceFile:
     return;
   }
 
-  if (!hasTx && namingMatched && (visibility === "private" || visibility === "protected")) {
+  if (
+    !hasTx &&
+    namingMatched &&
+    (visibility === "private" || visibility === "protected")
+  ) {
     out.push({
       type: "MISSING_TX_ON_NAMED",
       file: sourceFile.getFilePath(),
@@ -295,8 +334,12 @@ function printTextReport(issues: Issue[], filterTypes: Set<IssueType> | null) {
 
   const total = issues.length;
   console.log(`\n[naming-check v0] 共发现 ${total} 个问题`);
-  console.log(`  PRIVATE_TX_NAMING:   ${grouped.PRIVATE_TX_NAMING.length}  private @Transactional() 方法命名不规范`);
-  console.log(`  MISSING_TX_ON_NAMED: ${grouped.MISSING_TX_ON_NAMED.length}  命名命中约定但缺 @Transactional()\n`);
+  console.log(
+    `  PRIVATE_TX_NAMING:   ${grouped.PRIVATE_TX_NAMING.length}  private @Transactional() 方法命名不规范`,
+  );
+  console.log(
+    `  MISSING_TX_ON_NAMED: ${grouped.MISSING_TX_ON_NAMED.length}  命名命中约定但缺 @Transactional()\n`,
+  );
 
   const order: IssueType[] = ["PRIVATE_TX_NAMING", "MISSING_TX_ON_NAMED"];
   for (const type of order) {
@@ -307,7 +350,9 @@ function printTextReport(issues: Issue[], filterTypes: Set<IssueType> | null) {
     for (const i of list) {
       const rel = path.relative(ROOT, i.file);
       console.log(`\n  ${rel}:${i.line}`);
-      console.log(`    [${i.visibility}] ${i.className}.${i.methodName}: ${i.details}`);
+      console.log(
+        `    [${i.visibility}] ${i.className}.${i.methodName}: ${i.details}`,
+      );
       if (i.hint) {
         console.log(`    → ${i.hint}`);
       }
@@ -344,7 +389,9 @@ function buildMarkdownReport(issues: Issue[], meta: ReportMeta): string {
   for (const i of issues) grouped[i.type].push(i);
 
   const lines: string[] = [];
-  lines.push(`# method-naming fence report ${formatReportTimestamp(meta.generatedAt)}`);
+  lines.push(
+    `# method-naming fence report ${formatReportTimestamp(meta.generatedAt)}`,
+  );
   lines.push("");
   lines.push(`- **生成时间**: ${formatHumanTimestamp(meta.generatedAt)}`);
   lines.push(`- **扫描路径**: ${meta.paths.join(", ")}`);
@@ -360,7 +407,9 @@ function buildMarkdownReport(issues: Issue[], meta: ReportMeta): string {
   lines.push("");
   lines.push("- 后缀：`*InDb` / `*InTx` / `*InTransaction`（首选 `*InDb`）");
   lines.push("- 前缀：`persist[A-Z]*`");
-  lines.push("- 豁免：方法 JSDoc 中加 `@no-tx-naming` 标记可跳过校验（如方法体含 HTTP/MQ 不能放事务）");
+  lines.push(
+    "- 豁免：方法 JSDoc 中加 `@no-tx-naming` 标记可跳过校验（如方法体含 HTTP/MQ 不能放事务）",
+  );
   lines.push("");
 
   lines.push("## 摘要");
@@ -395,7 +444,9 @@ function buildMarkdownReport(issues: Issue[], meta: ReportMeta): string {
     lines.push("");
     for (const i of list) {
       const rel = path.relative(ROOT, i.file);
-      lines.push(`- **\`${rel}:${i.line}\`** — \`[${i.visibility}] ${i.className}.${i.methodName}\``);
+      lines.push(
+        `- **\`${rel}:${i.line}\`** — \`[${i.visibility}] ${i.className}.${i.methodName}\``,
+      );
       lines.push(`  - ${i.details}`);
       if (i.hint) {
         lines.push(`  - hint: ${i.hint}`);
@@ -447,10 +498,18 @@ function loadBaselineFingerprints(jsonPath: string): Set<string> | null {
   }
 }
 
-function diffAgainstBaseline(currentIssues: Issue[], absOutDir: string): BaselineDiff {
+function diffAgainstBaseline(
+  currentIssues: Issue[],
+  absOutDir: string,
+): BaselineDiff {
   const baselinePath = findLatestBaselineJson(absOutDir);
   if (!baselinePath) {
-    return { baselinePath: null, added: currentIssues, removed: [], unchanged: 0 };
+    return {
+      baselinePath: null,
+      added: currentIssues,
+      removed: [],
+      unchanged: 0,
+    };
   }
   const baselineFps = loadBaselineFingerprints(baselinePath);
   if (!baselineFps) {
@@ -477,7 +536,11 @@ function diffAgainstBaseline(currentIssues: Issue[], absOutDir: string): Baselin
   return { baselinePath, added, removed, unchanged };
 }
 
-function writeReportFiles(issues: Issue[], meta: ReportMeta, outDir: string): { mdPath: string; jsonPath: string } {
+function writeReportFiles(
+  issues: Issue[],
+  meta: ReportMeta,
+  outDir: string,
+): { mdPath: string; jsonPath: string } {
   const absOutDir = path.isAbsolute(outDir) ? outDir : path.join(ROOT, outDir);
   fs.mkdirSync(absOutDir, { recursive: true });
 
@@ -515,12 +578,18 @@ function main() {
   const issues: Issue[] = [];
   for (const sf of sourceFiles) analyzeFile(sf, issues);
 
-  const filtered = opts.types ? issues.filter((i) => opts.types?.has(i.type)) : issues;
+  const filtered = opts.types
+    ? issues.filter((i) => opts.types?.has(i.type))
+    : issues;
 
   if (opts.json) {
-    process.stdout.write(`${JSON.stringify({ total: filtered.length, issues: filtered }, null, 2)}\n`);
+    process.stdout.write(
+      `${JSON.stringify({ total: filtered.length, issues: filtered }, null, 2)}\n`,
+    );
   } else {
-    console.log(`[naming-check v0] 扫描 ${sourceFiles.length} 个 .ts 文件 (targets: ${opts.paths.join(", ")})`);
+    console.log(
+      `[naming-check v0] 扫描 ${sourceFiles.length} 个 .ts 文件 (targets: ${opts.paths.join(", ")})`,
+    );
     printTextReport(filtered, opts.types);
   }
 
@@ -528,19 +597,33 @@ function main() {
     const isPartialScan = opts.pathsExplicit || !!opts.types;
     const incrementalEnabled = !opts.forceReport && !isPartialScan;
 
-    const absOutDir = path.isAbsolute(opts.outDir) ? opts.outDir : path.join(ROOT, opts.outDir);
-    const diff = incrementalEnabled ? diffAgainstBaseline(filtered, absOutDir) : null;
+    const absOutDir = path.isAbsolute(opts.outDir)
+      ? opts.outDir
+      : path.join(ROOT, opts.outDir);
+    const diff = incrementalEnabled
+      ? diffAgainstBaseline(filtered, absOutDir)
+      : null;
 
     const shouldWrite =
-      opts.forceReport || isPartialScan || !diff || diff.added.length > 0 || diff.baselinePath === null;
+      opts.forceReport ||
+      isPartialScan ||
+      !diff ||
+      diff.added.length > 0 ||
+      diff.baselinePath === null;
 
     if (!shouldWrite && diff) {
       if (!opts.json) {
         console.log(`[naming-check v0] 增量判定: 无新增 finding，跳过写入报告`);
-        console.log(`  baseline: ${path.relative(ROOT, diff.baselinePath as string)}`);
-        console.log(`  unchanged=${diff.unchanged}  removed=${diff.removed.length}  added=0`);
+        console.log(
+          `  baseline: ${path.relative(ROOT, diff.baselinePath as string)}`,
+        );
+        console.log(
+          `  unchanged=${diff.unchanged}  removed=${diff.removed.length}  added=0`,
+        );
         if (diff.removed.length > 0) {
-          console.log(`  ✓ 已修复 ${diff.removed.length} 条历史 finding（如需刷新 baseline，重跑加 --force-report）`);
+          console.log(
+            `  ✓ 已修复 ${diff.removed.length} 条历史 finding（如需刷新 baseline，重跑加 --force-report）`,
+          );
         }
       }
     } else {
@@ -551,16 +634,28 @@ function main() {
         filterTypes: opts.types,
         strict: opts.strict,
       };
-      const { mdPath, jsonPath } = writeReportFiles(filtered, meta, opts.outDir);
+      const { mdPath, jsonPath } = writeReportFiles(
+        filtered,
+        meta,
+        opts.outDir,
+      );
       if (!opts.json) {
         if (diff && diff.baselinePath) {
-          console.log(`[naming-check v0] 增量判定: 检测到新增 finding，写入新报告`);
+          console.log(
+            `[naming-check v0] 增量判定: 检测到新增 finding，写入新报告`,
+          );
           console.log(`  baseline: ${path.relative(ROOT, diff.baselinePath)}`);
-          console.log(`  added=${diff.added.length}  removed=${diff.removed.length}  unchanged=${diff.unchanged}`);
+          console.log(
+            `  added=${diff.added.length}  removed=${diff.removed.length}  unchanged=${diff.unchanged}`,
+          );
         } else if (incrementalEnabled) {
-          console.log(`[naming-check v0] 增量判定: 未找到 baseline，写入首份报告`);
+          console.log(
+            `[naming-check v0] 增量判定: 未找到 baseline，写入首份报告`,
+          );
         } else if (isPartialScan) {
-          console.log(`[naming-check v0] 局部扫描（启用了 --paths/--types），跳过增量判定，直接写报告`);
+          console.log(
+            `[naming-check v0] 局部扫描（启用了 --paths/--types），跳过增量判定，直接写报告`,
+          );
         }
         console.log(`[naming-check v0] 报告已写入:`);
         console.log(`  ${path.relative(ROOT, mdPath)}`);

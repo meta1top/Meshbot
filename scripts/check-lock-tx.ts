@@ -51,7 +51,12 @@ import {
 
 const ROOT = path.resolve(__dirname, "..");
 
-const SKIP_CLASS_DECORATORS = new Set(["Controller", "Resolver", "WebSocketGateway", "EventPattern"]);
+const SKIP_CLASS_DECORATORS = new Set([
+  "Controller",
+  "Resolver",
+  "WebSocketGateway",
+  "EventPattern",
+]);
 
 type IssueType = "LOCK_INSIDE_TX_DECORATOR" | "LOCK_INSIDE_TX_CALL";
 
@@ -169,17 +174,29 @@ Lock-Tx Inversion Fence v0
 function shouldSkipFile(filePath: string): boolean {
   const rel = path.relative(ROOT, filePath);
   if (rel.startsWith("node_modules") || rel.startsWith("dist")) return true;
-  if (rel.includes("/test/") || rel.includes("/tests/") || rel.includes("/__tests__/")) return true;
-  if (rel.endsWith(".spec.ts") || rel.endsWith(".e2e-spec.ts") || rel.endsWith(".test.ts")) {
+  if (
+    rel.includes("/test/") ||
+    rel.includes("/tests/") ||
+    rel.includes("/__tests__/")
+  )
+    return true;
+  if (
+    rel.endsWith(".spec.ts") ||
+    rel.endsWith(".e2e-spec.ts") ||
+    rel.endsWith(".test.ts")
+  ) {
     return true;
   }
   if (rel.includes("/migrations/")) return true;
   if (rel.includes("/openspec/")) return true;
   // meshbot 非 NestJS 服务层代码：前端、CLI、Agent 域（vitest）、桌面端
   if (rel.startsWith("apps/web-") || rel.includes("/apps/web-")) return true;
-  if (rel.startsWith("apps/cli-agent") || rel.includes("/apps/cli-agent/")) return true;
-  if (rel.startsWith("apps/desktop") || rel.includes("/apps/desktop/")) return true;
-  if (rel.startsWith("libs/agent/") || rel.includes("/libs/agent/")) return true;
+  if (rel.startsWith("apps/cli-agent") || rel.includes("/apps/cli-agent/"))
+    return true;
+  if (rel.startsWith("apps/desktop") || rel.includes("/apps/desktop/"))
+    return true;
+  if (rel.startsWith("libs/agent/") || rel.includes("/libs/agent/"))
+    return true;
   if (rel.startsWith("packages/") || rel.includes("/packages/")) return true;
   if (rel.includes("/.next/")) return true;
   if (rel.endsWith(".d.ts")) return true;
@@ -208,14 +225,18 @@ function methodHasIgnoreComment(method: MethodDeclaration): boolean {
 }
 
 function fileHasIgnoreComment(sourceFile: SourceFile): boolean {
-  return /lock-tx-check:\s*ignore-file\b/.test(sourceFile.getFullText().slice(0, 500));
+  return /lock-tx-check:\s*ignore-file\b/.test(
+    sourceFile.getFullText().slice(0, 500),
+  );
 }
 
 /**
  * Pass 1: 收集所有带 @WithLock 的 service 方法
  * 返回 className -> Set<methodName> 映射
  */
-function collectLockedMethods(sourceFiles: SourceFile[]): Map<string, Map<string, LockedMethodRef>> {
+function collectLockedMethods(
+  sourceFiles: SourceFile[],
+): Map<string, Map<string, LockedMethodRef>> {
   const map = new Map<string, Map<string, LockedMethodRef>>();
   for (const sf of sourceFiles) {
     if (shouldSkipFile(sf.getFilePath())) continue;
@@ -389,7 +410,12 @@ function analyzeMethod(
     }
   }
 
-  const callHits = findLockedCalls(method, className, fieldTypeMap, lockedMethods);
+  const callHits = findLockedCalls(
+    method,
+    className,
+    fieldTypeMap,
+    lockedMethods,
+  );
   for (const hit of callHits) {
     out.push({
       type: "LOCK_INSIDE_TX_CALL",
@@ -464,7 +490,10 @@ function printTextReport(issues: Issue[], filterTypes: Set<IssueType> | null) {
     `  LOCK_INSIDE_TX_CALL:      ${grouped.LOCK_INSIDE_TX_CALL.length}  @Transactional 方法体内调用了 @WithLock 方法\n`,
   );
 
-  const order: IssueType[] = ["LOCK_INSIDE_TX_DECORATOR", "LOCK_INSIDE_TX_CALL"];
+  const order: IssueType[] = [
+    "LOCK_INSIDE_TX_DECORATOR",
+    "LOCK_INSIDE_TX_CALL",
+  ];
   for (const type of order) {
     if (filterTypes && !filterTypes.has(type)) continue;
     const list = grouped[type];
@@ -514,7 +543,9 @@ function buildMarkdownReport(issues: Issue[], meta: ReportMeta): string {
   for (const i of issues) grouped[i.type].push(i);
 
   const lines: string[] = [];
-  lines.push(`# lock-tx fence report ${formatReportTimestamp(meta.generatedAt)}`);
+  lines.push(
+    `# lock-tx fence report ${formatReportTimestamp(meta.generatedAt)}`,
+  );
   lines.push("");
   lines.push(`- **生成时间**: ${formatHumanTimestamp(meta.generatedAt)}`);
   lines.push(`- **扫描路径**: ${meta.paths.join(", ")}`);
@@ -529,16 +560,22 @@ function buildMarkdownReport(issues: Issue[], meta: ReportMeta): string {
 
   lines.push("## 漏洞机理");
   lines.push("");
-  lines.push("「事务-锁倒置」让锁的临界区 ⊊ 事务的临界区——锁释放时事务尚未 COMMIT，唯一性 / 幂等保护被静默绕过：");
+  lines.push(
+    "「事务-锁倒置」让锁的临界区 ⊊ 事务的临界区——锁释放时事务尚未 COMMIT，唯一性 / 幂等保护被静默绕过：",
+  );
   lines.push("");
   lines.push("1. 进入 `@Transactional` → 数据库 BEGIN，开启事务快照");
   lines.push("2. 进入内层 `@WithLock` → Redis 拿到锁");
-  lines.push("3. 内层方法查询 → 只能看到自己事务的快照，看不到其他并发事务尚未 COMMIT 的写入");
+  lines.push(
+    "3. 内层方法查询 → 只能看到自己事务的快照，看不到其他并发事务尚未 COMMIT 的写入",
+  );
   lines.push("4. 内层方法 save → 仍在事务内，未真正落库");
   lines.push("5. 内层方法返回 → **Redis 锁立刻释放**");
   lines.push("6. 外层 `@Transactional` 还没 COMMIT");
   lines.push("7. 此时另一个并发请求拿到同把锁，做相同的「查询 → 校验 → 写入」");
-  lines.push("8. 它的查询同样看不到第一个事务的未提交数据 → 校验通过 → 也插入一条");
+  lines.push(
+    "8. 它的查询同样看不到第一个事务的未提交数据 → 校验通过 → 也插入一条",
+  );
   lines.push("9. 两个事务先后 COMMIT → **唯一性约束失效 / 幂等保护失效**");
   lines.push("");
 
@@ -565,7 +602,10 @@ function buildMarkdownReport(issues: Issue[], meta: ReportMeta): string {
 
   lines.push("## 详情");
   lines.push("");
-  const order: IssueType[] = ["LOCK_INSIDE_TX_DECORATOR", "LOCK_INSIDE_TX_CALL"];
+  const order: IssueType[] = [
+    "LOCK_INSIDE_TX_DECORATOR",
+    "LOCK_INSIDE_TX_CALL",
+  ];
   for (const type of order) {
     if (meta.filterTypes && !meta.filterTypes.has(type)) continue;
     const list = grouped[type];
@@ -574,7 +614,9 @@ function buildMarkdownReport(issues: Issue[], meta: ReportMeta): string {
     lines.push("");
     for (const i of list) {
       const rel = path.relative(ROOT, i.file);
-      lines.push(`- **\`${rel}:${i.line}\`** — \`${i.className}.${i.methodName}\``);
+      lines.push(
+        `- **\`${rel}:${i.line}\`** — \`${i.className}.${i.methodName}\``,
+      );
       lines.push(`  - ${i.details}`);
       if (i.evidence?.length) {
         for (const e of i.evidence) lines.push(`  - evidence: \`${e}\``);
@@ -596,7 +638,9 @@ function buildMarkdownReport(issues: Issue[], meta: ReportMeta): string {
  */
 function issueFingerprint(i: Issue): string {
   const rel = path.relative(ROOT, i.file);
-  const target = i.lockedTarget ? `|${i.lockedTarget.className}.${i.lockedTarget.methodName}` : "";
+  const target = i.lockedTarget
+    ? `|${i.lockedTarget.className}.${i.lockedTarget.methodName}`
+    : "";
   return `${i.type}|${rel}|${i.className}.${i.methodName}${target}`;
 }
 
@@ -631,10 +675,18 @@ function loadBaselineFingerprints(jsonPath: string): Set<string> | null {
   }
 }
 
-function diffAgainstBaseline(currentIssues: Issue[], absOutDir: string): BaselineDiff {
+function diffAgainstBaseline(
+  currentIssues: Issue[],
+  absOutDir: string,
+): BaselineDiff {
   const baselinePath = findLatestBaselineJson(absOutDir);
   if (!baselinePath) {
-    return { baselinePath: null, added: currentIssues, removed: [], unchanged: 0 };
+    return {
+      baselinePath: null,
+      added: currentIssues,
+      removed: [],
+      unchanged: 0,
+    };
   }
   const baselineFps = loadBaselineFingerprints(baselinePath);
   if (!baselineFps) {
@@ -661,7 +713,11 @@ function diffAgainstBaseline(currentIssues: Issue[], absOutDir: string): Baselin
   return { baselinePath, added, removed, unchanged };
 }
 
-function writeReportFiles(issues: Issue[], meta: ReportMeta, outDir: string): { mdPath: string; jsonPath: string } {
+function writeReportFiles(
+  issues: Issue[],
+  meta: ReportMeta,
+  outDir: string,
+): { mdPath: string; jsonPath: string } {
   const absOutDir = path.isAbsolute(outDir) ? outDir : path.join(ROOT, outDir);
   fs.mkdirSync(absOutDir, { recursive: true });
 
@@ -692,7 +748,9 @@ function writeReportFiles(issues: Issue[], meta: ReportMeta, outDir: string): { 
   return { mdPath, jsonPath };
 }
 
-function countLockedMethods(map: Map<string, Map<string, LockedMethodRef>>): number {
+function countLockedMethods(
+  map: Map<string, Map<string, LockedMethodRef>>,
+): number {
   let n = 0;
   for (const inner of map.values()) n += inner.size;
   return n;
@@ -709,10 +767,14 @@ function main() {
   const issues: Issue[] = [];
   for (const sf of sourceFiles) analyzeFile(sf, lockedMethods, issues);
 
-  const filtered = opts.types ? issues.filter((i) => opts.types?.has(i.type)) : issues;
+  const filtered = opts.types
+    ? issues.filter((i) => opts.types?.has(i.type))
+    : issues;
 
   if (opts.json) {
-    process.stdout.write(`${JSON.stringify({ total: filtered.length, issues: filtered }, null, 2)}\n`);
+    process.stdout.write(
+      `${JSON.stringify({ total: filtered.length, issues: filtered }, null, 2)}\n`,
+    );
   } else {
     console.log(
       `[lock-tx-check v0] 扫描 ${sourceFiles.length} 个 .ts 文件 (targets: ${opts.paths.join(", ")})；@WithLock 方法 ${lockedMethodCount} 个`,
@@ -724,19 +786,35 @@ function main() {
     const isPartialScan = opts.pathsExplicit || !!opts.types;
     const incrementalEnabled = !opts.forceReport && !isPartialScan;
 
-    const absOutDir = path.isAbsolute(opts.outDir) ? opts.outDir : path.join(ROOT, opts.outDir);
-    const diff = incrementalEnabled ? diffAgainstBaseline(filtered, absOutDir) : null;
+    const absOutDir = path.isAbsolute(opts.outDir)
+      ? opts.outDir
+      : path.join(ROOT, opts.outDir);
+    const diff = incrementalEnabled
+      ? diffAgainstBaseline(filtered, absOutDir)
+      : null;
 
     const shouldWrite =
-      opts.forceReport || isPartialScan || !diff || diff.added.length > 0 || diff.baselinePath === null;
+      opts.forceReport ||
+      isPartialScan ||
+      !diff ||
+      diff.added.length > 0 ||
+      diff.baselinePath === null;
 
     if (!shouldWrite && diff) {
       if (!opts.json) {
-        console.log(`[lock-tx-check v0] 增量判定: 无新增 finding，跳过写入报告`);
-        console.log(`  baseline: ${path.relative(ROOT, diff.baselinePath as string)}`);
-        console.log(`  unchanged=${diff.unchanged}  removed=${diff.removed.length}  added=0`);
+        console.log(
+          `[lock-tx-check v0] 增量判定: 无新增 finding，跳过写入报告`,
+        );
+        console.log(
+          `  baseline: ${path.relative(ROOT, diff.baselinePath as string)}`,
+        );
+        console.log(
+          `  unchanged=${diff.unchanged}  removed=${diff.removed.length}  added=0`,
+        );
         if (diff.removed.length > 0) {
-          console.log(`  ✓ 已修复 ${diff.removed.length} 条历史 finding（如需刷新 baseline，重跑加 --force-report）`);
+          console.log(
+            `  ✓ 已修复 ${diff.removed.length} 条历史 finding（如需刷新 baseline，重跑加 --force-report）`,
+          );
         }
       }
     } else {
@@ -748,16 +826,28 @@ function main() {
         strict: opts.strict,
         lockedMethodCount,
       };
-      const { mdPath, jsonPath } = writeReportFiles(filtered, meta, opts.outDir);
+      const { mdPath, jsonPath } = writeReportFiles(
+        filtered,
+        meta,
+        opts.outDir,
+      );
       if (!opts.json) {
         if (diff && diff.baselinePath) {
-          console.log(`[lock-tx-check v0] 增量判定: 检测到新增 finding，写入新报告`);
+          console.log(
+            `[lock-tx-check v0] 增量判定: 检测到新增 finding，写入新报告`,
+          );
           console.log(`  baseline: ${path.relative(ROOT, diff.baselinePath)}`);
-          console.log(`  added=${diff.added.length}  removed=${diff.removed.length}  unchanged=${diff.unchanged}`);
+          console.log(
+            `  added=${diff.added.length}  removed=${diff.removed.length}  unchanged=${diff.unchanged}`,
+          );
         } else if (incrementalEnabled) {
-          console.log(`[lock-tx-check v0] 增量判定: 未找到 baseline，写入首份报告`);
+          console.log(
+            `[lock-tx-check v0] 增量判定: 未找到 baseline，写入首份报告`,
+          );
         } else if (isPartialScan) {
-          console.log(`[lock-tx-check v0] 局部扫描（启用了 --paths/--types），跳过增量判定，直接写报告`);
+          console.log(
+            `[lock-tx-check v0] 局部扫描（启用了 --paths/--types），跳过增量判定，直接写报告`,
+          );
         }
         console.log(`[lock-tx-check v0] 报告已写入:`);
         console.log(`  ${path.relative(ROOT, mdPath)}`);

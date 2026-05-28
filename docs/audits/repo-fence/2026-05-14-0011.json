@@ -1,8 +1,6 @@
 {
   "generatedAt": "2026-05-13T16:11:01.311Z",
-  "paths": [
-    "libs"
-  ],
+  "paths": ["libs"],
   "fileCount": 49,
   "filterTypes": null,
   "strict": false,
