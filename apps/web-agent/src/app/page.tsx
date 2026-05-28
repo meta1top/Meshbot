@@ -17,6 +17,7 @@ import { SuggestionChips } from "@/components/common/suggestion-chips";
 import { AppShellLayout } from "@/components/layouts/app-shell-layout";
 import { formatPeakHour, formatStreak } from "@/lib/format-stats";
 import { formatTokens } from "@/lib/format-tokens";
+import { toI18nList } from "@/lib/i18n-list";
 import { createSession } from "@/rest/session";
 import { fetchStats } from "@/rest/stats";
 
@@ -30,8 +31,11 @@ export default function Home() {
   const [draft, setDraft] = useState("");
   const inputRef = useRef<ChatInputHandle>(null);
 
-  // 随机标题：首帧用第 0 条，挂载后随机替换，避免 SSR/CSR hydration mismatch
-  const titles = (t.raw("titles") as string[]) ?? [t("title")];
+  // 随机标题：首帧用第 0 条，挂载后随机替换，避免 SSR/CSR hydration mismatch。
+  // 注意 sync-locales 用 dot 路径 flatten/unflatten，list 会落成 {"0":..,"1":..}
+  // object（非 Array），t.raw 返回的是 object —— 必须 Object.values 取列表，
+  // 否则 .length 是 undefined，永远落在 index 0，随机轮换形同虚设。
+  const titles = toI18nList(t.raw("titles"), () => t("title"));
   const [titleIdx, setTitleIdx] = useState(0);
   useEffect(() => {
     if (titles.length > 1) {
@@ -41,7 +45,7 @@ export default function Home() {
   const title = titles[titleIdx] ?? t("title");
 
   // 输入框 placeholder：同样客户端挂载后随机选一条（首页才随机，session 视图用默认）
-  const placeholders = (t.raw("inputPlaceholders") as string[]) ?? [];
+  const placeholders = toI18nList(t.raw("inputPlaceholders"));
   const [phIdx, setPhIdx] = useState(0);
   useEffect(() => {
     if (placeholders.length > 1) {

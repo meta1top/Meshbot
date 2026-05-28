@@ -44,6 +44,7 @@ import {
   type TimelineMessage,
 } from "@/components/session/message-list";
 import { PendingList } from "@/components/session/pending-list";
+import { toI18nList } from "@/lib/i18n-list";
 import { getSessionSocket } from "@/lib/socket";
 import { useModelConfigs } from "@/rest/model-config";
 import {
@@ -67,7 +68,8 @@ function SessionView() {
   const chatInputRef = useRef<ChatInputHandle>(null);
 
   // 输入框 placeholder：挂载后从同一组文案随机选一条（与首页一致，避免单调）
-  const placeholders = (tHome.raw("inputPlaceholders") as string[]) ?? [];
+  // sync-locales 把数组 flatten 成 numeric-key 对象，toI18nList 兜底还原列表
+  const placeholders = toI18nList(tHome.raw("inputPlaceholders"));
   const [phIdx, setPhIdx] = useState(0);
   useEffect(() => {
     if (placeholders.length > 1) {

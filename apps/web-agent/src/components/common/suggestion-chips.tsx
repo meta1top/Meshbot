@@ -2,6 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
+import { toI18nList } from "@/lib/i18n-list";
 import { fetchSuggestions } from "@/rest/stats";
 
 interface SuggestionChipsProps {
@@ -25,10 +26,12 @@ export function SuggestionChips({ onPick }: SuggestionChipsProps) {
     fetchSuggestions()
       .then((res) => {
         if (!alive) return;
+        // 后端返回空时 fallback 默认建议；sync-locales 把数组 flatten 成
+        // numeric-key 对象，toI18nList 兜底还原列表
         const list =
           res.suggestions.length > 0
             ? res.suggestions
-            : (t.raw("defaultSuggestions") as string[]);
+            : toI18nList(t.raw("defaultSuggestions"));
         setItems(list);
       })
       .catch(() => {
