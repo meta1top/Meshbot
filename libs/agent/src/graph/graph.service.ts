@@ -438,7 +438,7 @@ export class GraphService {
     const startedAt = Date.now();
     const stream = await this.graph.stream(input, {
       configurable: { thread_id: threadId },
-      streamMode: "messages",
+      streamMode: ["messages", "updates"] as const,
       signal,
       // LangGraph 默认 recursionLimit=25，长会话 + 频繁 tool 调用容易撞墙
       // （报 GraphRecursionError）。可通过 MESHBOT_GRAPH_RECURSION_LIMIT 调整。
@@ -505,13 +505,37 @@ export class GraphService {
     }.bind(this);
 
     for await (const part of stream) {
-      // streamMode:"messages" 产出 [BaseMessage, metadata] 元组
-      const msg = Array.isArray(part) ? part[0] : part;
+      // 多 mode 流：每个 yield 是 [mode, payload]
+      // mode === "messages" → payload = [BaseMessage, metadata]
+      // mode === "updates" → payload = { nodeName: stateUpdate }
+      if (!Array.isArray(part) || part.length !== 2) {
+        continue; // 防御：未知 yield 形状
+      }
+      const [mode, payload] = part as [string, unknown];
+
+      if (mode === "updates") {
+        // supervisor 节点 return → 立即 flush 这一轮 assistant，避免等到 tools
+        // 跑完 ToolMessage 进 stream 才 flush（慢 tool 几十秒空窗，刷新页面看不到）。
+        const updates = payload as Record<string, unknown> | null;
+        if (updates && "supervisor" in updates) {
+          if (currentId !== null && currentAcc !== undefined) {
+            yield* flushRound();
+            currentAcc = undefined;
+            currentId = null;
+            currentRoundStartedAt = Date.now();
+          }
+        }
+        continue;
+      }
+
+      if (mode !== "messages") continue;
+
+      // messages 模式：payload = [BaseMessage, metadata]
+      const messagePart = payload as unknown[];
+      const msg = Array.isArray(messagePart) ? messagePart[0] : messagePart;
       if (!(msg instanceof AIMessageChunk)) {
-        // tools 节点产出 ToolMessage（及任何非 AIMessageChunk 的消息）出现在 stream 里
-        // → supervisor 节点必然已退出 → 立即 flush 当前累加的 assistant，让 runner 早早
-        //   recordAssistant 落库。否则要等下一轮第一个 chunk 才 flush，期间 tool 在跑
-        //   （可能几十秒），刷新页面看不到这一轮的 assistant + 孤儿 tool。
+        // 非 AIMessageChunk（ToolMessage 等）：上面 updates 路径已经把 supervisor 出口
+        // flush 过了；这里保留为 backup 兜底，防 updates 事件意外缺失。
         if (currentId !== null && currentAcc !== undefined) {
           yield* flushRound();
           currentAcc = undefined;

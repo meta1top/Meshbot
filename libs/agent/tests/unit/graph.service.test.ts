@@ -158,13 +158,14 @@ describe("GraphService", () => {
     expect(chunks.length).toBeGreaterThan(0);
   });
 
-  it("ToolMessage 边界即 flushRound（assistant_done(A) 不等下一轮 LLM 启动）", async () => {
+  it("supervisor 节点退出即 flushRound（assistant_done(A) 不等 tool 执行结束）", async () => {
     // 构造一个两轮 ReAct 模型：
     //   轮1 → tool_calls chunk（触发 tools 节点）
-    //   轮2 → 先延迟 200ms，再 yield content chunk
-    // 时间探针：若 assistant_done(轮1) 在 ToolMessage 边界就 flush，
-    // 它必须在第二轮延迟结束前到达（< round2StartedAt + 100ms）。
-    let round2StartedAt = 0;
+    //   轮2 → content chunk（final answer）
+    // 时间探针：echoTool sleep 300ms 模拟慢 tool（MCP / 浏览器调用可能 30s+）。
+    // 修复前：flush 等 ToolMessage 进 stream（tool resolve 之后）→ adA.t ≥ toolFinishedAt。
+    // 修复后：supervisor update 触发立即 flush → adA.t < toolFinishedAt。
+    let toolFinishedAt = 0;
 
     // 正确的 BaseChatModel 子类：_streamResponseChunks 走 LangGraph 回调管道，
     // chunk 才能出现在 streamMode:"messages" 中。
@@ -216,9 +217,7 @@ describe("GraphService", () => {
             { chunk },
           );
         } else {
-          // 轮2：先延迟再回复
-          round2StartedAt = Date.now();
-          await new Promise((r) => setTimeout(r, 200));
+          // 轮2：直接回复（无延迟）
           const chunk = new ChatGenerationChunk({
             message: new AIMessageChunk({ id: "msg-B", content: "好" }),
             text: "好",
@@ -241,6 +240,10 @@ describe("GraphService", () => {
       description: "echo back",
       schema: z.object({ x: z.string() }),
       async execute(args) {
+        // 模拟慢 tool（真实场景 MCP / 浏览器调用可能 30s+）
+        // 用 300ms 即可暴露「flush 等到 tools 节点 return 才触发」的 bug
+        await new Promise((r) => setTimeout(r, 300));
+        toolFinishedAt = Date.now();
         return `echoed: ${args.x}`;
       },
     };
@@ -249,6 +252,8 @@ describe("GraphService", () => {
     };
     const toolRegistry2 = new ToolRegistry(fakeDisc as never);
     toolRegistry2.onModuleInit();
+    // echoTool 是纯对象（无 @Tool() 装饰器），onModuleInit 扫不到，需手动注册
+    toolRegistry2.register(echoTool);
     const cfg2 = new MeshbotConfigService();
     (cfg2 as unknown as Record<string, string>).meshbotDir = testDir;
     const model2 = new TwoRoundModel({});
@@ -275,8 +280,10 @@ describe("GraphService", () => {
       (e) => e.kind === "assistant_done" && e.messageId === "msg-A",
     );
     expect(adA).toBeTruthy();
-    // 关键断言：assistant_done(A) 必须在「第二轮 LLM 开始 200ms 延迟之前」就 yield
-    // 修复前 adA.t ≥ round2StartedAt + 200；修复后 adA.t ≤ round2StartedAt + 100
-    expect(adA?.t).toBeLessThan(round2StartedAt + 100);
+    expect(toolFinishedAt).toBeGreaterThan(0);
+    // 关键断言：assistant_done(A) 必须在 tool 完成之前 yield
+    // 修复前（仅 ToolMessage 触发）：flush 等 ToolMessage 进 stream（tool resolve 之后）→ adA.t ≥ toolFinishedAt
+    // 修复后（supervisor update 触发）：assistant_done 立即 yield，远早于 tool 完成 → adA.t < toolFinishedAt
+    expect(adA?.t).toBeLessThan(toolFinishedAt);
   });
 });
