@@ -124,6 +124,7 @@ export function MessageList({
                   text={m.reasoning}
                   startedAt={m.reasoningStartedAt}
                   durationMs={m.reasoningDurationMs}
+                  streaming={m.streaming}
                 />
               ) : null}
               {/*
@@ -226,13 +227,22 @@ function ReasoningBlock({
   text,
   startedAt,
   durationMs,
+  streaming,
 }: {
   text: string;
   startedAt?: number;
   durationMs?: number;
+  /**
+   * 父 message 是否在流式中（来自 inflight push 或 ws onChunk 标记）。
+   * 为 true 时强制走「思考中」分支 + 默认展开，无视 durationMs ——
+   * 刷新落在 reasoning 流式中时 durationMs=0 会被误判为「已思考」，
+   * 此 prop 是首要语义信号。
+   */
+  streaming?: boolean;
 }) {
   const t = useTranslations("session");
-  const isThinking = durationMs === undefined && startedAt !== undefined;
+  const isThinking =
+    streaming === true || (durationMs === undefined && startedAt !== undefined);
   // 思考中默认展开；思考一结束自动收起。用户点击切换会覆盖这个默认，
   // 但 isThinking 再变化时会再次同步（下一次新的推理流又会展开）。
   const [open, setOpen] = useState(isThinking);
@@ -247,10 +257,14 @@ function ReasoningBlock({
     return () => clearInterval(id);
   }, [isThinking]);
   const elapsed = isThinking
-    ? Date.now() - (startedAt ?? Date.now())
+    ? startedAt !== undefined
+      ? Date.now() - startedAt
+      : 0
     : (durationMs ?? 0);
   const label = isThinking
-    ? t("reasoningThinking", { seconds: (elapsed / 1000).toFixed(1) })
+    ? elapsed > 0
+      ? t("reasoningThinking", { seconds: (elapsed / 1000).toFixed(1) })
+      : t("reasoningThinking", { seconds: "0.0" })
     : elapsed > 0
       ? t("reasoningThought", { seconds: (elapsed / 1000).toFixed(1) })
       : t("reasoningProcess");
