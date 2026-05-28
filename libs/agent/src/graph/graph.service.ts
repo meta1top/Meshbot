@@ -509,6 +509,9 @@ export class GraphService {
       // mode === "messages" → payload = [BaseMessage, metadata]
       // mode === "updates" → payload = { nodeName: stateUpdate }
       if (!Array.isArray(part) || part.length !== 2) {
+        console.warn(
+          `[graph stream] unexpected yield shape, len=${Array.isArray(part) ? part.length : "n/a"}; type=${typeof part}`,
+        );
         continue; // 防御：未知 yield 形状
       }
       const [mode, payload] = part as [string, unknown];

@@ -23,6 +23,13 @@ describe("GraphService", () => {
     const configService = new MeshbotConfigService();
     (configService as unknown as Record<string, string>).meshbotDir = testDir;
     const promptService = new PromptService(testDir);
+    // 注意：以下 fakeModel 是普通对象，不继承 BaseChatModel，stream() 不经过
+    // LangChain 的 callback pipeline。配 streamMode:"messages" 单 mode 时凑合能用，
+    // 但 streamMode:["messages","updates"] 多 mode 下不可靠（chunks 不进 messages 流）。
+    // 想真测 streamMessage/resumeStream 流式行为，参考下面 TwoRoundModel 用
+    // BaseChatModel + _streamResponseChunks 的写法。3 个 pre-existing 挂的用例
+    // 是这个限制的后果，独立 issue 跟进。
+    //
     // fakeModel 用 stream() 逐 token yield AIMessageChunk —— 与 supervisor 节点一致。
     // 每次 stream() 调用产出一个新 id（模拟真实 LLM 每轮回复有独立 id），
     // 单轮内各 chunk 共享同一 id，验证 streamMode:"messages" 管道连通 + messageId 稳定。
@@ -241,8 +248,8 @@ describe("GraphService", () => {
       schema: z.object({ x: z.string() }),
       async execute(args) {
         // 模拟慢 tool（真实场景 MCP / 浏览器调用可能 30s+）
-        // 用 300ms 即可暴露「flush 等到 tools 节点 return 才触发」的 bug
-        await new Promise((r) => setTimeout(r, 300));
+        // 500ms gives ≥495ms margin between flushRound (which fires within ~5ms of supervisor exit) and toolFinishedAt — safe against CI flake.
+        await new Promise((r) => setTimeout(r, 500));
         toolFinishedAt = Date.now();
         return `echoed: ${args.x}`;
       },
