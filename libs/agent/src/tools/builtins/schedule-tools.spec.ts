@@ -41,6 +41,58 @@ describe("schedule tools", () => {
     expect(out).toMatch(/Created scheduled job j1/);
   });
 
+  it("schedule_create kind=once + naive runAt + timezone → 解析成 tz 内的绝对时刻", async () => {
+    const port = {
+      create: vi.fn().mockResolvedValue({ id: "j2", nextFireAt: new Date() }),
+      listBySession: vi.fn(),
+      findOwnedBy: vi.fn(),
+      delete: vi.fn(),
+    };
+    const tool = new ScheduleCreateTool(port);
+    await tool.execute(
+      {
+        title: "meet",
+        kind: "once",
+        runAt: "2026-05-28T10:15:10", // naive
+        timezone: "Asia/Shanghai",
+        prompt: "go",
+      },
+      fakeCtx("session-A"),
+    );
+    // Asia/Shanghai 10:15:10 = UTC 02:15:10
+    expect(port.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "once",
+        runAt: "2026-05-28T02:15:10.000Z",
+      }),
+    );
+  });
+
+  it("schedule_create kind=once + offset-bearing runAt → 原样下发（不再解析）", async () => {
+    const port = {
+      create: vi.fn().mockResolvedValue({ id: "j3", nextFireAt: new Date() }),
+      listBySession: vi.fn(),
+      findOwnedBy: vi.fn(),
+      delete: vi.fn(),
+    };
+    const tool = new ScheduleCreateTool(port);
+    await tool.execute(
+      {
+        title: "meet",
+        kind: "once",
+        runAt: "2026-05-28T10:15:10+08:00",
+        prompt: "go",
+      },
+      fakeCtx("session-A"),
+    );
+    expect(port.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "once",
+        runAt: "2026-05-28T10:15:10+08:00",
+      }),
+    );
+  });
+
   it("schedule_list 只列当前 session", async () => {
     const port = {
       create: vi.fn(),

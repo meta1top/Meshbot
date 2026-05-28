@@ -13,7 +13,9 @@ export const CreateCronJobSchema = z
     kind: CronJobKindSchema,
     cronExpr: z.string().optional(),
     timezone: z.string().optional(),
-    runAt: z.string().datetime().optional(),
+    // 接受带 offset 的 ISO 8601（如 '+08:00'）—— Zod 默认 offset:false 只收 Z，
+    // 会把合法的本地时区串拒掉，徒增一次重试。下游 new Date() 两种都吃。
+    runAt: z.string().datetime({ offset: true }).optional(),
   })
   .superRefine((v, ctx) => {
     if (v.kind === "cron" && !v.cronExpr) {

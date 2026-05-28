@@ -51,7 +51,13 @@ export class DateTool implements MeshbotTool<DateArgs, string> {
   }
 }
 
-/** "2026-05-24 12:34:56 Asia/Shanghai" */
+/**
+ * "2026-05-24 12:34:56 +08:00 (Asia/Shanghai)"。
+ *
+ * 数字 offset 放前面、IANA 名跟后面——agent 构造 ISO 串时可直接复用
+ * 这个 offset，避免「Asia/Shanghai → +08:00」的心算翻车（典型表现：
+ * 把本地 10:15 写成 '2026-...T10:15:00Z'，结果偏 8 小时）。
+ */
 function formatHuman(d: Date, tz: string): string {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: tz,
@@ -65,7 +71,8 @@ function formatHuman(d: Date, tz: string): string {
   }).formatToParts(d);
   const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
   const hour = get("hour") === "24" ? "00" : get("hour");
-  return `${get("year")}-${get("month")}-${get("day")} ${hour}:${get("minute")}:${get("second")} ${tz}`;
+  const offset = tzOffset(d, tz);
+  return `${get("year")}-${get("month")}-${get("day")} ${hour}:${get("minute")}:${get("second")} ${offset} (${tz})`;
 }
 
 /** "2026-05-24T12:34:56+08:00" */
