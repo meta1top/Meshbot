@@ -532,6 +532,8 @@ export class RunnerService implements OnModuleInit {
         sessionId: payload.sessionId,
         toolCallId: payload.toolCallId,
         content: payload.content,
+        // 透传失败标记 → metadata.ok=false → history 回放能复原红色失败态
+        ok: payload.ok,
       });
     } catch (err) {
       this.logger.error(

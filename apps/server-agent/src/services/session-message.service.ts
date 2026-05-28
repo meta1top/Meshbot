@@ -27,6 +27,12 @@ export interface RecordToolResultInput {
   sessionId: string;
   toolCallId: string;
   content: string;
+  /**
+   * 工具是否成功执行（Zod 校验通过 + execute 未抛异常）。
+   * 默认 true 兼容老调用方；为 false 时写入 metadata={ok:false}，给 history
+   * 回放和前端「红色失败」复原状态用——否则刷新页面失败 tool 会显示成功色。
+   */
+  ok?: boolean;
 }
 
 /** 写 compaction 占位行入参。id 调用方自行生成（建议 `comp-${uuid}` 或时间戳）。 */
@@ -102,10 +108,15 @@ export class SessionMessageService {
 
   /**
    * 记录一条 role=tool 消息（tool 调用结果）。幂等（id = toolCallId）。
+   *
+   * 失败时（input.ok === false）metadata 写 `{ ok: false }`；成功时 metadata
+   * 保持 null（缺省即成功，老数据无 metadata 也按 ok 解释）。role=tool 行的
+   * metadata 用途单一（仅本字段），无需 kind 区分符。
    */
   async recordToolResult(input: RecordToolResultInput): Promise<void> {
     const exists = await this.repo.findOneBy({ id: input.id });
     if (exists) return;
+    const metadata = input.ok === false ? JSON.stringify({ ok: false }) : null;
     await this.repo.insert({
       id: input.id,
       sessionId: input.sessionId,
@@ -114,6 +125,7 @@ export class SessionMessageService {
       reasoning: null,
       toolCalls: null,
       toolCallId: input.toolCallId,
+      metadata,
       createdAt: new Date(),
     });
   }

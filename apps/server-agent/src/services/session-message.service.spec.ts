@@ -149,6 +149,34 @@ describe("SessionMessageService", () => {
     });
   });
 
+  it("recordToolResult ok=true / 缺省 → metadata 为 null（兼容老数据）", async () => {
+    await service.recordToolResult({
+      id: "tc-ok",
+      sessionId: "s1",
+      toolCallId: "tc-ok",
+      content: "ok result",
+      ok: true,
+    });
+    const row = await ds
+      .getRepository(SessionMessage)
+      .findOneBy({ id: "tc-ok" });
+    expect(row?.metadata).toBeNull();
+  });
+
+  it("recordToolResult ok=false → metadata 写 {ok:false}（前端红色失败态来源）", async () => {
+    await service.recordToolResult({
+      id: "tc-err",
+      sessionId: "s1",
+      toolCallId: "tc-err",
+      content: "Error: bad args",
+      ok: false,
+    });
+    const row = await ds
+      .getRepository(SessionMessage)
+      .findOneBy({ id: "tc-err" });
+    expect(row?.metadata).toBe(JSON.stringify({ ok: false }));
+  });
+
   it("recordToolResult 重复 id 幂等", async () => {
     await service.recordToolResult({
       id: "tc1",
