@@ -507,9 +507,22 @@ export class GraphService {
     for await (const part of stream) {
       // streamMode:"messages" 产出 [BaseMessage, metadata] 元组
       const msg = Array.isArray(part) ? part[0] : part;
-      if (!(msg instanceof AIMessageChunk)) continue;
+      if (!(msg instanceof AIMessageChunk)) {
+        // tools 节点产出 ToolMessage（及任何非 AIMessageChunk 的消息）出现在 stream 里
+        // → supervisor 节点必然已退出 → 立即 flush 当前累加的 assistant，让 runner 早早
+        //   recordAssistant 落库。否则要等下一轮第一个 chunk 才 flush，期间 tool 在跑
+        //   （可能几十秒），刷新页面看不到这一轮的 assistant + 孤儿 tool。
+        if (currentId !== null && currentAcc !== undefined) {
+          yield* flushRound();
+          currentAcc = undefined;
+          currentId = null;
+          currentRoundStartedAt = Date.now();
+        }
+        continue;
+      }
       const messageId = msg.id ?? randomUUID();
-      // 轮次切换：flush 上一轮，重置累加
+      // 轮次切换：flush 上一轮，重置累加（ToolMessage 路径已 flush 过、currentId=null；
+      // 此分支兜底 supervisor 终答→END 不经 tools 直接连下一轮的罕见情况）
       if (currentId !== null && currentId !== messageId) {
         yield* flushRound();
         currentAcc = undefined;

@@ -1,13 +1,17 @@
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { AIMessageChunk } from "@langchain/core/messages";
+import { ChatGenerationChunk } from "@langchain/core/outputs";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { z } from "zod";
 import { MeshbotConfigService } from "../../src/config/meshbot-config.service";
 import { GraphService } from "../../src/graph/graph.service";
 import { PromptService } from "../../src/prompt/prompt.service";
 import { ToolRegistry } from "../../src/tools/tool-registry";
+import type { MeshbotTool } from "../../src/tools/tool.types";
 
 describe("GraphService", () => {
   let testDir: string;
@@ -152,5 +156,127 @@ describe("GraphService", () => {
     const userCountAfter = after.filter((m) => m.role === "user").length;
     expect(userCountAfter).toBe(userCountBefore);
     expect(chunks.length).toBeGreaterThan(0);
+  });
+
+  it("ToolMessage 边界即 flushRound（assistant_done(A) 不等下一轮 LLM 启动）", async () => {
+    // 构造一个两轮 ReAct 模型：
+    //   轮1 → tool_calls chunk（触发 tools 节点）
+    //   轮2 → 先延迟 200ms，再 yield content chunk
+    // 时间探针：若 assistant_done(轮1) 在 ToolMessage 边界就 flush，
+    // 它必须在第二轮延迟结束前到达（< round2StartedAt + 100ms）。
+    let round2StartedAt = 0;
+
+    // 正确的 BaseChatModel 子类：_streamResponseChunks 走 LangGraph 回调管道，
+    // chunk 才能出现在 streamMode:"messages" 中。
+    class TwoRoundModel extends (
+      await import("@langchain/core/language_models/chat_models")
+    ).BaseChatModel {
+      private callCount = 0;
+      _llmType() {
+        return "two-round-fake";
+      }
+      async _generate() {
+        // 不用 _generate；streaming 走 _streamResponseChunks
+        throw new Error("不应走 _generate");
+      }
+      async *_streamResponseChunks(
+        _msgs: unknown,
+        _opts: unknown,
+        runManager:
+          | {
+              handleLLMNewToken: (
+                t: string,
+                i: unknown,
+                id: unknown,
+                p: unknown,
+                tags: unknown,
+                fields: unknown,
+              ) => Promise<void>;
+            }
+          | undefined,
+      ): AsyncGenerator<ChatGenerationChunk> {
+        this.callCount += 1;
+        if (this.callCount === 1) {
+          // 轮1：tool_calls，无 content
+          const chunk = new ChatGenerationChunk({
+            message: new AIMessageChunk({
+              id: "msg-A",
+              content: "",
+              tool_calls: [{ id: "tc-A", name: "echo", args: { x: "hi" } }],
+            }),
+            text: "",
+          });
+          yield chunk;
+          await runManager?.handleLLMNewToken(
+            "",
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            { chunk },
+          );
+        } else {
+          // 轮2：先延迟再回复
+          round2StartedAt = Date.now();
+          await new Promise((r) => setTimeout(r, 200));
+          const chunk = new ChatGenerationChunk({
+            message: new AIMessageChunk({ id: "msg-B", content: "好" }),
+            text: "好",
+          });
+          yield chunk;
+          await runManager?.handleLLMNewToken(
+            "好",
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            { chunk },
+          );
+        }
+      }
+    }
+
+    const echoTool: MeshbotTool<{ x: string }, string> = {
+      name: "echo",
+      description: "echo back",
+      schema: z.object({ x: z.string() }),
+      async execute(args) {
+        return `echoed: ${args.x}`;
+      },
+    };
+    const fakeDisc = {
+      getProviders: () => [{ instance: echoTool }] as never,
+    };
+    const toolRegistry2 = new ToolRegistry(fakeDisc as never);
+    toolRegistry2.onModuleInit();
+    const cfg2 = new MeshbotConfigService();
+    (cfg2 as unknown as Record<string, string>).meshbotDir = testDir;
+    const model2 = new TwoRoundModel({});
+    const gs = new GraphService(
+      cfg2,
+      new PromptService(testDir),
+      toolRegistry2,
+      new EventEmitter2(),
+      () => Promise.resolve(model2 as BaseChatModel),
+      { providerType: "fake", model: "fake-model" },
+    );
+    const threadId = await gs.startSession({ model: "fake" });
+    const events: Array<{ kind: string; messageId: string; t: number }> = [];
+    for await (const ev of gs.streamMessage(threadId, [
+      { id: "pm-1", content: "hi" },
+    ])) {
+      events.push({
+        kind: ev.kind,
+        messageId: (ev as { messageId?: string }).messageId ?? "",
+        t: Date.now(),
+      });
+    }
+    const adA = events.find(
+      (e) => e.kind === "assistant_done" && e.messageId === "msg-A",
+    );
+    expect(adA).toBeTruthy();
+    // 关键断言：assistant_done(A) 必须在「第二轮 LLM 开始 200ms 延迟之前」就 yield
+    // 修复前 adA.t ≥ round2StartedAt + 200；修复后 adA.t ≤ round2StartedAt + 100
+    expect(adA?.t).toBeLessThan(round2StartedAt + 100);
   });
 });
