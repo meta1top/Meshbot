@@ -125,13 +125,26 @@ function SessionView() {
    * onHuman 触发：把指定 user 消息从当前位置抽出、追加到数组末尾，清 pending
    * 标记（→ 离开 pending 区，进入聊天列表），并保证末尾存在 loading 占位 assistant 气泡。
    *
-   * 因 messageId 由前端生成、append 同步用同一 id，run.human 到达时一定能 find 到。
+   * 用户手动发送时 messageId 由前端生成、append 同步用同一 id，run.human 到达时能 find 到。
+   * 服务端注入的消息（如定时任务触发）前端没有乐观气泡，idx===-1，按事件携带的 content 新建。
    */
   const migrateHumanToTimeline = useCallback(
-    (messageId: string): void => {
+    (messageId: string, content: string): void => {
       apply((prev) => {
         const idx = prev.findIndex((m) => m.id === messageId);
-        if (idx === -1) return prev;
+        if (idx === -1) {
+          const withoutLoading = prev.filter((m) => !m.loading);
+          return [
+            ...withoutLoading,
+            { id: messageId, role: "user" as const, content },
+            {
+              id: `loading-${messageId}`,
+              role: "assistant" as const,
+              content: "",
+              loading: true,
+            },
+          ];
+        }
         // 同 batch 多条 user 时（onHuman 连发多次），第一次会 append loading，
         // 后续每次必须把 loading 重新抽出再附到末尾，否则后到的 user 会被插在
         // loading 上面，loading 卡在用户消息中间。
@@ -306,7 +319,7 @@ function SessionView() {
 
     const onHuman = (e: RunHumanEvent) => {
       if (e.sessionId !== sessionId) return;
-      migrateHumanToTimeline(e.messageId);
+      migrateHumanToTimeline(e.messageId, e.content);
     };
     const onReasoning = (e: RunReasoningChunkEvent) => {
       if (e.sessionId !== sessionId) return;

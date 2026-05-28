@@ -295,6 +295,11 @@ export const RunHumanEventSchema = z.object({
   sessionId: z.string(),
   /** 与 pending_messages.id / checkpointer HumanMessage.id 三方对齐。 */
   messageId: z.string(),
+  /**
+   * 该 user 消息正文。前端有乐观气泡时（用户手动发送）按 id 迁移即可，忽略此字段；
+   * 服务端注入的消息（如定时任务触发）前端没有乐观气泡，需据此新建气泡。
+   */
+  content: z.string(),
 });
 export type RunHumanEvent = z.infer<typeof RunHumanEventSchema>;
 

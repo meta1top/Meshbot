@@ -407,13 +407,14 @@ export class RunnerService implements OnModuleInit {
             `runOnce first-human session=${sessionId} +${Date.now() - runStartedAt}ms`,
           );
         }
+        const content =
+          batch.find((b) => b.id === event.messageId)?.content ?? "";
         this.emitter.emit(SESSION_WS_EVENTS.runHuman, {
           sessionId,
           messageId: event.messageId,
+          content,
         });
         // 双写 session_messages（fire-and-forget，写失败仅 log）
-        const content =
-          batch.find((b) => b.id === event.messageId)?.content ?? "";
         this.sessionMessages
           .recordUser({ id: event.messageId, sessionId, content })
           .catch((err) =>
