@@ -240,7 +240,15 @@ function SessionView() {
               ...(history.inflight.reasoning
                 ? {
                     reasoning: history.inflight.reasoning,
-                    reasoningDurationMs: 0,
+                    // 服务端记录的真实 reasoning 起始时刻；缺失时不设 startedAt
+                    // （ReasoningBlock 走 streaming + 无 startedAt 的 fallback「思考中 0.0s」分支）
+                    ...(history.inflight.reasoningStartedAt !== null &&
+                    history.inflight.reasoningStartedAt !== undefined
+                      ? {
+                          reasoningStartedAt:
+                            history.inflight.reasoningStartedAt,
+                        }
+                      : {}),
                   }
                 : {}),
             });
@@ -327,7 +335,10 @@ function SessionView() {
         copy[idx] = {
           ...existing,
           reasoning: (existing.reasoning ?? "") + e.delta,
-          reasoningStartedAt: existing.reasoningStartedAt ?? Date.now(),
+          // existing.reasoningStartedAt 来自 inflight 透传（刷新场景）
+          // 或来自 idx===-1 分支首次创建（fresh 流式场景，已设 Date.now()）
+          // 两种情况都已正确赋值，不再用「?? Date.now()」覆盖
+          reasoningStartedAt: existing.reasoningStartedAt,
         };
         return copy;
       });

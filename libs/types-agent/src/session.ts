@@ -136,6 +136,11 @@ export const InflightSnapshotSchema = z.object({
   content: z.string(),
   /** 已累积的 reasoning（思考过程），无则空串。 */
   reasoning: z.string(),
+  /**
+   * 当前轮 reasoning 首个 chunk 到达的时间戳（ms）；无 reasoning 时为 null。
+   * 前端刷新时用此值恢复「思考中 Xs」计时器，避免从刷新时刻起算。
+   */
+  reasoningStartedAt: z.number().nullable(),
   status: z.enum(["streaming", "done", "interrupted"]),
 });
 export type InflightSnapshot = z.infer<typeof InflightSnapshotSchema>;

@@ -21,6 +21,13 @@ interface InflightRun {
   content: string;
   /** 当前轮累加的 reasoning（reasoning 事件 += delta；切轮清空）。 */
   reasoning: string;
+  /**
+   * 当前轮 reasoning 首个 chunk 到达的时间戳（ms）。
+   * - 进入新轮（messageId 切换）时重置为 null
+   * - 收到本轮第一个 reasoning event 时记录 Date.now()
+   * 用途：getInflight 返回，前端刷新替换 onReasoning 现取 Date.now() 的错误兜底。
+   */
+  reasoningStartedAt: number | null;
   status: "streaming" | "done" | "interrupted";
   abort: AbortController;
   /** ctx-exceeded 兜底重试标记；防止同一 run 重复触发兜底。 */
@@ -32,6 +39,13 @@ export interface InflightView {
   messageId: string | null;
   content: string;
   reasoning: string;
+  /**
+   * 当前轮 reasoning 首个 chunk 到达的时间戳（ms）。
+   * - 进入新轮（messageId 切换）时重置为 null
+   * - 收到本轮第一个 reasoning event 时记录 Date.now()
+   * 用途：getInflight 返回，前端刷新替换 onReasoning 现取 Date.now() 的错误兜底。
+   */
+  reasoningStartedAt: number | null;
   status: "streaming" | "done" | "interrupted";
 }
 
@@ -98,6 +112,7 @@ export class RunnerService implements OnModuleInit {
       messageId: run.messageId,
       content: run.content,
       reasoning: run.reasoning,
+      reasoningStartedAt: run.reasoningStartedAt,
       status: run.status,
     };
   }
@@ -210,6 +225,7 @@ export class RunnerService implements OnModuleInit {
       messageId: null,
       content: "",
       reasoning: "",
+      reasoningStartedAt: null,
       status: "streaming",
       abort: new AbortController(),
     };
@@ -415,6 +431,11 @@ export class RunnerService implements OnModuleInit {
           run.messageId = event.messageId;
           run.content = "";
           run.reasoning = "";
+          run.reasoningStartedAt = null;
+        }
+        // 本轮首个 reasoning delta：记下 startedAt，刷新时前端能拿到真实开始时间
+        if (run.reasoning === "" && event.delta) {
+          run.reasoningStartedAt = Date.now();
         }
         run.reasoning += event.delta;
         this.emitter.emit(SESSION_WS_EVENTS.runReasoning, {
@@ -444,6 +465,7 @@ export class RunnerService implements OnModuleInit {
           run.messageId = event.messageId;
           run.content = "";
           run.reasoning = "";
+          run.reasoningStartedAt = null;
         }
         run.content += event.delta;
         this.emitter.emit(SESSION_WS_EVENTS.runChunk, {
