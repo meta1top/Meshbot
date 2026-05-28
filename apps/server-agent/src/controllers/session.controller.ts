@@ -1,3 +1,4 @@
+import { computeToolCallStatus } from "./session-history-status";
 import {
   type CreateSessionResponse,
   type DeletePendingResponse,
@@ -143,22 +144,7 @@ export class SessionController {
           }>;
           const toolCalls: HistoryToolCall[] = calls.map((c) => {
             const tr = toolByCallId.get(c.id);
-            // tool row metadata 形如 { ok: false } 表示工具执行失败；缺省 / 无
-            // metadata 视为 ok（兼容老数据）。失败态用来让前端把 tool call 渲
-            // 染成红色，与流式时的颜色一致。
-            const trMeta = tr?.metadata
-              ? (() => {
-                  try {
-                    return JSON.parse(tr.metadata) as { ok?: boolean };
-                  } catch {
-                    return null;
-                  }
-                })()
-              : null;
-            const status =
-              trMeta && trMeta.ok === false
-                ? ("error" as const)
-                : ("ok" as const);
+            const status = computeToolCallStatus(tr);
             return {
               toolCallId: c.id,
               name: c.name,
