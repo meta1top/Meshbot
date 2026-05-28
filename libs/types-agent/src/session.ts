@@ -93,7 +93,7 @@ export const HistoryToolCallSchema = z.object({
   toolCallId: z.string(),
   name: z.string(),
   args: z.unknown(),
-  status: z.enum(["ok", "error"]),
+  status: z.enum(["ok", "error", "running"]),
   result: z.string(),
 });
 export type HistoryToolCall = z.infer<typeof HistoryToolCallSchema>;
