@@ -13,6 +13,7 @@ import {
   type RunHumanEvent,
   type RunInterruptedEvent,
   type RunReasoningChunkEvent,
+  type RunReasoningDoneEvent,
   type RunToolCallEndEvent,
   type RunToolCallProgressEvent,
   type RunToolCallStartEvent,
@@ -127,6 +128,14 @@ export class SessionGateway extends BaseWebSocketGateway {
     this.server
       .to(payload.sessionId)
       .emit(SESSION_WS_EVENTS.runReasoning, payload);
+  }
+
+  /** RunnerService → run.reasoning_done → 转发到房间。 */
+  @OnEvent(SESSION_WS_EVENTS.runReasoningDone)
+  onRunReasoningDone(payload: RunReasoningDoneEvent): void {
+    this.server
+      .to(payload.sessionId)
+      .emit(SESSION_WS_EVENTS.runReasoningDone, payload);
   }
 
   /** RunnerService → run.chunk → 转发到房间。 */

@@ -251,6 +251,22 @@ export const RunDoneEventSchema = z.object({
 });
 export type RunDoneEvent = z.infer<typeof RunDoneEventSchema>;
 
+/**
+ * socket: run.reasoning_done 事件载荷。
+ *
+ * 本轮 LLM 第一次出现非空 tool_calls 时触发——意味着 reasoning_content 阶段
+ * 已结束、模型转入 tool_calls token 流。前端据此锁定 reasoningDurationMs，
+ * 让「思考中 Xs」尽早切到「已思考 Xs」，不再把 tool_calls token 的几秒流
+ * 算进思考时间。
+ *
+ * 对 content-having 轮（无 tool_calls）：此事件不触发；onChunk 已处理锁定。
+ */
+export const RunReasoningDoneEventSchema = z.object({
+  sessionId: z.string(),
+  messageId: z.string(),
+});
+export type RunReasoningDoneEvent = z.infer<typeof RunReasoningDoneEventSchema>;
+
 /** socket: run.interrupted 事件载荷。 */
 export const RunInterruptedEventSchema = z.object({
   sessionId: z.string(),
@@ -399,6 +415,7 @@ export const SESSION_WS_EVENTS = {
   titleUpdated: "session.title_updated",
   runHuman: "run.human",
   runReasoning: "run.reasoning",
+  runReasoningDone: "run.reasoning_done",
   runChunk: "run.chunk",
   runDone: "run.done",
   runInterrupted: "run.interrupted",

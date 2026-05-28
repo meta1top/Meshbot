@@ -445,6 +445,16 @@ export class RunnerService implements OnModuleInit {
         });
         continue;
       }
+      if (event.kind === "reasoning_done") {
+        // 本轮 LLM reasoning_content 阶段结束、转入 tool_calls token 流。
+        // 前端据此尽早锁 reasoningDurationMs，把「思考中 Xs」切到「已思考 Xs」，
+        // 不再把后续几秒的 tool_calls token 流时间算进思考时长。
+        this.emitter.emit(SESSION_WS_EVENTS.runReasoningDone, {
+          sessionId,
+          messageId: event.messageId,
+        });
+        continue;
+      }
       if (event.kind === "tool_calls") {
         // tool_calls 在 assistant_done 里一并带过来，这里不需要单独处理
         continue;

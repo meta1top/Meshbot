@@ -7,6 +7,7 @@ import {
   type RunHumanEvent,
   type RunInterruptedEvent,
   type RunReasoningChunkEvent,
+  type RunReasoningDoneEvent,
   type RunToolCallEndEvent,
   type RunToolCallProgressEvent,
   type RunToolCallStartEvent,
@@ -343,6 +344,33 @@ function SessionView() {
         return copy;
       });
     };
+    /**
+     * LLM 本轮 reasoning_content 结束、转入 tool_calls token 流时由 graph 检测后
+     * emit 出来。前端据此锁 reasoningDurationMs，让「思考中 Xs」尽早切到「已思考 Xs」，
+     * 避免把后续几秒的 tool_calls token 流时间也算进思考时长（对长 tool_call args
+     * 尤其明显——一个长 curl + python 脚本可能要流好几秒）。
+     *
+     * content-having 轮（无 tool_calls）：reasoning_done 不会触发；
+     * onChunk 收到首个 content 字时已经锁过 duration，行为不变。
+     */
+    const onReasoningDone = (e: RunReasoningDoneEvent) => {
+      if (e.sessionId !== sessionId) return;
+      apply((prev) =>
+        prev.map((m) => {
+          if (m.id !== e.messageId) return m;
+          if (
+            m.reasoningStartedAt === undefined ||
+            m.reasoningDurationMs !== undefined
+          ) {
+            return m; // 没记 startedAt 或已锁过，跳过
+          }
+          return {
+            ...m,
+            reasoningDurationMs: Date.now() - m.reasoningStartedAt,
+          };
+        }),
+      );
+    };
     const onChunk = (e: RunChunkEvent) => {
       if (e.sessionId !== sessionId) return;
       setRunning(true);
@@ -497,6 +525,7 @@ function SessionView() {
     if (socket.connected) subscribe();
     socket.on(SESSION_WS_EVENTS.runHuman, onHuman);
     socket.on(SESSION_WS_EVENTS.runReasoning, onReasoning);
+    socket.on(SESSION_WS_EVENTS.runReasoningDone, onReasoningDone);
     socket.on(SESSION_WS_EVENTS.runChunk, onChunk);
     socket.on(SESSION_WS_EVENTS.runDone, onDone);
     socket.on(SESSION_WS_EVENTS.runInterrupted, onInterrupted);
@@ -542,6 +571,7 @@ function SessionView() {
       socket.off("connect", subscribe);
       socket.off(SESSION_WS_EVENTS.runHuman, onHuman);
       socket.off(SESSION_WS_EVENTS.runReasoning, onReasoning);
+      socket.off(SESSION_WS_EVENTS.runReasoningDone, onReasoningDone);
       socket.off(SESSION_WS_EVENTS.runChunk, onChunk);
       socket.off(SESSION_WS_EVENTS.runDone, onDone);
       socket.off(SESSION_WS_EVENTS.runInterrupted, onInterrupted);

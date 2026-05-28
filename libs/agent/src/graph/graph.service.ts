@@ -44,6 +44,10 @@ export interface Message {
  * - human：本批次每条 user 消息以 HumanMessage 形式写入 checkpointer 时各 yield 一次；
  * - reasoning：单个 reasoning token（DeepSeek 等推理模型先吐 reasoning 再吐 content）；
  * - chunk：单个 assistant content token；
+ * - reasoning_done：本轮 LLM 第一次出现非空 tool_calls 字段（reasoning_content 阶段
+ *   结束、转入 tool_calls token 流）。前端据此尽早锁 reasoningDurationMs，避免
+ *   把 tool_calls token 流的几秒算进「思考中」。content-having 轮不触发——
+ *   onChunk 已处理锁定。
  * - tool_calls：LLM 本轮调用的全部工具调用（本轮 LLM 结束、tools 节点开跑前 yield）；
  * - assistant_done：本轮 LLM 完整结束（finish=stop 或 finish=tool_calls）。runner 据此
  *   持久化一条 session_messages.assistant；ReAct 多轮里会 emit 多次（每轮一次）。
@@ -54,6 +58,7 @@ export type StreamChunk =
   | { kind: "human"; messageId: string }
   | { kind: "reasoning"; messageId: string; delta: string }
   | { kind: "chunk"; messageId: string; delta: string }
+  | { kind: "reasoning_done"; messageId: string }
   | {
       kind: "tool_calls";
       messageId: string;
@@ -459,6 +464,9 @@ export class GraphService {
     let lastChunkAt = 0;
     let chunkCount = 0;
     let reasoningCount = 0;
+    // 本轮是否已 yield reasoning_done —— 见首个非空 tool_calls 即 yield 一次，
+    // 然后置 true 避免后续 chunk 重复发；轮切换/flush 时重置回 false。
+    let reasoningDoneYielded = false;
     const flushRound = function* (this: GraphService): Generator<StreamChunk> {
       if (currentId === null || currentAcc === undefined) return;
       const content =
@@ -526,6 +534,7 @@ export class GraphService {
             currentAcc = undefined;
             currentId = null;
             currentRoundStartedAt = Date.now();
+            reasoningDoneYielded = false;
           }
         }
         continue;
@@ -544,6 +553,7 @@ export class GraphService {
           currentAcc = undefined;
           currentId = null;
           currentRoundStartedAt = Date.now();
+          reasoningDoneYielded = false;
         }
         continue;
       }
@@ -554,9 +564,23 @@ export class GraphService {
         yield* flushRound();
         currentAcc = undefined;
         currentRoundStartedAt = Date.now();
+        reasoningDoneYielded = false;
       }
       currentId = messageId;
+      // 本轮首次见到非空 tool_calls：yield reasoning_done。比较 concat 前后的
+      // 长度——若之前为 0、之后 > 0，说明这条 chunk 是 reasoning→tool_calls 的
+      // 切换点。运行频率：每轮最多 1 次。
+      const prevToolCallsLen = currentAcc?.tool_calls?.length ?? 0;
       currentAcc = currentAcc === undefined ? msg : currentAcc.concat(msg);
+      const nextToolCallsLen = currentAcc.tool_calls?.length ?? 0;
+      if (
+        !reasoningDoneYielded &&
+        prevToolCallsLen === 0 &&
+        nextToolCallsLen > 0
+      ) {
+        reasoningDoneYielded = true;
+        yield { kind: "reasoning_done", messageId };
+      }
       const reasoningDelta =
         typeof msg.additional_kwargs?.reasoning_content === "string"
           ? msg.additional_kwargs.reasoning_content
