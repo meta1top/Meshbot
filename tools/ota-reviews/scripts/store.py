@@ -63,3 +63,11 @@ class ReviewStore:
             (site, hotel_key),
         ).fetchall()
         return [dict(row) for row in rows]
+
+    def export_json(self, site: str, hotel_key: str, out_dir: Path | str, date_str: str) -> Path:
+        out_dir = Path(out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        rows = self.by(site, hotel_key)
+        out = out_dir / f"{site}-{hotel_key}-{date_str}.json"
+        out.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
+        return out
