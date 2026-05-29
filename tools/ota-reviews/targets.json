@@ -1,0 +1,15 @@
+{
+  "magellan-sutera": {
+    "hotel_name": "The Magellan Sutera Resort",
+    "platforms": {
+      "tripadvisor": "https://cn.tripadvisor.com/Hotel_Review-g298307-d16659663-Reviews-The_Magellan_Sutera_Resort-Kota_Kinabalu_Kota_Kinabalu_District_West_Coast_Division_S.html",
+      "trip": "",
+      "agoda": "",
+      "booking": ""
+    }
+  },
+  "hotel-2-placeholder": {
+    "hotel_name": "",
+    "platforms": { "tripadvisor": "", "trip": "", "agoda": "", "booking": "" }
+  }
+}
