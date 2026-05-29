@@ -33,6 +33,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { Node, Project, SyntaxKind } from "ts-morph";
+import { collectTsFiles } from "./lib/ts-files";
 
 const ROOT = path.resolve(__dirname, "..");
 const REPORT_DIR = "docs/audits/error-code";
@@ -122,10 +123,14 @@ function collect(): CodeDeclaration[] {
     tsConfigFilePath: path.join(ROOT, "tsconfig.base.json"),
     skipAddingFilesFromTsConfig: true,
   });
-  project.addSourceFilesAtPaths([
-    path.join(ROOT, "libs", "**", "*.ts"),
-    path.join(ROOT, "apps", "**", "src", "**", "*.ts"),
-  ]);
+  const srcSeg = `${path.sep}src${path.sep}`;
+  const files = [
+    ...collectTsFiles(path.join(ROOT, "libs")),
+    ...collectTsFiles(path.join(ROOT, "apps")).filter((f) =>
+      f.includes(srcSeg),
+    ),
+  ];
+  for (const f of files) project.addSourceFileAtPath(f);
 
   const out: CodeDeclaration[] = [];
 

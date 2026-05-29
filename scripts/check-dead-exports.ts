@@ -52,6 +52,7 @@ import {
   type TypeAliasDeclaration,
   type VariableStatement,
 } from "ts-morph";
+import { collectTsFiles } from "./lib/ts-files";
 
 const ROOT = path.resolve(__dirname, "..");
 
@@ -787,14 +788,8 @@ function loadProject(targets: string[]): Project {
       console.warn(`[dead-check] target 不存在: ${target}`);
       continue;
     }
-    project.addSourceFilesAtPaths([
-      `${abs}/**/*.ts`,
-      `${abs}/**/*.tsx`,
-      `!${abs}/**/*.d.ts`,
-      `!${abs}/**/node_modules/**`,
-      `!${abs}/**/dist/**`,
-      `!${abs}/**/.next/**`,
-    ]);
+    for (const f of collectTsFiles(abs, { exts: [".ts", ".tsx"] }))
+      project.addSourceFileAtPath(f);
   }
   return project;
 }

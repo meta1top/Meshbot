@@ -45,6 +45,7 @@ import {
   Project,
   type SourceFile,
 } from "ts-morph";
+import { collectTsFiles } from "./lib/ts-files";
 
 const ROOT = path.resolve(__dirname, "..");
 
@@ -689,12 +690,7 @@ function loadProject(targets: string[]): Project {
       console.warn(`[repo-check] target 不存在: ${target}`);
       continue;
     }
-    project.addSourceFilesAtPaths([
-      `${abs}/**/*.ts`,
-      `!${abs}/**/*.d.ts`,
-      `!${abs}/**/node_modules/**`,
-      `!${abs}/**/dist/**`,
-    ]);
+    for (const f of collectTsFiles(abs)) project.addSourceFileAtPath(f);
   }
   return project;
 }
