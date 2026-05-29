@@ -17,6 +17,7 @@ next-env.d.ts
 
 # electron
 release/
+apps/desktop/release-stage/
 
 # env
 .env

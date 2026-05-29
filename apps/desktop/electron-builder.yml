@@ -1,15 +1,42 @@
 appId: com.meshbot.desktop
 productName: Meshbot
 directories:
-  output: release
+  # 通过 --projectDir release-stage 把项目根整体切到 staging 目录，
+  # 所以不需要再设 app；output 写回到 apps/desktop/release（往上两层）。
+  output: ../release
+# release-stage 是 deploy 产物，结构已经干净，仅做常规瘦身
 files:
-  - dist/**/*
+  - "**/*"
+  - "!**/{tsconfig*.json,tsconfig.tsbuildinfo,nodemon.json,nest-cli.json,Dockerfile,CHANGELOG.md}"
+  - "!**/*.md"
+  - "!**/*.map"
+  - "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}"
+  - "!**/node_modules/*.d.ts"
+  - "!**/node_modules/.bin"
+asarUnpack:
+  - "**/*.node"
+  - "**/node_modules/better-sqlite3/**"
+  - "**/node_modules/bcrypt/**"
+  # nestjs-i18n 运行时通过 fs 读 i18n 目录，asar 内会失败
+  - "**/node_modules/@meshbot/server-agent/dist/i18n/**"
+# beforeBuild 路径相对于 electron-builder.yml 所在目录（apps/desktop）
+beforeBuild: scripts/before-build.js
+afterPack: scripts/after-pack.js
+# beforeBuild 已自己 rebuild 过，关掉 electron-builder 自带的
+npmRebuild: false
 mac:
   target:
-    - dmg
+    - target: dmg
+      arch:
+        - arm64
+        - x64
 win:
   target:
-    - nsis
+    - target: nsis
+      arch:
+        - x64
 linux:
   target:
-    - AppImage
+    - target: AppImage
+      arch:
+        - x64

@@ -22,6 +22,10 @@ function isPackaged(): boolean {
 }
 
 export function resolveMeshbotDir(): string {
+  // 显式指定（desktop 主进程 fork 时会注入）优先级最高，跨平台无歧义
+  if (process.env.MESHBOT_HOME) {
+    return process.env.MESHBOT_HOME;
+  }
   if (isPackaged()) {
     return path.join(homedir(), ".meshbot");
   }

@@ -7,13 +7,22 @@
     "build": "tsc --project tsconfig.json && node scripts/copy-web-agent.js",
     "dev": "tsc --project tsconfig.json && electron .",
     "start": "electron dist/main.js",
-    "clean": "rm -rf dist",
+    "clean": "rm -rf dist release release-stage",
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "test": "vitest run",
-    "pack": "electron-builder --dir",
-    "dist": "electron-builder"
+    "stage": "node scripts/stage.js",
+    "pack": "pnpm run stage && electron-builder --projectDir release-stage --dir",
+    "dist": "pnpm run stage && electron-builder --projectDir release-stage"
   },
+  "files": [
+    "dist",
+    "scripts",
+    "electron-builder.yml"
+  ],
   "dependencies": {
+    "@meshbot/server-agent": "workspace:*",
+    "better-sqlite3": "^12.9.0",
+    "bcrypt": "^6.0.0",
     "electron-updater": "^6"
   },
   "devDependencies": {

@@ -19,7 +19,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
+          # mac arm64 → dmg arm64
+          - os: macos-14
+            pkg: pkg:app
+          # mac x64 → dmg x64（独立 runner，原生模块在原生 arch 上 rebuild 最稳）
+          - os: macos-13
             pkg: pkg:app
           - os: ubuntu-latest
             pkg: pkg:app

@@ -1,5 +1,6 @@
 import path from "node:path";
 import { app, BrowserWindow, dialog } from "electron";
+import { startAgentRuntime, stopAgentRuntime } from "./agent-runtime";
 import { registerIpcHandlers } from "./ipc-handlers";
 import { startStaticServer } from "./static-server";
 
@@ -40,6 +41,9 @@ async function getAgentUrl(): Promise<string> {
     return DEV_AGENT_URL;
   }
 
+  // packaged 模式：先把内置 server-agent fork 起来并等就绪，再起静态 UI server
+  await startAgentRuntime();
+
   const webAgentPath = path.join(__dirname, "web-agent");
   staticServer = await startStaticServer(webAgentPath);
   return `http://127.0.0.1:${staticServer.port}`;
@@ -53,6 +57,7 @@ app.whenReady().then(async () => {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     dialog.showErrorBox("启动失败", message);
+    stopAgentRuntime();
     app.quit();
   }
 });
@@ -61,8 +66,13 @@ app.on("window-all-closed", () => {
   staticServer?.server.close();
   staticServer = null;
   if (process.platform !== "darwin") {
+    stopAgentRuntime();
     app.quit();
   }
+});
+
+app.on("before-quit", () => {
+  stopAgentRuntime();
 });
 
 app.on("activate", async () => {
