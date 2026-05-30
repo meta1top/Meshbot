@@ -28,15 +28,27 @@ def capture(
     wait_selector: str | None = None,
     timeout: int = 60000,
     headless: bool = True,
+    solve_cloudflare: bool = False,
+    real_chrome: bool = False,
+    proxy: str | None = None,
     out_dir: Path | str | None = None,
 ) -> Path:
     """抓取 url 的渲染后 HTML，存成 <out_dir>/<site>_sample.html 并打印诊断。
 
-    本地运行（需能访问目标站）。wait_selector 传评论容器选择器可提高拿到完整评论的概率。
+    本地运行（需能访问目标站）。被反爬挡（403/验证码）时，按强度逐级加码：
+    real_chrome（用本机真实 Chrome 指纹，通常最有效）→ solve_cloudflare → proxy（住宅代理）。
+    wait_selector 传评论容器选择器可提高拿到完整评论的概率，但页面被挡时它会白等到超时，
+    首次连通性测试建议不传。
     """
     kw: dict = {"headless": headless, "network_idle": True, "timeout": timeout}
     if wait_selector:
         kw["wait_selector"] = wait_selector
+    if solve_cloudflare:
+        kw["solve_cloudflare"] = True
+    if real_chrome:
+        kw["real_chrome"] = True
+    if proxy:
+        kw["proxy"] = proxy
     page = StealthyFetcher.fetch(url, **kw)
     html = page.html_content
 
@@ -66,7 +78,10 @@ def main() -> None:
     p.add_argument("--url", required=True, help="该平台上目标酒店的评论页 URL")
     p.add_argument("--wait", default=None, help="等待出现的 CSS 选择器（评论容器）")
     p.add_argument("--timeout", type=int, default=60000, help="页面加载超时 ms（默认 60s）")
-    p.add_argument("--headed", action="store_true", help="非 headless（调试时看浏览器）")
+    p.add_argument("--headed", action="store_true", help="非 headless（调试时看浏览器，常能过简单 bot 检测）")
+    p.add_argument("--solve-cf", action="store_true", help="尝试过 Cloudflare 挑战")
+    p.add_argument("--real-chrome", action="store_true", help="用本机真实 Chrome 指纹（对抗 403 最有效）")
+    p.add_argument("--proxy", default=None, help="代理，如 http://user:pass@host:port")
     a = p.parse_args()
     capture(
         a.site,
@@ -74,6 +89,9 @@ def main() -> None:
         wait_selector=a.wait,
         timeout=a.timeout,
         headless=not a.headed,
+        solve_cloudflare=a.solve_cf,
+        real_chrome=a.real_chrome,
+        proxy=a.proxy,
     )
 
 
