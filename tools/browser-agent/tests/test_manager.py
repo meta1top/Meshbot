@@ -1,7 +1,7 @@
 import asyncio
 from pathlib import Path
 import pytest
-from browser_agent.manager import BrowserManager, profile_dir
+from browser_agent.manager import BrowserManager, _host_os, profile_dir
 
 
 def test_profile_dir_under_base(tmp_path):
@@ -19,6 +19,21 @@ def test_profile_dir_rejects_traversal(tmp_path):
 def test_profile_dir_rejects_unsafe_names(tmp_path, bad):
     with pytest.raises(ValueError):
         profile_dir(tmp_path, bad)
+
+
+@pytest.mark.parametrize(
+    "sys_name,expected",
+    [("Darwin", "macos"), ("Windows", "windows"), ("Linux", "linux"), ("Other", "linux")],
+)
+def test_host_os_mapping(monkeypatch, sys_name, expected):
+    monkeypatch.setattr("platform.system", lambda: sys_name)
+    assert _host_os() == expected
+
+
+def test_manager_pins_os_to_host(tmp_path):
+    # 浏览器的 os 必须钉到宿主（保证 CJK 字体 + 指纹自洽），不能用 Camoufox 随机默认。
+    mgr = BrowserManager(profiles_root=tmp_path, headless=True)
+    assert mgr._os == _host_os()
 
 
 async def test_run_serializes_calls(tmp_path):

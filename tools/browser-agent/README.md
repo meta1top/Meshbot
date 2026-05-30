@@ -67,6 +67,9 @@ type_text / extract / get_state / compose / confirm_publish` 等工具。
 ## 约束
 
 - `begin_login` 需要有头显示环境（本机桌面）。无显示的服务器需配虚拟显示（xvfb）或走 headless。
+- **中文字体**：浏览器的 `os` 已自动钉到宿主真实 OS（见 `manager.py:_host_os`）——macOS/Windows
+  的内置字体集含 CJK，中文站正常渲染。**Linux 例外**：Camoufox 的 Linux(TOR) 字体集不含中文，
+  需在宿主装 `fonts-noto-cjk`（apt）/ `noto-cjk-fonts`（dnf），否则中文显示为豆腐块。
 - 跑在你自己机器 = 真实住宅 IP，是隐蔽性的关键红利；若部署到 VPS（机房 IP）需另配住宅代理。
 - 仅操作你自有账号；写操作人在环确认；遵守各平台 ToS / 速率限制。
 - 限速：每站默认 ≤30 动作/分钟（`BROWSER_AGENT_MAX_ACTIONS_PER_MIN` 可调），超了自动冷却。

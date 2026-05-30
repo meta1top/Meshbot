@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import platform
 from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import TYPE_CHECKING, Awaitable, Callable, TypeVar
@@ -12,6 +13,19 @@ if TYPE_CHECKING:
     from playwright.async_api import BrowserContext, Page
 
 T = TypeVar("T")
+
+
+def _host_os() -> str:
+    """把宿主 OS 映射成 Camoufox 的 os 取值。
+
+    必须钉到宿主真实 OS（而非用 Camoufox 默认随机）：
+      1. 字体——Camoufox 按 os 提供该系统的内置字体集；macOS/Windows 集含 CJK，
+         随机到 Linux(TOR) 集则无中文字形 → 中文站全是豆腐块。钉到宿主即有 CJK。
+      2. 指纹自洽——本机真实 IP/时区都是宿主的，os 也报宿主才一致、最不易被识别。
+    """
+    return {"Darwin": "macos", "Windows": "windows", "Linux": "linux"}.get(
+        platform.system(), "linux"
+    )
 
 
 def profile_dir(root: Path, name: str) -> Path:
@@ -26,6 +40,7 @@ class BrowserManager:
     def __init__(self, *, profiles_root: Path, headless: bool = False) -> None:
         self._root = Path(profiles_root)
         self._headless = headless
+        self._os = _host_os()  # 钉到宿主 OS：保证 CJK 字体 + 指纹自洽
         self._lock = asyncio.Lock()
         self._stack: AsyncExitStack | None = None
         self._context: BrowserContext | None = None  # camoufox 持久 context
@@ -52,6 +67,7 @@ class BrowserManager:
                 AsyncCamoufox(
                     headless=self._headless,
                     humanize=True,
+                    os=self._os,
                     persistent_context=True,
                     user_data_dir=str(path),
                 )
