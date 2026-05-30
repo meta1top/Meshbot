@@ -1,0 +1,20 @@
+{
+  "name": "@meshbot/browser-skill",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "browser": "./cli.js"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "e2e": "BROWSER_E2E=1 vitest run",
+    "online": "BROWSER_ONLINE=1 vitest run"
+  },
+  "dependencies": {
+    "patchright": "^1.60"
+  },
+  "devDependencies": {
+    "vitest": "^4"
+  }
+}
