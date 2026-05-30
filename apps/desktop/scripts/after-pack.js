@@ -1,4 +1,3 @@
-const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 
@@ -64,15 +63,20 @@ function copyNodeModulesIntoApp(context) {
   const destNm = path.join(resourcesDir, "app", "node_modules");
 
   fs.rmSync(destNm, { recursive: true, force: true });
-  fs.mkdirSync(destNm, { recursive: true });
-  // 用 cp -R 而非 fs.cpSync：fs.cpSync 在含「指向树外/祖先的软链」的目录上会抛
-  // ERR_FS_CP_EINVAL（且只拷前几个条目就中断、不致命 → 静默出残包）。hoisted 树正常
-  // 时 cpSync 也能拷，但 cp -R 对各种软链布局更稳，整棵 357 个包都能拷全（软链原样
-  // 保留，随后 pruneForCodesign 删 .bin 与悬空链）。构建宿主为 mac/linux，cp -R 始终可用。
-  execFileSync("cp", ["-R", `${srcNm}/.`, `${destNm}/`], { stdio: "inherit" });
+  // fs.cpSync 跨平台（Windows runner 没有 cp）。hoisted deploy 树里只有 .bin 是相对软链，
+  // cpSync 默认按软链原样拷（dereference:false），整棵 ~357 包都能拷全；随后
+  // pruneForCodesign 删 .bin 与悬空软链以过 codesign。实测 dest 357、server-agent
+  // 实文件、原生 .node 均在。
+  fs.cpSync(srcNm, destNm, { recursive: true });
   pruneForCodesign(destNm);
   // 防回归哨兵：拷贝不完整时直接让构建失败，绝不静默出残包。
-  const sentinel = path.join(destNm, "@meshbot", "server-agent", "dist", "main.js");
+  const sentinel = path.join(
+    destNm,
+    "@meshbot",
+    "server-agent",
+    "dist",
+    "main.js",
+  );
   if (!fs.existsSync(sentinel)) {
     throw new Error(
       `[after-pack] node_modules 拷贝不完整：缺 ${sentinel}（src=${srcNm}）`,

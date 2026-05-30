@@ -30,24 +30,20 @@ afterPack: scripts/after-pack.js
 # 崩在启动）。保持 true 让 beforeBuild 跑；before-build.js 返回 false 跳过
 # electron-builder 自带的 install-app-deps，由它自己做 rebuild。
 npmRebuild: true
-# 只打 arm64：开发机为 Apple Silicon，已全链路验证（DMG + codesign + fork 启动）。
-# x64 暂不支持——多架构时 app-builder UnpackElectron 的 EnsureEmptyDir 会撞上 after-pack
-# 注入的 node_modules（unlinkat directory not empty），需给每架构独立 release-stage
-# 才能干净分发，留作后续。
+# 各 target 不写死 arch！架构完全由 run-electron-builder.js 按 runner 追加的
+# --mac/--win/--linux + --arm64/--x64 决定。原因：DMG/NSIS/AppImage 等「完整打包」
+# 模式下，若 config 里 target.arch 列了多个架构，electron-builder 会无视 CLI 的
+# --arm64 过滤、把列出的架构全建一遍（实测 --dir 模式尊重 CLI 过滤、DMG 模式不尊重）。
+# 一台机器同机连构双架构又会让 after-pack 注入的 node_modules 撞 UnpackElectron 的
+# EnsureEmptyDir（unlinkat directory not empty）。所以这里只声明 target 类型，arch 留给
+# CLI 单一来源。CI 矩阵：macos-14=arm64 / macos-13=x64 / windows=x64 / linux=x64。
 mac:
   target:
-    - target: dmg
-      arch:
-        - arm64
+    - dmg
   artifactName: ${productName}-${version}-${arch}.${ext}
-# win / linux target 预留，未验证（after-pack 的拷贝 / 原生 rebuild 仅在 mac 跑通过）
 win:
   target:
-    - target: nsis
-      arch:
-        - x64
+    - nsis
 linux:
   target:
-    - target: AppImage
-      arch:
-        - x64
+    - AppImage
