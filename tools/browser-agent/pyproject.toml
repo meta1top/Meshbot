@@ -1,0 +1,20 @@
+[project]
+name = "browser-agent"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.10",
+    "camoufox[geoip]>=0.4",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.24"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = [
+    "browser: 需要 camoufox 浏览器二进制，无网络",
+    "online: 需要联网（反检测验收），手动 opt-in",
+]
+addopts = "-m 'not browser and not online'"
+testpaths = ["tests"]
