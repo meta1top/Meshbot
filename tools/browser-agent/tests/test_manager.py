@@ -15,6 +15,12 @@ def test_profile_dir_rejects_traversal(tmp_path):
         profile_dir(tmp_path, "../evil")
 
 
+@pytest.mark.parametrize("bad", ["", ".", "..", "a/b", "a\\b"])
+def test_profile_dir_rejects_unsafe_names(tmp_path, bad):
+    with pytest.raises(ValueError):
+        profile_dir(tmp_path, bad)
+
+
 async def test_run_serializes_calls(tmp_path):
     mgr = BrowserManager(profiles_root=tmp_path, headless=True)
     order: list[str] = []

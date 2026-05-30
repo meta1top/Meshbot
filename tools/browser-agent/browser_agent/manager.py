@@ -4,15 +4,19 @@ from __future__ import annotations
 import asyncio
 from contextlib import AsyncExitStack
 from pathlib import Path
-from typing import Awaitable, Callable, TypeVar
+from typing import TYPE_CHECKING, Awaitable, Callable, TypeVar
 
 from camoufox.async_api import AsyncCamoufox
+
+if TYPE_CHECKING:
+    from playwright.async_api import BrowserContext, Page
 
 T = TypeVar("T")
 
 
 def profile_dir(root: Path, name: str) -> Path:
     """解析账号 profile 目录，拒绝路径穿越。"""
+    # 注：`~` 开头的名字按字面量处理（不展开 home），`/` 已拦下绝对路径与多数穿越。
     if "/" in name or "\\" in name or name in ("", ".", ".."):
         raise ValueError(f"非法 profile 名: {name!r}")
     return root / name
@@ -24,7 +28,7 @@ class BrowserManager:
         self._headless = headless
         self._lock = asyncio.Lock()
         self._stack: AsyncExitStack | None = None
-        self._context = None  # camoufox 持久 BrowserContext
+        self._context: BrowserContext | None = None  # camoufox 持久 context
         self._profile: str | None = None
 
     async def run(self, op: Callable[[], Awaitable[T]]) -> T:
@@ -33,31 +37,41 @@ class BrowserManager:
             return await op()
 
     async def ensure_profile(self, name: str) -> None:
-        """确保指定 profile 的持久 context 已启动；切换 profile 会重启浏览器。"""
-        if self._profile == name and self._context is not None:
-            return
-        await self.close()
-        path = profile_dir(self._root, name)
-        path.mkdir(parents=True, exist_ok=True)
-        self._stack = AsyncExitStack()
-        self._context = await self._stack.enter_async_context(
-            AsyncCamoufox(
-                headless=self._headless,
-                humanize=True,
-                persistent_context=True,
-                user_data_dir=str(path),
-            )
-        )
-        self._profile = name
+        """确保指定 profile 的持久 context 已启动；切换 profile 会重启浏览器。
 
-    async def page(self):
-        """返回当前活动页面（无则新建）。"""
+        与 run() 共用同一把锁：profile 启停和页面操作互斥，杜绝并发重启竞态。
+        """
+        async with self._lock:
+            if self._profile == name and self._context is not None:
+                return
+            await self._close_locked()
+            path = profile_dir(self._root, name)
+            path.mkdir(parents=True, exist_ok=True)
+            self._stack = AsyncExitStack()
+            self._context = await self._stack.enter_async_context(
+                AsyncCamoufox(
+                    headless=self._headless,
+                    humanize=True,
+                    persistent_context=True,
+                    user_data_dir=str(path),
+                )
+            )
+            self._profile = name
+
+    async def page(self) -> "Page":
+        """返回当前活动页面（无则新建）。调用方必经 run()，故已在锁内。"""
         if self._context is None:
             raise RuntimeError("尚未 use_profile / ensure_profile")
         pages = self._context.pages
         return pages[0] if pages else await self._context.new_page()
 
     async def close(self) -> None:
+        """关闭浏览器并复位状态（取锁，与操作互斥）。"""
+        async with self._lock:
+            await self._close_locked()
+
+    async def _close_locked(self) -> None:
+        """实际拆除逻辑，要求调用方已持有 self._lock。"""
         if self._stack is not None:
             await self._stack.aclose()
         self._stack = None
