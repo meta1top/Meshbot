@@ -3,9 +3,20 @@ packages:
   - libs/*
   - packages/*
 
+# pnpm 11 起 verify-deps-before-run 等设置从 .npmrc 迁到这里（.npmrc 里的同名项已失效）。
+# 关掉「跑命令前校验依赖、失配就自动 install」：desktop 打包链路里 pnpm deploy 会改动
+# node_modules mtime，触发误判，进而想 purge+install，非 TTY 下直接 ERR_PNPM_ABORTED_
+# REMOVE_MODULES_DIR_NO_TTY 中断整个构建。
+verifyDepsBeforeRun: false
+
 overrides:
   '@types/node': ^22
   '@langchain/langgraph-checkpoint': ~0.0.18
+  # 统一 better-sqlite3 到 12.x：@langchain/langgraph-checkpoint-sqlite 固定 ^11.7.0，
+  # 但 11.x 的原生源码编译不过 Electron 41 的 v8 头（桌面打包 electron-rebuild 报 6 个
+  # 编译错误）。12.x 对 checkpointer 用到的 API 兼容且能编到 Electron ABI，避免树里
+  # 同时存在两个版本、其中老版本打包时崩。
+  better-sqlite3: ^12.9.0
 
 peerDependencyRules:
   ignoreMissing:

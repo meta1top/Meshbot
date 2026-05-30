@@ -4,7 +4,7 @@ directories:
   # 通过 --projectDir release-stage 把项目根整体切到 staging 目录，
   # 所以不需要再设 app；output 写回到 apps/desktop/release（往上两层）。
   output: ../release
-# release-stage 是 deploy 产物，结构已经干净，仅做常规瘦身
+# release-stage 是 deploy 产物，结构已经干净，仅做常规瘦身。
 files:
   - "**/*"
   - "!**/{tsconfig*.json,tsconfig.tsbuildinfo,nodemon.json,nest-cli.json,Dockerfile,CHANGELOG.md}"
@@ -13,23 +13,34 @@ files:
   - "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}"
   - "!**/node_modules/*.d.ts"
   - "!**/node_modules/.bin"
-asarUnpack:
-  - "**/*.node"
-  - "**/node_modules/better-sqlite3/**"
-  - "**/node_modules/bcrypt/**"
-  # nestjs-i18n 运行时通过 fs 读 i18n 目录，asar 内会失败
-  - "**/node_modules/@meshbot/server-agent/dist/i18n/**"
+# asar 关闭：主进程通过 child_process.fork 拉起内置 server-agent，fork 子进程带
+# ELECTRON_RUN_AS_NODE —— 该模式下 Electron 不挂载 asar 的 fs 补丁、读不了 app.asar
+# 内的模块（历史 commit「asar 仍未通」的根因），所以后端依赖必须落在磁盘上。
+# 注意：electron-builder 26 无论 asar:false 还是 asarUnpack，都没法把整棵 node_modules
+# 收进包里（实测 Contents/Resources/app 只有 dist/scripts，node_modules 为 0）。
+# 因此 node_modules 由 scripts/after-pack.js 在打包后手动拷进 app/，绕开 electron-builder
+# 的依赖收集。before-build.js 已先把 release-stage 里的原生模块重编到 Electron ABI。
+asar: false
 # beforeBuild 路径相对于 electron-builder.yml 所在目录（apps/desktop）
 beforeBuild: scripts/before-build.js
 afterPack: scripts/after-pack.js
-# beforeBuild 已自己 rebuild 过，关掉 electron-builder 自带的
-npmRebuild: false
+# 必须保持 true：electron-builder 26 在 npmRebuild=false 时会在 packager 里直接
+# return，连 beforeBuild 钩子都不触发，原生模块（better-sqlite3 / bcrypt）就不会
+# 被 electron-rebuild 重编到 Electron ABI（实测会 NODE_MODULE_VERSION 137 vs 145
+# 崩在启动）。保持 true 让 beforeBuild 跑；before-build.js 返回 false 跳过
+# electron-builder 自带的 install-app-deps，由它自己做 rebuild。
+npmRebuild: true
+# 只打 arm64：开发机为 Apple Silicon，已全链路验证（DMG + codesign + fork 启动）。
+# x64 暂不支持——多架构时 app-builder UnpackElectron 的 EnsureEmptyDir 会撞上 after-pack
+# 注入的 node_modules（unlinkat directory not empty），需给每架构独立 release-stage
+# 才能干净分发，留作后续。
 mac:
   target:
     - target: dmg
       arch:
         - arm64
-        - x64
+  artifactName: ${productName}-${version}-${arch}.${ext}
+# win / linux target 预留，未验证（after-pack 的拷贝 / 原生 rebuild 仅在 mac 跑通过）
 win:
   target:
     - target: nsis

@@ -1,22 +1,26 @@
 #!/usr/bin/env node
-// 把 desktop 及其所有运行时传递依赖扁平化拷贝到 release-stage/，
-// 让 electron-builder 能在一个干净的 node_modules 树上工作。
+// 用 pnpm deploy 生成「自洽的」node_modules 后交给 electron-builder。
 //
-// 为什么不用 `pnpm deploy`：
-// pnpm v10+ 在没有 inject-workspace-packages=true 的情况下，
-// deploy 只复制顶层声明的 workspace 包本身，不会递归解析 workspace 包的依赖。
-// 开 inject 会破坏本地 dev workflow（lib 改动要重 install 才生效）。
+// 为什么不再手搓扁平拷贝（旧实现）：
+//   1. 本仓库 .npmrc 设了 node-linker=hoisted，根 node_modules 是 npm 式扁平树，
+//      版本冲突靠「依赖方本地 node_modules 里嵌套另一版本」解决。旧 stage.js 的
+//      copyPackage 跳过嵌套 node_modules，把这些冲突副本丢了（如 chalk 需要
+//      ansi-styles@4，扁平层却只剩 ansi-styles@6），产出的依赖树不完整。
+//   2. electron-builder 26 的 node module collector 对 pnpm 工程是跑
+//      `pnpm list --prod --json` 来求依赖图的；手搓树没有 lockfile / .pnpm 状态，
+//      pnpm list 给不出正确结果（只会捞到几个 hoist 到顶层的传递依赖），导致
+//      asar 里几乎没有 node_modules。
+//
+// pnpm deploy（--legacy 绕开 v10+ 默认要求 inject-workspace-packages 的限制）
+// 产出一个带 .pnpm 存储 + 正确版本嵌套的自洽工程，electron-builder 的 pnpm
+// collector 能原生识别。
 
+const { execSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 
 const desktopDir = path.resolve(__dirname, "..");
 const stageDir = path.join(desktopDir, "release-stage");
-const stageNm = path.join(stageDir, "node_modules");
-
-function readJson(p) {
-  return JSON.parse(fs.readFileSync(p, "utf8"));
-}
 
 // 直接扫描 node_modules（不用 require.resolve 是因为有些包用 exports 字段挡掉 package.json 路径）
 function findPackageDir(depName, fromDir) {
@@ -32,159 +36,50 @@ function findPackageDir(depName, fromDir) {
   }
 }
 
-// 仅复制一个包"自己的"文件，跳过其内部 node_modules
-// （传递依赖由顶层 dep walker 统一在 release-stage/node_modules/ 平铺）
-function copyPackage(src, dest) {
-  fs.mkdirSync(dest, { recursive: true });
-  const entries = fs.readdirSync(src, { withFileTypes: true });
-  for (const e of entries) {
-    if (e.name === "node_modules") continue;
-    const s = path.join(src, e.name);
-    const d = path.join(dest, e.name);
-    if (e.isSymbolicLink()) {
-      fs.cpSync(fs.realpathSync(s), d, { recursive: true, dereference: true });
-    } else if (e.isDirectory()) {
-      fs.cpSync(s, d, { recursive: true, dereference: true });
-    } else {
-      fs.copyFileSync(s, d);
-    }
-  }
-}
-
-// 把 package.json 里的 workspace:* / workspace:^ / workspace:~ 替换为真实版本号。
-// electron-builder 看到 workspace:* 会把整条依赖链跳过，所以必须改写。
-function rewriteWorkspaceVersions(pkgJsonPath, resolvedVersions) {
-  const pkg = readJson(pkgJsonPath);
-  let changed = false;
-  for (const field of [
-    "dependencies",
-    "peerDependencies",
-    "optionalDependencies",
-  ]) {
-    if (!pkg[field]) continue;
-    for (const [name, range] of Object.entries(pkg[field])) {
-      if (typeof range !== "string" || !range.startsWith("workspace:"))
-        continue;
-      const version = resolvedVersions.get(name);
-      if (!version) {
-        console.error(
-          `[stage] workspace dep "${name}" referenced from ${pkgJsonPath} but version unknown`,
-        );
-        process.exitCode = 1;
-        continue;
-      }
-      pkg[field][name] = version;
-      changed = true;
-    }
-  }
-  if (changed) {
-    fs.writeFileSync(pkgJsonPath, `${JSON.stringify(pkg, null, 2)}\n`);
-  }
-}
-
-const seen = new Set();
-// 走完一遍依赖图后，可以从这里查每个 workspace 包的真实版本号
-const resolvedVersions = new Map();
-
-// BFS 遍历依赖图：
-// 浅层依赖（desktop 直接 dep）先被加入 seen，
-// 避免被深层依赖（langchain 私有版本）抢先解析到不兼容的旧版本。
-function walk(rootDir) {
-  const queue = [rootDir];
-  while (queue.length > 0) {
-    const packageDir = queue.shift();
-    let pkg;
-    try {
-      pkg = readJson(path.join(packageDir, "package.json"));
-    } catch {
-      continue;
-    }
-    const deps = {
-      ...pkg.dependencies,
-      ...pkg.peerDependencies,
-      ...pkg.optionalDependencies,
-    };
-
-    for (const depName of Object.keys(deps)) {
-      if (seen.has(depName)) continue;
-      seen.add(depName);
-
-      const depDir = findPackageDir(depName, packageDir);
-      if (!depDir) {
-        if (pkg.dependencies?.[depName]) {
-          console.error(
-            `[stage] cannot resolve required dep "${depName}" from ${packageDir}`,
-          );
-          process.exitCode = 1;
-        } else {
-          console.warn(
-            `[stage] skip optional/peer "${depName}" (not installed)`,
-          );
-        }
-        continue;
-      }
-
-      const depPkg = readJson(path.join(depDir, "package.json"));
-      if (depPkg.version) resolvedVersions.set(depName, depPkg.version);
-
-      copyPackage(depDir, path.join(stageNm, depName));
-      queue.push(depDir);
-    }
-  }
-}
-
 // === main ===
 
+// --config.node-linker=hoisted：产出「扁平、几乎无符号链接」的 node_modules。
+//   - 顶层全是实文件目录，工作区包 @meshbot/server-agent 是实目录（不是软链）。
+//     默认 isolated 布局会把 @meshbot/* 链成指向 .pnpm 的相对软链，after-pack 拷贝 +
+//     codesign 清链后会丢包（实测 server-agent 时有时无、顶层只剩 3 个）→ 启动 MODULE_NOT_FOUND。
+//   - 仅剩 .bin 里的软链，after-pack 会整目录删掉（运行时 fork 不依赖 .bin）。
+//   - --prod 正确排除 devDependencies（electron / vitest 等不进树，避免嵌套 Electron.app
+//     的框架软链破坏 codesign --deep）；--legacy 绕开 v10+ inject-workspace-packages 限制。
+console.log("[stage] pnpm deploy --prod --legacy (hoisted) -> release-stage ...");
 fs.rmSync(stageDir, { recursive: true, force: true });
-fs.mkdirSync(stageNm, { recursive: true });
-
-// desktop 自己的入口文件
-fs.cpSync(path.join(desktopDir, "dist"), path.join(stageDir, "dist"), {
-  recursive: true,
-  dereference: true,
-});
-fs.cpSync(path.join(desktopDir, "scripts"), path.join(stageDir, "scripts"), {
-  recursive: true,
-  dereference: true,
-});
-fs.copyFileSync(
-  path.join(desktopDir, "electron-builder.yml"),
-  path.join(stageDir, "electron-builder.yml"),
-);
-fs.copyFileSync(
-  path.join(desktopDir, "package.json"),
-  path.join(stageDir, "package.json"),
+execSync(
+  `pnpm --filter @meshbot/desktop deploy --prod --legacy --config.node-linker=hoisted "${stageDir}"`,
+  { cwd: desktopDir, stdio: "inherit" },
 );
 
-console.log("[stage] walking dependency graph from desktop...");
-const t0 = Date.now();
-walk(desktopDir);
-
-const stats = fs.readdirSync(stageNm);
-console.log(
-  `[stage] copied ${stats.length} packages in ${Date.now() - t0}ms -> ${stageNm}`,
-);
-
-// 把所有 workspace:* 改写成真实版本号，
-// 让 electron-builder 能完整跟随依赖图（包括传递依赖）。
-console.log("[stage] rewriting workspace:* version refs...");
-function rewriteAll(dir) {
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
-  for (const e of entries) {
-    if (!e.isDirectory()) continue;
-    const sub = path.join(dir, e.name);
-    if (e.name.startsWith("@")) {
-      rewriteAll(sub);
-      continue;
-    }
-    const pj = path.join(sub, "package.json");
-    if (fs.existsSync(pj)) rewriteWorkspaceVersions(pj, resolvedVersions);
-  }
+// electron 是 devDependency，--prod deploy 不会装进 release-stage/node_modules；
+// electron-builder 需要一个「固定」的 electron 版本号去下载对应二进制（package.json
+// 里是 "^41" range，电不能用）。这里解析真实安装版本写进 staged electron-builder.yml
+// 的 electronVersion 字段，无需 node_modules/electron 存在。
+const electronDir = findPackageDir("electron", desktopDir);
+if (!electronDir) {
+  console.error("[stage] cannot resolve electron to determine version");
+  process.exit(1);
 }
-rewriteAll(stageNm);
-rewriteWorkspaceVersions(path.join(stageDir, "package.json"), resolvedVersions);
+const electronVersion = JSON.parse(
+  fs.readFileSync(path.join(electronDir, "package.json"), "utf8"),
+).version;
+// electron-builder 的 pnpm collector 会在 release-stage 里跑 `pnpm list` 求依赖图。
+// pnpm 跑任何命令前的 verify-deps-before-run 会拿这个自洽工程跟「共享 workspace
+// lockfile」对比、判定 node_modules 失配，于是尝试 `pnpm install --production` 并
+// 想清空 node_modules——无 TTY 确认就直接 ERR_PNPM_ABORTED_REMOVE_MODULES_DIR 失败。
+// 这里给 release-stage 单独放一份 .npmrc 关掉该检查，pnpm list 就只读已部署的状态。
+fs.writeFileSync(
+  path.join(stageDir, ".npmrc"),
+  "verify-deps-before-run=false\n",
+);
 
-if (process.exitCode) {
-  console.error("[stage] failed");
-  process.exit(process.exitCode);
+const ymlPath = path.join(stageDir, "electron-builder.yml");
+let yml = fs.readFileSync(ymlPath, "utf8");
+if (!/^electronVersion:/m.test(yml)) {
+  yml = `electronVersion: ${electronVersion}\n${yml}`;
+  fs.writeFileSync(ymlPath, yml);
+  console.log(`[stage] pinned electronVersion: ${electronVersion}`);
 }
+
+console.log("[stage] done");

@@ -11,8 +11,8 @@
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "test": "vitest run",
     "stage": "node scripts/stage.js",
-    "pack": "pnpm run stage && electron-builder --projectDir release-stage --dir",
-    "dist": "pnpm run stage && electron-builder --projectDir release-stage"
+    "pack": "pnpm run stage && node scripts/run-electron-builder.js --projectDir release-stage --dir",
+    "dist": "pnpm run stage && node scripts/run-electron-builder.js --projectDir release-stage"
   },
   "files": [
     "dist",

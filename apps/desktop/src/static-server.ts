@@ -28,7 +28,10 @@ function tryReadFile(filePath: string): Buffer | null {
   try {
     return readFileSync(filePath);
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    const code = (err as NodeJS.ErrnoException).code;
+    // ENOENT：文件不存在；EISDIR：路径是目录（如请求 "/" → rootDir 本身）。
+    // 两者都当「未命中」让上层回退到 index.html，否则 EISDIR 会冒泡崩主进程。
+    if (code === "ENOENT" || code === "EISDIR") return null;
     throw err;
   }
 }
