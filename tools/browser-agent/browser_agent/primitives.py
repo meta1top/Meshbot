@@ -12,7 +12,8 @@ _BLOCK_MARKERS = ("captcha", "verify you are human", "请完成安全验证",
                   "checking your browser", "access denied")
 
 
-def _sel(ref: int) -> str:
+def _sel(ref: int | str) -> str:
+    # ref 来自 snapshot：server 侧传 int，page.get_attribute 取回是 str，两者插值等价。
     return f'[data-mb-ref="{ref}"]'
 
 
@@ -24,7 +25,11 @@ async def navigate(page, url: str) -> dict[str, Any]:
 
 async def get_state(page) -> dict[str, Any]:
     title = await page.title()
-    body = (await page.inner_text("body"))[:4000].lower()
+    try:
+        body = (await page.inner_text("body"))[:4000].lower()
+    except Exception:
+        # 空白页 / 错误页 / DOM 半加载时无 <body>，按"无正文"处理而非崩。
+        body = ""
     blocked = any(m in body for m in _BLOCK_MARKERS)
     return {"ok": True, "url": page.url, "title": title, "blocked": blocked}
 

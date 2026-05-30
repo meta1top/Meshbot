@@ -27,7 +27,9 @@ async def test_type_and_click_change_dom():
     async with AsyncCamoufox(headless=True, humanize=True) as ctx:
         page = await ctx.new_page()
         await P.navigate(page, FIXTURE)
-        await page.evaluate(COLLECT_JS)            # 打 ref
+        # navigate 只调 get_state（不打 ref）；ref 由 snapshot/COLLECT_JS 才会写上，
+        # 故这里显式 evaluate 一次，模拟 LLM 真实流程 navigate→snapshot→click(ref)。
+        await page.evaluate(COLLECT_JS)
         user_ref = await _ref_of(page, "user")
         await P.type_text(page, ref=user_ref, text="alice")
         assert await page.input_value("#user") == "alice"
