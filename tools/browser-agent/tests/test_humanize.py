@@ -1,5 +1,3 @@
-import time
-import pytest
 from browser_agent.humanize import (
     action_delay, typing_intervals, RateLimiter,
 )
@@ -33,3 +31,14 @@ def test_rate_limiter_separate_keys():
     rl = RateLimiter(max_per_window=1, window_s=10.0, _now=lambda: 100.0)
     assert rl.allow("x.com") is True
     assert rl.allow("xhs.com") is True  # 不同站独立预算
+
+
+def test_rate_limiter_evicts_stale_hits():
+    now = {"t": 100.0}
+    rl = RateLimiter(max_per_window=1, window_s=10.0, _now=lambda: now["t"])
+    assert rl.allow("x.com") is True
+    assert rl.allow("x.com") is False  # 窗口内已满
+    now["t"] = 111.0  # 过窗口（>10s），旧命中应被淘汰
+    assert rl.allow("x.com") is True
+    now["t"] = 120.0  # 边界：距上次正好 9s，仍在窗口内
+    assert rl.allow("x.com") is False

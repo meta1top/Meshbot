@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import math
 import random
+import time
 from collections import deque
 from typing import Callable, Deque, Dict
 
@@ -30,10 +31,10 @@ class RateLimiter:
 
     def __init__(self, max_per_window: int, window_s: float,
                  _now: Callable[[], float] | None = None) -> None:
-        import time
         self._max = max_per_window
         self._window = window_s
         self._now = _now or time.monotonic
+        # 按 key（站点）存命中时间戳；本场景 key 是少量固定站点，集合有界，不做过期清理。
         self._hits: Dict[str, Deque[float]] = {}
 
     def allow(self, key: str) -> bool:
