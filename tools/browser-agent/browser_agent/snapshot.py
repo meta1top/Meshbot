@@ -8,6 +8,8 @@ from typing import Any
 COLLECT_JS = r"""
 () => {
   const INTERACTIVE = new Set(['a','button','input','textarea','select','summary']);
+  // 纯装饰/排版 role：truthy 但不可交互，必须排除，否则每个快照都被噪声塞满。
+  const SKIP_ROLES = new Set(['presentation','none','separator']);
   const out = [];
   let ref = 0;
   const visible = (el) => {
@@ -15,13 +17,16 @@ COLLECT_JS = r"""
     const s = getComputedStyle(el);
     return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none';
   };
+  // name 优先取已填 value（让 LLM 看到输入框真实内容），再退到 placeholder/文本。
   const nameOf = (el) =>
-    (el.getAttribute('aria-label') || el.getAttribute('placeholder') ||
-     (el.innerText || '').trim() || el.value || '').slice(0, 120);
+    (el.getAttribute('aria-label') || el.value ||
+     el.getAttribute('placeholder') || (el.innerText || '').trim() || '').slice(0, 120);
   for (const el of document.querySelectorAll('*')) {
-    const role = el.getAttribute('role') || el.tagName.toLowerCase();
+    const ariaRole = el.getAttribute('role');
+    const role = ariaRole || el.tagName.toLowerCase();
     const interactive = INTERACTIVE.has(el.tagName.toLowerCase()) ||
-                        el.getAttribute('role') || el.getAttribute('contenteditable') === 'true';
+                        (ariaRole && !SKIP_ROLES.has(ariaRole)) ||
+                        el.getAttribute('contenteditable') === 'true';
     if (!interactive || !visible(el)) continue;
     ref += 1;
     el.setAttribute('data-mb-ref', String(ref));
