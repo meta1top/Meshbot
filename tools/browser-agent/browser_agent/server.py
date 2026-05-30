@@ -1,19 +1,36 @@
 """browser-agent MCP server：FastMCP 暴露低层原语，全部经 BrowserManager 串行。"""
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import urlparse
 
 from mcp.server.fastmcp import FastMCP
 
 from . import primitives as P
 from .guardrails import WriteGuard
+from .humanize import RateLimiter, action_delay
 from .manager import BrowserManager
 
 PROFILES_ROOT = Path(__file__).resolve().parent.parent / "profiles"
 HEADLESS = os.environ.get("BROWSER_AGENT_HEADLESS", "0") == "1"
+# 每站每分钟动作上限：再好的指纹，频率超标也会被风控打。可经环境变量调。
+_MAX_ACTIONS_PER_MIN = int(os.environ.get("BROWSER_AGENT_MAX_ACTIONS_PER_MIN", "30"))
+_rl = RateLimiter(max_per_window=_MAX_ACTIONS_PER_MIN, window_s=60.0)
+
+
+def _host(url: str) -> str:
+    """从 url 取站点 host 作为限速 key；空/无 host 归一到 'default'。"""
+    return urlparse(url or "").netloc or "default"
+
+
+async def _throttle(host: str) -> None:
+    """超过该站动作预算时按人类节奏歇一下再放行（冷却，而非报错）。"""
+    while not _rl.allow(host):
+        await asyncio.sleep(action_delay(0.8, 2.0))
 
 
 @asynccontextmanager
@@ -52,6 +69,7 @@ async def navigate(url: str) -> dict:
 
 async def _nav(url: str) -> dict:
     page = await _mgr.page()
+    await _throttle(_host(url))  # 按目标站限速
     return await P.navigate(page, url)
 
 
@@ -74,6 +92,7 @@ async def click(ref: int) -> dict:
 
 async def _click(ref: int) -> dict:
     page = await _mgr.page()
+    await _throttle(_host(page.url))
     return await P.click(page, ref)
 
 
@@ -85,6 +104,7 @@ async def type_text(ref: int, text: str, submit: bool = False) -> dict:
 
 async def _type(ref: int, text: str, submit: bool) -> dict:
     page = await _mgr.page()
+    await _throttle(_host(page.url))
     return await P.type_text(page, ref, text, submit=submit)
 
 
@@ -131,6 +151,7 @@ async def confirm_publish(confirm_token: str, publish_ref: int) -> dict:
 
 async def _publish(publish_ref: int, summary: str) -> dict:
     page = await _mgr.page()
+    await _throttle(_host(page.url))
     await P.click(page, publish_ref)
     return {"ok": True, "published": summary}
 

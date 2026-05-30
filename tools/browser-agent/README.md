@@ -69,3 +69,15 @@ type_text / extract / get_state / compose / confirm_publish` 等工具。
 - `begin_login` 需要有头显示环境（本机桌面）。无显示的服务器需配虚拟显示（xvfb）或走 headless。
 - 跑在你自己机器 = 真实住宅 IP，是隐蔽性的关键红利；若部署到 VPS（机房 IP）需另配住宅代理。
 - 仅操作你自有账号；写操作人在环确认；遵守各平台 ToS / 速率限制。
+- 限速：每站默认 ≤30 动作/分钟（`BROWSER_AGENT_MAX_ACTIONS_PER_MIN` 可调），超了自动冷却。
+
+## 已知边界（首切片，后续迭代补）
+
+- **护栏是流程约定、非沙箱**：`confirm_publish` 工具要 token 才发布；但通用 `click(ref)` 不受
+  护栏管——LLM 直接点「发布」按钮可绕过 compose→confirm。发帖务必走 compose→confirm 流程。
+- **`compose` 不替你填内容**：它只登记待确认动作并返回 token/预览文本；正文要先用 `type_text`
+  填进页面，`compose` 的 `preview` 是你传入的摘要，不是页面截图。
+- **`extract` 暂不落盘**：大结果整段内联返回，依赖 meshbot 32KB 截断；海量「看评论」场景的
+  落盘分页（spec 设想的 `<meshbotDir>/workspace/browser-agent/`）留待后续。
+- 仅实现验收路径所需原语（navigate/snapshot/click/type_text/fill/scroll/extract/get_state +
+  会话/护栏）；`hover/select/tabs/upload/dialog/frame/screenshot` 等按需补，模式同 primitives。
