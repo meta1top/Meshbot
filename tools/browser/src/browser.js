@@ -37,6 +37,10 @@ export async function launch(userDataDir, { headless = false } = {}) {
       channel: "chrome",
       headless,
       viewport: null,
+      // chromiumSandbox 默认 false → patchright 注入 --no-sandbox：真 Chrome 会弹
+      //「不受支持的命令行标记」警告条，且是自动化特征。开启沙箱去掉该 flag（macOS 真
+      // Chrome 沙箱正常工作）。注：无沙箱权限的 Linux 容器如启动失败，再按需放开。
+      chromiumSandbox: true,
     });
   } catch (e) {
     if (/executable|channel|chrome|not found/i.test(String(e?.message))) {
