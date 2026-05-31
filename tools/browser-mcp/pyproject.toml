@@ -10,5 +10,6 @@ browser-mcp = "browser_mcp.server:main"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 markers = ["browser: 需 nodriver+Chrome，无网络", "online: 需联网（反检测验收）"]
-addopts = "-m 'not browser and not online'"
+# browser/online 的默认跳过由 tests/conftest.py 按环境变量控制（BROWSER_E2E / BROWSER_ONLINE），
+# 不用 addopts 硬编 -m 过滤，这样 `BROWSER_E2E=1 pytest` 一开即跑、无需 --override-ini。
 testpaths = ["tests"]
