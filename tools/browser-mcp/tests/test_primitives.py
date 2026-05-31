@@ -16,6 +16,9 @@ async def test_navigate_snapshot_click_type():
         uref = await tab.evaluate("document.getElementById('u').getAttribute('data-mb-ref')")
         await P.type_text(tab, uref, "alice")
         assert (await tab.evaluate("document.getElementById('u').value")) == "alice"
+        # fill 必须替换而非追加（验 clear_input 真生效）：已有 alice，fill bob 后应只剩 bob
+        await P.fill(tab, uref, "bob")
+        assert (await tab.evaluate("document.getElementById('u').value")) == "bob"
         gref = await tab.evaluate("document.getElementById('go').getAttribute('data-mb-ref')")
         await P.click(tab, gref)
         await tab.sleep(0.3)

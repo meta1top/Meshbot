@@ -59,7 +59,7 @@ async def type_text(tab, ref, text: str, submit: bool = False) -> dict[str, Any]
 
 async def fill(tab, ref, text: str) -> dict[str, Any]:
     el = await tab.select(_sel(ref))
-    el.clear_input()
+    await el.clear_input()  # nodriver clear_input 是协程，必须 await，否则不清空、变成追加
     await el.send_keys(text)
     return {"ok": True}
 
