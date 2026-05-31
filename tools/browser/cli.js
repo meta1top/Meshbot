@@ -59,7 +59,26 @@ async function main() {
       );
     process.exit(0);
   }
-  // comments 在 Task 7 接入
+  if (verb === "comments") {
+    const { comments } = await import("./src/comments.js");
+    const stamp = String(process.hrtime.bigint()); // 进程内单调时间戳，避免 Date
+    const r = await comments({
+      profileDir: dir,
+      platform,
+      url: flags.url,
+      max: flags.max ? Number(flags.max) : 50,
+      outDir: meshbotWorkspace(),
+      stamp,
+    });
+    if (!r.ok) {
+      console.error(`[comments] FAIL: ${r.reason}`);
+      process.exit(1);
+    }
+    console.log(
+      `[comments] ${r.count} 条 → ${r.file}\n样本: ${JSON.stringify(r.sample, null, 2)}`,
+    );
+    process.exit(0);
+  }
   console.error(`未实现的 verb: ${verb}`);
   process.exit(2);
 }
