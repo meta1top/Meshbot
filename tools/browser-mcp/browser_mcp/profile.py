@@ -52,10 +52,7 @@ def wipe_window_state(profile: Path) -> None:
         except OSError:
             pass
     import shutil
-    try:
-        shutil.rmtree(default / "Sessions", ignore_errors=True)
-    except OSError:
-        pass
+    shutil.rmtree(default / "Sessions", ignore_errors=True)  # ignore_errors 已吞异常，无需再包
     prefs = default / "Preferences"
     try:
         data = json.loads(prefs.read_text())
