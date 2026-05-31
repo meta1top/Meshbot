@@ -1,0 +1,14 @@
+[project]
+name = "meshbot-browser-mcp"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = ["nodriver>=0.50", "mcp>=1.10"]
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.24"]
+[project.scripts]
+browser-mcp = "browser_mcp.server:main"
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = ["browser: 需 nodriver+Chrome，无网络", "online: 需联网（反检测验收）"]
+addopts = "-m 'not browser and not online'"
+testpaths = ["tests"]
