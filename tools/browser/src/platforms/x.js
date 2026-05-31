@@ -30,6 +30,7 @@ export async function isLoggedIn(page) {
  * 调用方（post.js）已先 goto homeUrl 并校验登录态。
  */
 export async function post(page, { text, confirm = false }) {
+  // images：首切片纯文本，post.js 会传 images 但此处暂不处理（后补）。
   const box = page.locator(COMPOSE_BOX).first();
   await box.waitFor({ timeout: 15000 });
   await box.click();
@@ -42,8 +43,21 @@ export async function post(page, { text, confirm = false }) {
   }
   await sleep(actionDelay(0.4, 1.0));
   if (!confirm) return { published: false, preview: text };
-  await page.locator(PUBLISH_BTN).first().click();
-  await sleep(actionDelay(1.0, 2.0));
+  const btn = page.locator(PUBLISH_BTN).first();
+  await btn.waitFor({ state: "visible", timeout: 10000 });
+  // click 自带 enabled 可点等待（正文为空时按钮 disabled，此处已输入故可点）。
+  await btn.click();
+  // 不轻信点击：发布成功后首页内联框会清空——等它清空才算真发出；
+  // 否则（按钮没生效/发布失败）这里抛超时，由上层报错，绝不假报 published。
+  await page.waitForFunction(
+    (sel) => {
+      const el = document.querySelector(sel);
+      return el && (el.innerText || "").trim() === "";
+    },
+    COMPOSE_BOX,
+    { timeout: 10000 },
+  );
+  await sleep(actionDelay(0.5, 1.2));
   return { published: true };
 }
 
