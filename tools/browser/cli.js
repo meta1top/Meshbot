@@ -39,7 +39,27 @@ async function main() {
     );
     process.exit(r.ok ? 0 : 1);
   }
-  // post / comments 在 Task 5 / 7 接入
+  if (verb === "post") {
+    const { post } = await import("./src/post.js");
+    const r = await post({
+      profileDir: dir,
+      platform,
+      text: flags.text || "",
+      images: flags.image ? [].concat(flags.image) : [],
+      confirm: flags.confirm === true,
+    });
+    if (!r.ok) {
+      console.error(`[post] FAIL: ${r.reason}`);
+      process.exit(1);
+    }
+    if (r.published) console.log("[post] 已发布");
+    else
+      console.log(
+        `[post] 预览（未发布）:\n${r.preview}\n截图: ${r.screenshot}\n确认后加 --confirm 重跑发布`,
+      );
+    process.exit(0);
+  }
+  // comments 在 Task 7 接入
   console.error(`未实现的 verb: ${verb}`);
   process.exit(2);
 }
