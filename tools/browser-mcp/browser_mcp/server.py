@@ -2,12 +2,17 @@
 from __future__ import annotations
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 from mcp.server.fastmcp import FastMCP
 from . import primitives as P
+from .humanize import RateLimiter, action_delay, sleep
 from .manager import BrowserManager
 
 PROFILES_ROOT = Path(__file__).resolve().parent.parent / "profiles"
 HEADLESS = os.environ.get("BROWSER_MCP_HEADLESS", "0") == "1"
+# 每站每分钟动作上限：再好的指纹，频率超标也会被风控打。可经环境变量调。
+_MAX_ACTIONS_PER_MIN = int(os.environ.get("BROWSER_MCP_MAX_ACTIONS_PER_MIN", "30"))
+_rl = RateLimiter(_MAX_ACTIONS_PER_MIN, 60.0)
 
 mcp = FastMCP("browser")
 _mgr = BrowserManager(profiles_root=PROFILES_ROOT, headless=HEADLESS)
@@ -15,6 +20,16 @@ _mgr = BrowserManager(profiles_root=PROFILES_ROOT, headless=HEADLESS)
 
 async def _t():
     return await _mgr.tab()
+
+
+def _host(url: str) -> str:
+    return urlparse(url or "").netloc or "default"
+
+
+async def _throttle(host: str) -> None:
+    """超过该站动作预算时按人类节奏歇一下再放行（冷却，而非报错）。"""
+    while not _rl.allow(host):
+        await sleep(action_delay(0.8, 2.0))
 
 
 @mcp.tool()
@@ -31,6 +46,7 @@ async def navigate(url: str) -> dict:
 
 
 async def _nav(url):
+    await _throttle(_host(url))  # 按目标站限速
     return await P.navigate(await _t(), url)
 
 
@@ -51,7 +67,9 @@ async def click(ref: int) -> dict:
 
 
 async def _click(ref):
-    return await P.click(await _t(), ref)
+    tab = await _t()
+    await _throttle(_host(await tab.evaluate("location.href")))
+    return await P.click(tab, ref)
 
 
 @mcp.tool()
@@ -61,7 +79,9 @@ async def type_text(ref: int, text: str, submit: bool = False) -> dict:
 
 
 async def _type(ref, text, submit):
-    return await P.type_text(await _t(), ref, text, submit)
+    tab = await _t()
+    await _throttle(_host(await tab.evaluate("location.href")))
+    return await P.type_text(tab, ref, text, submit)
 
 
 @mcp.tool()

@@ -1,4 +1,4 @@
-from browser_mcp.humanize import action_delay, typing_intervals, mouse_path, RateLimiter
+from browser_mcp.humanize import action_delay, typing_intervals, RateLimiter
 
 def test_action_delay_bounds_and_varies():
     vals = {round(action_delay(0.4, 1.5), 4) for _ in range(200)}
@@ -7,10 +7,6 @@ def test_action_delay_bounds_and_varies():
 def test_typing_intervals():
     iv = typing_intervals("hello")
     assert len(iv) == 5 and all(0.02 <= x <= 0.5 for x in iv)
-
-def test_mouse_path_endpoints():
-    p = mouse_path((0, 0), (100, 50), 6)
-    assert p[0] == (0, 0) and p[-1] == (100, 50) and len(p) == 7
 
 def test_rate_limiter():
     now = [100.0]

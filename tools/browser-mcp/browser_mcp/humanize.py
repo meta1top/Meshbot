@@ -17,16 +17,6 @@ def typing_intervals(text: str, base: float = 0.08) -> list[float]:
         out.append(min(0.5, max(0.02, base * jitter + pause)))
     return out
 
-def mouse_path(frm: tuple[float, float], to: tuple[float, float], steps: int = 12) -> list[tuple[float, float]]:
-    pts = [(frm[0], frm[1])]
-    for i in range(1, steps):
-        t = i / steps
-        jx = (random.random() - 0.5) * 4
-        jy = (random.random() - 0.5) * 4
-        pts.append((frm[0] + (to[0] - frm[0]) * t + jx, frm[1] + (to[1] - frm[1]) * t + jy))
-    pts.append((to[0], to[1]))
-    return pts
-
 class RateLimiter:
     def __init__(self, max_per_window: int, window_s: float, now: Callable[[], float] | None = None):
         self._max, self._window, self._now = max_per_window, window_s, now or time.monotonic
