@@ -123,6 +123,8 @@ async def cookies_save(path: str) -> dict:
 
 
 async def _cs(path):
+    if _mgr._browser is None:
+        raise RuntimeError("尚未 use_profile")
     await _mgr._browser.cookies.save(path)
     return {"ok": True, "path": path}
 
@@ -134,6 +136,8 @@ async def cookies_load(path: str) -> dict:
 
 
 async def _cl(path):
+    if _mgr._browser is None:
+        raise RuntimeError("尚未 use_profile")
     await _mgr._browser.cookies.load(path)
     return {"ok": True}
 

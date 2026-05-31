@@ -7,4 +7,4 @@ EXPECTED = {"use_profile", "navigate", "snapshot", "click", "type_text", "fill",
 
 def test_tools_registered():
     names = {t.name for t in asyncio.run(mcp.list_tools())}
-    assert EXPECTED.issubset(names)
+    assert names == EXPECTED  # 恰好这 12 个，不多不少
