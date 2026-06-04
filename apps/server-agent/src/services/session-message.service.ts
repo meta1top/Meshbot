@@ -1,7 +1,7 @@
 import type { HeatmapCell } from "@meshbot/types-agent";
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { LessThan, MoreThan, Repository } from "typeorm";
+import { In, LessThan, MoreThan, Repository } from "typeorm";
 import { SessionMessage } from "../entities/session-message.entity";
 
 /** 写 user 消息入参。 */
@@ -238,6 +238,20 @@ export class SessionMessageService {
   /** 删某会话全部 session_messages（仅 session 删除时调用）。 */
   async deleteBySession(sessionId: string): Promise<void> {
     await this.repo.delete({ sessionId });
+  }
+
+  /**
+   * 在给定 id 集合中，返回确实存在于本会话 session_messages 的那部分（Set）。
+   * 供 pending 展示判断「该 pending 消息是否已入历史」——已入库的 failed/processing
+   * 由历史在正确 seq 位置展示，不必再被前端追加到末尾。
+   */
+  async existingIds(sessionId: string, ids: string[]): Promise<Set<string>> {
+    if (ids.length === 0) return new Set();
+    const rows = await this.repo.find({
+      where: { sessionId, id: In(ids) },
+      select: { id: true },
+    });
+    return new Set(rows.map((r) => r.id));
   }
 
   /** 取一条消息，按 id 查；不存在抛 NotFoundException。 */

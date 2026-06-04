@@ -213,11 +213,11 @@ export class SessionController {
     return { feedback };
   }
 
-  /** 取排队中 / 处理中的用户消息。 */
+  /** 取排队中 / 处理中的用户消息（含 inHistory 标注）。 */
   @Get(":id/pending")
   async pending(@Param("id") id: string): Promise<PendingResponse> {
     await this.sessions.findSessionOrFail(id);
-    const rows = await this.sessions.listActivePending(id);
+    const rows = await this.sessions.listActivePendingWithHistory(id);
     return {
       pending: rows.map((m) => ({
         id: m.id,
@@ -225,6 +225,7 @@ export class SessionController {
         content: m.content,
         status: m.status as PendingResponse["pending"][number]["status"],
         createdAt: m.createdAt.toISOString(),
+        inHistory: m.inHistory,
       })),
     };
   }

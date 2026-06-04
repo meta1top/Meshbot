@@ -161,6 +161,22 @@ export class SessionService {
   }
 
   /**
+   * 供 pending 展示端点：在 listActivePending 基础上标注每条是否已入 session_messages。
+   * 前端据 inHistory 区分——已入库的 failed/processing 由历史在正确 seq 位置渲染，
+   * 不再追加到时间线末尾；未入库的（孤儿）才追加。单读，无需事务。
+   */
+  async listActivePendingWithHistory(
+    sessionId: string,
+  ): Promise<Array<PendingMessage & { inHistory: boolean }>> {
+    const rows = await this.listActivePending(sessionId);
+    const existing = await this.sessionMessages.existingIds(
+      sessionId,
+      rows.map((r) => r.id),
+    );
+    return rows.map((r) => ({ ...r, inHistory: existing.has(r.id) }));
+  }
+
+  /**
    * 取会话全部 failed 消息，整批转 processing 后返回（用于重试）。
    * 这些消息的 HumanMessage 已在 checkpointer，重试只重跑产出回复。
    */

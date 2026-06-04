@@ -195,6 +195,28 @@ describe("SessionService", () => {
     expect(active.some((m) => m.status === "failed")).toBe(true);
   });
 
+  it("listActivePendingWithHistory 标注 inHistory（已入 session_messages 为 true）", async () => {
+    const { sessionId } = await service.createSession({ content: "m1" });
+    const claimed = await service.claimPending(sessionId);
+    await service.markFailed(claimed.map((m) => m.id));
+    // 第一条 failed 已落入 session_messages（模拟 run.human 已记录），第二条没有
+    const ds = (service as unknown as { __ds: DataSource }).__ds;
+    await ds.query(
+      `INSERT INTO session_messages (id, session_id, role, content, seq) VALUES (?, ?, 'user', 'm1', 1)`,
+      [claimed[0].id, sessionId],
+    );
+    const rows = await service.listActivePendingWithHistory(sessionId);
+    const target = rows.find((r) => r.id === claimed[0].id);
+    expect(target?.inHistory).toBe(true);
+    // 再追加一条全新的 pending（未入库）→ inHistory=false
+    await service.appendMessage(sessionId, {
+      messageId: "fresh-pending",
+      content: "fresh",
+    });
+    const rows2 = await service.listActivePendingWithHistory(sessionId);
+    expect(rows2.find((r) => r.id === "fresh-pending")?.inHistory).toBe(false);
+  });
+
   it("claimFailed 把 failed 消息批量转 processing 并返回", async () => {
     const { sessionId } = await service.createSession({ content: "m1" });
     const claimed = await service.claimPending(sessionId);

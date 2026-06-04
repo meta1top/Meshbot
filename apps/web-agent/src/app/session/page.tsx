@@ -281,16 +281,30 @@ function SessionView() {
             }
             continue;
           }
-          // 仅 status === "pending"（runner 还没认领）进 pending 区；
-          // processing 当作正常 user 气泡（runner 已在跑、对应 assistant 即将出现）；
-          // failed 当作正常 user 气泡 + 失败标记。
-          initial.push({
-            id: p.id,
-            role: "user",
-            content: p.content,
-            pending: p.status === "pending",
-            failed: p.status === "failed",
-          });
+          if (p.status === "pending") {
+            // 排队中（runner 还没认领、从未入库）→ 输入框上方 pending 区
+            initial.push({
+              id: p.id,
+              role: "user",
+              content: p.content,
+              pending: true,
+            });
+            continue;
+          }
+          // processing / failed 且不在首页历史 id 集合里：
+          // - inHistory=true → 已落入 session_messages（只是在更早的历史页）。
+          //   跳过，由历史在正确 seq 位置展示——否则会被追加到时间线末尾，造成
+          //   "失败/旧消息堆在最后面"（首页 historyIds 不含分页深处的 id）。
+          // - inHistory=false → 孤儿（如 run.human 记录前就失败）。它是最新的，
+          //   历史里没有，追加到末尾才看得到 + 可重试。
+          if (!p.inHistory) {
+            initial.push({
+              id: p.id,
+              role: "user",
+              content: p.content,
+              failed: p.status === "failed",
+            });
+          }
         }
         // 合并：历史快照打底，但保留 socket 已先到的消息（不被覆盖）
         apply((current) => {

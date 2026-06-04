@@ -152,6 +152,13 @@ export const PendingMessageDtoSchema = z.object({
   content: z.string(),
   status: PendingMessageStatus,
   createdAt: z.string(),
+  /**
+   * 该消息是否已落入 session_messages（历史）。
+   * 前端据此区分：已入库的 failed/processing 由历史在正确 seq 位置展示，不再
+   * 追加到时间线末尾（修复"失败消息堆在底部"——历史分页时首页 id 集合不全）；
+   * 未入库的（如 run.human 前就失败的孤儿消息）才追加。
+   */
+  inHistory: z.boolean(),
 });
 export type PendingMessageDto = z.infer<typeof PendingMessageDtoSchema>;
 

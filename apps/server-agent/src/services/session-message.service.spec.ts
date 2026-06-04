@@ -276,6 +276,19 @@ describe("SessionMessageService", () => {
     expect(row?.toolCalls).toBe(JSON.stringify(calls));
   });
 
+  it("existingIds 只返回本会话内确实存在的 id", async () => {
+    await service.recordUser({ id: "u1", sessionId: "s1", content: "a" });
+    await service.recordUser({ id: "u2", sessionId: "s1", content: "b" });
+    await service.recordUser({ id: "other", sessionId: "s2", content: "c" });
+    const got = await service.existingIds("s1", ["u1", "u2", "nope", "other"]);
+    expect([...got].sort()).toEqual(["u1", "u2"]);
+  });
+
+  it("existingIds 空入参返回空集合", async () => {
+    const got = await service.existingIds("s1", []);
+    expect(got.size).toBe(0);
+  });
+
   it("deleteBySession 删该会话全部消息", async () => {
     await service.recordUser({ id: "u1", sessionId: "s1", content: "a" });
     await service.recordUser({ id: "u2", sessionId: "s2", content: "b" });
