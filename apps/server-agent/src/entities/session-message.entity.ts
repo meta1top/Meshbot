@@ -17,10 +17,20 @@ import {
  */
 @Entity("session_messages")
 @Index(["sessionId", "createdAt", "id"])
+@Index(["sessionId", "seq"])
 export class SessionMessage {
   /** 与 checkpointer / pending_messages.id 对齐。 */
   @PrimaryColumn()
   id!: string;
+
+  /**
+   * 会话内单调递增序号（1-based）。唯一可靠排序键：
+   * INSERT 时由 `(SELECT COALESCE(MAX(seq),0)+1 WHERE session_id=?)` 原子赋值。
+   * createdAt 仅保留作活跃度统计 / 时间展示，不再用于排序（会同毫秒碰撞、
+   * 退化为随机 UUID tie-break → 批量注入消息刷新后时序错乱）。
+   */
+  @Column({ type: "integer", default: 0 })
+  seq!: number;
 
   /** 逻辑外键，无 DB 约束。 */
   @Column({ name: "session_id" })
