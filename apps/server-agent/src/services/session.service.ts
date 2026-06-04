@@ -348,7 +348,9 @@ export class SessionService {
     if (msg.role !== "user") {
       throw new BadRequestException("仅 user 消息支持重生成");
     }
-    await this.sessionMessages.deleteAfter(sessionId, msg.createdAt);
+    // session_messages 按 seq 裁剪（唯一可靠排序键）；llm_calls 表无 seq，
+    // 但 assistant 调用天然晚于该 user 消息，createdAt 裁剪正确。
+    await this.sessionMessages.deleteAfter(sessionId, msg.seq);
     await this.llmCalls.deleteAfter(sessionId, msg.createdAt);
     await this.graph.cutMessagesAfter(sessionId, messageId);
   }

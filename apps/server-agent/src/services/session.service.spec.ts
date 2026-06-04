@@ -444,15 +444,15 @@ describe("SessionService", () => {
     async function seedSession(sessionId: string): Promise<void> {
       const ds = (service as unknown as { __ds: DataSource }).__ds;
       await ds.query(
-        `INSERT INTO session_messages (id, session_id, role, content, created_at) VALUES (?, ?, 'user', '你好', datetime('now', '-3 seconds'))`,
+        `INSERT INTO session_messages (id, session_id, role, content, seq, created_at) VALUES (?, ?, 'user', '你好', 1, datetime('now', '-3 seconds'))`,
         [`u1-${sessionId}`, sessionId],
       );
       await ds.query(
-        `INSERT INTO session_messages (id, session_id, role, content, created_at) VALUES (?, ?, 'assistant', '回复', datetime('now', '-2 seconds'))`,
+        `INSERT INTO session_messages (id, session_id, role, content, seq, created_at) VALUES (?, ?, 'assistant', '回复', 2, datetime('now', '-2 seconds'))`,
         [`a1-${sessionId}`, sessionId],
       );
       await ds.query(
-        `INSERT INTO session_messages (id, session_id, role, content, created_at) VALUES (?, ?, 'user', '再问', datetime('now', '-1 seconds'))`,
+        `INSERT INTO session_messages (id, session_id, role, content, seq, created_at) VALUES (?, ?, 'user', '再问', 3, datetime('now', '-1 seconds'))`,
         [`u2-${sessionId}`, sessionId],
       );
       await ds.query(
