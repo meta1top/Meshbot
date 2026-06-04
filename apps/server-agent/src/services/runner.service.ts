@@ -414,15 +414,21 @@ export class RunnerService implements OnModuleInit {
           messageId: event.messageId,
           content,
         });
-        // 双写 session_messages（fire-and-forget，写失败仅 log）
-        this.sessionMessages
-          .recordUser({ id: event.messageId, sessionId, content })
-          .catch((err) =>
-            this.logger.error(
-              `session_messages.recordUser 失败 msg=${event.messageId}`,
-              err,
-            ),
+        // 双写 session_messages：顺序 await 保证同一批 human 按 emit 顺序拿到
+        // 递增 seq（fire-and-forget 并发会让 seq 反映插入竞速顺序而非 emit
+        // 顺序，刷新后时序错乱）。写失败仅 log，不杀 run。
+        try {
+          await this.sessionMessages.recordUser({
+            id: event.messageId,
+            sessionId,
+            content,
+          });
+        } catch (err) {
+          this.logger.error(
+            `session_messages.recordUser 失败 msg=${event.messageId}`,
+            err,
           );
+        }
         continue;
       }
       if (event.kind === "reasoning") {
@@ -495,20 +501,21 @@ export class RunnerService implements OnModuleInit {
         const toolCallsJson = event.toolCalls
           ? JSON.stringify(event.toolCalls)
           : null;
-        this.sessionMessages
-          .recordAssistant({
+        // 顺序 await：保证 assistant 接续本批 human 的 seq（emit 顺序）。
+        try {
+          await this.sessionMessages.recordAssistant({
             id: event.messageId,
             sessionId,
             content: event.content,
             reasoning,
             toolCalls: toolCallsJson,
-          })
-          .catch((err) =>
-            this.logger.error(
-              `session_messages.recordAssistant 失败 msg=${event.messageId}`,
-              err,
-            ),
+          });
+        } catch (err) {
+          this.logger.error(
+            `session_messages.recordAssistant 失败 msg=${event.messageId}`,
+            err,
           );
+        }
         continue;
       }
       // event.kind === "usage"
