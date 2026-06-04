@@ -36,7 +36,9 @@ describe("SessionMessageService", () => {
   ): Promise<string[]> {
     const base = Date.now();
     const ids: string[] = [];
+    let i = 0;
     for (const r of rows) {
+      i += 1;
       const id = randomUUID();
       ids.push(id);
       await ds.getRepository(SessionMessage).insert({
@@ -47,6 +49,7 @@ describe("SessionMessageService", () => {
         reasoning: null,
         toolCalls: null,
         toolCallId: null,
+        seq: i,
         createdAt: new Date(base + r.offsetMs),
       });
     }
@@ -85,6 +88,72 @@ describe("SessionMessageService", () => {
       content: "你好",
       reasoning: "thinking...",
     });
+  });
+
+  it("recordUser 按调用顺序分配会话内递增 seq（1,2,3）", async () => {
+    await service.recordUser({ id: "u1", sessionId: "s1", content: "a" });
+    await service.recordUser({ id: "u2", sessionId: "s1", content: "b" });
+    await service.recordUser({ id: "u3", sessionId: "s1", content: "c" });
+    const rows = await ds
+      .getRepository(SessionMessage)
+      .find({ where: { sessionId: "s1" }, order: { seq: "ASC" } });
+    expect(rows.map((r) => [r.id, r.seq])).toEqual([
+      ["u1", 1],
+      ["u2", 2],
+      ["u3", 3],
+    ]);
+  });
+
+  it("seq 按 session 独立计数", async () => {
+    await service.recordUser({ id: "a1", sessionId: "sA", content: "a" });
+    await service.recordUser({ id: "b1", sessionId: "sB", content: "b" });
+    await service.recordUser({ id: "a2", sessionId: "sA", content: "c" });
+    const a = await ds.getRepository(SessionMessage).findOneBy({ id: "a2" });
+    const b = await ds.getRepository(SessionMessage).findOneBy({ id: "b1" });
+    expect(a?.seq).toBe(2);
+    expect(b?.seq).toBe(1);
+  });
+
+  it("recordAssistant / recordToolResult 也分配 seq（接续 max+1）", async () => {
+    await service.recordUser({ id: "u1", sessionId: "s1", content: "q" });
+    await service.recordAssistant({
+      id: "a1",
+      sessionId: "s1",
+      content: "ans",
+      reasoning: null,
+    });
+    await service.recordToolResult({
+      id: "tc1",
+      sessionId: "s1",
+      toolCallId: "tc1",
+      content: "r",
+    });
+    const a = await ds.getRepository(SessionMessage).findOneBy({ id: "a1" });
+    const t = await ds.getRepository(SessionMessage).findOneBy({ id: "tc1" });
+    expect(a?.seq).toBe(2);
+    expect(t?.seq).toBe(3);
+  });
+
+  it("回归：createdAt 相同也按 seq 稳定排序（修复批量注入时序错乱）", async () => {
+    const same = new Date();
+    const order = ["m1", "m2", "m3", "m4"];
+    // 故意打乱物理插入顺序，但 seq 反映真实 emit 顺序
+    for (const content of [order[2], order[0], order[3], order[1]]) {
+      const seq = order.indexOf(content) + 1;
+      await ds.getRepository(SessionMessage).insert({
+        id: randomUUID(),
+        sessionId: "s1",
+        role: seq % 2 === 1 ? "user" : "assistant",
+        content,
+        reasoning: null,
+        toolCalls: null,
+        toolCallId: null,
+        seq,
+        createdAt: same,
+      });
+    }
+    const res = await service.listPage("s1", { limit: 10 });
+    expect(res.messages.map((m) => m.content)).toEqual(order);
   });
 
   it("listPage 无 before 返最新 N 条 + hasMore=true（>N 条数据）", async () => {
@@ -250,29 +319,26 @@ describe("findByIdOrFail / deleteAfter", () => {
     expect(r.content).toBe("a");
   });
 
-  it("deleteAfter 删 createdAt > cutoff 的消息，cutoff 本身保留", async () => {
+  it("deleteAfter 删 seq > cutoff 的消息，cutoff 本身保留", async () => {
     await service.recordUser({ id: "u1", sessionId: "s1", content: "A" });
-    await new Promise((r) => setTimeout(r, 10));
     await service.recordAssistant({
       id: "a1",
       sessionId: "s1",
       content: "B",
       reasoning: null,
     });
-    await new Promise((r) => setTimeout(r, 10));
     await service.recordUser({ id: "u2", sessionId: "s1", content: "C" });
     const cutoffMsg = await service.findByIdOrFail("u1");
-    await service.deleteAfter("s1", cutoffMsg.createdAt);
+    await service.deleteAfter("s1", cutoffMsg.seq);
     const page = await service.listPage("s1", { limit: 10 });
     expect(page.messages.map((m) => m.id)).toEqual(["u1"]);
   });
 
   it("deleteAfter 不影响其他 session", async () => {
     await service.recordUser({ id: "x1", sessionId: "s1", content: "x" });
-    await new Promise((r) => setTimeout(r, 10));
     await service.recordUser({ id: "y1", sessionId: "s2", content: "y" });
     const cutoff = await service.findByIdOrFail("x1");
-    await service.deleteAfter("s1", cutoff.createdAt);
+    await service.deleteAfter("s1", cutoff.seq);
     const p = await service.listPage("s2", { limit: 10 });
     expect(p.messages.map((m) => m.id)).toEqual(["y1"]);
   });
@@ -282,10 +348,26 @@ describe("SessionMessageService.recordCompactionPlaceholder", () => {
   let service: SessionMessageService;
   let repo: jest.Mocked<Repository<SessionMessage>>;
 
+  /** QueryBuilder 链 mock；values 入参用于断言。 */
+  let qb: {
+    insert: jest.Mock;
+    into: jest.Mock;
+    values: jest.Mock;
+    setParameter: jest.Mock;
+    execute: jest.Mock;
+  };
+
   beforeEach(async () => {
+    qb = {
+      insert: jest.fn().mockReturnThis(),
+      into: jest.fn().mockReturnThis(),
+      values: jest.fn().mockReturnThis(),
+      setParameter: jest.fn().mockReturnThis(),
+      execute: jest.fn().mockResolvedValue({}),
+    };
     repo = {
       findOneBy: jest.fn(),
-      insert: jest.fn(),
+      createQueryBuilder: jest.fn().mockReturnValue(qb),
     } as unknown as jest.Mocked<Repository<SessionMessage>>;
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -306,8 +388,8 @@ describe("SessionMessageService.recordCompactionPlaceholder", () => {
       fromMessageId: "m1",
       toMessageId: "m5",
     });
-    expect(repo.insert).toHaveBeenCalledTimes(1);
-    const arg = repo.insert.mock.calls[0][0] as Partial<SessionMessage>;
+    expect(qb.values).toHaveBeenCalledTimes(1);
+    const arg = qb.values.mock.calls[0][0] as Partial<SessionMessage>;
     expect(arg.id).toBe("comp-1");
     expect(arg.sessionId).toBe("s1");
     expect(arg.role).toBe("system");
@@ -331,6 +413,6 @@ describe("SessionMessageService.recordCompactionPlaceholder", () => {
       fromMessageId: "a",
       toMessageId: "b",
     });
-    expect(repo.insert).not.toHaveBeenCalled();
+    expect(qb.values).not.toHaveBeenCalled();
   });
 });
