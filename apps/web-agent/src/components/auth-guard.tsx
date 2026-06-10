@@ -50,13 +50,22 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
         if (cancelled) {
           return;
         }
-        if (setup.needsSetup) {
+        const step = setup.step;
+        if (step === "needs-org" || step === "needs-model") {
           if (pathname !== "/setup") {
             setResolved(false);
             router.replace("/setup");
             return;
           }
+        } else if (step === "needs-login") {
+          // 新用户默认进 /setup 注册；允许停留 /login（已有账号登录）
+          if (pathname !== "/setup" && pathname !== "/login") {
+            setResolved(false);
+            router.replace("/setup");
+            return;
+          }
         } else if (pathname !== "/login") {
+          // ready 但本地无 JWT → 去 /login 重新登录
           setResolved(false);
           router.replace("/login");
           return;

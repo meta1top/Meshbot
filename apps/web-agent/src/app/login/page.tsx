@@ -14,6 +14,7 @@ import {
 import { Form, FormItem } from "@meshbot/design/form";
 import { useSchema } from "@meshbot/design/hooks";
 import { type LoginInput, loginSchema } from "@meshbot/types-agent";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { AuthShellLayout } from "@/components/layouts/auth-shell-layout";
@@ -57,14 +58,14 @@ export default function LoginPage() {
                 name="email"
                 label={
                   <span className="text-[11px] tracking-[0.08em] uppercase">
-                    {t("account")}
+                    {t("email")}
                   </span>
                 }
               >
                 <Input
                   type="email"
                   autoComplete="email"
-                  placeholder={t("accountPlaceholder")}
+                  placeholder={t("emailPlaceholder")}
                 />
               </FormItem>
 
@@ -100,6 +101,13 @@ export default function LoginPage() {
               >
                 {loginMutation.isPending ? t("signingIn") : t("signIn")}
               </Button>
+
+              <p className="mt-3 text-center text-xs text-muted-foreground">
+                {t("noAccount")}{" "}
+                <Link href="/setup" className="text-primary hover:underline">
+                  {t("goRegister")}
+                </Link>
+              </p>
             </Form>
           </CardContent>
         </Card>
