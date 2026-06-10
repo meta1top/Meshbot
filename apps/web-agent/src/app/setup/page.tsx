@@ -27,6 +27,7 @@ import { useSchema } from "@meshbot/design/hooks";
 import { registerSchema } from "@meshbot/types-agent";
 import type { ModelConfigInput, ProviderDef } from "@meshbot/web-common";
 import { useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
@@ -42,6 +43,7 @@ import {
 import { z } from "zod";
 import { AuthShellLayout } from "@/components/layouts/auth-shell-layout";
 import ModelForm from "@/components/setup/model-form";
+import { OrgStep } from "@/components/setup/org-step";
 import { useAuthStatus, useRegister } from "@/rest/auth";
 import { useCreateModelConfig, useProviders } from "@/rest/model-config";
 
@@ -52,7 +54,7 @@ type SetupRegisterValues = {
   confirmPassword: string;
 };
 
-type SetupStep = "register" | "model";
+type WizardStep = "register" | "org" | "model";
 
 type SimpleIconLike = {
   path: string;
@@ -112,7 +114,7 @@ export default function SetupPage() {
   const registerMutation = useRegister();
   const createModelMutation = useCreateModelConfig();
 
-  const [step, setStep] = useState<SetupStep>("register");
+  const [step, setStep] = useState<WizardStep>("register");
   const [selected, setSelected] = useState<ProviderDef | null>(null);
   const translatedRegisterSchema = useSchema(registerSchema);
   const setupRegisterSchema = translatedRegisterSchema
@@ -137,10 +139,10 @@ export default function SetupPage() {
   });
 
   useEffect(() => {
-    if (authStatus?.step === "needs-model" && step === "register") {
-      setStep("model");
-    }
-  }, [authStatus, step]);
+    if (!authStatus) return;
+    if (authStatus.step === "needs-org") setStep("org");
+    else if (authStatus.step === "needs-model") setStep("model");
+  }, [authStatus]);
 
   useEffect(() => {
     if (step === "model" && !selected && providers.length > 0) {
@@ -155,7 +157,7 @@ export default function SetupPage() {
   }: SetupRegisterValues) => {
     try {
       await registerMutation.mutateAsync({ email, displayName, password });
-      setStep("model");
+      setStep("org");
     } catch (err) {
       form.setError("root", {
         message: err instanceof Error ? err.message : t("registerFailed"),
@@ -282,10 +284,29 @@ export default function SetupPage() {
                         ? t("creating")
                         : t("createAndContinue")}
                     </Button>
+
+                    <p className="mt-1 text-center text-xs text-muted-foreground">
+                      {t("haveAccount")}{" "}
+                      <Link
+                        href="/login"
+                        className="text-primary hover:underline"
+                      >
+                        {t("goLogin")}
+                      </Link>
+                    </p>
                   </form>
                 </Form>
               </CardContent>
             </Card>
+          )}
+
+          {step === "org" && (
+            <OrgStep
+              onDone={() => {
+                queryClient.invalidateQueries({ queryKey: ["auth", "status"] });
+                setStep("model");
+              }}
+            />
           )}
 
           {step === "model" && (
