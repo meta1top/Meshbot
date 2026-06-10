@@ -1,0 +1,6 @@
+{
+  "notFound": "Organization not found",
+  "forbidden": "No permission for this organization",
+  "invitationInvalid": "Invitation is invalid or revoked",
+  "invitationExpired": "Invitation has expired"
+}

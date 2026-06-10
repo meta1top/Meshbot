@@ -26,6 +26,9 @@ export class AppUser {
   @Column({ type: "varchar", length: 64 })
   displayName!: string;
 
+  @Column({ type: "uuid", nullable: true })
+  activeOrgId!: string | null;
+
   @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 

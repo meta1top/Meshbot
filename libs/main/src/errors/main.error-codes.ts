@@ -27,4 +27,21 @@ export const MainErrorCode = defineErrorCode({
     code: 2002,
     message: "auth.invalidCredentials",
   },
+  ORG_NOT_FOUND: {
+    code: 2003,
+    message: "org.notFound",
+  },
+  ORG_FORBIDDEN: {
+    code: 2004,
+    message: "org.forbidden",
+    httpStatus: 403,
+  },
+  INVITATION_INVALID: {
+    code: 2005,
+    message: "org.invitationInvalid",
+  },
+  INVITATION_EXPIRED: {
+    code: 2006,
+    message: "org.invitationExpired",
+  },
 });

@@ -1,5 +1,11 @@
 import { createI18nZodDto } from "@meshbot/common";
 import {
+  type AcceptInvitationInput,
+  AcceptInvitationSchema,
+  type CreateInvitationInput,
+  CreateInvitationSchema,
+  type CreateOrgInput,
+  CreateOrgSchema,
   type LoginInput,
   LoginSchema,
   type RegisterUserInput,
@@ -24,3 +30,19 @@ export interface RegisterUserDto extends RegisterUserInput {}
 // biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
 export class LoginDto extends createI18nZodDto(LoginSchema) {}
 export interface LoginDto extends LoginInput {}
+
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
+export class CreateOrgDto extends createI18nZodDto(CreateOrgSchema) {}
+export interface CreateOrgDto extends CreateOrgInput {}
+
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
+export class CreateInvitationDto extends createI18nZodDto(
+  CreateInvitationSchema,
+) {}
+export interface CreateInvitationDto extends CreateInvitationInput {}
+
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
+export class AcceptInvitationDto extends createI18nZodDto(
+  AcceptInvitationSchema,
+) {}
+export interface AcceptInvitationDto extends AcceptInvitationInput {}

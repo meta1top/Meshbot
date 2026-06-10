@@ -1,0 +1,6 @@
+{
+  "notFound": "组织不存在",
+  "forbidden": "无权操作该组织",
+  "invitationInvalid": "邀请码无效或已失效",
+  "invitationExpired": "邀请码已过期"
+}
