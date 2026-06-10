@@ -6,10 +6,16 @@
 #
 # 构建（在 repo root）：
 #   docker build -f apps/server-main/Dockerfile -t meshbot/server-main:local .
-# 起动：
+# 起动（配置走 loadAppConfig：Nacos 引导 env 或镜像内置/挂载的 conf/application.yml）：
+#   # 方式一：Nacos 引导（生产推荐；漏配会落回镜像内置 YAML 并因 dev secret fail-fast）
 #   docker run --rm -p 3200:3200 \
-#     -e DATABASE_URL=postgresql://meshbot:meshbot@host.docker.internal:5432/meshbot_main \
-#     -e JWT_SECRET=local-test \
+#     -e NACOS_SERVER_ADDR=nacos.example.com:8848 \
+#     -e NACOS_DATA_ID=server-main.yml \
+#     -e MESHBOT_NODE_ID=0 \
+#     meshbot/server-main:local
+#   # 方式二：挂载本地 YAML 覆盖（conf/application.local.yml 深合并覆盖内置默认值）
+#   docker run --rm -p 3200:3200 \
+#     -v $PWD/application.local.yml:/app/conf/application.local.yml:ro \
 #     meshbot/server-main:local
 
 # ============ Stage 1: deps ===============================================
@@ -48,9 +54,11 @@ RUN pnpm --filter @meshbot/types build \
 RUN pnpm --filter @meshbot/server-main deploy \
       --prod --legacy --no-optional /out
 
-# 单独 copy dist 与 i18n（deploy 不带源码 build 产物，只带 deps）
+# 单独 copy dist、i18n 与 conf（deploy 不带源码 build 产物，只带 deps；
+# conf/application.yml 是无 Nacos 时的 YAML 兜底配置源）
 RUN cp -r /repo/apps/server-main/dist /out/dist \
  && cp -r /repo/apps/server-main/i18n /out/i18n \
+ && cp -r /repo/apps/server-main/conf /out/conf \
  && cp -r /repo/libs/common/dist      /out/node_modules/@meshbot/common/dist \
  && cp -r /repo/libs/main/dist        /out/node_modules/@meshbot/main/dist \
  && cp -r /repo/libs/types/dist       /out/node_modules/@meshbot/types/dist \

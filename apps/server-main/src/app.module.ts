@@ -158,7 +158,11 @@ export class AppModule {
         PassportModule,
         JwtModule.register({
           secret: config.jwt.secret,
-          signOptions: { expiresIn: config.jwt.expires as `${number}d` },
+          // schema 校验过形如 `\d+[smhd]`，这里把 string 收窄到 ms 可接受的模板字面量
+          signOptions: {
+            expiresIn: config.jwt
+              .expires as `${number}${"s" | "m" | "h" | "d"}`,
+          },
         }),
         // 全局限流，proxy-aware。Redis 存在时走共享 storage（多副本计数一致）；
         // 否则 memory（单实例）。Redis 故障时 fail-open（限流暂失效优于全站 500）。

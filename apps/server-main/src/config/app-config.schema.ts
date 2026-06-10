@@ -11,7 +11,22 @@ export const DatabaseConfigSchema = z
     database: z.string(),
     synchronize: z.boolean().default(false),
     autoLoadEntities: z.boolean().default(true),
-    logging: z.union([z.boolean(), z.array(z.string())]).optional(),
+    logging: z
+      .union([
+        z.boolean(),
+        z.array(
+          z.enum([
+            "query",
+            "error",
+            "warn",
+            "info",
+            "log",
+            "migration",
+            "schema",
+          ]),
+        ),
+      ])
+      .optional(),
   })
   .passthrough();
 
