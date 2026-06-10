@@ -1,0 +1,39 @@
+# server-main 本地开发配置（提交，含 localhost 默认值，pnpm dev 开箱即用）。
+# 部署环境在 .env 配置 NACOS_SERVER_ADDR 后，本文件不会被读取（loader 走 Nacos 分支）。
+# 个人覆盖：写进 conf/application.local.yml（已 gitignore）。
+port: 3200
+
+database:
+  type: postgres
+  host: localhost
+  port: 5432
+  username: meshbot
+  password: meshbot
+  database: meshbot_main
+  synchronize: false
+  autoLoadEntities: true
+  logging:
+    - error
+    - warn
+    - migration
+
+jwt:
+  secret: meshbot-main-dev-secret-change-in-prod-min-16
+  expires: 7d
+
+invitation:
+  expiresDays: 7
+
+# Redis：留空走 memory 兜底；本地 `pnpm dev:db:up` 起的 redis 映射在宿主 6380。
+# redis:
+#   host: localhost
+#   port: 6380
+#   db: 0
+
+# 邮件：留空走 LogEmailSender（邀请码打日志）；接阿里 DirectMail 时填。
+# email:
+#   endpoint: dm.aliyuncs.com
+#   accountName: noreply@your-domain.com
+#   accessKeyId: <ak>
+#   accessKeySecret: <sk>
+#   from: meshbot
