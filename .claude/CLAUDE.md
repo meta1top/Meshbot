@@ -127,5 +127,5 @@ packages/
 
 | 应用 | 数据库 | 当前 Entity |
 |------|--------|-------------|
-| server-agent | `agent.db`（SQLite，`~/.meshbot/`，TypeORM 迁移管理） | `User` / `Setting` / `ModelConfig` / `Session` / `SessionMessage` / `LlmCall` / `PendingMessage` |
-| server-main | Postgres（TypeORM 迁移管理） | `AppUser`（注册 / 登录框架基线；真实业务由 meshbot 自行扩展） |
+| server-agent | `agent.db`（SQLite，`~/.meshbot/`，TypeORM 迁移管理） | `CloudIdentity` / `Setting` / `ModelConfig` / `Session` / `SessionMessage` / `LlmCall` / `PendingMessage` |
+| server-main | Postgres（TypeORM 迁移管理） | `AppUser` / `Organization` / `Membership` / `Invitation`（云端身份 + 企业/组织；Phase 1） |

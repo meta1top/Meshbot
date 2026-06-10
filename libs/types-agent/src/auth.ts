@@ -36,6 +36,12 @@ export const joinOrgSchema = z.object({
 });
 export type JoinOrgInput = z.infer<typeof joinOrgSchema>;
 
+/** 邀请成员（owner 输对方邮箱）。 */
+export const inviteMemberSchema = z.object({
+  email: z.string().email("orgSettings.validation.emailInvalid"),
+});
+export type InviteMemberInput = z.infer<typeof inviteMemberSchema>;
+
 /** setup-status 四态。 */
 export type SetupStep = "needs-login" | "needs-org" | "needs-model" | "ready";
 

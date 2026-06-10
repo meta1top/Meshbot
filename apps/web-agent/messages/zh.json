@@ -125,7 +125,14 @@
     "inviting": "发送中...",
     "inviteFailed": "邀请失败，请重试",
     "pendingTitle": "待处理邀请",
-    "code": "邀请码"
+    "code": "邀请码",
+    "roleOwner": "所有者",
+    "roleMember": "成员",
+    "loading": "加载中...",
+    "loadFailed": "成员加载失败",
+    "validation": {
+      "emailInvalid": "邮箱格式不正确"
+    }
   },
   "chatInput": {
     "placeholder": "请输入",
@@ -318,6 +325,7 @@
   "inviteFailed": "邀请失败，请重试",
   "pendingTitle": "待处理邀请",
   "code": "邀请码",
+  "loading": "加载中...",
   "pinned": "已置顶",
   "logout": "退出登录",
   "switchToLightTheme": "切换到亮色主题",

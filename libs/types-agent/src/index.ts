@@ -4,6 +4,8 @@ export {
   type CreateOrgInput,
   createOrgSchema,
   type InvitationInfo,
+  type InviteMemberInput,
+  inviteMemberSchema,
   type JoinOrgInput,
   joinOrgSchema,
   type LoginInput,

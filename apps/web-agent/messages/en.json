@@ -125,7 +125,14 @@
     "inviting": "Sending...",
     "inviteFailed": "Invitation failed, please retry",
     "pendingTitle": "Pending invitations",
-    "code": "Invite code"
+    "code": "Invite code",
+    "roleOwner": "Owner",
+    "roleMember": "Member",
+    "loading": "Loading...",
+    "loadFailed": "Failed to load members",
+    "validation": {
+      "emailInvalid": "Invalid email format"
+    }
   },
   "chatInput": {
     "placeholder": "Type here",
@@ -318,6 +325,7 @@
   "inviteFailed": "Invitation failed, please retry",
   "pendingTitle": "Pending invitations",
   "code": "Invite code",
+  "loading": "Loading...",
   "pinned": "Pinned",
   "logout": "Logout",
   "switchToLightTheme": "Switch to light theme",

@@ -181,7 +181,8 @@ export function AppShellLayout({
               <button
                 type="button"
                 onClick={handleLogout}
-                className="flex items-center gap-2 rounded-md py-1.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+                disabled={logoutMutation.isPending}
+                className="flex items-center gap-2 rounded-md py-1.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
               >
                 <LogOut className="h-3.5 w-3.5" />
                 {t("logout")}

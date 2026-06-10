@@ -10,6 +10,12 @@ import {
   CardTitle,
   Input,
 } from "@meshbot/design";
+import { Form, FormItem } from "@meshbot/design/form";
+import { useSchema } from "@meshbot/design/hooks";
+import {
+  type InviteMemberInput,
+  inviteMemberSchema,
+} from "@meshbot/types-agent";
 import { useAtomValue } from "jotai";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
@@ -23,16 +29,21 @@ export default function OrgSettingsPage() {
   const org = user?.org ?? null;
   const isOwner = org?.role === "owner";
 
-  const { data: members = [] } = useMembers(org?.id ?? null);
+  const {
+    data: members = [],
+    isPending: membersPending,
+    error: membersError,
+  } = useMembers(org?.id ?? null);
   const { data: invitations = [] } = useInvitations(org?.id ?? null, isOwner);
   const invite = useInviteMember(org?.id ?? "");
-  const [email, setEmail] = useState("");
+  const inviteSchema = useSchema(inviteMemberSchema);
+  // Form 不暴露 reset API —— 提交成功后 key++ 强制重挂以清空输入
+  const [formKey, setFormKey] = useState(0);
 
-  const onInvite = async () => {
-    if (!email) return;
+  const onInvite = async (values: InviteMemberInput) => {
     try {
-      await invite.mutateAsync(email);
-      setEmail("");
+      await invite.mutateAsync(values.email);
+      setFormKey((k) => k + 1);
     } catch {
       // 错误通过 invite.error 展示
     }
@@ -54,18 +65,34 @@ export default function OrgSettingsPage() {
             <CardTitle>{t("membersTitle", { org: org.name })}</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
-            {members.map((m) => (
-              <div
-                key={m.userId}
-                className="flex items-center justify-between border-b border-border py-2 text-sm last:border-0"
-              >
-                <span>
-                  {m.displayName}{" "}
-                  <span className="text-muted-foreground">({m.email})</span>
-                </span>
-                <span className="text-xs text-muted-foreground">{m.role}</span>
+            {membersError ? (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  {membersError instanceof Error
+                    ? membersError.message
+                    : t("loadFailed")}
+                </AlertDescription>
+              </Alert>
+            ) : membersPending ? (
+              <div className="text-sm text-muted-foreground">
+                {t("loading")}
               </div>
-            ))}
+            ) : (
+              members.map((m) => (
+                <div
+                  key={m.userId}
+                  className="flex items-center justify-between border-b border-border py-2 text-sm last:border-0"
+                >
+                  <span>
+                    {m.displayName}{" "}
+                    <span className="text-muted-foreground">({m.email})</span>
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {t(m.role === "owner" ? "roleOwner" : "roleMember")}
+                  </span>
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
 
@@ -75,17 +102,22 @@ export default function OrgSettingsPage() {
               <CardTitle>{t("inviteTitle")}</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
-              <div className="flex gap-2">
-                <Input
-                  type="email"
-                  placeholder={t("invitePlaceholder")}
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-                <Button onClick={onInvite} disabled={invite.isPending}>
-                  {invite.isPending ? t("inviting") : t("invite")}
-                </Button>
-              </div>
+              <Form
+                key={formKey}
+                schema={inviteSchema}
+                defaultValues={{ email: "" }}
+                onSubmit={onInvite}
+                className="flex flex-col gap-3"
+              >
+                <div className="flex items-start gap-2">
+                  <FormItem name="email" className="flex-1">
+                    <Input type="email" placeholder={t("invitePlaceholder")} />
+                  </FormItem>
+                  <Button type="submit" disabled={invite.isPending}>
+                    {invite.isPending ? t("inviting") : t("invite")}
+                  </Button>
+                </div>
+              </Form>
               {invite.error ? (
                 <Alert variant="destructive">
                   <AlertDescription>
