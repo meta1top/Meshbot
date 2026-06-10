@@ -1,0 +1,46 @@
+{
+  "generatedAt": "2026-06-10T21:11:55.600Z",
+  "paths": ["libs", "apps"],
+  "fileCount": 350,
+  "exportCount": 29,
+  "strict": false,
+  "total": 3,
+  "issues": [
+    {
+      "type": "DEAD_EXPORT",
+      "file": "/Users/grant/Meta1/meshbot/apps/server-agent/src/cloud/cloud.types.ts",
+      "line": 2,
+      "className": "cloud.types.ts",
+      "methodName": "CloudAuthData",
+      "details": "export interface `CloudAuthData` 在全仓任何文件（含本文件本身）都找不到第二处引用（已跳过装饰器类 / 框架文件 / barrel / SDK types 包）",
+      "evidence": [
+        "apps/server-agent/src/cloud/cloud.types.ts:2: export interface CloudAuthData"
+      ],
+      "hint": "全仓未发现对该 export 的命名 import。请确认：\n      1. 是否真的不再被任何代码引用 → 直接删除（含 export 关键字本身）\n      2. 是否通过反射 / 字符串路径 / 动态 import 被消费 → 在符号上方加 `// dead-check: ignore` 或 `@public-api` JSDoc\n      3. 是否本就是对外 API（如 SDK 包公开导出）→ 加 `@public-api` 标记说明意图"
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "file": "/Users/grant/Meta1/meshbot/apps/server-agent/src/cloud/cloud.types.ts",
+      "line": 9,
+      "className": "cloud.types.ts",
+      "methodName": "CloudProfileData",
+      "details": "export interface `CloudProfileData` 在全仓任何文件（含本文件本身）都找不到第二处引用（已跳过装饰器类 / 框架文件 / barrel / SDK types 包）",
+      "evidence": [
+        "apps/server-agent/src/cloud/cloud.types.ts:9: export interface CloudProfileData"
+      ],
+      "hint": "全仓未发现对该 export 的命名 import。请确认：\n      1. 是否真的不再被任何代码引用 → 直接删除（含 export 关键字本身）\n      2. 是否通过反射 / 字符串路径 / 动态 import 被消费 → 在符号上方加 `// dead-check: ignore` 或 `@public-api` JSDoc\n      3. 是否本就是对外 API（如 SDK 包公开导出）→ 加 `@public-api` 标记说明意图"
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "file": "/Users/grant/Meta1/meshbot/apps/server-agent/src/cloud/cloud.types.ts",
+      "line": 16,
+      "className": "cloud.types.ts",
+      "methodName": "CloudOrgSummary",
+      "details": "export interface `CloudOrgSummary` 在全仓任何文件（含本文件本身）都找不到第二处引用（已跳过装饰器类 / 框架文件 / barrel / SDK types 包）",
+      "evidence": [
+        "apps/server-agent/src/cloud/cloud.types.ts:16: export interface CloudOrgSummary"
+      ],
+      "hint": "全仓未发现对该 export 的命名 import。请确认：\n      1. 是否真的不再被任何代码引用 → 直接删除（含 export 关键字本身）\n      2. 是否通过反射 / 字符串路径 / 动态 import 被消费 → 在符号上方加 `// dead-check: ignore` 或 `@public-api` JSDoc\n      3. 是否本就是对外 API（如 SDK 包公开导出）→ 加 `@public-api` 标记说明意图"
+    }
+  ]
+}

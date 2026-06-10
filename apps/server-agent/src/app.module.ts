@@ -31,6 +31,7 @@ import { ModelConfigController } from "./controllers/model-config.controller";
 import { SettingController } from "./controllers/setting.controller";
 import { SetupController } from "./controllers/setup.controller";
 import { EnvSchema } from "./env.schema";
+import { CloudIdentity } from "./entities/cloud-identity.entity";
 import { CronJob } from "./entities/cron-job.entity";
 import { LlmCall } from "./entities/llm-call.entity";
 import { ModelConfig } from "./entities/model-config.entity";
@@ -84,6 +85,7 @@ const meshbotDir = resolveMeshbotDir();
         PendingMessage,
         SessionMessage,
         CronJob,
+        CloudIdentity,
       ],
       migrations: [path.join(__dirname, "migrations", "*.{js,ts}")],
       synchronize: false,
