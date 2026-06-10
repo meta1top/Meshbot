@@ -62,6 +62,7 @@ export function useLogin() {
     mutationFn: login,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: profileQueryKey });
+      queryClient.invalidateQueries({ queryKey: authStatusQueryKey });
     },
   });
 }
@@ -71,9 +72,6 @@ export function useRegister() {
   return useMutation({
     mutationFn: register,
     onSuccess: () => {
-      // 同时刷 profile + setup-status：profile 让 AuthGuard 切换到「已登录」分支；
-      // setup-status 让 SetupPage 守门 effect 捕获 step="model" —— 避免依赖
-      // onSubmit 里那条同步 setStep 在批更新里被淹没。
       queryClient.invalidateQueries({ queryKey: profileQueryKey });
       queryClient.invalidateQueries({ queryKey: authStatusQueryKey });
     },

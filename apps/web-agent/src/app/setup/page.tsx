@@ -1,7 +1,6 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { ModelConfigInput, ProviderDef } from "@meshbot/web-common";
 import {
   Alert,
   AlertDescription,
@@ -24,7 +23,9 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@meshbot/design";
+import { useSchema } from "@meshbot/design/hooks";
 import { registerSchema } from "@meshbot/types-agent";
+import type { ModelConfigInput, ProviderDef } from "@meshbot/web-common";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -45,7 +46,8 @@ import { useAuthStatus, useRegister } from "@/rest/auth";
 import { useCreateModelConfig, useProviders } from "@/rest/model-config";
 
 type SetupRegisterValues = {
-  username: string;
+  email: string;
+  displayName: string;
   password: string;
   confirmPassword: string;
 };
@@ -112,7 +114,8 @@ export default function SetupPage() {
 
   const [step, setStep] = useState<SetupStep>("register");
   const [selected, setSelected] = useState<ProviderDef | null>(null);
-  const setupRegisterSchema = registerSchema
+  const translatedRegisterSchema = useSchema(registerSchema);
+  const setupRegisterSchema = translatedRegisterSchema
     .extend({
       confirmPassword: z
         .string()
@@ -125,11 +128,16 @@ export default function SetupPage() {
 
   const form = useForm<SetupRegisterValues>({
     resolver: zodResolver(setupRegisterSchema),
-    defaultValues: { username: "", password: "", confirmPassword: "" },
+    defaultValues: {
+      email: "",
+      displayName: "",
+      password: "",
+      confirmPassword: "",
+    },
   });
 
   useEffect(() => {
-    if (authStatus?.step === "model" && step === "register") {
+    if (authStatus?.step === "needs-model" && step === "register") {
       setStep("model");
     }
   }, [authStatus, step]);
@@ -140,9 +148,13 @@ export default function SetupPage() {
     }
   }, [providers, selected, step]);
 
-  const onSubmit = async ({ username, password }: SetupRegisterValues) => {
+  const onSubmit = async ({
+    email,
+    displayName,
+    password,
+  }: SetupRegisterValues) => {
     try {
-      await registerMutation.mutateAsync({ username, password });
+      await registerMutation.mutateAsync({ email, displayName, password });
       setStep("model");
     } catch (err) {
       form.setError("root", {
@@ -180,14 +192,33 @@ export default function SetupPage() {
                   >
                     <FormField
                       control={form.control}
-                      name="username"
+                      name="email"
                       render={({ field }) => (
                         <FormItem className="space-y-4">
-                          <FormLabel>{t("username")}</FormLabel>
+                          <FormLabel>{t("email")}</FormLabel>
                           <FormControl>
                             <Input
-                              autoComplete="username"
-                              placeholder={t("usernamePlaceholder")}
+                              type="email"
+                              autoComplete="email"
+                              placeholder={t("emailPlaceholder")}
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="displayName"
+                      render={({ field }) => (
+                        <FormItem className="space-y-4">
+                          <FormLabel>{t("displayName")}</FormLabel>
+                          <FormControl>
+                            <Input
+                              autoComplete="nickname"
+                              placeholder={t("displayNamePlaceholder")}
                               {...field}
                             />
                           </FormControl>

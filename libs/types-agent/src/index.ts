@@ -1,14 +1,19 @@
 export * from "./ai";
 export {
-  AuthResponse,
   type AuthStatus,
-  LoginDto,
+  type CreateOrgInput,
+  createOrgSchema,
+  type InvitationInfo,
+  type JoinOrgInput,
+  joinOrgSchema,
   type LoginInput,
   type LoginResponse,
   loginSchema,
-  RegisterDto,
+  type MemberInfo,
+  type OrgInfo,
   type RegisterInput,
   registerSchema,
+  type SetupStep,
   type UserInfo,
 } from "./auth";
 export * from "./schedule";

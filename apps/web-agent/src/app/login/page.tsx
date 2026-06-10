@@ -49,12 +49,12 @@ export default function LoginPage() {
           <CardContent className="pt-0">
             <Form
               schema={schema}
-              defaultValues={{ username: "", password: "" }}
+              defaultValues={{ email: "", password: "" }}
               onSubmit={onSubmit}
               className="flex flex-col gap-4"
             >
               <FormItem
-                name="username"
+                name="email"
                 label={
                   <span className="text-[11px] tracking-[0.08em] uppercase">
                     {t("account")}
@@ -62,8 +62,8 @@ export default function LoginPage() {
                 }
               >
                 <Input
-                  type="text"
-                  autoComplete="username"
+                  type="email"
+                  autoComplete="email"
                   placeholder={t("accountPlaceholder")}
                 />
               </FormItem>
