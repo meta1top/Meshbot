@@ -15,7 +15,11 @@ import { DataSource, type DataSourceOptions } from "typeorm";
 import { SnakeNamingStrategy } from "typeorm-naming-strategies";
 
 import { AppUser } from "../../../../libs/main/src/entities/app-user.entity";
+import { Invitation } from "../../../../libs/main/src/entities/invitation.entity";
+import { Membership } from "../../../../libs/main/src/entities/membership.entity";
+import { Organization } from "../../../../libs/main/src/entities/organization.entity";
 import { InitialSchema1778869010469 } from "../../src/migrations/1778869010469-InitialSchema";
+import { OrgSchema1779000000000 } from "../../src/migrations/1779000000000-OrgSchema";
 
 const DEFAULT_URL =
   process.env.TEST_DATABASE_URL ??
@@ -64,8 +68,8 @@ export async function createTestDb(): Promise<TestDbContext> {
     schema,
     // 让所有连接默认在测试 schema 内创建 / 读对象，避免 unqualified DDL 落 public
     extra: { options: `-c search_path=${schema}` },
-    entities: [AppUser],
-    migrations: [InitialSchema1778869010469],
+    entities: [AppUser, Organization, Membership, Invitation],
+    migrations: [InitialSchema1778869010469, OrgSchema1779000000000],
     namingStrategy: new SnakeNamingStrategy(),
     synchronize: false,
     logging: false,
