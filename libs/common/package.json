@@ -14,8 +14,11 @@
   "dependencies": {
     "@meshbot/types": "workspace:*",
     "async-mutex": "^0.5.0",
+    "dotenv": "^17",
     "ioredis": "^5.10.1",
+    "js-yaml": "^4",
     "lru-cache": "^11.0.0",
+    "nacos": "^2",
     "zod": "^3"
   },
   "peerDependencies": {
@@ -48,6 +51,7 @@
     "@nestjs/platform-socket.io": "^11",
     "@nestjs/websockets": "^11",
     "@types/ioredis-mock": "^8.2.7",
+    "@types/js-yaml": "^4",
     "@types/node": "^22",
     "ioredis-mock": "^8.13.1",
     "socket.io": "^4"
