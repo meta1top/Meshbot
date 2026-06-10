@@ -44,6 +44,7 @@ import type { AppConfig } from "./config/app-config.schema";
 import { EmailModule } from "./email/email.module";
 import { HealthController } from "./health.controller";
 import { AuthController } from "./rest/auth.controller";
+import { OrgController } from "./rest/org.controller";
 import { HealthGateway } from "./ws/health.gateway";
 
 /**
@@ -185,7 +186,7 @@ export class AppModule {
         EmailModule,
         MainModule.forRoot(config.invitation),
       ],
-      controllers: [HealthController, AuthController],
+      controllers: [HealthController, AuthController, OrgController],
       providers: [
         { provide: REDIS_CLIENT, useValue: redis },
         // Redis 连接的优雅关闭：应用 shutdown / 热重载时 quit()，避免连接泄漏

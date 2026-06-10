@@ -1,13 +1,16 @@
 import {
   type AppUser,
   LoginDto,
+  MembershipService,
   RegisterUserDto,
   UserService,
 } from "@meshbot/main";
-import { Body, Controller, HttpCode, Inject, Post } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Inject, Post } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Throttle } from "@nestjs/throttler";
 
+import { CurrentUser } from "../auth/current-user.decorator";
+import type { JwtMainPayload } from "../auth/jwt.strategy";
 import { Public } from "../auth/public.decorator";
 import { type AppConfig, APP_CONFIG } from "../config/app-config.schema";
 
@@ -25,9 +28,28 @@ interface AuthTokenResponse {
 export class AuthController {
   constructor(
     private readonly users: UserService,
+    private readonly memberships: MembershipService,
     private readonly jwt: JwtService,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
+
+  /** 当前用户 profile：身份 + 活跃组织 + 全部组织。供 server-agent 镜像。 */
+  @Get("profile")
+  async profile(@CurrentUser() jwt: JwtMainPayload) {
+    const user = await this.users.findById(jwt.userId);
+    const orgs = await this.memberships.listOrgsForUser(jwt.userId);
+    const activeOrg =
+      user?.activeOrgId != null
+        ? (orgs.find((o) => o.id === user.activeOrgId) ?? null)
+        : null;
+    return {
+      user: user
+        ? { id: user.id, email: user.email, displayName: user.displayName }
+        : null,
+      activeOrg,
+      memberships: orgs,
+    };
+  }
 
   @Public()
   // 限流：同源 IP 1 分钟内最多 5 次注册（防爬虫批量注册账号）
