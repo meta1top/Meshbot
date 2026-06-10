@@ -3,5 +3,6 @@
   "stringTooShort": "长度至少 {min}",
   "stringTooLong": "长度最多 {max}",
   "invalidUuid": "格式不正确",
-  "invalidEmail": "邮箱格式不正确"
+  "invalidEmail": "邮箱格式不正确",
+  "passwordTooShort": "密码至少 8 位"
 }

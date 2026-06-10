@@ -142,6 +142,9 @@ importers:
       '@meshbot/types-agent':
         specifier: workspace:^
         version: link:../../libs/types-agent
+      '@meshbot/types-main':
+        specifier: workspace:^
+        version: link:../../libs/types-main
       '@nestjs/common':
         specifier: ^11
         version: 11.1.19(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -187,9 +190,6 @@ importers:
       '@nestjs/websockets':
         specifier: ^11.1.21
         version: 11.1.21(@nestjs/common@11.1.19(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.19)(@nestjs/platform-socket.io@11.1.21)(reflect-metadata@0.2.2)(rxjs@7.8.2)
-      bcrypt:
-        specifier: ^6.0.0
-        version: 6.0.0
       better-sqlite3:
         specifier: ^12.9.0
         version: 12.9.0
@@ -242,9 +242,6 @@ importers:
       '@nestjs/testing':
         specifier: ^11
         version: 11.1.19(@nestjs/common@11.1.19(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.19)(@nestjs/platform-express@11.1.19)
-      '@types/bcrypt':
-        specifier: ^6.0.0
-        version: 6.0.0
       '@types/better-sqlite3':
         specifier: ^7.6.13
         version: 7.6.13

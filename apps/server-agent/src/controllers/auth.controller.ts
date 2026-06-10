@@ -1,34 +1,36 @@
-import { Body, Controller, Get, Post, Req } from "@nestjs/common";
+import { Body, Controller, Get, Post } from "@nestjs/common";
+
 import { LoginDto, RegisterDto } from "../dto/auth.dto";
 import { Public } from "../guards/jwt-auth.guard";
-import { AuthService } from "../services/auth.service";
+import { CloudAuthService } from "../services/cloud-auth.service";
 
+/** 认证端点：代理云端 register/login，本地只签发 / 校验本地 JWT。 */
 @Controller("api/auth")
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly cloudAuth: CloudAuthService) {}
 
   @Public()
   @Post("register")
   register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto.username, dto.password);
+    return this.cloudAuth.register(dto);
   }
 
   @Public()
   @Post("login")
   login(@Body() dto: LoginDto) {
-    return this.authService.login(dto.username, dto.password);
+    return this.cloudAuth.login(dto);
   }
 
-  @Public()
-  @Get("status")
-  getStatus() {
-    return this.authService.getStatus();
+  /** 登出：清云端身份镜像（本地 JWT 由前端自行丢弃）。 */
+  @Post("logout")
+  async logout() {
+    await this.cloudAuth.logout();
+    return { ok: true };
   }
 
-  /** 取当前登录用户 profile（受 JWT 保护，未登录返回 401）。 */
+  /** 当前用户 profile（读本地镜像，不打云端）。401 由 guard/service 处理。 */
   @Get("profile")
-  profile(@Req() req: { user?: { id: string; username: string } }) {
-    // JwtAuthGuard 保证此处已注入 user，空串分支不可达（仅满足类型）
-    return this.authService.getProfile(req.user?.id ?? "");
+  profile() {
+    return this.cloudAuth.getProfile();
   }
 }

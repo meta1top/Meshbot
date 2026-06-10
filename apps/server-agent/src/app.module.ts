@@ -39,7 +39,6 @@ import { PendingMessage } from "./entities/pending-message.entity";
 import { Session } from "./entities/session.entity";
 import { SessionMessage } from "./entities/session-message.entity";
 import { Setting } from "./entities/setting.entity";
-import { User } from "./entities/user.entity";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { SettingService } from "./services/setting.service";
 import { SessionModule } from "./session.module";
@@ -80,7 +79,6 @@ const meshbotDir = resolveMeshbotDir();
         LlmCall,
         ModelConfig,
         Setting,
-        User,
         Session,
         PendingMessage,
         SessionMessage,

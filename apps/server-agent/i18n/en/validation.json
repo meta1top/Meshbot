@@ -3,5 +3,6 @@
   "stringTooShort": "Must be at least {min} characters",
   "stringTooLong": "Must be at most {max} characters",
   "invalidUuid": "Invalid format",
-  "invalidEmail": "Invalid email"
+  "invalidEmail": "Invalid email",
+  "passwordTooShort": "Password must be at least 8 characters"
 }
