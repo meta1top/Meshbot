@@ -56,9 +56,37 @@ export class CloudAuthService {
     return this.afterCloudAuth(auth);
   }
 
-  /** 登出：清空本地身份镜像（本地 JWT 由前端自行丢弃）。 */
+  /**
+   * 登出：清空本地身份镜像（本地 JWT 由前端自行丢弃）。
+   * 本地 JWT 不主动吊销（无状态），登出语义 = 清云端身份；profile / 云端
+   * 代理端点立即 401，纯本地路由在 JWT 剩余有效期内仍可用（单机桌面可接受）。
+   */
   async logout(): Promise<void> {
     await this.identity.clear();
+  }
+
+  /**
+   * 镜像自愈：有 token 但无活跃组织时，从云端拉一次 profile 刷新组织镜像。
+   * 云端不可达 / 401 时静默失败（保持现状，由后续操作再触发）。
+   */
+  async trySyncActiveOrg(): Promise<void> {
+    const id = await this.identity.get();
+    if (!id?.cloudToken || id.orgId) return;
+    try {
+      const profile = await this.cloud.get<CloudProfileData>(
+        "/api/auth/profile",
+        id.cloudToken,
+      );
+      if (profile.activeOrg) {
+        await this.identity.updateActiveOrg(
+          profile.activeOrg.id,
+          profile.activeOrg.name,
+          profile.activeOrg.role,
+        );
+      }
+    } catch {
+      // 自愈失败不阻塞 setup-status；保持 needs-org 由用户操作触发后续刷新
+    }
   }
 
   /** 当前用户 profile（读本地镜像）。无镜像 → 401。 */
@@ -83,12 +111,13 @@ export class CloudAuthService {
       "/api/auth/profile",
       auth.token,
     );
+    const expiresAtIso = computeExpiresAt(auth.expiresIn);
     await this.identity.upsert({
       cloudUserId: auth.user.id,
       email: auth.user.email,
       displayName: auth.user.displayName,
       cloudToken: auth.token,
-      cloudTokenExpiresAt: null,
+      cloudTokenExpiresAt: expiresAtIso,
       orgId: profile.activeOrg?.id ?? null,
       orgName: profile.activeOrg?.name ?? null,
       role: profile.activeOrg?.role ?? null,
@@ -99,4 +128,15 @@ export class CloudAuthService {
     });
     return { access_token };
   }
+}
+
+/** 把云端 expiresIn（如 "7d" / "12h"）换算为 ISO 过期时间；无法解析返回 null。 */
+function computeExpiresAt(expiresIn: string): string | null {
+  const m = /^(\d+)([smhd])$/.exec(expiresIn);
+  if (!m) return null;
+  const n = Number(m[1]);
+  const unitMs = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 }[
+    m[2] as "s" | "m" | "h" | "d"
+  ];
+  return new Date(Date.now() + n * unitMs).toISOString();
 }

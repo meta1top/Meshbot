@@ -36,6 +36,8 @@ describe("CloudAuthService.login", () => {
         orgId: "o1",
         orgName: "Acme",
         cloudToken: "cloud-jwt",
+        // expiresIn "7d" 应换算为 ISO 过期时间（而非 null）
+        cloudTokenExpiresAt: expect.stringMatching(/T/),
       }),
     );
     expect(jwt.sign).toHaveBeenCalledWith({ sub: "u1", email: "a@x.io" });

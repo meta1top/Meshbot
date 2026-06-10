@@ -2,7 +2,7 @@ import { AppError } from "@meshbot/common";
 import { Injectable } from "@nestjs/common";
 
 import { CloudClientService } from "../cloud/cloud-client.service";
-import type { CloudOrgSummary, CloudProfileData } from "../cloud/cloud.types";
+import type { CloudOrgSummary } from "../cloud/cloud.types";
 import { AgentErrorCode } from "../errors/agent.error-codes";
 import { CloudIdentityService } from "./cloud-identity.service";
 
@@ -22,7 +22,11 @@ export class CloudOrgService {
     return this.cloud.get<CloudOrgSummary[]>("/api/orgs", await this.token());
   }
 
-  /** 创建组织，成功后刷新活跃组织镜像。 */
+  /**
+   * 创建组织，成功后用响应直接写活跃组织镜像。
+   * 不再额外拉 profile —— 避免「建组织成功但 profile 往返失败 → 前端重试
+   * 重复建组织」的窗口；建组织者必为 owner。
+   */
   async createOrg(name: string): Promise<CloudOrgSummary> {
     const token = await this.token();
     const org = await this.cloud.post<CloudOrgSummary>(
@@ -30,11 +34,11 @@ export class CloudOrgService {
       { name },
       token,
     );
-    await this.refreshActiveOrg(token);
+    await this.identity.updateActiveOrg(org.id, org.name, "owner");
     return org;
   }
 
-  /** 接受邀请，成功后刷新活跃组织镜像。 */
+  /** 接受邀请，成功后用响应直接写活跃组织镜像（受邀者为 member）。 */
   async acceptInvitation(
     inviteToken: string,
   ): Promise<{ orgId: string; orgName: string }> {
@@ -44,7 +48,7 @@ export class CloudOrgService {
       { token: inviteToken },
       token,
     );
-    await this.refreshActiveOrg(token);
+    await this.identity.updateActiveOrg(res.orgId, res.orgName, "member");
     return res;
   }
 
@@ -96,18 +100,5 @@ export class CloudOrgService {
       throw new AppError(AgentErrorCode.AUTH_UNAUTHORIZED);
     }
     return id.cloudToken;
-  }
-
-  /** 拉云端 profile，把活跃组织写回本地镜像。 */
-  private async refreshActiveOrg(token: string): Promise<void> {
-    const profile = await this.cloud.get<CloudProfileData>(
-      "/api/auth/profile",
-      token,
-    );
-    await this.identity.updateActiveOrg(
-      profile.activeOrg?.id ?? null,
-      profile.activeOrg?.name ?? null,
-      profile.activeOrg?.role ?? null,
-    );
   }
 }
