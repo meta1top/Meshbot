@@ -1,0 +1,22 @@
+{
+  "generatedAt": "2026-06-10T19:10:21.057Z",
+  "paths": ["libs", "apps"],
+  "fileCount": 307,
+  "filterTypes": null,
+  "strict": false,
+  "total": 1,
+  "issues": [
+    {
+      "type": "MISSING",
+      "file": "/Users/grant/Meta1/meshbot/libs/main/src/services/invitation.service.ts",
+      "line": 44,
+      "className": "InvitationService",
+      "methodName": "createInvitation",
+      "details": "检测到 2 处写动作但未挂 @Transactional()",
+      "evidence": [
+        "62: this.inviteRepo.update(...)",
+        "77: this.inviteRepo.save(...)"
+      ]
+    }
+  ]
+}

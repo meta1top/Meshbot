@@ -3,7 +3,7 @@ import { AppError, Transactional, WithLock } from "@meshbot/common";
 import type { InvitationSummary } from "@meshbot/types-main";
 import { Inject, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { IsNull, type Repository } from "typeorm";
+import { IsNull, MoreThan, type Repository } from "typeorm";
 
 import { AppUser } from "../entities/app-user.entity";
 import { Invitation } from "../entities/invitation.entity";
@@ -36,7 +36,13 @@ export class InvitationService {
     private readonly config: AppConfigInvitation,
   ) {}
 
-  /** owner 创建邀请；同组织同邮箱已有 pending 则幂等复用。返回实体（含 token）。 */
+  /**
+   * owner 创建邀请；同组织同邮箱已有 pending 则幂等复用。返回实体（含 token）。
+   * 已有 pending 但已过期 → 原行刷新 token 与有效期（部分唯一索引
+   * idx_invitation_org_email_pending 阻止再插一行，必须就地刷新避免死锁）。
+   *
+   * tx-check: ignore — update 与 save 分属互斥分支，每次执行只有一处单表写。
+   */
   async createInvitation(
     orgId: string,
     invitedBy: string,
@@ -45,7 +51,19 @@ export class InvitationService {
     const existing = await this.inviteRepo.findOne({
       where: { orgId, email, status: "pending" },
     });
-    if (existing) return existing;
+    if (existing) {
+      if (existing.expiresAt.getTime() >= Date.now()) return existing;
+      const refresh = {
+        token: randomBytes(24).toString("hex"),
+        status: "pending" as const,
+        invitedBy,
+        expiresAt: new Date(
+          Date.now() + this.config.expiresDays * 24 * 60 * 60 * 1000,
+        ),
+      };
+      await this.inviteRepo.update({ id: existing.id }, refresh);
+      return Object.assign(existing, refresh);
+    }
     const invite = this.inviteRepo.create({
       orgId,
       email,
@@ -61,10 +79,10 @@ export class InvitationService {
     return this.inviteRepo.save(invite);
   }
 
-  /** owner 查看组织的 pending 邀请。 */
+  /** owner 查看组织的 pending 邀请（不含已过期）。 */
   async listPending(orgId: string): Promise<InvitationSummary[]> {
     const rows = await this.inviteRepo.find({
-      where: { orgId, status: "pending" },
+      where: { orgId, status: "pending", expiresAt: MoreThan(new Date()) },
       order: { createdAt: "DESC" },
     });
     return rows.map((r) => ({
