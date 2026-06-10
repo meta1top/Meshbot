@@ -1,5 +1,4 @@
 import { AppError, type ErrorCode } from "@meshbot/common";
-import { Inject, Injectable, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 
 import { AgentErrorCode } from "../errors/agent.error-codes";
@@ -12,18 +11,16 @@ interface CloudEnvelope<T> {
   data?: T;
 }
 
-/** 注入用 token：可被测试替换的 fetch。 */
-export const CLOUD_FETCH = Symbol("CLOUD_FETCH");
-
 /**
  * 云端 server-main 的 HTTP 客户端（方案 A）。
+ * - 不挂 @Injectable：构造函数是 `string | ConfigService` 联合，Nest 无法解析，
+ *   统一在 AuthModule 用 useFactory 构造；测试直接 new 并传 fetch 桩。
  * - 云端 token 由调用方传入（持久化在 cloud_identity，由上层服务取出）。
  * - 解信封：success=true 返回 data；success=false 把云端 code/message 透传为
  *   AppError（message 已是云端翻译好的文本，本地 i18n 未命中时按原文展示）。
  * - 网络异常 / 非 JSON → CLOUD_UNREACHABLE；HTTP 401 → 触发回调（清本地
  *   token）并抛 AUTH_UNAUTHORIZED。
  */
-@Injectable()
 export class CloudClientService {
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
@@ -31,7 +28,7 @@ export class CloudClientService {
 
   constructor(
     baseUrlOrConfig: string | ConfigService,
-    @Optional() @Inject(CLOUD_FETCH) fetchImpl?: typeof fetch,
+    fetchImpl?: typeof fetch,
   ) {
     this.baseUrl =
       typeof baseUrlOrConfig === "string"
