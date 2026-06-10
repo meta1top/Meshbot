@@ -9,6 +9,10 @@ import {
 /** 组织邀请。token 即邮件邀请码。 */
 @Entity("invitation")
 @Index("idx_invitation_token", ["token"], { unique: true })
+@Index("idx_invitation_org_email_pending", ["orgId", "email"], {
+  unique: true,
+  where: "status = 'pending'",
+})
 export class Invitation {
   @PrimaryGeneratedColumn("uuid")
   id!: string;

@@ -24,6 +24,7 @@ export interface InvitationSummary {
   id: string;
   email: string;
   status: InvitationStatus;
+  /** 邀请码。owner 专用视图；如向普通成员返回须过滤掉该字段。 */
   token: string;
   expiresAt: string;
   createdAt: string;

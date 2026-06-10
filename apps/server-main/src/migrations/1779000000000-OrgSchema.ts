@@ -3,6 +3,7 @@ import type { MigrationInterface, QueryRunner } from "typeorm";
 /**
  * 组织域 schema：organization / membership / invitation 三张表，
  * 外加 app_user.active_org_id 列。logical FK，无数据库外键约束。
+ * 依赖 InitialSchema 迁移启用的 pgcrypto 扩展（gen_random_uuid）。
  */
 export class OrgSchema1779000000000 implements MigrationInterface {
   name = "OrgSchema1779000000000";
