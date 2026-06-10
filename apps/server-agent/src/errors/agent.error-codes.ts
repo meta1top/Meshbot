@@ -21,4 +21,9 @@ export const AgentErrorCode = defineErrorCode({
     message: "auth.unauthorized",
     httpStatus: 401,
   },
+  CLOUD_UNREACHABLE: {
+    code: 3004,
+    message: "cloud.unreachable",
+    httpStatus: 503,
+  },
 });

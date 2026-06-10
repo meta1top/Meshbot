@@ -25,6 +25,9 @@ export const EnvSchema = z.object({
   /** JWT 签名密钥（本地登录用），默认开发兜底值 */
   MESHBOT_JWT_SECRET: z.string().min(8).optional(),
 
+  /** 云端 server-main 基址（方案 A：server-agent 代理云端调用）。默认本地 3200。 */
+  MESHBOT_CLOUD_URL: z.string().url().default("http://127.0.0.1:3200"),
+
   /**
    * LangGraph ReAct 递归上限（一次 supervisor↔tools 往返算 2 个 super-step）。
    * 不设默认 100；长会话 + 多轮 tool 调用建议 100~200。
