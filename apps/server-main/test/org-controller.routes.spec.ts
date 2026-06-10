@@ -47,6 +47,7 @@ describe("OrgController 路由顺序与邮件失败语义", () => {
       listOrgsForUser: jest.fn().mockResolvedValue([]),
       listMembers: jest.fn().mockResolvedValue([]),
       isMember: jest.fn().mockResolvedValue(true),
+      assertMember: jest.fn().mockResolvedValue(undefined),
     };
     invitations = {
       createInvitation: jest.fn().mockResolvedValue({
@@ -60,6 +61,23 @@ describe("OrgController 路由顺序与邮件失败语义", () => {
       listPending: jest.fn().mockResolvedValue([]),
       revoke: jest.fn(),
       findById: jest.fn(),
+      toSummary: jest.fn(
+        (invite: {
+          id: string;
+          email: string;
+          status: string;
+          token: string;
+          expiresAt: Date;
+          createdAt: Date;
+        }) => ({
+          id: invite.id,
+          email: invite.email,
+          status: invite.status,
+          token: invite.token,
+          expiresAt: invite.expiresAt.toISOString(),
+          createdAt: invite.createdAt.toISOString(),
+        }),
+      ),
       acceptInvitation: jest
         .fn()
         .mockResolvedValue({ orgId: "o-1", orgName: "Acme" }),

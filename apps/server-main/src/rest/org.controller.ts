@@ -77,7 +77,7 @@ export class OrgController {
     @CurrentUser() user: JwtMainPayload,
     @Param("id") orgId: string,
   ): Promise<MemberSummary[]> {
-    await this.assertMember(orgId, user.userId);
+    await this.memberships.assertMember(orgId, user.userId);
     return this.memberships.listMembers(orgId);
   }
 
@@ -102,14 +102,7 @@ export class OrgController {
       invite.token,
       invite.expiresAt,
     );
-    return {
-      id: invite.id,
-      email: invite.email,
-      status: invite.status as InvitationSummary["status"],
-      token: invite.token,
-      expiresAt: invite.expiresAt.toISOString(),
-      createdAt: invite.createdAt.toISOString(),
-    };
+    return this.invitations.toSummary(invite);
   }
 
   /** 组织 pending 邀请列表（owner 限定）。 */
@@ -122,7 +115,11 @@ export class OrgController {
     return this.invitations.listPending(orgId);
   }
 
-  /** 重发邀请邮件（owner 限定）。 */
+  /**
+   * 重发邀请邮件（owner 限定）。过期的 pending 邀请会先被刷新（新 token +
+   * 新有效期）再发送。对不存在 / 跨组织的 invitationId 静默返回 ok
+   * （防枚举，幂等语义）。
+   */
   @Post(":id/invitations/:invitationId/resend")
   async resend(
     @CurrentUser() user: JwtMainPayload,
@@ -133,18 +130,26 @@ export class OrgController {
     const org = await this.orgs.getOrgOrThrow(orgId);
     const invite = await this.invitations.findById(invitationId);
     if (invite && invite.orgId === orgId && invite.status === "pending") {
-      await this.sendInvitationMail(
+      const fresh = await this.invitations.createInvitation(
+        orgId,
+        user.userId,
         invite.email,
+      );
+      await this.sendInvitationMail(
+        fresh.email,
         org.name,
         user.userId,
-        invite.token,
-        invite.expiresAt,
+        fresh.token,
+        fresh.expiresAt,
       );
     }
     return { ok: true };
   }
 
-  /** 撤销邀请（owner 限定）。 */
+  /**
+   * 撤销邀请（owner 限定）。对不存在 / 跨组织的 invitationId 静默返回 ok
+   * （防枚举，幂等语义）。
+   */
   @Delete(":id/invitations/:invitationId")
   async revoke(
     @CurrentUser() user: JwtMainPayload,
@@ -157,14 +162,6 @@ export class OrgController {
       await this.invitations.revoke(invitationId);
     }
     return { ok: true };
-  }
-
-  /** 非成员访问成员资源 → ORG_FORBIDDEN（owner 必为成员，借 assertOwner 抛错）。 */
-  private async assertMember(orgId: string, userId: string): Promise<void> {
-    const ok = await this.memberships.isMember(orgId, userId);
-    if (!ok) {
-      await this.orgs.assertOwner(orgId, userId);
-    }
   }
 
   /** 发送/重发邀请邮件。发送失败不抛错（邀请已建好，owner 可重发）。 */

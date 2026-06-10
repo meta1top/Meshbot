@@ -79,20 +79,25 @@ export class InvitationService {
     return this.inviteRepo.save(invite);
   }
 
+  /** Invitation 实体 → 对外摘要（ISO 时间字符串）。 */
+  toSummary(invite: Invitation): InvitationSummary {
+    return {
+      id: invite.id,
+      email: invite.email,
+      status: invite.status as InvitationSummary["status"],
+      token: invite.token,
+      expiresAt: invite.expiresAt.toISOString(),
+      createdAt: invite.createdAt.toISOString(),
+    };
+  }
+
   /** owner 查看组织的 pending 邀请（不含已过期）。 */
   async listPending(orgId: string): Promise<InvitationSummary[]> {
     const rows = await this.inviteRepo.find({
       where: { orgId, status: "pending", expiresAt: MoreThan(new Date()) },
       order: { createdAt: "DESC" },
     });
-    return rows.map((r) => ({
-      id: r.id,
-      email: r.email,
-      status: r.status as InvitationSummary["status"],
-      token: r.token,
-      expiresAt: r.expiresAt.toISOString(),
-      createdAt: r.createdAt.toISOString(),
-    }));
+    return rows.map((r) => this.toSummary(r));
   }
 
   /** owner 撤销邀请（仅 pending 可撤销）。 */

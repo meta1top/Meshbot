@@ -1,3 +1,4 @@
+import { AppError } from "@meshbot/common";
 import type { MemberSummary, OrgRole, OrgSummary } from "@meshbot/types-main";
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -6,6 +7,7 @@ import type { Repository } from "typeorm";
 import { AppUser } from "../entities/app-user.entity";
 import { Membership } from "../entities/membership.entity";
 import { Organization } from "../entities/organization.entity";
+import { MainErrorCode } from "../errors/main.error-codes";
 
 /**
  * Membership 的唯一归属 Service。组织成员关系的读写。
@@ -48,6 +50,14 @@ export class MembershipService {
   async isMember(orgId: string, userId: string): Promise<boolean> {
     const count = await this.membershipRepo.count({ where: { orgId, userId } });
     return count > 0;
+  }
+
+  /** 校验是组织成员，否则抛 ORG_FORBIDDEN。 */
+  async assertMember(orgId: string, userId: string): Promise<void> {
+    const ok = await this.isMember(orgId, userId);
+    if (!ok) {
+      throw new AppError(MainErrorCode.ORG_FORBIDDEN);
+    }
   }
 
   /** 用户在某组织的角色；非成员返回 null。 */
