@@ -12,7 +12,6 @@ import {
 } from "@meshbot/common";
 import { MainModule } from "@meshbot/main";
 import type { INestApplication } from "@nestjs/common";
-import { ConfigModule } from "@nestjs/config";
 import { APP_GUARD, Reflector } from "@nestjs/core";
 import { JwtModule } from "@nestjs/jwt";
 import { PassportModule } from "@nestjs/passport";
@@ -30,6 +29,7 @@ import request from "supertest";
 
 import { JwtAuthGuard } from "../../src/auth/jwt-auth.guard";
 import { JwtMainStrategy } from "../../src/auth/jwt.strategy";
+import { type AppConfig, APP_CONFIG } from "../../src/config/app-config.schema";
 import { AuthController } from "../../src/rest/auth.controller";
 import {
   createTestDb,
@@ -40,6 +40,11 @@ import {
 const I18N_PATH = path.join(__dirname, "..", "..", "i18n");
 
 const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
+
+// e2e 只消费 config.jwt（JwtMainStrategy / AuthController），其余切片不参与，partial cast 即可
+const TEST_APP_CONFIG = {
+  jwt: { secret: "e2e-test-secret", expires: "1h" },
+} as AppConfig;
 
 async function isRedisReachable(): Promise<boolean> {
   const probe = new Redis(REDIS_URL, {
@@ -110,11 +115,6 @@ describe.each<[Mode]>([
 
     const moduleRef = await Test.createTestingModule({
       imports: [
-        ConfigModule.forRoot({
-          isGlobal: true,
-          ignoreEnvFile: true,
-          load: [() => ({ JWT_SECRET: "e2e-test-secret", JWT_EXPIRES: "1h" })],
-        }),
         CommonModule.forRoot(commonOptions),
         I18nModule.forRoot({
           fallbackLanguage: "zh",
@@ -135,6 +135,7 @@ describe.each<[Mode]>([
       ],
       controllers: [AuthController],
       providers: [
+        { provide: APP_CONFIG, useValue: TEST_APP_CONFIG },
         JwtMainStrategy,
         { provide: APP_GUARD, useClass: JwtAuthGuard },
       ],

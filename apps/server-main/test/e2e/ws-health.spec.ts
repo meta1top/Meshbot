@@ -9,7 +9,6 @@ import {
 } from "@meshbot/common";
 // WsExceptionFilter via APP_FILTER provider — see WsTestModule below
 import { type INestApplication, Module } from "@nestjs/common";
-import { ConfigModule } from "@nestjs/config";
 import { Reflector } from "@nestjs/core";
 import { JwtModule, JwtService } from "@nestjs/jwt";
 import { Test } from "@nestjs/testing";
@@ -51,11 +50,6 @@ function waitForEvent<T = unknown>(
 
 @Module({
   imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-      ignoreEnvFile: true,
-      load: [() => ({ JWT_SECRET, JWT_EXPIRES: "1h" })],
-    }),
     I18nModule.forRoot({
       fallbackLanguage: "zh",
       loader: I18nJsonLoader,

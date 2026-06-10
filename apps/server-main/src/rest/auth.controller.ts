@@ -4,12 +4,12 @@ import {
   RegisterUserDto,
   UserService,
 } from "@meshbot/main";
-import { Body, Controller, HttpCode, Post } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
+import { Body, Controller, HttpCode, Inject, Post } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Throttle } from "@nestjs/throttler";
 
 import { Public } from "../auth/public.decorator";
+import { type AppConfig, APP_CONFIG } from "../config/app-config.schema";
 
 interface AuthTokenResponse {
   token: string;
@@ -26,7 +26,7 @@ export class AuthController {
   constructor(
     private readonly users: UserService,
     private readonly jwt: JwtService,
-    private readonly config: ConfigService,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
   @Public()
@@ -53,7 +53,7 @@ export class AuthController {
     const token = this.jwt.sign({ userId: user.id, email: user.email });
     return {
       token,
-      expiresIn: this.config.get<string>("JWT_EXPIRES") ?? "7d",
+      expiresIn: this.config.jwt.expires,
       user: { id: user.id, email: user.email, displayName: user.displayName },
     };
   }

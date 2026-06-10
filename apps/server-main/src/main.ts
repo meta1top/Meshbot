@@ -1,6 +1,7 @@
 import {
   ErrorsFilter,
   I18nZodValidationPipe,
+  loadAppConfig,
   ResponseInterceptor,
   traceIdMiddleware,
 } from "@meshbot/common";
@@ -8,15 +9,19 @@ import { NestFactory, Reflector } from "@nestjs/core";
 import { I18nService } from "nestjs-i18n";
 import { AppModule } from "./app.module";
 import { setupSwagger } from "./app.swagger";
+import { AppConfigSchema } from "./config/app-config.schema";
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // 配置加载在 Nest 生命周期之外：从 YAML / Nacos 读成强类型嵌套 AppConfig 并校验。
+  const config = await loadAppConfig(AppConfigSchema, {
+    cwd: process.cwd(),
+    envFiles: [".env"],
+    yamlFiles: ["conf/application.yml", "conf/application.local.yml"],
+  });
 
-  // Phase 5 标准全局链路（顺序：trace → pipe → interceptor → filter）
-  // - traceIdMiddleware：注入 / 透传 x-trace-id，让后续 interceptor / filter / 日志可追溯
-  // - I18nZodValidationPipe：DTO 校验 + i18n key 翻译
-  // - ResponseInterceptor：成功响应包 envelope {success, code:0, data, ...}
-  // - ErrorsFilter：异常统一为 envelope {success:false, code, message, data, ...}
+  const app = await NestFactory.create(AppModule.forRoot(config));
+
+  // 标准全局链路（顺序：trace → pipe → interceptor → filter）
   app.use(traceIdMiddleware);
   const i18n = app.get(I18nService);
   const reflector = app.get(Reflector);
@@ -26,14 +31,12 @@ async function bootstrap() {
 
   app.setGlobalPrefix("api");
 
-  // Phase 5 Track C4：dev 模式挂载 Swagger UI（/api/docs）
   if (process.env.NODE_ENV !== "production") {
     setupSwagger(app);
   }
 
-  const port = process.env.PORT ?? 3200;
-  await app.listen(port);
-  console.log(`server-main running on http://localhost:${port}`);
+  await app.listen(config.port);
+  console.log(`server-main running on http://localhost:${config.port}`);
 }
 
 bootstrap();
