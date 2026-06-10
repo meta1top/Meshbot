@@ -1,14 +1,24 @@
 import { z } from "zod";
 
 /** Nacos 引导配置 schema：namespace / group / dataId 带默认，鉴权可选。 */
-export const NacosBootstrapSchema = z.object({
-  serverAddr: z.string().min(1),
-  namespace: z.string().default("public"),
-  group: z.string().default("DEFAULT_GROUP"),
-  dataId: z.string().default("meshbot-server-main.yaml"),
-  username: z.string().optional(),
-  password: z.string().optional(),
-});
+export const NacosBootstrapSchema = z
+  .object({
+    serverAddr: z.string().min(1),
+    namespace: z.string().default("public"),
+    group: z.string().default("DEFAULT_GROUP"),
+    dataId: z.string().default("meshbot-server-main.yaml"),
+    username: z.string().optional(),
+    password: z.string().optional(),
+  })
+  .superRefine((val, ctx) => {
+    if (Boolean(val.username) !== Boolean(val.password)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [val.username ? "password" : "username"],
+        message: "NACOS_USERNAME 与 NACOS_PASSWORD 必须成对设置",
+      });
+    }
+  });
 
 export type NacosBootstrap = z.infer<typeof NacosBootstrapSchema>;
 

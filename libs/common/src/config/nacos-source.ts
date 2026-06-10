@@ -24,6 +24,8 @@ export async function loadNacosConfig(
       `[config-loader] 从 Nacos 拉取配置失败（${where}）：${String(err)}`,
       { cause: err },
     );
+  } finally {
+    client.close();
   }
   if (!content) {
     throw new Error(`[config-loader] Nacos 配置为空（${where}）。`);

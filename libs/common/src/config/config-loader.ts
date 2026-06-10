@@ -55,6 +55,6 @@ export async function loadAppConfig<S extends ZodType>(
     );
   }
 
-  console.log(`[config-loader] 配置源=${source}，已加载并校验通过`);
+  console.info(`[config-loader] 配置源=${source}，已加载并校验通过`);
   return parsed.data;
 }
