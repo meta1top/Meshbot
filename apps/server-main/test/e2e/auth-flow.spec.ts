@@ -131,7 +131,7 @@ describe.each<[Mode]>([
           secret: "e2e-test-secret",
           signOptions: { expiresIn: "1h" },
         }),
-        MainModule,
+        MainModule.forRoot({ expiresDays: 7 }),
       ],
       controllers: [AuthController],
       providers: [

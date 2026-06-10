@@ -183,7 +183,7 @@ export class AppModule {
         // 结构化健康检查（DB + Redis 分组上报）
         TerminusModule,
         EmailModule,
-        MainModule,
+        MainModule.forRoot(config.invitation),
       ],
       controllers: [HealthController, AuthController],
       providers: [
