@@ -93,6 +93,7 @@
   "appShell": {
     "newSession": "新会话",
     "scheduled": "计划任务",
+    "org": "组织",
     "pinned": "已固定",
     "sessions": "会话",
     "logout": "退出",
@@ -114,6 +115,17 @@
     "loadFailed": "会话加载失败",
     "retry": "重试",
     "sessionsEmpty": "暂无会话"
+  },
+  "orgSettings": {
+    "noOrg": "你还没有加入任何组织",
+    "membersTitle": "{org} · 成员",
+    "inviteTitle": "邀请成员",
+    "invitePlaceholder": "对方邮箱",
+    "invite": "发送邀请",
+    "inviting": "发送中...",
+    "inviteFailed": "邀请失败，请重试",
+    "pendingTitle": "待处理邀请",
+    "code": "邀请码"
   },
   "chatInput": {
     "placeholder": "请输入",
@@ -296,6 +308,16 @@
   "chooseProviderToStart": "选择提供商以开始",
   "newSession": "新建会话",
   "scheduled": "定时",
+  "org": "组织",
+  "noOrg": "你还没有加入任何组织",
+  "membersTitle": "{org} · 成员",
+  "inviteTitle": "邀请成员",
+  "invitePlaceholder": "对方邮箱",
+  "invite": "发送邀请",
+  "inviting": "发送中...",
+  "inviteFailed": "邀请失败，请重试",
+  "pendingTitle": "待处理邀请",
+  "code": "邀请码",
   "pinned": "已置顶",
   "logout": "退出登录",
   "switchToLightTheme": "切换到亮色主题",

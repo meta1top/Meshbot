@@ -6,7 +6,11 @@ import type {
   LoginResponse,
   RegisterInput,
 } from "@meshbot/types-agent";
-import { apiClient, setAccessToken } from "@meshbot/web-common";
+import {
+  apiClient,
+  clearAccessToken,
+  setAccessToken,
+} from "@meshbot/web-common";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { profileQueryKey } from "@/lib/profile-client";
@@ -44,6 +48,10 @@ export async function register(input: RegisterInput): Promise<LoginResponse> {
   return data;
 }
 
+export async function logout(): Promise<void> {
+  await apiClient.post("/api/auth/logout");
+}
+
 export function useAuthStatus() {
   const mounted = useClientMounted();
   return useQuery({
@@ -72,6 +80,22 @@ export function useRegister() {
   return useMutation({
     mutationFn: register,
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: profileQueryKey });
+      queryClient.invalidateQueries({ queryKey: authStatusQueryKey });
+    },
+  });
+}
+
+/**
+ * 登出：先调服务端登出（需要 Bearer），settle 后再清本地 token + 缓存。
+ * 云端不可达时调用方可 catch 忽略，onSettled 仍保证本地登出。
+ */
+export function useLogout() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: logout,
+    onSettled: () => {
+      clearAccessToken();
       queryClient.invalidateQueries({ queryKey: profileQueryKey });
       queryClient.invalidateQueries({ queryKey: authStatusQueryKey });
     },

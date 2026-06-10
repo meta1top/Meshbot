@@ -5,11 +5,9 @@ import {
   SESSION_WS_EVENTS,
   type SessionTitleUpdatedEvent,
 } from "@meshbot/types-agent";
-import { clearAccessToken } from "@meshbot/web-common";
 import { useTheme } from "@meshbot/web-common/react";
-import { useQueryClient } from "@tanstack/react-query";
 import { useAtomValue, useSetAtom } from "jotai";
-import { Clock, LogOut, Moon, Plus, Sun } from "lucide-react";
+import { Clock, LogOut, Moon, Plus, Sun, Users } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
@@ -27,6 +25,7 @@ import { LanguageToggle } from "@/components/language-toggle";
 import { SessionListSection } from "@/components/sidebar/session-list-section";
 import { SessionListSkeleton } from "@/components/sidebar/session-list-skeleton";
 import { getSessionSocket } from "@/lib/socket";
+import { useLogout } from "@/rest/auth";
 
 interface AppShellLayoutProps {
   children: React.ReactNode;
@@ -41,13 +40,14 @@ export function AppShellLayout({
   scrollContainerRef,
 }: AppShellLayoutProps) {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const { theme, toggleTheme } = useTheme();
   const t = useTranslations("appShell");
   const commonT = useTranslations("common");
   const pathname = usePathname();
   const isNewSessionActive = pathname === "/";
   const isScheduledActive = pathname === "/schedule";
+  const isOrgActive = pathname === "/settings/org";
+  const logoutMutation = useLogout();
   const [isMac, setIsMac] = useState(false);
 
   const pinned = useAtomValue(pinnedSessionsAtom);
@@ -92,11 +92,12 @@ export function AppShellLayout({
     };
   }, []);
 
-  const handleLogout = useCallback(() => {
-    clearAccessToken();
-    queryClient.invalidateQueries({ queryKey: ["auth", "status"] });
+  const handleLogout = useCallback(async () => {
+    // 先服务端登出（endpoint 需要 Bearer）；云端不可达也照样本地登出
+    // （useLogout 的 onSettled 会清 token + 失效 profile / auth-status 缓存）。
+    await logoutMutation.mutateAsync().catch(() => {});
     router.replace("/login");
-  }, [queryClient, router]);
+  }, [logoutMutation.mutateAsync, router]);
 
   return (
     <main className="titlebar-safe h-screen bg-background text-foreground">
@@ -124,6 +125,13 @@ export function AppShellLayout({
                 onClick={() => router.push("/schedule")}
               >
                 {t("scheduled")}
+              </SidebarNavItem>
+              <SidebarNavItem
+                icon={<Users className="h-4 w-4" />}
+                active={isOrgActive}
+                onClick={() => router.push("/settings/org")}
+              >
+                {t("org")}
               </SidebarNavItem>
             </nav>
 

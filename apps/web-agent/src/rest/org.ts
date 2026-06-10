@@ -54,10 +54,6 @@ export async function inviteMember(
   return data;
 }
 
-export async function logout(): Promise<void> {
-  await apiClient.post("/api/auth/logout");
-}
-
 export function useCreateOrg() {
   const qc = useQueryClient();
   return useMutation({
