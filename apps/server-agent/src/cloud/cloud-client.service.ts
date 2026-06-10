@@ -84,7 +84,12 @@ export class CloudClientService {
     }
 
     if (res.status === 401) {
-      await this.onUnauthorized?.();
+      try {
+        await this.onUnauthorized?.();
+      } catch {
+        // 处理器失败（如本地清 token 落库异常）不得掩盖 401 语义，
+        // 否则前端无法落回 needs-login 重新登录
+      }
       throw new AppError(AgentErrorCode.AUTH_UNAUTHORIZED);
     }
 

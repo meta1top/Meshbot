@@ -79,3 +79,19 @@ describe("CloudClientService", () => {
     );
   });
 });
+
+describe("CloudClientService 401 处理器异常", () => {
+  it("处理器抛错不掩盖 AUTH_UNAUTHORIZED", async () => {
+    const client = makeClient((async () =>
+      jsonResponse(
+        { success: false, code: 3003 },
+        401,
+      )) as unknown as typeof fetch);
+    client.setUnauthorizedHandler(() => {
+      throw new Error("db write failed");
+    });
+    await expect(client.get("/api/orgs", "stale")).rejects.toMatchObject({
+      errorCode: AgentErrorCode.AUTH_UNAUTHORIZED,
+    });
+  });
+});
