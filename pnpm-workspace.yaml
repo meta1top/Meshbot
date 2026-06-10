@@ -28,6 +28,8 @@ peerDependencyRules:
     "reflect-metadata": "*"
 
 allowBuilds:
+  # postinstall 跑 select-version（按本机 TS 版本选编译产物），必须放行
+  '@alicloud/openapi-core': true
   '@nestjs/core': true
   '@parcel/watcher': true
   '@scarf/scarf': true
