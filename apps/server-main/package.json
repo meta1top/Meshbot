@@ -7,9 +7,7 @@
     "dev": "nest start --watch",
     "start": "node dist/main",
     "clean": "rm -rf dist",
-    "typecheck": "tsc --project tsconfig.json --noEmit",
-    "migration": "tsx ../../scripts/typeorm-cli.ts src/data-source.cli.ts",
-    "migration:archive": "tsx ../../scripts/archive-migrations.ts ."
+    "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
     "@alicloud/dm20151123": "^1.10.0",

@@ -11,6 +11,8 @@
  * 当 DATABASE_URL 不可达时通过 `isPostgresReachable()` 探测，整个 suite skip。
  */
 import { randomBytes } from "node:crypto";
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { DataSource, type DataSourceOptions } from "typeorm";
 import { SnakeNamingStrategy } from "typeorm-naming-strategies";
 
@@ -18,8 +20,20 @@ import { AppUser } from "../../../../libs/main/src/entities/app-user.entity";
 import { Invitation } from "../../../../libs/main/src/entities/invitation.entity";
 import { Membership } from "../../../../libs/main/src/entities/membership.entity";
 import { Organization } from "../../../../libs/main/src/entities/organization.entity";
-import { InitialSchema1778869010469 } from "../../src/migrations/1778869010469-InitialSchema";
-import { OrgSchema1779000000000 } from "../../src/migrations/1779000000000-OrgSchema";
+
+/** 云端 schema 的真相源：apps/server-main/migrations/*.sql（DDL 由 DBA 手动执行）。 */
+const MIGRATIONS_DIR = path.join(__dirname, "..", "..", "migrations");
+
+/** 按文件名顺序把全部 DDL 执行到当前连接（测试 schema 由 search_path 圈定）。 */
+async function applyDdl(ds: DataSource): Promise<void> {
+  const files = readdirSync(MIGRATIONS_DIR)
+    .filter((f) => f.endsWith(".sql"))
+    .sort();
+  for (const file of files) {
+    const sql = readFileSync(path.join(MIGRATIONS_DIR, file), "utf8");
+    await ds.query(sql);
+  }
+}
 
 const DEFAULT_URL =
   process.env.TEST_DATABASE_URL ??
@@ -69,7 +83,6 @@ export async function createTestDb(): Promise<TestDbContext> {
     // 让所有连接默认在测试 schema 内创建 / 读对象，避免 unqualified DDL 落 public
     extra: { options: `-c search_path=${schema}` },
     entities: [AppUser, Organization, Membership, Invitation],
-    migrations: [InitialSchema1778869010469, OrgSchema1779000000000],
     namingStrategy: new SnakeNamingStrategy(),
     synchronize: false,
     logging: false,
@@ -77,7 +90,7 @@ export async function createTestDb(): Promise<TestDbContext> {
 
   const ds = new DataSource(dataSourceOptions);
   await ds.initialize();
-  await ds.runMigrations();
+  await applyDdl(ds);
 
   return {
     schema,

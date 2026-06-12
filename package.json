@@ -43,9 +43,7 @@
     "version-packages": "changeset version",
     "release": "changeset publish",
     "migration:agent": "pnpm --filter @meshbot/server-agent migration",
-    "migration:main": "pnpm --filter @meshbot/server-main migration",
     "migration:archive:agent": "pnpm --filter @meshbot/server-agent migration:archive",
-    "migration:archive:main": "pnpm --filter @meshbot/server-main migration:archive",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
@@ -73,7 +71,7 @@
     "typeorm-naming-strategies": "^4.1.0",
     "typescript": "^5"
   },
-  "packageManager": "pnpm@11.4.0",
+  "packageManager": "pnpm@11.5.3",
   "engines": {
     "node": ">=22",
     "pnpm": ">=11"

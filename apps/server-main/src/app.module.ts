@@ -141,13 +141,12 @@ export class AppModule {
             new QueryResolver(["lang"]),
           ],
         }),
-        // 数据库：整块 config.database 透传给 TypeORM，再补 namingStrategy /
-        // migrations / migrationsRun 等应用级项（生产不自动跑迁移）。
+        // 数据库：整块 config.database 透传给 TypeORM，再补 namingStrategy。
+        // schema 由 apps/server-main/migrations/*.sql DDL 管理，DBA 手动执行
+        // （规则见 .claude/skills/ddl-migration），任何模式都不自动建表 / 跑迁移。
         TypeOrmModule.forRoot({
           ...config.database,
           namingStrategy: new SnakeNamingStrategy(),
-          migrationsRun: !isProd,
-          migrations: [path.join(__dirname, "migrations", "*.{js,ts}")],
           // production 切纯文本 logger + 强制 UTC 时区
           ...(isProd
             ? {

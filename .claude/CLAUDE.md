@@ -87,8 +87,8 @@ packages/
 
 ### 数据库规范
 
-- **本地轨**（SQLite）：用 TypeORM 迁移文件管理 schema（`synchronize:false` + `migrationsRun:true`，启动自动跑迁移）；DataSource 启用 `journal_mode=WAL` + `busy_timeout=5000` 缓解 SQLITE_BUSY（通过 `prepareDatabase` 回调）
-- **云端轨**（Postgres）：迁移文件 + 幂等 SQL（`IF NOT EXISTS`）+ 索引 `CONCURRENTLY` + 列名 snake_case + 逻辑外键
+- **本地轨**（SQLite）：用 TypeORM 迁移文件管理 schema（`synchronize:false` + `migrationsRun:true`，启动自动跑迁移，桌面端单节点自升级）；DataSource 启用 `journal_mode=WAL` + `busy_timeout=5000` 缓解 SQLITE_BUSY（通过 `prepareDatabase` 回调）
+- **云端轨**（Postgres）：纯 SQL DDL 文件 `apps/server-main/migrations/<YYYYMMDDHHmm>-<english-summary>.sql`，**DBA 手动执行，服务任何模式都不自动建表 / 跑迁移**；幂等 SQL（`IF NOT EXISTS`）+ 文件不可变（变更追加新文件）+ 列名 snake_case + 逻辑外键 + 线上大表索引 `CONCURRENTLY` 单独成文件。改 Entity 必须配套 DDL 文件，详见 `ddl-migration` 技能
 - 禁止数据库级别外键约束（不使用 `@ManyToOne`/`@OneToMany`/`@JoinColumn`）
 
 ### Zod / DTO（共享数据模型）
@@ -128,4 +128,4 @@ packages/
 | 应用 | 数据库 | 当前 Entity |
 |------|--------|-------------|
 | server-agent | `agent.db`（SQLite，`~/.meshbot/`，TypeORM 迁移管理） | `CloudIdentity` / `Setting` / `ModelConfig` / `Session` / `SessionMessage` / `LlmCall` / `PendingMessage` |
-| server-main | Postgres（TypeORM 迁移管理） | `AppUser` / `Organization` / `Membership` / `Invitation`（云端身份 + 企业/组织；Phase 1） |
+| server-main | Postgres（SQL DDL 文件，DBA 手动执行） | `AppUser` / `Organization` / `Membership` / `Invitation`（云端身份 + 企业/组织；Phase 1） |
