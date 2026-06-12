@@ -1,0 +1,60 @@
+# server-main 的 Nacos 配置样例（部署用）。
+#
+# 用法：把本文件内容（按环境改好值）粘贴到 Nacos 配置中心：
+#   dataId : meshbot-server-main.yaml   ← 代码默认值；可用 NACOS_DATA_ID 覆盖
+#   group  : DEFAULT_GROUP              ← 可用 NACOS_GROUP 覆盖
+#   format : YAML
+#
+# 服务侧只需在 `.env` 配引导变量（见 .env.example）：
+#   NACOS_SERVER_ADDR=<host:8848>  （设了它 loader 才走 Nacos，本地 conf/application.yml 即失效）
+#   NACOS_NAMESPACE / NACOS_USERNAME / NACOS_PASSWORD 按需
+#
+# 规则：
+#   - key 支持 kebab-case（如 access-key-id），加载时自动归一化为 camelCase
+#   - 运行模式不在这里 —— NODE_ENV 由部署环境注入（prod 镜像烤 production）
+#   - 生产严禁使用仓库里 application.yml 的 dev jwt secret（启动会 fail-fast）
+#   - 配了 redis（多副本信号）必须同时给每个副本设 MESHBOT_NODE_ID（0-1023），否则拒绝启动
+
+port: 3200
+
+# database 块直接映射 TypeORM postgres 选项；可按需追加 passthrough 项
+# （如 ssl / poolSize / extra），无需改代码。
+database:
+  type: postgres
+  host: pg.internal.example.com
+  port: 5432
+  username: meshbot
+  password: <strong-db-password>
+  database: meshbot_main
+  synchronize: false        # 必须 false，schema 由迁移管理
+  autoLoadEntities: true
+  logging:
+    - error
+    - warn
+    - migration
+  # ssl: true               # 云数据库按需
+  # poolSize: 20
+
+jwt:
+  # 至少 16 字符；生产建议 32 字节随机串：openssl rand -base64 48
+  secret: <openssl-rand-base64-48>
+  expires: 7d               # 形如 7d / 12h / 60m / 3600s
+
+# Redis：生产多副本必配（锁 / 缓存 / 限流计数共享）；单副本可整块省略走 memory 兜底
+redis:
+  host: redis.internal.example.com
+  port: 6379
+  db: 0
+  password: <redis-password>   # 未开 requirepass 则删掉本行
+
+# 邮件（组织邀请）：阿里云邮件推送 DirectMail。整块省略则邀请码只打服务日志
+# （LogEmailSender，仅适合开发 —— 生产省略会导致邀请邮件发不出去）。
+email:
+  endpoint: dm.aliyuncs.com          # 区域化端点形如 dm.<region>.aliyuncs.com
+  account-name: noreply@mail.example.com   # DirectMail 控制台创建的发信地址
+  access-key-id: <aliyun-ak>
+  access-key-secret: <aliyun-sk>
+  from: meshbot                      # 发信人显示名（FromAlias，可选）
+
+invitation:
+  expiresDays: 7            # 邀请码有效天数（1-30）
