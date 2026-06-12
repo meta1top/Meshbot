@@ -66,7 +66,7 @@
     "ts-morph": "^28.0.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
-    "turbo": "^2.9.14",
+    "turbo": "^2.9.18",
     "typeorm": "^0.3.28",
     "typeorm-naming-strategies": "^4.1.0",
     "typescript": "^5"
