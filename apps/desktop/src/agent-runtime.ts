@@ -2,6 +2,7 @@ import { type ChildProcess, fork } from "node:child_process";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { app } from "electron";
 
 const AGENT_PORT = 3100;
 const READINESS_TIMEOUT_MS = 30_000;
@@ -13,7 +14,10 @@ let intentionalStop = false;
 
 /**
  * 启动内置 server-agent 子进程。
- * - 复用 Electron 自带 Node 运行时（fork 默认 ELECTRON_RUN_AS_NODE）
+ * - packaged：复用 Electron 自带 Node（fork 默认 ELECTRON_RUN_AS_NODE），
+ *   打包产物的原生模块（better-sqlite3 等）已由 electron-builder 按 Electron ABI 重建
+ * - dev（未打包）：必须用**系统 Node** fork —— workspace 里的原生模块是按系统
+ *   Node ABI 编译的，用 Electron 内置 Node 加载会 ERR_DLOPEN_FAILED
  * - MESHBOT_HOME 显式注入 ~/.meshbot，确保跨平台一致
  * - 等待 /api/health 200 后才 resolve，UI 不会拿到空后端
  */
@@ -23,8 +27,12 @@ export async function startAgentRuntime(): Promise<void> {
   const entry = require.resolve("@meshbot/server-agent");
   const meshbotHome = path.join(os.homedir(), ".meshbot");
 
+  // pnpm 启动时 npm_node_execpath 指向运行 pnpm 的系统 node；兜底走 PATH
+  const devNodePath = process.env.npm_node_execpath ?? "node";
+
   intentionalStop = false;
   child = fork(entry, [], {
+    ...(app.isPackaged ? {} : { execPath: devNodePath }),
     env: {
       ...process.env,
       NODE_ENV: "production",
