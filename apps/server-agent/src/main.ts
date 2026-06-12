@@ -13,6 +13,12 @@ import { setupSwagger } from "./app.swagger";
 import { resolveMeshbotDir } from "./utils/meshbot-dir";
 
 async function bootstrap() {
+  // 被桌面壳 fork（带 IPC 通道）时：父进程退出/崩溃导致 IPC 断开 → 自退，
+  // 避免成为占着端口的孤儿进程
+  if (process.send) {
+    process.on("disconnect", () => process.exit(0));
+  }
+
   const meshbotDir = resolveMeshbotDir();
   mkdirSync(meshbotDir, { recursive: true });
   mkdirSync(path.join(meshbotDir, "logs"), { recursive: true });

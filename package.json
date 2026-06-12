@@ -18,7 +18,7 @@
     "dev:web-main": "turbo run dev --filter=@meshbot/web-main...",
     "dev:server-agent": "turbo run dev --filter=@meshbot/server-agent...",
     "dev:server-main": "turbo run dev --filter=@meshbot/server-main...",
-    "dev:desktop": "turbo run build --filter=@meshbot/desktop^... && turbo run dev --filter=@meshbot/desktop",
+    "dev:desktop": "turbo run dev --filter=@meshbot/desktop",
     "dev:cli-agent": "turbo run dev --filter=@meshbot/cli-agent...",
     "dev:db:up": "docker compose -f infra/dev/docker-compose.dev.yml up -d",
     "dev:db:down": "docker compose -f infra/dev/docker-compose.dev.yml down",
