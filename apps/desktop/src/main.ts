@@ -4,8 +4,6 @@ import { startAgentRuntime, stopAgentRuntime } from "./agent-runtime";
 import { registerIpcHandlers } from "./ipc-handlers";
 import { startStaticServer } from "./static-server";
 
-const DEV_AGENT_URL = "http://localhost:3001";
-
 let mainWindow: BrowserWindow | null = null;
 let staticServer: { server: import("node:http").Server; port: number } | null =
   null;
@@ -37,14 +35,20 @@ function createWindow(agentUrl: string) {
 }
 
 async function getAgentUrl(): Promise<string> {
-  if (!app.isPackaged) {
-    return DEV_AGENT_URL;
+  // UI 热更联调逃生门：自行起 dev:server-agent + dev:web-agent 后，
+  // MESHBOT_DESKTOP_DEV_URL=http://localhost:3001 pnpm dev:desktop
+  const devUrl = process.env.MESHBOT_DESKTOP_DEV_URL;
+  if (devUrl) {
+    return devUrl;
   }
 
-  // packaged 模式：先把内置 server-agent fork 起来并等就绪，再起静态 UI server
+  // 默认自包含（dev 与 packaged 同路径）：fork 内置 server-agent 并等就绪，
+  // 再起静态 UI server。dev 模式静态资源直接用 workspace 的 web-agent 构建产物。
   await startAgentRuntime();
 
-  const webAgentPath = path.join(__dirname, "web-agent");
+  const webAgentPath = app.isPackaged
+    ? path.join(__dirname, "web-agent")
+    : path.resolve(__dirname, "..", "..", "web-agent", "out");
   staticServer = await startStaticServer(webAgentPath);
   return `http://127.0.0.1:${staticServer.port}`;
 }
