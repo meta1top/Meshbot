@@ -113,6 +113,12 @@ pre code.hljs {
 :root {
   --titlebar-height: 52px;
   --mac-controls-safe-left: 92px;
+  /* Slack 风格外壳配色（web-agent 局部，不进共享 design 系统） */
+  --shell-chrome: #9a3412;
+  --shell-sidebar: #d24a0d;
+  --shell-content: #ffffff;
+  --shell-accent: #d24a0d;
+  --shell-radius: 0.625rem;
 }
 
 .drag-region,
@@ -165,4 +171,9 @@ pre code.hljs {
   .electron-shell.mac-shell .mac-controls-safe-left {
     padding-left: 0;
   }
+}
+
+/* 暗色模式：橙色骨架保留，仅内嵌内容卡翻深色 */
+html.dark {
+  --shell-content: oklch(0.145 0 0);
 }
