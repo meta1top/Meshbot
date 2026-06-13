@@ -15,6 +15,9 @@
     "signingIn": "Signing in...",
     "noAccount": "No account?",
     "goRegister": "Sign up",
+    "brandTagline": "Where your team and AI work together",
+    "brandSubtitle": "Local agent + cloud collaboration — pick up your workflow anywhere.",
+    "welcomeBack": "Welcome back to meshbot",
     "validation": {
       "passwordRequired": "Please enter your password",
       "emailInvalid": "Invalid email address",
@@ -114,7 +117,29 @@
     },
     "loadFailed": "Failed to load sessions",
     "retry": "Retry",
-    "sessionsEmpty": "No sessions yet"
+    "sessionsEmpty": "No sessions yet",
+    "assistantTitle": "Assistant",
+    "rail": {
+      "home": "Home",
+      "messages": "Messages",
+      "assistant": "Assistant",
+      "more": "More"
+    },
+    "search": { "placeholder": "Search meshbot" },
+    "userMenu": {
+      "org": "Organization",
+      "settings": "Settings",
+      "logout": "Log out"
+    },
+    "placeholder": {
+      "homeTitle": "Home",
+      "homeBody": "A global overview is coming soon — unread messages, local sessions and activity will live here.",
+      "messagesTitle": "Messages",
+      "messagesBody": "Real-time conversations with your teammates are coming soon.",
+      "moreTitle": "More",
+      "moreBody": "Files, knowledge base and more are coming soon.",
+      "goAssistant": "Go to Assistant"
+    }
   },
   "orgSettings": {
     "noOrg": "You have not joined any organization yet",
@@ -174,6 +199,8 @@
     }
   },
   "session": {
+    "assistantName": "Assistant",
+    "youName": "You",
     "scrollToBottom": "Scroll to bottom",
     "generatingReply": "Generating reply",
     "editPending": "Edit",

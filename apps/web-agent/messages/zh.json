@@ -15,6 +15,9 @@
     "signingIn": "登录中...",
     "noAccount": "没有账号？",
     "goRegister": "去注册",
+    "brandTagline": "让团队与 AI 一起协作",
+    "brandSubtitle": "本地 Agent + 云端协同，随时随地接管你的工作流。",
+    "welcomeBack": "欢迎回到 meshbot",
     "validation": {
       "passwordRequired": "请输入密码",
       "emailInvalid": "邮箱格式不正确",
@@ -114,7 +117,25 @@
     },
     "loadFailed": "会话加载失败",
     "retry": "重试",
-    "sessionsEmpty": "暂无会话"
+    "sessionsEmpty": "暂无会话",
+    "assistantTitle": "助手",
+    "rail": {
+      "home": "主页",
+      "messages": "消息",
+      "assistant": "助手",
+      "more": "更多"
+    },
+    "search": { "placeholder": "搜索 meshbot" },
+    "userMenu": { "org": "组织", "settings": "设置", "logout": "退出登录" },
+    "placeholder": {
+      "homeTitle": "主页",
+      "homeBody": "全局概览即将上线 —— 未读消息、本地会话与活跃统计都会汇聚到这里。",
+      "messagesTitle": "消息",
+      "messagesBody": "与团队同事的实时会话即将上线。",
+      "moreTitle": "更多",
+      "moreBody": "文件、知识库等扩展能力即将上线。",
+      "goAssistant": "前往助手"
+    }
   },
   "orgSettings": {
     "noOrg": "你还没有加入任何组织",
@@ -174,6 +195,8 @@
     }
   },
   "session": {
+    "assistantName": "助手",
+    "youName": "你",
     "scrollToBottom": "滚动到底部",
     "generatingReply": "正在生成回复",
     "editPending": "编辑",
