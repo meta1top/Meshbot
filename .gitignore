@@ -63,3 +63,6 @@ apps/server-agent/.bundle/
 # skills CLI (npx skills add) 的本地缓存与 lockfile，不入库
 .agents/
 skills-lock.json
+
+# superpowers 头脑风暴可视化辅助的本地产物，不入库
+.superpowers/
