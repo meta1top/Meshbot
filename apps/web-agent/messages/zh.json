@@ -125,8 +125,14 @@
       "assistant": "助手",
       "more": "更多"
     },
-    "search": { "placeholder": "搜索 meshbot" },
-    "userMenu": { "org": "组织", "settings": "设置", "logout": "退出登录" },
+    "search": {
+      "placeholder": "搜索 meshbot"
+    },
+    "userMenu": {
+      "org": "组织",
+      "settings": "设置",
+      "logout": "退出登录"
+    },
     "placeholder": {
       "homeTitle": "主页",
       "homeBody": "全局概览即将上线 —— 未读消息、本地会话与活跃统计都会汇聚到这里。",
@@ -421,5 +427,16 @@
   "runAt": "",
   "prompt": "",
   "promptPlaceholder": "",
-  "save": ""
+  "save": "",
+  "rail": {
+    "home": "",
+    "messages": "",
+    "assistant": "",
+    "more": ""
+  },
+  "userMenu": {
+    "settings": "",
+    "org": "",
+    "logout": ""
+  }
 }

@@ -125,7 +125,9 @@
       "assistant": "Assistant",
       "more": "More"
     },
-    "search": { "placeholder": "Search meshbot" },
+    "search": {
+      "placeholder": "Search meshbot"
+    },
     "userMenu": {
       "org": "Organization",
       "settings": "Settings",
@@ -425,5 +427,16 @@
   "runAt": "",
   "prompt": "",
   "promptPlaceholder": "",
-  "save": ""
+  "save": "",
+  "rail": {
+    "home": "",
+    "messages": "",
+    "assistant": "",
+    "more": ""
+  },
+  "userMenu": {
+    "settings": "",
+    "org": "",
+    "logout": ""
+  }
 }
