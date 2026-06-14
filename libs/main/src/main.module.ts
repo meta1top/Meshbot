@@ -17,6 +17,7 @@ import { InvitationService } from "./services/invitation.service";
 import { MembershipService } from "./services/membership.service";
 import { MessageService } from "./services/message.service";
 import { OrgService } from "./services/org.service";
+import { PresenceService } from "./services/presence.service";
 import { UserService } from "./services/user.service";
 
 /**
@@ -64,6 +65,7 @@ export class MainModule {
         InvitationService,
         MessageService,
         ConversationService,
+        PresenceService,
         { provide: INVITATION_CONFIG, useValue: invitation },
       ],
       exports: [
@@ -73,6 +75,7 @@ export class MainModule {
         InvitationService,
         MessageService,
         ConversationService,
+        PresenceService,
       ],
     };
   }

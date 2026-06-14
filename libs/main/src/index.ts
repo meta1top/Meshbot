@@ -21,4 +21,5 @@ export {
 export { MembershipService } from "./services/membership.service";
 export { MessageService } from "./services/message.service";
 export { OrgService } from "./services/org.service";
+export { PresenceService } from "./services/presence.service";
 export { UserService } from "./services/user.service";

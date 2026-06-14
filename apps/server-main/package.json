@@ -18,6 +18,7 @@
     "@meshbot/types": "workspace:*",
     "@meshbot/types-main": "workspace:^",
     "@nest-lab/throttler-storage-redis": "^1.2.0",
+    "@nestjs/event-emitter": "^3.1.0",
     "@nestjs/common": "^11",
     "@nestjs/core": "^11",
     "@nestjs/jwt": "^11.0.2",
