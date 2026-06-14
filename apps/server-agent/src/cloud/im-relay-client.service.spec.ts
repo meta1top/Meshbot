@@ -211,6 +211,110 @@ describe("ImRelayClientService", () => {
 
       expect(cloudIdentityService.clear).toHaveBeenCalledTimes(1);
 
+      // svc already torn down by the auth handler; no need to disconnect again
+    });
+
+    it("auth connect_error → socket 被拆除（isConnected false，this.socket null）", async () => {
+      const socket = new FakeSocket();
+      const cloudIdentityService = {
+        get: jest
+          .fn()
+          .mockResolvedValue({ cloudToken: "stale", orgId: "org1" }),
+        clear: jest.fn().mockResolvedValue(undefined),
+      };
+      const emitter = new EventEmitter2();
+      const ioFactory = makeIoFactory(socket);
+      const svc = new ImRelayClientService(
+        cloudIdentityService as never,
+        emitter,
+        "http://cloud.test",
+        ioFactory as never,
+      );
+
+      await svc.connect();
+      expect(svc.isConnected()).toBe(true);
+
+      socket.simulateServerEvent("connect_error", new Error("unauthorized"));
+
+      // socket torn down: FakeSocket.disconnect() sets connected=false
+      expect(svc.isConnected()).toBe(false);
+      expect(socket.disconnected).toBe(true);
+    });
+
+    it("auth connect_error → 重新登录后 connect() 创建新 socket（无僵尸阻断）", async () => {
+      const socket1 = new FakeSocket();
+      const socket2 = new FakeSocket();
+      let callCount = 0;
+      const ioFactory = (_url: string, _opts: unknown): FakeSocket => {
+        callCount++;
+        const s = callCount === 1 ? socket1 : socket2;
+        s.connected = true;
+        return s;
+      };
+      const cloudIdentityService = {
+        get: jest.fn().mockResolvedValue({ cloudToken: "tok", orgId: "org1" }),
+        clear: jest.fn().mockResolvedValue(undefined),
+      };
+      const emitter = new EventEmitter2();
+      const svc = new ImRelayClientService(
+        cloudIdentityService as never,
+        emitter,
+        "http://cloud.test",
+        ioFactory as never,
+      );
+
+      // First connect
+      await svc.connect();
+      expect(callCount).toBe(1);
+
+      // Auth failure tears down socket
+      socket1.simulateServerEvent("connect_error", new Error("auth failed"));
+      expect(svc.isConnected()).toBe(false);
+
+      // Re-login: connect() should succeed and create a NEW socket
+      await svc.connect();
+      expect(callCount).toBe(2);
+      expect(svc.isConnected()).toBe(true);
+
+      svc.disconnect();
+    });
+
+    it("connect() 并发调用两次 → 只创建一个 socket", async () => {
+      let socketCreations = 0;
+      const socket = new FakeSocket();
+      // cloudIdentityService.get resolves after a microtask to expose the race
+      const cloudIdentityService = {
+        get: jest
+          .fn()
+          .mockImplementation(
+            () =>
+              new Promise((resolve) =>
+                setTimeout(
+                  () => resolve({ cloudToken: "tok", orgId: "org1" }),
+                  0,
+                ),
+              ),
+          ),
+        clear: jest.fn(),
+      };
+      const ioSpy = jest.fn((_url: string, _opts: unknown): FakeSocket => {
+        socketCreations++;
+        socket.connected = true;
+        return socket;
+      });
+      const emitter = new EventEmitter2();
+      const svc = new ImRelayClientService(
+        cloudIdentityService as never,
+        emitter,
+        "http://cloud.test",
+        ioSpy as never,
+      );
+
+      // Fire two concurrent connects
+      await Promise.all([svc.connect(), svc.connect()]);
+
+      expect(socketCreations).toBe(1);
+
       svc.disconnect();
     });
 
@@ -318,6 +422,20 @@ describe("ImRelayClientService", () => {
       const { svc } = makeService(null, null, socket);
       await svc.connect(); // no-op
       expect(svc.isConnected()).toBe(false);
+    });
+  });
+
+  describe("onModuleDestroy()", () => {
+    it("模块销毁时断开 socket 并清理定时器", async () => {
+      const socket = new FakeSocket();
+      const { svc } = makeService("tok", "org1", socket);
+      await svc.connect();
+      expect(svc.isConnected()).toBe(true);
+
+      svc.onModuleDestroy();
+
+      expect(svc.isConnected()).toBe(false);
+      expect(socket.disconnected).toBe(true);
     });
   });
 });

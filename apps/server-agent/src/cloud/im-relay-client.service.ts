@@ -1,7 +1,7 @@
 import { AppError } from "@meshbot/common";
 import { IM_WS_EVENTS, IM_WS_NAMESPACE } from "@meshbot/types";
 import type { ImReadInput, ImSendInput } from "@meshbot/types";
-import { Injectable } from "@nestjs/common";
+import { Injectable, type OnModuleDestroy } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { type Socket, io } from "socket.io-client";
@@ -28,9 +28,10 @@ const PING_INTERVAL_MS = 20_000;
  * - keepalive：连接后每 ~20s 发一次 `im.ping`，刷新服务端 presence TTL。
  */
 @Injectable()
-export class ImRelayClientService {
+export class ImRelayClientService implements OnModuleDestroy {
   private socket: Socket | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
+  private connecting = false;
 
   constructor(
     private readonly cloudIdentityService: CloudIdentityService,
@@ -50,59 +51,69 @@ export class ImRelayClientService {
    * 若未登录（无 cloudToken）或无活跃 org（orgId 为 null）→ 跳过，不建连接。
    */
   async connect(): Promise<void> {
-    if (this.socket) {
-      return; // 已连接，避免重复建立
+    if (this.socket || this.connecting) {
+      return; // 已连接或正在建连，避免重复建立
     }
+    this.connecting = true;
+    try {
+      const identity = await this.cloudIdentityService.get();
+      if (!identity?.cloudToken || !identity.orgId) {
+        return;
+      }
 
-    const identity = await this.cloudIdentityService.get();
-    if (!identity?.cloudToken || !identity.orgId) {
-      return;
+      const baseUrl =
+        typeof this.cloudWsUrl === "string"
+          ? this.cloudWsUrl
+          : this.cloudWsUrl.getOrThrow<string>("MESHBOT_CLOUD_URL");
+
+      const url = `${baseUrl}/${IM_WS_NAMESPACE}`;
+
+      const socket = this.ioFactory(url, {
+        auth: { token: identity.cloudToken },
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 10_000,
+      });
+
+      this.socket = socket;
+
+      // 下行事件 → 本地 EventEmitter2（Phase 3 钩子）
+      for (const event of [
+        IM_WS_EVENTS.message,
+        IM_WS_EVENTS.presence,
+        IM_WS_EVENTS.conversationCreated,
+      ] as const) {
+        socket.on(event, (payload: unknown) => {
+          this.emitter.emit(event, payload);
+        });
+      }
+
+      // connect_error：认证失败 → 先拆 socket 防僵尸/重连风暴，再清 cloud_identity
+      socket.on("connect_error", (err: Error) => {
+        const msg = err?.message?.toLowerCase() ?? "";
+        if (msg.includes("unauthorized") || msg.includes("auth")) {
+          this.disconnect();
+          void this.cloudIdentityService.clear();
+        }
+      });
+
+      // keepalive ping（unref 防止阻塞进程退出）
+      const timer = setInterval(() => {
+        if (this.socket?.connected) {
+          this.socket.emit("im.ping");
+        }
+      }, PING_INTERVAL_MS);
+      // biome-ignore lint/suspicious/noExplicitAny: NodeJS.Timeout has unref()
+      (timer as any).unref?.();
+      this.pingTimer = timer;
+    } finally {
+      this.connecting = false;
     }
+  }
 
-    const baseUrl =
-      typeof this.cloudWsUrl === "string"
-        ? this.cloudWsUrl
-        : this.cloudWsUrl.getOrThrow<string>("MESHBOT_CLOUD_URL");
-
-    const url = `${baseUrl}/${IM_WS_NAMESPACE}`;
-
-    const socket = this.ioFactory(url, {
-      auth: { token: identity.cloudToken },
-      reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 10_000,
-    }) as Socket;
-
-    this.socket = socket;
-
-    // 下行事件 → 本地 EventEmitter2（Phase 3 钩子）
-    socket.on(IM_WS_EVENTS.message, (payload: unknown) => {
-      this.emitter.emit(IM_WS_EVENTS.message, payload);
-    });
-    socket.on(IM_WS_EVENTS.presence, (payload: unknown) => {
-      this.emitter.emit(IM_WS_EVENTS.presence, payload);
-    });
-    socket.on(IM_WS_EVENTS.conversationCreated, (payload: unknown) => {
-      this.emitter.emit(IM_WS_EVENTS.conversationCreated, payload);
-    });
-
-    // connect_error：认证失败 → 清 cloud_identity（镜像 CloudClient 401 语义）
-    socket.on("connect_error", (err: Error) => {
-      const msg = err?.message?.toLowerCase() ?? "";
-      if (msg.includes("unauthorized") || msg.includes("auth")) {
-        void this.cloudIdentityService.clear();
-      }
-    });
-
-    // keepalive ping（unref 防止阻塞进程退出）
-    const timer = setInterval(() => {
-      if (this.socket?.connected) {
-        this.socket.emit("im.ping");
-      }
-    }, PING_INTERVAL_MS);
-    // biome-ignore lint/suspicious/noExplicitAny: NodeJS.Timeout has unref()
-    (timer as any).unref?.();
-    this.pingTimer = timer;
+  /** NestJS 模块销毁时自动清理 socket 和定时器。 */
+  onModuleDestroy(): void {
+    this.disconnect();
   }
 
   /** 断开并清理连接（登出时调用）。 */
