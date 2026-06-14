@@ -2,9 +2,11 @@
 
 import { cn } from "@meshbot/design";
 import type { MessageUsage } from "@meshbot/types-agent";
-import { ChevronRight } from "lucide-react";
+import { useAtomValue } from "jotai";
+import { ChevronRight, Sparkles } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
+import { currentUserAtom } from "@/atoms/auth";
 import { AssistantMessageActions } from "./assistant-message-actions";
 import { CompactionRow } from "./compaction-row";
 import { MarkdownContent } from "./markdown-content";
@@ -75,11 +77,11 @@ interface MessageListProps {
 }
 
 /**
- * 会话消息时间线。user 右对齐（浅 primary 色块），assistant 左对齐（无背景，文档化）。
+ * 会话消息时间线。Slack 行式：头像 + 名字 + 左对齐内容。
  *
  * 设计原则：
  * - 全局 radius=0（直角），由 design token 强制；
- * - user 消息用浅色 primary 块强调输入；
+ * - 每条消息以 7×7 头像块 + 粗体名字开头，内容左对齐；
  * - assistant 消息无背景，靠对齐 + 间距区分，避免大色块视觉重量；
  * - reasoning 区无背景，用左侧细竖线低调表示「思考」是从属过程。
  */
@@ -90,8 +92,13 @@ export function MessageList({
   onRegenerateOptimisticCut,
   usageByMessage,
 }: MessageListProps) {
+  const t = useTranslations("session");
+  const user = useAtomValue(currentUserAtom);
+  const userName = user?.displayName ?? user?.email ?? t("youName");
+  const userInitial = userName.charAt(0).toUpperCase();
+  const assistantName = t("assistantName");
   return (
-    <div className="flex flex-col gap-8 pb-6">
+    <div className="flex flex-col gap-5 pb-6">
       {messages
         .filter(
           (m) => !(m.role === "system" && m.metadata?.kind !== "compaction"),
@@ -108,94 +115,96 @@ export function MessageList({
             );
           }
           return (
-            <div
-              key={m.id}
-              className={cn(
-                "group relative flex flex-col gap-3",
-                // assistant 固定宽 80%：避免表格 / 长行内容触发容器宽度跳动；
-                // user 保持 max-w-[80%] 让气泡贴右沿、按内容自适应
-                m.role === "user"
-                  ? "max-w-[80%] self-end items-end"
-                  : "w-[80%] self-start",
-              )}
-            >
-              {m.role === "assistant" && m.reasoning ? (
-                <ReasoningBlock
-                  text={m.reasoning}
-                  startedAt={m.reasoningStartedAt}
-                  durationMs={m.reasoningDurationMs}
-                  streaming={m.streaming}
-                />
-              ) : null}
-              {/*
-              气泡仅在「有可见正文 / loading / streaming / failed」时出现。
-              中间决策轮（仅 reasoning + toolCalls、content 空）不出气泡 —— 否则
-              空 div 也算 flex gap-2 一个 item，让「思考过程 ↔ tool 块」之间多一段空白。
-              toolCalls 自身有独立块（下方渲染），不靠这里撑场。
-            */}
-              {(m.role === "user" ||
-                m.content ||
-                m.loading ||
-                m.streaming ||
-                m.failed) && (
-                <div
-                  className={cn(
-                    "text-sm leading-relaxed",
-                    m.role === "user"
-                      ? cn(
-                          "px-3.5 py-2 text-foreground whitespace-pre-wrap",
-                          m.failed ? "bg-destructive/8" : "bg-foreground/8",
-                        )
-                      : "text-foreground",
-                  )}
-                >
-                  {m.loading ? (
-                    <TypingDots />
-                  ) : m.role === "assistant" ? (
-                    <MarkdownContent text={m.content} streaming={m.streaming} />
-                  ) : (
-                    <>
-                      {m.content}
-                      {m.streaming && (
-                        <span className="ml-0.5 inline-block w-[2px] animate-pulse bg-muted-foreground/60 align-middle">
-                          &nbsp;
-                        </span>
-                      )}
-                    </>
-                  )}
+            <div key={m.id} className="group relative flex gap-3">
+              {m.role === "user" ? (
+                <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] bg-[#16a34a] text-[12px] font-semibold text-white">
+                  {userInitial}
+                </div>
+              ) : (
+                <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] bg-(--shell-accent) text-white">
+                  <Sparkles className="h-4 w-4" />
                 </div>
               )}
-              {m.role === "assistant" &&
-                m.toolCalls &&
-                m.toolCalls.length > 0 && (
-                  <div className="flex flex-col gap-2">
-                    {m.toolCalls.map((tc) => (
-                      <ToolCallBlock key={tc.toolCallId} tool={tc} />
-                    ))}
+              <div className="min-w-0 flex-1">
+                <div className="mb-1 text-[13px] font-bold text-foreground">
+                  {m.role === "user" ? userName : assistantName}
+                </div>
+                {m.role === "assistant" && m.reasoning ? (
+                  <ReasoningBlock
+                    text={m.reasoning}
+                    startedAt={m.reasoningStartedAt}
+                    durationMs={m.reasoningDurationMs}
+                    streaming={m.streaming}
+                  />
+                ) : null}
+                {/*
+                气泡仅在「有可见正文 / loading / streaming / failed」时出现。
+                中间决策轮（仅 reasoning + toolCalls、content 空）不出气泡 —— 否则
+                空 div 也算 flex gap-2 一个 item，让「思考过程 ↔ tool 块」之间多一段空白。
+                toolCalls 自身有独立块（下方渲染），不靠这里撑场。
+              */}
+                {(m.role === "user" ||
+                  m.content ||
+                  m.loading ||
+                  m.streaming ||
+                  m.failed) && (
+                  <div
+                    className={cn(
+                      "text-sm leading-relaxed text-foreground",
+                      m.failed && "text-destructive",
+                    )}
+                  >
+                    {m.loading ? (
+                      <TypingDots />
+                    ) : m.role === "assistant" ? (
+                      <MarkdownContent
+                        text={m.content}
+                        streaming={m.streaming}
+                      />
+                    ) : (
+                      <span className="whitespace-pre-wrap">
+                        {m.content}
+                        {m.streaming && (
+                          <span className="ml-0.5 inline-block w-[2px] animate-pulse bg-muted-foreground/60 align-middle">
+                            &nbsp;
+                          </span>
+                        )}
+                      </span>
+                    )}
                   </div>
                 )}
-              {m.role === "assistant" &&
-                m.content &&
-                !m.streaming &&
-                !(m.toolCalls && m.toolCalls.length > 0) && (
-                  <AssistantMessageActions
+                {m.role === "assistant" &&
+                  m.toolCalls &&
+                  m.toolCalls.length > 0 && (
+                    <div className="flex flex-col gap-2">
+                      {m.toolCalls.map((tc) => (
+                        <ToolCallBlock key={tc.toolCallId} tool={tc} />
+                      ))}
+                    </div>
+                  )}
+                {m.role === "assistant" &&
+                  m.content &&
+                  !m.streaming &&
+                  !(m.toolCalls && m.toolCalls.length > 0) && (
+                    <AssistantMessageActions
+                      sessionId={sessionId}
+                      messageId={m.id}
+                      content={m.content}
+                      usage={usageByMessage?.[m.id]}
+                      feedback={m.feedback}
+                    />
+                  )}
+                {m.role === "user" && (
+                  <UserMessageActions
                     sessionId={sessionId}
                     messageId={m.id}
                     content={m.content}
-                    usage={usageByMessage?.[m.id]}
-                    feedback={m.feedback}
+                    failed={m.failed}
+                    running={running}
+                    onOptimisticCut={() => onRegenerateOptimisticCut(m.id)}
                   />
                 )}
-              {m.role === "user" && (
-                <UserMessageActions
-                  sessionId={sessionId}
-                  messageId={m.id}
-                  content={m.content}
-                  failed={m.failed}
-                  running={running}
-                  onOptimisticCut={() => onRegenerateOptimisticCut(m.id)}
-                />
-              )}
+              </div>
             </div>
           );
         })}
