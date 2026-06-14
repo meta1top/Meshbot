@@ -10,6 +10,7 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { I18nJsonLoader, I18nModule, I18nService } from "nestjs-i18n";
 import request from "supertest";
 import { CloudClientService } from "../../src/cloud/cloud-client.service";
+import { ImRelayClientService } from "../../src/cloud/im-relay-client.service";
 import { AuthController } from "../../src/controllers/auth.controller";
 import { CloudIdentity } from "../../src/entities/cloud-identity.entity";
 import { JwtAuthGuard } from "../../src/guards/jwt-auth.guard";
@@ -64,6 +65,17 @@ describe("Auth profile e2e（云端代理）", () => {
         CloudAuthService,
         JwtStrategy,
         { provide: CloudClientService, useValue: cloudStub },
+        // C3 给 CloudAuthService 加了 ImRelayClientService 依赖；本 e2e 不演练 IM，桩掉即可
+        {
+          provide: ImRelayClientService,
+          useValue: {
+            connect: jest.fn(),
+            disconnect: jest.fn(),
+            send: jest.fn(),
+            read: jest.fn(),
+            isConnected: () => false,
+          },
+        },
         { provide: APP_GUARD, useClass: JwtAuthGuard },
       ],
     }).compile();
