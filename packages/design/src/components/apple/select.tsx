@@ -27,7 +27,7 @@ const SelectTrigger = React.forwardRef<
   <UiSelectTrigger
     ref={ref}
     className={cn(
-      "h-10 rounded-none border-input bg-card text-[14px] shadow-none transition-[border-color,box-shadow] duration-150 hover:border-muted-foreground/40 focus:ring-2 focus:ring-ring/25 focus:ring-offset-0",
+      "h-10 rounded-md border-input bg-card text-[14px] shadow-none transition-[border-color,box-shadow] duration-150 hover:border-muted-foreground/40 focus:ring-2 focus:ring-ring/25 focus:ring-offset-0",
       className,
     )}
     {...props}
@@ -42,7 +42,7 @@ const SelectContent = React.forwardRef<
   <UiSelectContent
     ref={ref}
     className={cn(
-      "rounded-none border-border bg-popover shadow-[0_8px_24px_-16px_rgba(0,0,0,0.2)] dark:shadow-[0_8px_24px_-16px_rgba(0,0,0,0.5)]",
+      "rounded-md border-border bg-popover shadow-[0_8px_24px_-16px_rgba(0,0,0,0.2)] dark:shadow-[0_8px_24px_-16px_rgba(0,0,0,0.5)]",
       className,
     )}
     {...props}
@@ -57,7 +57,7 @@ const SelectItem = React.forwardRef<
   <UiSelectItem
     ref={ref}
     className={cn(
-      "rounded-none py-2 transition-colors focus:bg-accent",
+      "rounded-md py-2 transition-colors focus:bg-accent",
       className,
     )}
     {...props}

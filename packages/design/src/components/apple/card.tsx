@@ -18,7 +18,7 @@ const Card = React.forwardRef<HTMLDivElement, CardProps>(
       <UiCard
         ref={ref}
         className={cn(
-          "rounded-none border border-border bg-card shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)]",
+          "rounded-lg border border-border bg-card shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)]",
           className,
         )}
         {...props}
