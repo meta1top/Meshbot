@@ -223,7 +223,11 @@ export default function ModelForm({
           </Alert>
         )}
 
-        <Button type="submit" className="mt-2" disabled={submitting}>
+        <Button
+          type="submit"
+          className="mt-2 bg-(--shell-accent) text-white hover:opacity-90"
+          disabled={submitting}
+        >
           {submitting ? t("saving") : t("saveAndStart")}
         </Button>
       </form>

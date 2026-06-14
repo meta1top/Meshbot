@@ -173,7 +173,7 @@ export default function SetupPage() {
 
   return (
     <AuthShellLayout>
-      <div className={cn("w-full max-w-[500px]")}>
+      <div className={cn("w-full max-w-[420px]")}>
         <div className="pr-1">
           <span className="mb-4 inline-flex items-center rounded-md border border-border bg-card px-2.5 py-1 text-[11px] font-semibold tracking-[0.08em] text-muted-foreground">
             {t("getStarted")}
@@ -277,7 +277,7 @@ export default function SetupPage() {
 
                     <Button
                       type="submit"
-                      className="mt-1"
+                      className="mt-1 bg-(--shell-accent) text-white hover:opacity-90"
                       disabled={registerMutation.isPending}
                     >
                       {registerMutation.isPending

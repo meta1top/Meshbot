@@ -94,7 +94,11 @@ export function OrgStep({ onDone }: { onDone: () => void }) {
                 </AlertDescription>
               </Alert>
             ) : null}
-            <Button type="submit" disabled={createOrg.isPending}>
+            <Button
+              type="submit"
+              className="bg-(--shell-accent) text-white hover:opacity-90"
+              disabled={createOrg.isPending}
+            >
               {createOrg.isPending
                 ? t("orgCreating")
                 : t("orgCreateAndContinue")}
@@ -119,7 +123,11 @@ export function OrgStep({ onDone }: { onDone: () => void }) {
                 </AlertDescription>
               </Alert>
             ) : null}
-            <Button type="submit" disabled={joinOrg.isPending}>
+            <Button
+              type="submit"
+              className="bg-(--shell-accent) text-white hover:opacity-90"
+              disabled={joinOrg.isPending}
+            >
               {joinOrg.isPending ? t("orgJoining") : t("orgJoinAndContinue")}
             </Button>
           </Form>
