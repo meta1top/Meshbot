@@ -51,14 +51,14 @@ export default function OrgSettingsPage() {
 
   if (!org) {
     return (
-      <AppShellLayout>
+      <AppShellLayout sidebar={null}>
         <div className="p-6 text-sm text-muted-foreground">{t("noOrg")}</div>
       </AppShellLayout>
     );
   }
 
   return (
-    <AppShellLayout>
+    <AppShellLayout sidebar={null}>
       <div className="mx-auto flex w-full max-w-[680px] flex-col gap-6 p-6">
         <Card>
           <CardHeader>

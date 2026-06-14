@@ -29,7 +29,7 @@ export default function LoginPage() {
   const onSubmit = async (values: LoginInput) => {
     try {
       await loginMutation.mutateAsync(values);
-      router.push("/");
+      router.push("/assistant");
     } catch {
       // error is available via loginMutation.error
     }

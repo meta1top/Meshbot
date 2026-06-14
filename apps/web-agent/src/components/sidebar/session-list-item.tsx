@@ -96,7 +96,7 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
       // 成功才关 dialog；失败留着让用户看到状态（atom 内已回滚列表，dialog
       // 显示「请重试或取消」由用户决定）。
       setConfirmOpen(false);
-      if (active) router.push("/");
+      if (active) router.push("/assistant");
     } catch {
       // atom 内已回滚
     } finally {

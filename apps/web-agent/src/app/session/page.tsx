@@ -190,7 +190,7 @@ function SessionView() {
 
   useEffect(() => {
     if (!sessionId) {
-      router.replace("/");
+      router.replace("/assistant");
       return;
     }
     // 切换 session：清空上一轮 timeline + inflight 状态 + usage 累计。否则

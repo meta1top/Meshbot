@@ -168,7 +168,7 @@ export default function SetupPage() {
   const handleModelSubmit = async (data: ModelConfigInput) => {
     await createModelMutation.mutateAsync(data);
     await queryClient.invalidateQueries({ queryKey: ["auth", "status"] });
-    router.push("/");
+    router.push("/assistant");
   };
 
   return (
