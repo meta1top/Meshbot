@@ -118,7 +118,7 @@ pre code.hljs {
   --shell-sidebar: #342a20;
   --shell-content: #ffffff;
   --shell-accent: #d24a0d;
-  --shell-radius: 0.625rem;
+  --shell-radius: 0.5rem;
 }
 
 .drag-region,
