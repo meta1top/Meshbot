@@ -32,6 +32,7 @@ export function ImSidebar() {
   const [dmPickerOpen, setDmPickerOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const submittingRef = useRef(false);
 
   const channels = conversations.filter((c) => c.type === "channel");
   const dms = conversations.filter((c) => c.type === "dm");
@@ -63,13 +64,22 @@ export function ImSidebar() {
     router.push(`/messages?id=${id}`);
   }
 
+  // 关闭内联输入并清空名称（取消路径，不会创建频道）
+  function cancelChannel() {
+    setCreatingChannel(false);
+    setChannelName("");
+  }
+
+  // 提交路径：仅由 Enter 触发。空名直接取消；非空才创建频道。
+  // submittingRef 同步置位防重入，避免任何残留的二次提交（如 finally 移除输入后再触发）。
   async function submitChannel() {
+    if (submittingRef.current) return;
     const name = channelName.trim();
     if (!name) {
-      setCreatingChannel(false);
-      setChannelName("");
+      cancelChannel();
       return;
     }
+    submittingRef.current = true;
     try {
       const conv = await createChannel(name);
       upsertConversation(conv);
@@ -77,8 +87,8 @@ export function ImSidebar() {
     } catch {
       // swallow — user can retry
     } finally {
-      setCreatingChannel(false);
-      setChannelName("");
+      submittingRef.current = false;
+      cancelChannel();
     }
   }
 
@@ -144,13 +154,16 @@ export function ImSidebar() {
                 value={channelName}
                 onChange={(e) => setChannelName(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") void submitChannel();
-                  if (e.key === "Escape") {
-                    setCreatingChannel(false);
-                    setChannelName("");
+                  // IME 组合期间（中文/日文/韩文输入法未确认）不拦截 Enter，
+                  // 让 IME 自己用回车 confirm 候选词。
+                  if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void submitChannel();
                   }
+                  if (e.key === "Escape") cancelChannel();
                 }}
-                onBlur={() => void submitChannel()}
+                onBlur={cancelChannel}
                 placeholder={t("channelNamePlaceholder")}
                 className="min-w-0 flex-1 bg-transparent text-[13px] text-white outline-none placeholder:text-white/40"
               />

@@ -32,7 +32,11 @@ export function DmPicker({ open, onClose, onNavigate }: DmPickerProps) {
 
   if (!open) return null;
 
-  const others = members.filter((m) => m.userId !== currentUser?.id);
+  // currentUser 为 null（鉴权加载中/失效）时，m.userId !== undefined 恒为 true，
+  // 自身会出现在自己的 DM 列表里。仅在 currentUser 存在时计算列表，确保永不列出自身。
+  const others = currentUser
+    ? members.filter((m) => m.userId !== currentUser.id)
+    : [];
 
   async function handleSelect(userId: string) {
     if (pending) return;
@@ -94,7 +98,7 @@ export function DmPicker({ open, onClose, onNavigate }: DmPickerProps) {
             <button
               key={m.userId}
               type="button"
-              disabled={pending === m.userId}
+              disabled={pending !== null}
               onClick={() => void handleSelect(m.userId)}
               className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-[13px] text-foreground transition-colors hover:bg-muted disabled:opacity-50"
             >

@@ -19,7 +19,9 @@ export function ImConversationHeader() {
 
   const isChannel = conv.type === "channel";
   const peerId = conv.peer?.userId ?? "";
-  const online = !isChannel && (presence[peerId] ?? false);
+  // peerId 为空字符串（peer 为 null）时，presence[""] 可能误判为在线，
+  // 故仅在 peerId 非空时读取在线状态。
+  const online = !isChannel && peerId !== "" && (presence[peerId] ?? false);
   const name = isChannel
     ? (conv.name ?? "")
     : (conv.peer?.displayName ?? conv.name ?? "");
