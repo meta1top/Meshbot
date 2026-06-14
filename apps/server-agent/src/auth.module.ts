@@ -1,10 +1,12 @@
 import { TxTypeOrmModule } from "@meshbot/common";
 import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { JwtModule } from "@nestjs/jwt";
 import { PassportModule } from "@nestjs/passport";
 
 import { CloudClientService } from "./cloud/cloud-client.service";
+import { ImRelayClientService } from "./cloud/im-relay-client.service";
 import { AuthController } from "./controllers/auth.controller";
 import { CloudOrgController } from "./controllers/cloud-org.controller";
 import { CloudIdentity } from "./entities/cloud-identity.entity";
@@ -38,7 +40,22 @@ import { JWT_SECRET, JwtStrategy } from "./strategies/jwt.strategy";
         return client;
       },
     },
+    {
+      provide: ImRelayClientService,
+      inject: [ConfigService, CloudIdentityService, EventEmitter2],
+      useFactory: (
+        config: ConfigService,
+        identity: CloudIdentityService,
+        emitter: EventEmitter2,
+      ) => new ImRelayClientService(identity, emitter, config),
+    },
   ],
-  exports: [CloudIdentityService, CloudAuthService, JwtModule],
+  exports: [
+    CloudIdentityService,
+    CloudAuthService,
+    CloudClientService,
+    ImRelayClientService,
+    JwtModule,
+  ],
 })
 export class AuthModule {}

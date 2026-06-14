@@ -26,6 +26,7 @@ import {
 } from "nestjs-i18n";
 import { AuthModule } from "./auth.module";
 import { CronJobModule } from "./cron-job.module";
+import { ImModule } from "./im.module";
 import { HealthController } from "./controllers/health.controller";
 import { ModelConfigController } from "./controllers/model-config.controller";
 import { SettingController } from "./controllers/setting.controller";
@@ -113,6 +114,7 @@ const meshbotDir = resolveMeshbotDir();
     CronJobModule,
     SessionModule,
     AuthModule,
+    ImModule,
     StaticModule.forRoot(),
   ],
   controllers: [

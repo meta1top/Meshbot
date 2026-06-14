@@ -18,10 +18,12 @@ describe("CloudAuthService.login", () => {
     const identity = { upsert: jest.fn().mockResolvedValue(undefined) };
     const jwt = { sign: jest.fn().mockReturnValue("local-jwt") };
 
+    const imRelay = { connect: jest.fn().mockResolvedValue(undefined) };
     const svc = new CloudAuthService(
       cloud as never,
       identity as never,
       jwt as never,
+      imRelay as never,
     );
     const out = await svc.login({ email: "a@x.io", password: "p" });
 
@@ -48,6 +50,7 @@ describe("CloudAuthService.login", () => {
     const svc = new CloudAuthService(
       {} as never,
       { get: jest.fn().mockResolvedValue(null) } as never,
+      {} as never,
       {} as never,
     );
     await expect(svc.getProfile()).rejects.toMatchObject({

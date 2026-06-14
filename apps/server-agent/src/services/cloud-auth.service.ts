@@ -3,6 +3,7 @@ import { Injectable } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 
 import { CloudClientService } from "../cloud/cloud-client.service";
+import { ImRelayClientService } from "../cloud/im-relay-client.service";
 import type { CloudAuthData, CloudProfileData } from "../cloud/cloud.types";
 import { AgentErrorCode } from "../errors/agent.error-codes";
 import { CloudIdentityService } from "./cloud-identity.service";
@@ -39,6 +40,7 @@ export class CloudAuthService {
     private readonly cloud: CloudClientService,
     private readonly identity: CloudIdentityService,
     private readonly jwt: JwtService,
+    private readonly imRelay: ImRelayClientService,
   ) {}
 
   /** 代理云端注册，成功后写镜像并签本地 JWT。 */
@@ -50,10 +52,12 @@ export class CloudAuthService {
     return this.afterCloudAuth(auth);
   }
 
-  /** 代理云端登录，成功后写镜像并签本地 JWT。 */
+  /** 代理云端登录，成功后写镜像并签本地 JWT，并建立 IM 中继连接。 */
   async login(input: Credentials): Promise<LocalTokenResponse> {
     const auth = await this.cloud.post<CloudAuthData>("/api/auth/login", input);
-    return this.afterCloudAuth(auth);
+    const result = await this.afterCloudAuth(auth);
+    void this.imRelay.connect();
+    return result;
   }
 
   /**
@@ -62,6 +66,7 @@ export class CloudAuthService {
    * 代理端点立即 401，纯本地路由在 JWT 剩余有效期内仍可用（单机桌面可接受）。
    */
   async logout(): Promise<void> {
+    this.imRelay.disconnect();
     await this.identity.clear();
   }
 

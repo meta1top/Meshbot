@@ -1,7 +1,11 @@
 import { AppError } from "@meshbot/common";
 import { IM_WS_EVENTS, IM_WS_NAMESPACE } from "@meshbot/types";
 import type { ImReadInput, ImSendInput } from "@meshbot/types";
-import { Injectable, type OnModuleDestroy } from "@nestjs/common";
+import {
+  Injectable,
+  type OnModuleDestroy,
+  type OnModuleInit,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { type Socket, io } from "socket.io-client";
@@ -28,7 +32,7 @@ const PING_INTERVAL_MS = 20_000;
  * - keepalive：连接后每 ~20s 发一次 `im.ping`，刷新服务端 presence TTL。
  */
 @Injectable()
-export class ImRelayClientService implements OnModuleDestroy {
+export class ImRelayClientService implements OnModuleInit, OnModuleDestroy {
   private socket: Socket | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private connecting = false;
@@ -109,6 +113,14 @@ export class ImRelayClientService implements OnModuleDestroy {
     } finally {
       this.connecting = false;
     }
+  }
+
+  /**
+   * NestJS 模块初始化时自动尝试连接（启动即连）。
+   * 若未登录或无活跃 org，connect() 内部静默跳过，safe to call unconditionally。
+   */
+  onModuleInit(): void {
+    void this.connect();
   }
 
   /** NestJS 模块销毁时自动清理 socket 和定时器。 */
