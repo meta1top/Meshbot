@@ -67,9 +67,7 @@ export function UserMessageActions({
   return (
     <div
       className={cn(
-        // 绝对定位贴在气泡左外侧、垂直居中。不占布局高度，避免连续 user
-        // 消息时每条都多出 ~38px 间距，跟 ChatGPT / Claude.ai 一致。
-        "absolute top-1/2 right-full mr-1.5 -translate-y-1/2 flex items-center gap-1.5 transition-opacity",
+        "mt-1 flex gap-1 transition-opacity",
         failed ? "opacity-100" : "opacity-0 group-hover:opacity-100",
       )}
     >

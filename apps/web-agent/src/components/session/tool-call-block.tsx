@@ -28,11 +28,11 @@ export function ToolCallBlock({ tool }: { tool: ToolCallView }) {
         ? "bg-destructive"
         : "bg-muted-foreground/40";
   return (
-    <div className="flex w-full flex-col">
+    <div className="flex w-full flex-col rounded-[8px] border border-border overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="group -mx-1.5 flex w-full items-center gap-2 px-1.5 py-1 text-left text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+        className="group flex w-full items-center gap-2 bg-muted/40 px-2.5 py-1.5 text-left text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground"
         aria-expanded={open}
       >
         <span
@@ -64,7 +64,7 @@ export function ToolCallBlock({ tool }: { tool: ToolCallView }) {
         />
       </button>
       {open && (
-        <div className="mt-2 ml-[3px] flex flex-col gap-3 border-l border-border pl-3">
+        <div className="flex flex-col gap-3 px-2.5 py-2">
           <ToolSection label="请求">
             <pre className="overflow-auto whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-foreground">
               {argsJson}
