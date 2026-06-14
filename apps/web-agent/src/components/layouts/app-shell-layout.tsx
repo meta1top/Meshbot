@@ -1,228 +1,85 @@
 "use client";
 
 import { cn } from "@meshbot/design";
-import {
-  SESSION_WS_EVENTS,
-  type SessionTitleUpdatedEvent,
-} from "@meshbot/types-agent";
-import { useTheme } from "@meshbot/web-common/react";
-import { useAtomValue, useSetAtom } from "jotai";
-import { Clock, LogOut, Moon, Plus, Sun, Users } from "lucide-react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useState } from "react";
-import {
-  loadSessionsAtom,
-  pinnedSessionsAtom,
-  recentSessionsAtom,
-  reloadSessionsAtom,
-  sessionsStatusAtom,
-  updateSessionTitleAtom,
-} from "@/atoms/sessions";
-import { SidebarNavItem } from "@/components/common/sidebar-nav-item";
+import { type ReactNode, useEffect } from "react";
 import { DragRegion } from "@/components/drag-region";
-import { LanguageToggle } from "@/components/language-toggle";
-import { SessionListSection } from "@/components/sidebar/session-list-section";
-import { SessionListSkeleton } from "@/components/sidebar/session-list-skeleton";
-import { getSessionSocket } from "@/lib/socket";
-import { useLogout } from "@/rest/auth";
+import { AssistantSidebar } from "@/components/shell/assistant-sidebar";
+import { PlaceholderSidebar } from "@/components/shell/placeholder-sidebar";
+import { ShellTopBar } from "@/components/shell/shell-top-bar";
+import { areaFromPath, WorkspaceRail } from "@/components/shell/workspace-rail";
 
 interface AppShellLayoutProps {
-  children: React.ReactNode;
+  children: ReactNode;
   className?: string;
   /** 暴露内部滚动容器 ref，供子页面读取/操作 scrollTop（如分页锚定）。 */
   scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
+  /** 侧栏覆盖：undefined=按区自动选；null=不渲染侧栏（设置页用）。 */
+  sidebar?: ReactNode | null;
 }
 
 export function AppShellLayout({
   children,
   className,
   scrollContainerRef,
+  sidebar,
 }: AppShellLayoutProps) {
-  const router = useRouter();
-  const { theme, toggleTheme } = useTheme();
-  const t = useTranslations("appShell");
-  const commonT = useTranslations("common");
   const pathname = usePathname();
-  const isNewSessionActive = pathname === "/";
-  const isScheduledActive = pathname === "/schedule";
-  const isOrgActive = pathname === "/settings/org";
-  const logoutMutation = useLogout();
-  const [isMac, setIsMac] = useState(false);
-
-  const pinned = useAtomValue(pinnedSessionsAtom);
-  const recent = useAtomValue(recentSessionsAtom);
-  const status = useAtomValue(sessionsStatusAtom);
-  const loadSessions = useSetAtom(loadSessionsAtom);
-  const reload = useSetAtom(reloadSessionsAtom);
-  const updateSessionTitle = useSetAtom(updateSessionTitleAtom);
-
-  useEffect(() => {
-    void loadSessions();
-  }, [loadSessions]);
-
-  useEffect(() => {
-    const socket = getSessionSocket();
-    const onTitleUpdated = (e: SessionTitleUpdatedEvent) => {
-      updateSessionTitle({ id: e.sessionId, title: e.title });
-    };
-    // 重连后从服务端 re-pull 一次 list，补齐断连期间错过的 title_updated 事件
-    // （gateway 是 fire-and-forget，不会 replay 历史事件）。首次 connect 也会触发，
-    // 但 loadSessions / reloadSessions 是 cheap GET，可以接受。
-    const onConnect = () => {
-      void reload();
-    };
-    socket.on(SESSION_WS_EVENTS.titleUpdated, onTitleUpdated);
-    socket.on("connect", onConnect);
-    return () => {
-      socket.off(SESSION_WS_EVENTS.titleUpdated, onTitleUpdated);
-      socket.off("connect", onConnect);
-    };
-  }, [updateSessionTitle, reload]);
+  const t = useTranslations("appShell");
+  const area = areaFromPath(pathname);
 
   useEffect(() => {
     document.body.classList.add("app-shell-mode");
-    const api = (window as unknown as { electronAPI?: { platform?: string } })
-      .electronAPI;
-    if (api?.platform === "darwin") {
-      setIsMac(true);
-    }
-    return () => {
-      document.body.classList.remove("app-shell-mode");
-    };
+    return () => document.body.classList.remove("app-shell-mode");
   }, []);
 
-  const handleLogout = useCallback(async () => {
-    // 先服务端登出（endpoint 需要 Bearer）；云端不可达也照样本地登出
-    // （useLogout 的 onSettled 会清 token + 失效 profile / auth-status 缓存）。
-    await logoutMutation.mutateAsync().catch(() => {});
-    router.replace("/login");
-  }, [logoutMutation.mutateAsync, router]);
+  const autoSidebar =
+    area === "assistant" ? (
+      <AssistantSidebar />
+    ) : area === "messages" ? (
+      <PlaceholderSidebar title={t("rail.messages")} />
+    ) : area === "more" ? (
+      <PlaceholderSidebar title={t("rail.more")} />
+    ) : area === "home" ? (
+      <PlaceholderSidebar title={t("rail.home")} />
+    ) : null;
+  const resolvedSidebar = sidebar === undefined ? autoSidebar : sidebar;
 
   return (
-    <main className="titlebar-safe h-screen bg-background text-foreground">
+    <main className="titlebar-safe flex h-screen flex-col bg-[var(--shell-chrome)] text-foreground">
+      {/* 保留 DragRegion：Electron Linux 窗口控制按钮 + macOS 安全区由它承载 */}
       <DragRegion />
-      <div className="flex h-full">
-        <aside className="hidden w-[246px] shrink-0 px-1.5 py-1.5 lg:flex lg:flex-col">
-          <div
+      <ShellTopBar />
+      <div className="flex min-h-0 flex-1">
+        <WorkspaceRail />
+        <div className="flex min-h-0 flex-1 pr-1.5 pb-1.5">
+          {resolvedSidebar && (
+            <aside className="hidden w-[240px] shrink-0 overflow-hidden rounded-l-[var(--shell-radius)] lg:block">
+              {resolvedSidebar}
+            </aside>
+          )}
+          <section
             className={cn(
-              "flex h-full flex-col border border-border bg-muted px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]",
-              isMac && "rounded-l-[12px]",
+              "relative flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--shell-content)]",
+              resolvedSidebar
+                ? "rounded-r-[var(--shell-radius)]"
+                : "rounded-[var(--shell-radius)]",
             )}
           >
-            {isMac && <div className="app-mac-controls-safe-left mb-2 h-8" />}
-            <nav className="space-y-0.5">
-              <SidebarNavItem
-                icon={<Plus className="h-4 w-4" />}
-                active={isNewSessionActive}
-                onClick={() => router.push("/")}
-              >
-                {t("newSession")}
-              </SidebarNavItem>
-              <SidebarNavItem
-                icon={<Clock className="h-4 w-4" />}
-                active={isScheduledActive}
-                onClick={() => router.push("/schedule")}
-              >
-                {t("scheduled")}
-              </SidebarNavItem>
-              <SidebarNavItem
-                icon={<Users className="h-4 w-4" />}
-                active={isOrgActive}
-                onClick={() => router.push("/settings/org")}
-              >
-                {t("org")}
-              </SidebarNavItem>
-            </nav>
-
-            {/*
-              会话列表区域：flex-1 + min-h-0 让它在 aside 里占满剩余空间但不撑高，
-              overflow-y-auto 让超出时内部滚动；外面的 nav 顶 / logout 底保持可见。
-              -mx-2.5 + px-2.5 抵消滚动条裁切感（让 hover bg 仍能贴边）。
-            */}
-            <div className="-mx-2.5 mt-1 flex min-h-0 flex-1 flex-col overflow-y-auto px-2.5">
-              {pinned.length > 0 && (
-                <SessionListSection title={t("pinned")} sessions={pinned} />
+            <div
+              ref={scrollContainerRef}
+              className={cn(
+                "flex min-h-0 flex-1 flex-col overflow-y-auto",
+                className,
               )}
-
-              {status === "loading" ? (
-                <div className="mt-5">
-                  <div className="px-2 text-[12px] font-medium text-muted-foreground">
-                    {t("sessions")}
-                  </div>
-                  <SessionListSkeleton />
-                </div>
-              ) : status === "error" ? (
-                <div className="mt-5 px-2 text-xs text-destructive">
-                  {t("loadFailed")}{" "}
-                  <button
-                    type="button"
-                    onClick={() => void reload()}
-                    className="underline hover:text-destructive/80"
-                  >
-                    {t("retry")}
-                  </button>
-                </div>
-              ) : (
-                // 「会话」段：有未固定项就正常列出；都没有的话仅在 pinned
-                // 也为空时显示「暂无会话」占位 —— 有 pinned 而 recent 空就
-                // 直接隐藏，避免误导用户「没有会话」。
-                (recent.length > 0 || pinned.length === 0) && (
-                  <SessionListSection
-                    title={t("sessions")}
-                    sessions={recent}
-                    emptyText={t("sessionsEmpty")}
-                  />
-                )
-              )}
-            </div>
-
-            <div className="mt-2 flex items-center justify-between px-2">
-              <button
-                type="button"
-                onClick={handleLogout}
-                disabled={logoutMutation.isPending}
-                className="flex items-center gap-2 rounded-md py-1.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
-              >
-                <LogOut className="h-3.5 w-3.5" />
-                {t("logout")}
-              </button>
-              <div className="flex items-center gap-1.5">
-                <LanguageToggle />
-                <button
-                  type="button"
-                  onClick={toggleTheme}
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-                  title={
-                    theme === "dark"
-                      ? commonT("switchToLightTheme")
-                      : commonT("switchToDarkTheme")
-                  }
-                >
-                  {theme === "dark" ? (
-                    <Sun className="h-3.5 w-3.5" />
-                  ) : (
-                    <Moon className="h-3.5 w-3.5" />
-                  )}
-                </button>
+            >
+              <div className="mx-auto flex w-full max-w-[900px] flex-1 flex-col p-4 lg:px-10">
+                {children}
               </div>
             </div>
-          </div>
-        </aside>
-
-        <section className="relative flex min-w-0 flex-1 flex-col">
-          <div
-            ref={scrollContainerRef}
-            className={cn(
-              "flex min-h-0 flex-1 flex-col overflow-y-auto",
-              className,
-            )}
-          >
-            <div className="mx-auto flex w-full max-w-[900px] flex-1 flex-col p-4 lg:px-10">
-              {children}
-            </div>
-          </div>
-        </section>
+          </section>
+        </div>
       </div>
     </main>
   );
