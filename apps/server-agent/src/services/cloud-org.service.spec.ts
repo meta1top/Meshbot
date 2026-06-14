@@ -17,10 +17,19 @@ describe("CloudOrgService", () => {
       del: jest.fn(),
       ...opts.cloud,
     };
+    const imRelay = {
+      connect: jest.fn().mockResolvedValue(undefined),
+      disconnect: jest.fn(),
+    };
     return {
-      svc: new CloudOrgService(cloud as never, identity as never),
+      svc: new CloudOrgService(
+        cloud as never,
+        identity as never,
+        imRelay as never,
+      ),
       identity,
       cloud,
+      imRelay,
     };
   }
 

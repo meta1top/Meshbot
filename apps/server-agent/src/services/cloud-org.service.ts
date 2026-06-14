@@ -2,6 +2,7 @@ import { AppError } from "@meshbot/common";
 import { Injectable } from "@nestjs/common";
 
 import { CloudClientService } from "../cloud/cloud-client.service";
+import { ImRelayClientService } from "../cloud/im-relay-client.service";
 import type { CloudOrgSummary } from "../cloud/cloud.types";
 import { AgentErrorCode } from "../errors/agent.error-codes";
 import { CloudIdentityService } from "./cloud-identity.service";
@@ -15,6 +16,7 @@ export class CloudOrgService {
   constructor(
     private readonly cloud: CloudClientService,
     private readonly identity: CloudIdentityService,
+    private readonly imRelay: ImRelayClientService,
   ) {}
 
   /** 我的组织列表。 */
@@ -35,6 +37,7 @@ export class CloudOrgService {
       token,
     );
     await this.identity.updateActiveOrg(org.id, org.name, "owner");
+    void this.imRelay.connect();
     return org;
   }
 
@@ -49,6 +52,7 @@ export class CloudOrgService {
       token,
     );
     await this.identity.updateActiveOrg(res.orgId, res.orgName, "member");
+    void this.imRelay.connect();
     return res;
   }
 

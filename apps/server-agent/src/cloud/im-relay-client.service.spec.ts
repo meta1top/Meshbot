@@ -268,7 +268,7 @@ describe("ImRelayClientService", () => {
       expect(callCount).toBe(1);
 
       // Auth failure tears down socket
-      socket1.simulateServerEvent("connect_error", new Error("auth failed"));
+      socket1.simulateServerEvent("connect_error", new Error("unauthorized"));
       expect(svc.isConnected()).toBe(false);
 
       // Re-login: connect() should succeed and create a NEW socket

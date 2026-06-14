@@ -95,7 +95,7 @@ export class ImRelayClientService implements OnModuleInit, OnModuleDestroy {
       // connect_error：认证失败 → 先拆 socket 防僵尸/重连风暴，再清 cloud_identity
       socket.on("connect_error", (err: Error) => {
         const msg = err?.message?.toLowerCase() ?? "";
-        if (msg.includes("unauthorized") || msg.includes("auth")) {
+        if (msg.includes("unauthorized")) {
           this.disconnect();
           void this.cloudIdentityService.clear();
         }

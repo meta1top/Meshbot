@@ -44,6 +44,7 @@ describe("CloudAuthService.login", () => {
     );
     expect(jwt.sign).toHaveBeenCalledWith({ sub: "u1", email: "a@x.io" });
     expect(out).toEqual({ access_token: "local-jwt" });
+    expect(imRelay.connect).toHaveBeenCalledTimes(1);
   });
 
   it("getProfile：无身份镜像抛 AUTH_UNAUTHORIZED", async () => {
@@ -51,10 +52,51 @@ describe("CloudAuthService.login", () => {
       {} as never,
       { get: jest.fn().mockResolvedValue(null) } as never,
       {} as never,
-      {} as never,
+      { connect: jest.fn(), disconnect: jest.fn() } as never,
     );
     await expect(svc.getProfile()).rejects.toMatchObject({
       name: "AppError",
     });
+  });
+
+  it("register 成功：调云端、写镜像、返回本地 access_token，并触发 IM relay connect", async () => {
+    const cloud = {
+      post: jest.fn().mockResolvedValue({
+        token: "cloud-jwt-reg",
+        expiresIn: "7d",
+        user: { id: "u2", email: "b@x.io", displayName: "Bob" },
+      }),
+      get: jest.fn().mockResolvedValue({
+        user: { id: "u2", email: "b@x.io", displayName: "Bob" },
+        activeOrg: null,
+        memberships: [],
+      }),
+    };
+    const identity = { upsert: jest.fn().mockResolvedValue(undefined) };
+    const jwt = { sign: jest.fn().mockReturnValue("local-jwt-reg") };
+    const imRelay = {
+      connect: jest.fn().mockResolvedValue(undefined),
+      disconnect: jest.fn(),
+    };
+
+    const svc = new CloudAuthService(
+      cloud as never,
+      identity as never,
+      jwt as never,
+      imRelay as never,
+    );
+    const out = await svc.register({
+      email: "b@x.io",
+      password: "p",
+      displayName: "Bob",
+    });
+
+    expect(cloud.post).toHaveBeenCalledWith("/api/auth/register", {
+      email: "b@x.io",
+      password: "p",
+      displayName: "Bob",
+    });
+    expect(out).toEqual({ access_token: "local-jwt-reg" });
+    expect(imRelay.connect).toHaveBeenCalledTimes(1);
   });
 });

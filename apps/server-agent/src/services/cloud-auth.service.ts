@@ -43,13 +43,15 @@ export class CloudAuthService {
     private readonly imRelay: ImRelayClientService,
   ) {}
 
-  /** 代理云端注册，成功后写镜像并签本地 JWT。 */
+  /** 代理云端注册，成功后写镜像并签本地 JWT，并尝试建立 IM 中继连接。 */
   async register(input: RegisterInput): Promise<LocalTokenResponse> {
     const auth = await this.cloud.post<CloudAuthData>(
       "/api/auth/register",
       input,
     );
-    return this.afterCloudAuth(auth);
+    const result = await this.afterCloudAuth(auth);
+    void this.imRelay.connect();
+    return result;
   }
 
   /** 代理云端登录，成功后写镜像并签本地 JWT，并建立 IM 中继连接。 */
