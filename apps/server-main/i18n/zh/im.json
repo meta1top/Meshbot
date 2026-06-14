@@ -1,0 +1,6 @@
+{
+  "conversationNotFound": "会话不存在",
+  "conversationForbidden": "无权操作该会话",
+  "channelNameInvalid": "频道名称无效",
+  "dmTargetInvalid": "私信目标无效"
+}

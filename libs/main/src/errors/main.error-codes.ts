@@ -44,4 +44,21 @@ export const MainErrorCode = defineErrorCode({
     code: 2006,
     message: "org.invitationExpired",
   },
+  CONVERSATION_NOT_FOUND: {
+    code: 2007,
+    message: "im.conversationNotFound",
+  },
+  CONVERSATION_FORBIDDEN: {
+    code: 2008,
+    message: "im.conversationForbidden",
+    httpStatus: 403,
+  },
+  CHANNEL_NAME_INVALID: {
+    code: 2009,
+    message: "im.channelNameInvalid",
+  },
+  DM_TARGET_INVALID: {
+    code: 2010,
+    message: "im.dmTargetInvalid",
+  },
 });
