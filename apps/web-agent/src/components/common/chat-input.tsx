@@ -149,7 +149,16 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       : 0;
 
     return (
-      <div className="rounded-none border border-border bg-card">
+      <div className="overflow-hidden rounded-[10px] border border-border bg-card">
+        {/* Decorative formatting toolbar — visual only, no editing logic */}
+        <div className="flex items-center gap-3 border-b border-border px-3 py-1.5 text-muted-foreground">
+          <span className="text-[13px] font-bold">B</span>
+          <span className="text-[13px] italic">I</span>
+          <span className="text-[13px] underline">U</span>
+          <span className="text-[13px]">≡</span>
+          <span className="font-mono text-[12px]">{"</>"}</span>
+        </div>
+
         <div className="flex items-center gap-2 px-3 py-2">
           <div className="relative w-full">
             {!hasContent && (
@@ -189,7 +198,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             className={cn(
               "flex h-8 w-8 shrink-0 items-center justify-center transition-colors",
               hasContent
-                ? "text-foreground hover:text-foreground/80"
+                ? "rounded-md bg-(--shell-accent) text-white"
                 : "text-muted-foreground",
             )}
             title={tChat("send")}
@@ -210,7 +219,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           {tokenUsage && (
             <div className="flex items-center gap-2">
               {modelName && (
-                <span className="text-xs text-muted-foreground">
+                <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
                   {modelName}
                 </span>
               )}
