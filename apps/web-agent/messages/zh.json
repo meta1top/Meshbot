@@ -251,7 +251,10 @@
     "online": "在线",
     "pickMember": "发起私信",
     "loading": "加载中...",
-    "empty": "暂无内容"
+    "empty": "暂无内容",
+    "emptyHint": "选择一个会话开始聊天",
+    "inputPlaceholder": "发消息…",
+    "historyStart": "会话开头"
   },
   "home": {
     "title": "接下来做什么？",
@@ -471,5 +474,8 @@
   "newDm": "",
   "channels": "",
   "channelNamePlaceholder": "",
-  "directMessages": ""
+  "directMessages": "",
+  "emptyHint": "",
+  "historyStart": "",
+  "inputPlaceholder": ""
 }

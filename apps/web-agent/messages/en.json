@@ -251,7 +251,10 @@
     "online": "Online",
     "pickMember": "Start a direct message",
     "loading": "Loading...",
-    "empty": "Nothing here yet"
+    "empty": "Nothing here yet",
+    "emptyHint": "Select a conversation to start chatting",
+    "inputPlaceholder": "Send a message…",
+    "historyStart": "Beginning of conversation"
   },
   "home": {
     "title": "What's up next?",
@@ -471,5 +474,8 @@
   "newDm": "",
   "channels": "",
   "channelNamePlaceholder": "",
-  "directMessages": ""
+  "directMessages": "",
+  "emptyHint": "",
+  "historyStart": "",
+  "inputPlaceholder": ""
 }
