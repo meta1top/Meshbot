@@ -53,7 +53,7 @@ export function AuthShellLayout({ children, className }: AuthShellLayoutProps) {
         }
       />
       {/* 左品牌色块 */}
-      <div className="relative hidden w-[44%] flex-col justify-between overflow-hidden bg-linear-to-br from-(--shell-chrome) to-(--shell-sidebar) p-10 text-white lg:flex">
+      <div className="relative hidden w-[44%] flex-col justify-between overflow-hidden bg-linear-to-br from-(--shell-chrome) to-(--shell-accent) p-10 text-white lg:flex">
         <div className="flex items-center gap-2 text-[16px] font-extrabold">
           <span className="flex h-7 w-7 items-center justify-center rounded-[8px] bg-white text-(--shell-chrome)">
             M

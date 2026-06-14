@@ -114,8 +114,8 @@ pre code.hljs {
   --titlebar-height: 52px;
   --mac-controls-safe-left: 92px;
   /* Slack 风格外壳配色（web-agent 局部，不进共享 design 系统） */
-  --shell-chrome: #9a3412;
-  --shell-sidebar: #d24a0d;
+  --shell-chrome: #241c15;
+  --shell-sidebar: #342a20;
   --shell-content: #ffffff;
   --shell-accent: #d24a0d;
   --shell-radius: 0.625rem;
