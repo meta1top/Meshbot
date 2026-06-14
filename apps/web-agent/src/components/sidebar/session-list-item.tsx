@@ -110,16 +110,14 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
         className={cn(
           "group flex items-center gap-2 rounded-none px-2 py-1.5 text-[14px]",
           active
-            ? "bg-accent text-white"
-            : "text-foreground/80 hover:bg-accent hover:text-white",
+            ? "bg-white/24 text-white"
+            : "text-white/85 hover:bg-white/12 hover:text-white",
         )}
       >
         <MessageSquare
           className={cn(
             "h-3.5 w-3.5 shrink-0",
-            active
-              ? "text-white"
-              : "text-muted-foreground group-hover:text-white",
+            active ? "text-white" : "text-white/70 group-hover:text-white",
           )}
         />
         {editing ? (
@@ -148,6 +146,7 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
                 className={cn(
                   "opacity-0 transition-opacity group-hover:opacity-100",
                   menuOpen && "opacity-100",
+                  "text-white/70 hover:text-white",
                 )}
                 aria-label="menu"
               >

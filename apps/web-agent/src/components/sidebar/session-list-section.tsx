@@ -14,14 +14,12 @@ interface Props {
 export function SessionListSection({ title, sessions, emptyText }: Props) {
   return (
     <div className="mt-5">
-      <div className="px-2 text-[12px] font-medium text-muted-foreground">
-        {title}
-      </div>
+      <div className="px-2 text-[12px] font-medium text-white/70">{title}</div>
       <div className="mt-1 space-y-0.5 text-[14px]">
         {sessions.length > 0 ? (
           sessions.map((s) => <SessionListItem key={s.id} session={s} />)
         ) : emptyText ? (
-          <div className="px-2 py-1.5 text-[12px] text-muted-foreground/60">
+          <div className="px-2 py-1.5 text-[12px] text-white/55">
             {emptyText}
           </div>
         ) : null}
