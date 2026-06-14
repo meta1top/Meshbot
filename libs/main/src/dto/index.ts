@@ -1,5 +1,11 @@
 import { createI18nZodDto } from "@meshbot/common";
 import {
+  type CreateChannelInput,
+  CreateChannelSchema,
+  type CreateDmInput,
+  CreateDmSchema,
+} from "@meshbot/types";
+import {
   type AcceptInvitationInput,
   AcceptInvitationSchema,
   type CreateInvitationInput,
@@ -46,3 +52,11 @@ export class AcceptInvitationDto extends createI18nZodDto(
   AcceptInvitationSchema,
 ) {}
 export interface AcceptInvitationDto extends AcceptInvitationInput {}
+
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
+export class CreateChannelDto extends createI18nZodDto(CreateChannelSchema) {}
+export interface CreateChannelDto extends CreateChannelInput {}
+
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
+export class CreateDmDto extends createI18nZodDto(CreateDmSchema) {}
+export interface CreateDmDto extends CreateDmInput {}
