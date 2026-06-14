@@ -17,8 +17,11 @@ import { DataSource, type DataSourceOptions } from "typeorm";
 import { SnakeNamingStrategy } from "typeorm-naming-strategies";
 
 import { AppUser } from "../../../../libs/main/src/entities/app-user.entity";
+import { Conversation } from "../../../../libs/main/src/entities/conversation.entity";
+import { ConversationMember } from "../../../../libs/main/src/entities/conversation-member.entity";
 import { Invitation } from "../../../../libs/main/src/entities/invitation.entity";
 import { Membership } from "../../../../libs/main/src/entities/membership.entity";
+import { Message } from "../../../../libs/main/src/entities/message.entity";
 import { Organization } from "../../../../libs/main/src/entities/organization.entity";
 
 /** 云端 schema 的真相源：apps/server-main/migrations/*.sql（DDL 由 DBA 手动执行）。 */
@@ -82,7 +85,15 @@ export async function createTestDb(): Promise<TestDbContext> {
     schema,
     // 让所有连接默认在测试 schema 内创建 / 读对象，避免 unqualified DDL 落 public
     extra: { options: `-c search_path=${schema}` },
-    entities: [AppUser, Organization, Membership, Invitation],
+    entities: [
+      AppUser,
+      Organization,
+      Membership,
+      Invitation,
+      Conversation,
+      ConversationMember,
+      Message,
+    ],
     namingStrategy: new SnakeNamingStrategy(),
     synchronize: false,
     logging: false,
