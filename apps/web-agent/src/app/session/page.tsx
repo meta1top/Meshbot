@@ -45,6 +45,7 @@ import {
   type TimelineMessage,
 } from "@/components/session/message-list";
 import { PendingList } from "@/components/session/pending-list";
+import { SessionHeader } from "@/components/session/session-header";
 import { toI18nList } from "@/lib/i18n-list";
 import { getSessionSocket } from "@/lib/socket";
 import { useModelConfigs } from "@/rest/model-config";
@@ -842,6 +843,7 @@ function SessionView() {
 
   return (
     <AppShellLayout scrollContainerRef={scrollContainerRef}>
+      {sessionId && <SessionHeader sessionId={sessionId} />}
       <div className="flex w-full flex-1 flex-col">
         {hasMoreHistory && (
           <div
