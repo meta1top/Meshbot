@@ -33,6 +33,7 @@ export const presenceAtom = atom<Record<string, boolean>>({});
 
 /** 按 lastMessage.createdAt desc，无 lastMessage 的靠后再按 name 排。 */
 function sortConversations(arr: ConversationSummary[]): ConversationSummary[] {
+  if (!Array.isArray(arr)) return [];
   return [...arr].sort((a, b) => {
     const aTime = a.lastMessage?.createdAt ?? "";
     const bTime = b.lastMessage?.createdAt ?? "";
@@ -47,8 +48,14 @@ function sortConversations(arr: ConversationSummary[]): ConversationSummary[] {
  * 拉取会话列表并写入 conversationsAtom（排序后）。
  */
 export const loadConversationsAtom = atom(null, async (_get, set) => {
-  const arr = await fetchConversations();
-  set(conversationsAtom, sortConversations(arr));
+  try {
+    const arr = await fetchConversations();
+    set(conversationsAtom, sortConversations(arr));
+  } catch {
+    // 拉取失败（未登录云端 / 网络错误 / 云端未启动）时降级为空列表，
+    // 不抛出，避免 page.tsx 里 `void loadConversations()` 产生 unhandledRejection。
+    set(conversationsAtom, []);
+  }
 });
 
 /**

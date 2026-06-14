@@ -9,7 +9,9 @@ import { apiClient } from "@meshbot/web-common";
 export async function fetchConversations(): Promise<ConversationSummary[]> {
   const { data } =
     await apiClient.get<ConversationSummary[]>("/api/conversations");
-  return data;
+  // 未登录云端时后端返回 401 错误 envelope，解包后 data 可能为 null/undefined；
+  // 兜底成空数组以遵守 Promise<ConversationSummary[]> 契约，避免下游 [...arr] 崩溃。
+  return Array.isArray(data) ? data : [];
 }
 
 /**
