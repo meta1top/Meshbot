@@ -240,6 +240,19 @@
       "toastError": "Compaction failed: {message}"
     }
   },
+  "messages": {
+    "title": "Messages",
+    "channels": "Channels",
+    "directMessages": "Direct Messages",
+    "newChannel": "New channel",
+    "newDm": "New direct message",
+    "newConversation": "New conversation",
+    "channelNamePlaceholder": "Channel name",
+    "online": "Online",
+    "pickMember": "Start a direct message",
+    "loading": "Loading...",
+    "empty": "Nothing here yet"
+  },
   "home": {
     "title": "What's up next?",
     "titles": {
@@ -450,5 +463,13 @@
   "assistantName": "",
   "welcomeBack": "",
   "brandTagline": "",
-  "brandSubtitle": ""
+  "brandSubtitle": "",
+  "pickMember": "",
+  "online": "",
+  "newConversation": "",
+  "newChannel": "",
+  "newDm": "",
+  "channels": "",
+  "channelNamePlaceholder": "",
+  "directMessages": ""
 }

@@ -240,6 +240,19 @@
       "toastError": "压缩失败：{message}"
     }
   },
+  "messages": {
+    "title": "消息",
+    "channels": "频道",
+    "directMessages": "私信",
+    "newChannel": "新建频道",
+    "newDm": "发起私信",
+    "newConversation": "新建会话",
+    "channelNamePlaceholder": "频道名称",
+    "online": "在线",
+    "pickMember": "发起私信",
+    "loading": "加载中...",
+    "empty": "暂无内容"
+  },
   "home": {
     "title": "接下来做什么？",
     "titles": {
@@ -450,5 +463,13 @@
   "assistantName": "",
   "welcomeBack": "",
   "brandTagline": "",
-  "brandSubtitle": ""
+  "brandSubtitle": "",
+  "pickMember": "",
+  "online": "",
+  "newConversation": "",
+  "newChannel": "",
+  "newDm": "",
+  "channels": "",
+  "channelNamePlaceholder": "",
+  "directMessages": ""
 }
