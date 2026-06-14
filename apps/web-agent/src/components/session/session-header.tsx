@@ -10,27 +10,29 @@ export function SessionHeader({ sessionId }: { sessionId: string }) {
   const session = sessions.find((s) => s.id === sessionId);
   if (!session) return null;
   return (
-    <div className="sticky top-0 z-10 -mx-4 flex h-11 items-center gap-2 border-b border-border bg-(--shell-content) px-4 lg:-mx-10 lg:px-10">
-      <button
-        type="button"
-        onClick={() =>
-          void togglePin({ id: session.id, pinned: !session.pinned })
-        }
-        className={
-          session.pinned
-            ? "text-(--shell-accent)"
-            : "text-muted-foreground hover:text-foreground"
-        }
-        aria-pressed={session.pinned}
-      >
-        <Star
-          className="h-4 w-4"
-          fill={session.pinned ? "currentColor" : "none"}
-        />
-      </button>
-      <span className="truncate text-[13px] font-semibold text-foreground">
-        {session.title}
-      </span>
+    <div className="shrink-0 border-b border-border bg-(--shell-content)">
+      <div className="mx-auto flex h-11 w-full max-w-[900px] items-center gap-2 px-4 lg:px-10">
+        <button
+          type="button"
+          onClick={() =>
+            void togglePin({ id: session.id, pinned: !session.pinned })
+          }
+          className={
+            session.pinned
+              ? "text-(--shell-accent)"
+              : "text-muted-foreground hover:text-foreground"
+          }
+          aria-pressed={session.pinned}
+        >
+          <Star
+            className="h-4 w-4"
+            fill={session.pinned ? "currentColor" : "none"}
+          />
+        </button>
+        <span className="truncate text-[13px] font-semibold text-foreground">
+          {session.title}
+        </span>
+      </div>
     </div>
   );
 }

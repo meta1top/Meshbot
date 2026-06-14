@@ -17,6 +17,11 @@ interface AppShellLayoutProps {
   scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
   /** 侧栏覆盖：undefined=按区自动选；null=不渲染侧栏（设置页用）。 */
   sidebar?: ReactNode | null;
+  /**
+   * 内容卡顶部固定栏（如会话标题栏）。渲染在滚动容器之外、贴卡片顶边，
+   * 整条横贯内容卡宽度，不随消息滚动、不受滚动条影响。
+   */
+  header?: ReactNode;
 }
 
 export function AppShellLayout({
@@ -24,6 +29,7 @@ export function AppShellLayout({
   className,
   scrollContainerRef,
   sidebar,
+  header,
 }: AppShellLayoutProps) {
   const pathname = usePathname();
   const t = useTranslations("appShell");
@@ -67,6 +73,7 @@ export function AppShellLayout({
                 : "rounded-(--shell-radius)",
             )}
           >
+            {header}
             <div
               ref={scrollContainerRef}
               className={cn(

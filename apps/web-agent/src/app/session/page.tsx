@@ -842,8 +842,10 @@ function SessionView() {
   }, [loadMoreHistory, hasMoreHistory]);
 
   return (
-    <AppShellLayout scrollContainerRef={scrollContainerRef}>
-      {sessionId && <SessionHeader sessionId={sessionId} />}
+    <AppShellLayout
+      scrollContainerRef={scrollContainerRef}
+      header={sessionId ? <SessionHeader sessionId={sessionId} /> : undefined}
+    >
       <div className="flex w-full flex-1 flex-col">
         {hasMoreHistory && (
           <div
