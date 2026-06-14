@@ -1,12 +1,14 @@
 import {
+  AppError,
   BaseWebSocketGateway,
   WsAuthGuard,
   WsExceptionFilter,
 } from "@meshbot/common";
 import {
   ConversationService,
-  PresenceService,
+  MainErrorCode,
   MessageService,
+  PresenceService,
   UserService,
 } from "@meshbot/main";
 import {
@@ -17,7 +19,7 @@ import {
   type ImSendInput,
   type PresenceState,
 } from "@meshbot/types";
-import { UseFilters, UseGuards } from "@nestjs/common";
+import { Logger, UseFilters, UseGuards } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
 import { JwtService } from "@nestjs/jwt";
 import {
@@ -57,6 +59,8 @@ import type { Socket } from "socket.io";
 @WebSocketGateway({ namespace: IM_WS_NAMESPACE, cors: true })
 @UseFilters(WsExceptionFilter)
 export class ImGateway extends BaseWebSocketGateway {
+  private readonly logger = new Logger(ImGateway.name);
+
   constructor(
     private readonly jwt: JwtService,
     private readonly conversation: ConversationService,
@@ -92,35 +96,40 @@ export class ImGateway extends BaseWebSocketGateway {
    * 5. 向本连接下发当前在线快照
    */
   private async onAuthedConnect(client: Socket): Promise<void> {
-    const userId: string = client.data.user.userId;
-    const user = await this.userService.findById(userId);
-    const orgId = user?.activeOrgId;
-    if (!orgId) return;
+    try {
+      const userId: string = client.data.user.userId;
+      const user = await this.userService.findById(userId);
+      const orgId = user?.activeOrgId;
+      if (!orgId) return;
 
-    client.data.orgId = orgId;
+      client.data.orgId = orgId;
 
-    await this.presence.setOnline(orgId, userId);
+      await this.presence.setOnline(orgId, userId);
 
-    client.join(`org:${orgId}`);
+      client.join(`org:${orgId}`);
 
-    const convs = await this.conversation.listConversations(userId, orgId);
-    for (const conv of convs) {
-      client.join(`conv:${conv.id}`);
-    }
+      const convs = await this.conversation.listConversations(userId, orgId);
+      for (const conv of convs) {
+        client.join(`conv:${conv.id}`);
+      }
 
-    // 广播本用户上线到同 org 所有连接（含自身）
-    this.server.to(`org:${orgId}`).emit(IM_WS_EVENTS.presence, {
-      userId,
-      online: true,
-    } satisfies PresenceState);
-
-    // 向本连接下发当前在线用户快照
-    const onlineUserIds = await this.presence.listOnline(orgId);
-    for (const onlineUserId of onlineUserIds) {
-      client.emit(IM_WS_EVENTS.presence, {
-        userId: onlineUserId,
+      // 广播本用户上线到同 org 所有连接（含自身）
+      this.server.to(`org:${orgId}`).emit(IM_WS_EVENTS.presence, {
+        userId,
         online: true,
       } satisfies PresenceState);
+
+      // 向本连接下发当前在线用户快照
+      const onlineUserIds = await this.presence.listOnline(orgId);
+      for (const onlineUserId of onlineUserIds) {
+        client.emit(IM_WS_EVENTS.presence, {
+          userId: onlineUserId,
+          online: true,
+        } satisfies PresenceState);
+      }
+    } catch (err) {
+      this.logger.error("im onAuthedConnect failed", err as Error);
+      client.disconnect(true);
     }
   }
 
@@ -129,15 +138,19 @@ export class ImGateway extends BaseWebSocketGateway {
    * 仅在已完成鉴权 + 入 org 时执行（否则无 orgId）。
    */
   async handleDisconnect(client: Socket): Promise<void> {
-    const userId: string | undefined = client.data?.user?.userId;
-    const orgId: string | undefined = client.data?.orgId;
-    if (!userId || !orgId) return;
+    try {
+      const userId: string | undefined = client.data?.user?.userId;
+      const orgId: string | undefined = client.data?.orgId;
+      if (!userId || !orgId) return;
 
-    await this.presence.setOffline(orgId, userId);
-    this.server.to(`org:${orgId}`).emit(IM_WS_EVENTS.presence, {
-      userId,
-      online: false,
-    } satisfies PresenceState);
+      await this.presence.setOffline(orgId, userId);
+      this.server.to(`org:${orgId}`).emit(IM_WS_EVENTS.presence, {
+        userId,
+        online: false,
+      } satisfies PresenceState);
+    } catch (err) {
+      this.logger.error("im handleDisconnect failed", err as Error);
+    }
   }
 
   /**
@@ -151,7 +164,8 @@ export class ImGateway extends BaseWebSocketGateway {
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
     const userId: string = client.data.user.userId;
-    const orgId: string = client.data.orgId;
+    const orgId: string | undefined = client.data.orgId;
+    if (!orgId) throw new AppError(MainErrorCode.CONVERSATION_FORBIDDEN);
 
     await this.conversation.getVisibleOrThrow(
       body.conversationId,
@@ -179,6 +193,9 @@ export class ImGateway extends BaseWebSocketGateway {
     @MessageBody() body: ImReadInput,
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
+    const orgId: string | undefined = client.data?.orgId;
+    if (!orgId) return;
+
     await this.conversation.markRead(
       body.conversationId,
       client.data.user.userId,
@@ -219,13 +236,17 @@ export class ImGateway extends BaseWebSocketGateway {
     userIds: string[];
     orgId: string;
   }): Promise<void> {
-    const { summary, userIds, orgId } = payload;
-    const sockets = await this.server.in(`org:${orgId}`).fetchSockets();
-    for (const s of sockets) {
-      if (userIds.includes(s.data.user?.userId)) {
-        s.join(`conv:${summary.id}`);
-        s.emit(IM_WS_EVENTS.conversationCreated, summary);
+    try {
+      const { summary, userIds, orgId } = payload;
+      const sockets = await this.server.in(`org:${orgId}`).fetchSockets();
+      for (const s of sockets) {
+        if (userIds.includes(s.data.user?.userId)) {
+          s.join(`conv:${summary.id}`);
+          s.emit(IM_WS_EVENTS.conversationCreated, summary);
+        }
       }
+    } catch (err) {
+      this.logger.error("im onConversationCreated failed", err as Error);
     }
   }
 }
