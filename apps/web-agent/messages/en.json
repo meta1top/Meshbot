@@ -442,5 +442,8 @@
   "search": {
     "placeholder": ""
   },
-  "assistantTitle": ""
+  "assistantTitle": "",
+  "placeholder": {
+    "goAssistant": ""
+  }
 }
