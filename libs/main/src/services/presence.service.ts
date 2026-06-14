@@ -1,4 +1,5 @@
-import { Injectable, Optional } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
+import { REDIS_CLIENT } from "../tokens";
 
 /**
  * 用户在线状态 TTL（秒）。
@@ -49,8 +50,11 @@ export class PresenceService {
    * @param redis   ioredis 实例；null → 走内存回退路径
    * @param nowFn   当前时间（ms），默认 Date.now；可注入以便测试推进虚假时钟
    */
+  // B8 必须提供 { provide: REDIS_CLIENT, useValue: <Redis|null> }
   constructor(
-    @Optional() private readonly redis: RedisPresenceClient | null,
+    @Optional()
+    @Inject(REDIS_CLIENT)
+    private readonly redis: RedisPresenceClient | null,
     private readonly nowFn: () => number = Date.now,
   ) {}
 
@@ -111,6 +115,10 @@ export class PresenceService {
       } else {
         orgMap.delete(userId);
       }
+    }
+    // 清理空 org，避免长期运行多租户场景下外层 Map 无限增长
+    if (orgMap.size === 0) {
+      this.memStore.delete(orgId);
     }
     return online;
   }

@@ -1,4 +1,5 @@
 export * from "./dto";
+export { REDIS_CLIENT } from "./tokens";
 export * from "./entities/app-user.entity";
 export * from "./entities/conversation.entity";
 export * from "./entities/conversation-member.entity";
