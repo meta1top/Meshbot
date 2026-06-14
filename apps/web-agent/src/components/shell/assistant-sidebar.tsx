@@ -51,7 +51,7 @@ export function AssistantSidebar() {
 
   return (
     <div className="flex h-full flex-col bg-(--shell-sidebar) px-2 py-2.5 text-white">
-      <div className="flex items-center justify-between border-b border-white/15 px-1.5 pb-2.5">
+      <div className="flex h-9 items-center justify-between border-b border-white/15 px-1.5">
         <span className="text-[15px] font-extrabold">
           {t("assistantTitle")}
         </span>
