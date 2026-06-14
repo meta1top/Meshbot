@@ -54,6 +54,7 @@
     "reflect-metadata": "^0.2",
     "rxjs": "^7",
     "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3",
     "typeorm": "^0.3.28",
     "zod": "^3"
   },

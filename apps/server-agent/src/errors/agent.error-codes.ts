@@ -26,4 +26,9 @@ export const AgentErrorCode = defineErrorCode({
     message: "cloud.unreachable",
     httpStatus: 503,
   },
+  IM_NOT_CONNECTED: {
+    code: 3005,
+    message: "im.notConnected",
+    httpStatus: 503,
+  },
 });
