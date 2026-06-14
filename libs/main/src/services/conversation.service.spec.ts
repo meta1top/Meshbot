@@ -351,6 +351,57 @@ describe("ConversationService", () => {
       expect(dmKey0).toBe("user-a:user-b");
     });
 
+    it("(b,a) 反序调用 → 结果与正序调用的 id/dmKey 相同（锁键排序不变性）", async () => {
+      // 两次调用都返回同一个已存在的 conversation（模拟加锁后 find 命中）
+      const dmConv = makeConv({
+        id: "dm-sort-inv",
+        type: "dm",
+        name: null,
+        dmKey: "user-a:user-b",
+      });
+      const findOne = jest.fn().mockResolvedValue(dmConv);
+      const convRepo = makeConvRepo({ findOne, save: jest.fn() });
+      const userSvc = makeUserSvc({
+        findById: jest
+          .fn()
+          .mockResolvedValue(
+            makeUser({ id: "user-b", displayName: "Bob", email: "b@x.io" }),
+          ),
+      });
+
+      // 测试 acquireLock 记录的 key — 替换 passthroughLock，捕获 key 参数
+      const lockKeys: string[] = [];
+      const capturingLock = {
+        acquire: async (key: string) => {
+          lockKeys.push(key);
+          return async () => {};
+        },
+      };
+
+      const svc = new ConversationService(
+        convRepo as never,
+        makeMemberRepo() as never,
+        makeMessageSvc(),
+        userSvc,
+      );
+      // biome-ignore lint/suspicious/noExplicitAny: test instrumentation
+      (injectLockProvider as (svc: any, p: any) => void)(svc, capturingLock);
+
+      const outAB = await svc.findOrCreateDm("org-1", "user-a", "user-b");
+      const outBA = await svc.findOrCreateDm("org-1", "user-b", "user-a");
+
+      // 两次结果指向同一 conversation
+      expect(outAB.id).toBe("dm-sort-inv");
+      expect(outBA.id).toBe("dm-sort-inv");
+
+      // 两次加锁都使用排好序的 dmKey（user-a:user-b）
+      expect(lockKeys).toHaveLength(2);
+      expect(lockKeys[0]).toContain("user-a:user-b");
+      expect(lockKeys[1]).toContain("user-a:user-b");
+      // 两次 key 完全相同（排序不变性）
+      expect(lockKeys[0]).toBe(lockKeys[1]);
+    });
+
     it("返回的 peer 是对端用户（a 发起 → peer.userId = b）", async () => {
       const dmConv = makeConv({
         id: "dm-p",
@@ -491,8 +542,8 @@ describe("ConversationService", () => {
     });
   });
 
-  // ── ensureDefaultChannelInTx ──────────────────────────────────────
-  describe("ensureDefaultChannelInTx", () => {
+  // ── ensureDefaultChannel ──────────────────────────────────────
+  describe("ensureDefaultChannel", () => {
     it("空 org → 建「综合」频道", async () => {
       const convRepo = makeConvRepo({
         count: jest.fn().mockResolvedValue(0),
@@ -504,7 +555,7 @@ describe("ConversationService", () => {
         makeMessageSvc(),
         makeUserSvc(),
       );
-      await svc.ensureDefaultChannelInTx("org-1", "user-1");
+      await svc.ensureDefaultChannel("org-1", "user-1");
       expect(convRepo.save).toHaveBeenCalledTimes(1);
       const savedConv = convRepo.save.mock.calls[0][0] as { name: string };
       expect(savedConv.name).toBe("综合");
@@ -521,7 +572,7 @@ describe("ConversationService", () => {
         makeMessageSvc(),
         makeUserSvc(),
       );
-      await svc.ensureDefaultChannelInTx("org-1", "user-1");
+      await svc.ensureDefaultChannel("org-1", "user-1");
       expect(convRepo.save).not.toHaveBeenCalled();
     });
 
@@ -542,8 +593,8 @@ describe("ConversationService", () => {
         makeMessageSvc(),
         makeUserSvc(),
       );
-      await svc.ensureDefaultChannelInTx("org-1", "user-1");
-      await svc.ensureDefaultChannelInTx("org-1", "user-1");
+      await svc.ensureDefaultChannel("org-1", "user-1");
+      await svc.ensureDefaultChannel("org-1", "user-1");
       expect(convRepo.save).toHaveBeenCalledTimes(1);
     });
   });

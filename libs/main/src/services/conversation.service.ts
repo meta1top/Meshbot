@@ -15,8 +15,8 @@ import { UserService } from "./user.service";
  *
  * 职责：
  * - 频道建立（persistChannelInTx）：跨表写，@Transactional()
- * - DM 去重（findOrCreateDm）：@WithLock（按 dmKey）包 @Transactional()
- * - 默认频道保障（ensureDefaultChannelInTx）：@WithLock（按 orgId）包 @Transactional()
+ * - DM 去重（findOrCreateDm）：先排序 dmKey，再 @WithLock（按 orgId+dmKey）包 @Transactional()
+ * - 默认频道保障（ensureDefaultChannel）：@WithLock（按 orgId）包单表写
  * - 可见性校验（getVisibleOrThrow）：只读，无需事务
  * - 会话列表（listConversations）：组合 MessageService + UserService
  * - 已读标记（markRead）：单表 upsert，无需事务
@@ -37,14 +37,14 @@ export class ConversationService {
   /**
    * 列出 userId 在 orgId 内可见的会话。
    * = 该 org 全部 channel + userId 参与的 dm。
-   * 先调 ensureDefaultChannelInTx 保证至少一个频道。
+   * 先调 ensureDefaultChannel 保证至少一个频道。
    * 每项组装 ConversationSummary（name / peer / unreadCount / lastMessage）。
    */
   async listConversations(
     userId: string,
     orgId: string,
   ): Promise<ConversationSummary[]> {
-    await this.ensureDefaultChannelInTx(orgId, userId);
+    await this.ensureDefaultChannel(orgId, userId);
 
     // 全部频道（按 org）
     const channels = await this.convRepo.find({
@@ -103,16 +103,31 @@ export class ConversationService {
 
   /**
    * 查找或创建两人 DM。幂等：按 (orgId, dmKey, type='dm') 查。
-   * @WithLock（按 dmKey）包 @Transactional()，防并发重复创建。
+   * 先对 (a, b) 排序得到 dmKey，再委托 findOrCreateDmLocked，
+   * 确保无论参数顺序如何都使用同一把锁（sort-invariant）。
    * peer 相对于发起者 a（对端为 b）。
    */
-  @WithLock({ key: "dm:findOrCreate:#{0}:#{1}:#{2}", waitTimeout: 5000 })
   async findOrCreateDm(
     orgId: string,
     a: string,
     b: string,
   ): Promise<ConversationSummary> {
-    return this.persistDmInTx(orgId, a, b);
+    const dmKey = [a, b].sort().join(":");
+    return this.findOrCreateDmLocked(orgId, dmKey, a, b);
+  }
+
+  /**
+   * @WithLock 按 (orgId, dmKey) 加锁，确保并发的正、反序调用互斥。
+   * 锁在 @Transactional 外层（check:lock-tx 要求）。
+   */
+  @WithLock({ key: "dm:findOrCreate:#{0}:#{1}", waitTimeout: 5000 })
+  private async findOrCreateDmLocked(
+    orgId: string,
+    dmKey: string,
+    a: string,
+    b: string,
+  ): Promise<ConversationSummary> {
+    return this.persistDmInTx(orgId, dmKey, a, b);
   }
 
   /**
@@ -122,10 +137,10 @@ export class ConversationService {
   @Transactional()
   private async persistDmInTx(
     orgId: string,
+    dmKey: string,
     a: string,
     b: string,
   ): Promise<ConversationSummary> {
-    const dmKey = [a, b].sort().join(":");
     const existing = await this.convRepo.findOne({
       where: { orgId, dmKey, type: "dm" },
     });
@@ -196,7 +211,7 @@ export class ConversationService {
    * 内部是单表写，无需 @Transactional()。
    */
   @WithLock({ key: "channel:ensureDefault:#{0}", waitTimeout: 5000 })
-  async ensureDefaultChannelInTx(orgId: string, userId: string): Promise<void> {
+  async ensureDefaultChannel(orgId: string, userId: string): Promise<void> {
     return this.createDefaultChannelIfEmpty(orgId, userId);
   }
 
