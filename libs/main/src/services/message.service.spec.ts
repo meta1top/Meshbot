@@ -1,4 +1,5 @@
 import type { ImMessage, MessagePage } from "@meshbot/types";
+import { MoreThan } from "typeorm";
 import { MessageService } from "./message.service";
 
 /**
@@ -176,11 +177,9 @@ describe("MessageService", () => {
       const svc = new MessageService(repo as never);
       const n = await svc.unreadCount("conv-1", ts);
       expect(n).toBe(3);
-      expect(repo.count).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({ conversationId: "conv-1" }),
-        }),
-      );
+      expect(repo.count).toHaveBeenCalledWith({
+        where: { conversationId: "conv-1", createdAt: MoreThan(ts) },
+      });
     });
   });
 
