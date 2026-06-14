@@ -196,10 +196,15 @@ export class ImGateway extends BaseWebSocketGateway {
     const orgId: string | undefined = client.data?.orgId;
     if (!orgId) return;
 
-    await this.conversation.markRead(
+    const userId: string = client.data.user.userId;
+
+    await this.conversation.getVisibleOrThrow(
       body.conversationId,
-      client.data.user.userId,
+      userId,
+      orgId,
     );
+
+    await this.conversation.markRead(body.conversationId, userId);
   }
 
   /**
@@ -207,7 +212,7 @@ export class ImGateway extends BaseWebSocketGateway {
    * server-agent 每 ~20s 发一次，防止 TTL（45s）到期被判离线。
    */
   @UseGuards(WsAuthGuard)
-  @SubscribeMessage("im.ping")
+  @SubscribeMessage(IM_WS_EVENTS.ping)
   async handlePing(@ConnectedSocket() client: Socket): Promise<void> {
     const orgId: string | undefined = client.data?.orgId;
     if (orgId) {

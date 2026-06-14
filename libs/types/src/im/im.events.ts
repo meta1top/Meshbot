@@ -14,6 +14,7 @@ export const IM_WS_EVENTS = {
   // client → server（上行）
   send: "im.send",
   read: "im.read",
+  ping: "im.ping",
 } as const;
 
 // 下行事件 payload

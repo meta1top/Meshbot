@@ -104,7 +104,7 @@ export class ImRelayClientService implements OnModuleInit, OnModuleDestroy {
       // keepalive ping（unref 防止阻塞进程退出）
       const timer = setInterval(() => {
         if (this.socket?.connected) {
-          this.socket.emit("im.ping");
+          this.socket.emit(IM_WS_EVENTS.ping);
         }
       }, PING_INTERVAL_MS);
       // biome-ignore lint/suspicious/noExplicitAny: NodeJS.Timeout has unref()
