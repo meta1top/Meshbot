@@ -50,8 +50,8 @@ export function AssistantSidebar() {
   }, [updateSessionTitle, reload]);
 
   return (
-    <div className="flex h-full flex-col bg-(--shell-sidebar) px-2 py-2.5 text-white">
-      <div className="flex h-9 items-center justify-between border-b border-white/15 px-1.5">
+    <div className="flex h-full flex-col bg-(--shell-sidebar) text-white">
+      <div className="flex h-11 shrink-0 items-center justify-between border-b border-white/15 px-3.5">
         <span className="text-[15px] font-extrabold">
           {t("assistantTitle")}
         </span>
@@ -65,7 +65,7 @@ export function AssistantSidebar() {
         </button>
       </div>
 
-      <div className="mt-1 flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pt-1">
         {pinned.length > 0 && (
           <SessionListSection title={t("pinned")} sessions={pinned} />
         )}
@@ -101,7 +101,7 @@ export function AssistantSidebar() {
       <button
         type="button"
         onClick={() => router.push("/schedule")}
-        className={`mt-1 flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] transition-colors ${pathname.startsWith("/schedule") ? "bg-white/24 text-white" : "text-white/85 hover:bg-white/12 hover:text-white"}`}
+        className={`mx-2 mt-1 mb-2.5 flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] transition-colors ${pathname.startsWith("/schedule") ? "bg-white/24 text-white" : "text-white/85 hover:bg-white/12 hover:text-white"}`}
       >
         <Clock className="h-4 w-4" />
         {t("scheduled")}
