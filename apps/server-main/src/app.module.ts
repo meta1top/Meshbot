@@ -9,7 +9,7 @@ import {
   RedisHealthIndicator,
   RedisLockProvider,
 } from "@meshbot/common";
-import { MainModule } from "@meshbot/main";
+import { MainModule, REDIS_CLIENT as MAIN_REDIS_CLIENT } from "@meshbot/main";
 import {
   type DynamicModule,
   Inject,
@@ -42,10 +42,13 @@ import { JwtMainStrategy } from "./auth/jwt.strategy";
 import { AppConfigModule } from "./config/app-config.module";
 import type { AppConfig } from "./config/app-config.schema";
 import { EmailModule } from "./email/email.module";
+import { EventEmitterModule } from "@nestjs/event-emitter";
 import { HealthController } from "./health.controller";
 import { AuthController } from "./rest/auth.controller";
+import { ImController } from "./rest/im.controller";
 import { OrgController } from "./rest/org.controller";
 import { HealthGateway } from "./ws/health.gateway";
+import { ImGateway } from "./ws/im.gateway";
 
 /**
  * 共享 Redis 连接的 token —— CommonModule、ThrottlerModule、
@@ -184,14 +187,24 @@ export class AppModule {
         TerminusModule,
         EmailModule,
         MainModule.forRoot(config.invitation),
+        EventEmitterModule.forRoot(),
       ],
-      controllers: [HealthController, AuthController, OrgController],
+      controllers: [
+        HealthController,
+        AuthController,
+        OrgController,
+        ImController,
+      ],
       providers: [
         { provide: REDIS_CLIENT, useValue: redis },
+        // 同一 Redis 实例绑定到 @meshbot/main 的 REDIS_CLIENT token，
+        // 供 PresenceService 注入（不创建第二个连接）。
+        { provide: MAIN_REDIS_CLIENT, useValue: redis },
         // Redis 连接的优雅关闭：应用 shutdown / 热重载时 quit()，避免连接泄漏
         RedisLifecycle,
         RedisHealthIndicator,
         HealthGateway,
+        ImGateway,
         JwtMainStrategy,
         // 注意：guard 注册顺序 = 执行顺序（先 throttle、后 jwt）
         { provide: APP_GUARD, useClass: ProxyThrottlerGuard },
