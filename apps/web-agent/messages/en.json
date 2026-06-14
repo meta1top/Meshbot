@@ -447,5 +447,8 @@
     "goAssistant": ""
   },
   "youName": "",
-  "assistantName": ""
+  "assistantName": "",
+  "welcomeBack": "",
+  "brandTagline": "",
+  "brandSubtitle": ""
 }

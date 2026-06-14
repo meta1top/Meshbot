@@ -37,9 +37,12 @@ export default function LoginPage() {
 
   return (
     <AuthShellLayout>
-      <div className="w-full max-w-[430px] border border-border bg-card shadow-sm">
+      <div className="w-full max-w-[380px]">
         <Card className="border-0 shadow-none">
           <CardHeader className="space-y-0 pb-4">
+            <p className="mb-1 text-xs text-muted-foreground">
+              {t("welcomeBack")}
+            </p>
             <CardTitle className="text-left text-[28px] leading-[1.15] font-semibold tracking-tight text-foreground">
               {t("title")}
             </CardTitle>
@@ -96,7 +99,7 @@ export default function LoginPage() {
 
               <Button
                 type="submit"
-                className="mt-2 w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                className="mt-2 w-full bg-(--shell-accent) text-white hover:opacity-90"
                 disabled={loginMutation.isPending}
               >
                 {loginMutation.isPending ? t("signingIn") : t("signIn")}
