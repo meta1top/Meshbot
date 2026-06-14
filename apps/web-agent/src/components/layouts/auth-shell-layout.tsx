@@ -66,7 +66,7 @@ export function AuthShellLayout({ children, className }: AuthShellLayoutProps) {
           </div>
           <div className="mt-3 text-sm text-white/85">{t("brandSubtitle")}</div>
         </div>
-        <div className="pointer-events-none absolute -right-12 -bottom-12 h-48 w-48 rounded-full border-20 border-white/10" />
+        <div className="pointer-events-none absolute -right-12 -bottom-12 h-48 w-48 rounded-full border-[20px] border-white/10" />
       </div>
       {/* 右内容 */}
       <div

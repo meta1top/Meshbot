@@ -31,7 +31,7 @@ import { SessionDeleteDialog } from "./session-delete-dialog";
  * 单条会话。三态：
  *  - 默认：图标 + 标题 + 三点（hover 显）
  *  - 编辑：图标 + Input（autofocus + 全选）；Enter/blur 保存、Esc 取消、IME 期 Enter 忽略
- *  - 激活：路由匹配则高亮（与 SidebarNavItem 一致色）
+ *  - 激活：路由匹配则高亮（半透明白选中）
  *
  * 三点菜单：修改标题 / 固定·取消固定 / 删除 —— 使用 shadcn DropdownMenu。
  */

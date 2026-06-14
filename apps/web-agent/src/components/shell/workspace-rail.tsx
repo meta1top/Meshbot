@@ -45,6 +45,7 @@ export function WorkspaceRail() {
   const router = useRouter();
   const pathname = usePathname();
   const t = useTranslations("appShell");
+  const tCommon = useTranslations("common");
   const { theme, toggleTheme } = useTheme();
   const user = useAtomValue(currentUserAtom);
   const logoutMutation = useLogout();
@@ -95,7 +96,11 @@ export function WorkspaceRail() {
         type="button"
         onClick={toggleTheme}
         className="flex h-9 w-9 items-center justify-center rounded-(--shell-radius) text-white/65 transition-colors hover:bg-white/10 hover:text-white"
-        title={t("userMenu.settings")}
+        title={
+          theme === "dark"
+            ? tCommon("switchToLightTheme")
+            : tCommon("switchToDarkTheme")
+        }
       >
         {theme === "dark" ? (
           <Sun className="h-4 w-4" />
