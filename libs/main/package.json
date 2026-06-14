@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@meshbot/common": "workspace:*",
+    "@meshbot/types": "workspace:*",
     "@meshbot/types-main": "workspace:*",
     "bcrypt": "^6.0.0",
     "nanoid": "^5"
