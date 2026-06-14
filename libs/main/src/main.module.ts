@@ -2,22 +2,28 @@ import { TxTypeOrmModule } from "@meshbot/common";
 import { type DynamicModule, Module } from "@nestjs/common";
 
 import { AppUser } from "./entities/app-user.entity";
+import { Conversation } from "./entities/conversation.entity";
+import { ConversationMember } from "./entities/conversation-member.entity";
 import { Invitation } from "./entities/invitation.entity";
 import { Membership } from "./entities/membership.entity";
+import { Message } from "./entities/message.entity";
 import { Organization } from "./entities/organization.entity";
 import {
   type AppConfigInvitation,
   INVITATION_CONFIG,
 } from "./services/invitation.config";
+import { ConversationService } from "./services/conversation.service";
 import { InvitationService } from "./services/invitation.service";
 import { MembershipService } from "./services/membership.service";
+import { MessageService } from "./services/message.service";
 import { OrgService } from "./services/org.service";
 import { UserService } from "./services/user.service";
 
 /**
  * server-main 业务模块。Entity → Service 一对一归属（check:repo）：
  * AppUser→UserService / Organization→OrgService /
- * Membership→MembershipService / Invitation→InvitationService。
+ * Membership→MembershipService / Invitation→InvitationService /
+ * Conversation+ConversationMember→ConversationService / Message→MessageService。
  *
  * `forRoot(invitation)` 注入邀请配置切片（过期天数），由 server-main 的
  * AppConfig.invitation 提供。
@@ -46,6 +52,9 @@ export class MainModule {
           Organization,
           Membership,
           Invitation,
+          Conversation,
+          ConversationMember,
+          Message,
         ]),
       ],
       providers: [
@@ -53,9 +62,18 @@ export class MainModule {
         OrgService,
         MembershipService,
         InvitationService,
+        MessageService,
+        ConversationService,
         { provide: INVITATION_CONFIG, useValue: invitation },
       ],
-      exports: [UserService, OrgService, MembershipService, InvitationService],
+      exports: [
+        UserService,
+        OrgService,
+        MembershipService,
+        InvitationService,
+        MessageService,
+        ConversationService,
+      ],
     };
   }
 }

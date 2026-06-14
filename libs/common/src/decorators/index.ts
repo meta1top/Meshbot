@@ -7,6 +7,7 @@ export {
 } from "./cacheable.decorator";
 export { Transactional, TransactionContext } from "./transactional.decorator";
 export {
+  injectLockProvider,
   WITH_LOCK_MARKER,
   WithLock,
   type WithLockOptions,
