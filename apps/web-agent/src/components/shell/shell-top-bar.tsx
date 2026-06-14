@@ -12,7 +12,7 @@ export function ShellTopBar() {
   const router = useRouter();
   const t = useTranslations("appShell");
   return (
-    <div className="drag-handle flex h-[42px] shrink-0 items-center gap-2 bg-[var(--shell-chrome)] px-3">
+    <div className="drag-handle flex h-[42px] shrink-0 items-center gap-2 bg-(--shell-chrome) px-3">
       <div className="app-mac-controls-safe-left flex items-center gap-0.5">
         <button
           type="button"

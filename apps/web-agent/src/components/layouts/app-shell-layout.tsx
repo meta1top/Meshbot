@@ -47,7 +47,7 @@ export function AppShellLayout({
   const resolvedSidebar = sidebar === undefined ? autoSidebar : sidebar;
 
   return (
-    <main className="titlebar-safe flex h-screen flex-col bg-[var(--shell-chrome)] text-foreground">
+    <main className="titlebar-safe flex h-screen flex-col bg-(--shell-chrome) text-foreground">
       {/* 保留 DragRegion：Electron Linux 窗口控制按钮 + macOS 安全区由它承载 */}
       <DragRegion />
       <ShellTopBar />
@@ -55,16 +55,16 @@ export function AppShellLayout({
         <WorkspaceRail />
         <div className="flex min-h-0 flex-1 pr-1.5 pb-1.5">
           {resolvedSidebar && (
-            <aside className="hidden w-[240px] shrink-0 overflow-hidden rounded-l-[var(--shell-radius)] lg:block">
+            <aside className="hidden w-[240px] shrink-0 overflow-hidden rounded-l-(--shell-radius) lg:block">
               {resolvedSidebar}
             </aside>
           )}
           <section
             className={cn(
-              "relative flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--shell-content)]",
+              "relative flex min-w-0 flex-1 flex-col overflow-hidden bg-(--shell-content)",
               resolvedSidebar
-                ? "rounded-r-[var(--shell-radius)]"
-                : "rounded-[var(--shell-radius)]",
+                ? "rounded-r-(--shell-radius)"
+                : "rounded-(--shell-radius)",
             )}
           >
             <div

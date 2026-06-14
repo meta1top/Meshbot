@@ -60,8 +60,8 @@ export function WorkspaceRail() {
     .toUpperCase();
 
   return (
-    <div className="flex h-full w-[68px] shrink-0 flex-col items-center gap-2 bg-[var(--shell-chrome)] px-1.5 pt-2 pb-2">
-      <div className="flex h-8 w-8 items-center justify-center rounded-[var(--shell-radius)] bg-white text-[15px] font-extrabold text-[var(--shell-chrome)]">
+    <div className="flex h-full w-[68px] shrink-0 flex-col items-center gap-2 bg-(--shell-chrome) px-1.5 pt-2 pb-2">
+      <div className="flex h-8 w-8 items-center justify-center rounded-(--shell-radius) bg-white text-[15px] font-extrabold text-(--shell-chrome)">
         M
       </div>
       <nav className="mt-1 flex w-full flex-col gap-1">
@@ -94,7 +94,7 @@ export function WorkspaceRail() {
       <button
         type="button"
         onClick={toggleTheme}
-        className="flex h-9 w-9 items-center justify-center rounded-[var(--shell-radius)] text-white/65 transition-colors hover:bg-white/10 hover:text-white"
+        className="flex h-9 w-9 items-center justify-center rounded-(--shell-radius) text-white/65 transition-colors hover:bg-white/10 hover:text-white"
         title={t("userMenu.settings")}
       >
         {theme === "dark" ? (
@@ -107,7 +107,7 @@ export function WorkspaceRail() {
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="flex h-8 w-8 items-center justify-center rounded-[var(--shell-radius)] bg-[#16a34a] text-[13px] font-semibold text-white"
+            className="flex h-8 w-8 items-center justify-center rounded-(--shell-radius) bg-[#16a34a] text-[13px] font-semibold text-white"
             title={user?.displayName ?? user?.email ?? ""}
           >
             {initial}

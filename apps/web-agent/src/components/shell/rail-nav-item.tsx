@@ -32,7 +32,7 @@ export function RailNavItem({
     >
       <span
         className={cn(
-          "flex h-9 w-9 items-center justify-center rounded-[var(--shell-radius)] transition-colors",
+          "flex h-9 w-9 items-center justify-center rounded-(--shell-radius) transition-colors",
           active ? "bg-white/22" : "hover:bg-white/10",
         )}
       >

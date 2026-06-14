@@ -10,7 +10,7 @@ export function SessionHeader({ sessionId }: { sessionId: string }) {
   const session = sessions.find((s) => s.id === sessionId);
   if (!session) return null;
   return (
-    <div className="sticky top-0 z-10 -mx-4 flex h-11 items-center gap-2 border-b border-border bg-[var(--shell-content)] px-4 lg:-mx-10 lg:px-10">
+    <div className="sticky top-0 z-10 -mx-4 flex h-11 items-center gap-2 border-b border-border bg-(--shell-content) px-4 lg:-mx-10 lg:px-10">
       <button
         type="button"
         onClick={() =>
@@ -18,7 +18,7 @@ export function SessionHeader({ sessionId }: { sessionId: string }) {
         }
         className={
           session.pinned
-            ? "text-[var(--shell-accent)]"
+            ? "text-(--shell-accent)"
             : "text-muted-foreground hover:text-foreground"
         }
         aria-pressed={session.pinned}
