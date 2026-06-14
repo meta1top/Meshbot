@@ -115,18 +115,21 @@ export class ImController {
   ): Promise<MessagePage> {
     const orgId = await this.resolveOrgId(user.userId);
     await this.conversation.getVisibleOrThrow(id, user.userId, orgId);
-    const limit = limitStr
-      ? Math.min(Number(limitStr) || DEFAULT_LIMIT, MAX_LIMIT)
-      : DEFAULT_LIMIT;
+    const n = Number(limitStr);
+    const limit = Math.max(
+      1,
+      Math.min(Number.isFinite(n) && n > 0 ? n : DEFAULT_LIMIT, MAX_LIMIT),
+    );
     return this.message.listMessages(id, before, limit);
   }
 
-  /** 解析当前用户的活跃组织 ID；未设置活跃组织则抛 ORG_NOT_FOUND。 */
+  /** 解析当前用户的活跃组织 ID；未设置活跃组织则抛 ORG_NOT_FOUND，非成员则抛 ORG_FORBIDDEN。 */
   private async resolveOrgId(userId: string): Promise<string> {
     const user = await this.users.findById(userId);
     if (!user?.activeOrgId) {
       throw new AppError(MainErrorCode.ORG_NOT_FOUND);
     }
+    await this.membership.assertMember(user.activeOrgId, userId);
     return user.activeOrgId;
   }
 }
