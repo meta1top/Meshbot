@@ -46,17 +46,25 @@ export class PresenceService {
    */
   private readonly memStore = new Map<string, Map<string, number>>();
 
+  /** 当前时间（ms）。默认 Date.now；测试可经构造参数注入虚假时钟。 */
+  private readonly nowFn: () => number;
+
   /**
    * @param redis   ioredis 实例；null → 走内存回退路径
-   * @param nowFn   当前时间（ms），默认 Date.now；可注入以便测试推进虚假时钟
+   * @param nowFn   时钟函数；NestJS DI 下无对应 provider，靠 @Optional 注入 undefined
+   *                后在体内回退到 Date.now —— **不能用参数默认值**，DI 会把该参数
+   *                当作待解析依赖（Function 类型）而报 UnknownDependenciesException。
    */
   // B8 必须提供 { provide: REDIS_CLIENT, useValue: <Redis|null> }
   constructor(
     @Optional()
     @Inject(REDIS_CLIENT)
     private readonly redis: RedisPresenceClient | null,
-    private readonly nowFn: () => number = Date.now,
-  ) {}
+    @Optional()
+    nowFn?: () => number,
+  ) {
+    this.nowFn = nowFn ?? Date.now;
+  }
 
   /**
    * 标记用户上线，设置 TTL。
