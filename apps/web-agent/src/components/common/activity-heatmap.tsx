@@ -14,9 +14,9 @@ interface ActivityHeatmapProps {
 function intensityClass(value: number, max: number): string {
   if (value <= 0) return "bg-foreground/5";
   const ratio = value / max;
-  if (ratio <= 0.25) return "bg-accent/30";
-  if (ratio <= 0.6) return "bg-accent/60";
-  return "bg-accent";
+  if (ratio <= 0.25) return "bg-secondary/30";
+  if (ratio <= 0.6) return "bg-secondary/60";
+  return "bg-secondary";
 }
 
 /** 本地日期 YYYY-MM-DD。 */
