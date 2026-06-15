@@ -2,19 +2,29 @@ import { resolveContextWindow } from "@meshbot/types-agent";
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
+import { ScopedRepository } from "../account/scoped-repository";
+import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
 import type {
   CreateModelConfigDto,
   UpdateModelConfigDto,
 } from "../dto/create-model-config.dto";
 import { ModelConfig } from "../entities/model-config.entity";
 
+/** ModelConfig 表的归属 Service —— 模型配置的数据层（按账号隔离）。 */
 @Injectable()
 export class ModelConfigService {
+  /** ModelConfig 账号作用域仓库（自动按当前账号过滤/盖章）。 */
+  private readonly repo: ScopedRepository<ModelConfig>;
+
   constructor(
     @InjectRepository(ModelConfig)
-    private readonly repo: Repository<ModelConfig>,
-  ) {}
+    rawRepo: Repository<ModelConfig>,
+    scopedFactory: ScopedRepositoryFactory,
+  ) {
+    this.repo = scopedFactory.create(rawRepo);
+  }
 
+  /** 列出当前账号所有已启用的 ModelConfig。 */
   findAllEnabled(): Promise<ModelConfig[]> {
     return this.repo.find({ where: { enabled: true } });
   }
@@ -25,18 +35,24 @@ export class ModelConfigService {
     return rows[0] ?? null;
   }
 
+  /** 列出当前账号所有 ModelConfig。 */
   findAll(): Promise<ModelConfig[]> {
     return this.repo.find();
   }
 
+  /**
+   * 按 id 查单条；不存在或不属于当前账号则抛 NotFoundException。
+   * 作用域查询保证他账号的 id 对当前账号不可见。
+   */
   async findOneOrFail(id: string): Promise<ModelConfig> {
     const entity = await this.repo.findOneBy({ id });
     if (!entity) throw new NotFoundException(`ModelConfig ${id} not found`);
     return entity;
   }
 
+  /** 创建并保存新 ModelConfig（自动盖上当前账号 cloudUserId）。 */
   async create(dto: CreateModelConfigDto): Promise<ModelConfig> {
-    const entity = this.repo.create({
+    return this.repo.save({
       providerType: dto.providerType,
       name: dto.name,
       model: dto.model,
@@ -44,8 +60,7 @@ export class ModelConfigService {
       baseUrl: dto.baseUrl ?? "",
       enabled: true,
       contextWindow: resolveContextWindow(dto.model, dto.contextWindow),
-    });
-    return this.repo.save(entity);
+    } as ModelConfig);
   }
 
   /**
@@ -66,13 +81,19 @@ export class ModelConfigService {
     return this.repo.save(entity);
   }
 
+  /**
+   * 删除指定 ModelConfig。
+   * 先通过作用域 findOneOrFail 验证归属（不属于当前账号则抛 NOT_FOUND），
+   * 再用作用域 delete 确保删除条件合并当前账号（防误删他账号行）。
+   */
   async remove(id: string): Promise<void> {
-    const entity = await this.findOneOrFail(id);
-    await this.repo.remove(entity);
+    await this.findOneOrFail(id);
+    await this.repo.delete({ id });
   }
 
+  /** 判断当前账号是否有已启用的 ModelConfig。 */
   async hasEnabledModels(): Promise<boolean> {
-    const count = await this.repo.countBy({ enabled: true });
+    const count = await this.repo.count({ where: { enabled: true } });
     return count > 0;
   }
 }
