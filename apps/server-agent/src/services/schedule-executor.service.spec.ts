@@ -313,3 +313,114 @@ describe("ScheduleExecutor.onApplicationBootstrap", () => {
     expect(registry.getCronJobs().has(disabled.id)).toBe(false);
   });
 });
+
+describe("ScheduleExecutor 账号运行时生命周期事件（登录注册 / 登出反注册）", () => {
+  let ds: DataSource;
+  let ctx: AccountContextService;
+  let schedule: ScheduleService;
+  let executor: ScheduleExecutor;
+  let registry: SchedulerRegistry;
+
+  /** 直接植入一行（绕过 ALS），模拟 DB 里某账号已有任务。 */
+  async function seedCronJob(overrides: {
+    cloudUserId: string;
+    title?: string;
+    enabled?: boolean;
+  }): Promise<CronJob> {
+    const repo = ds.getRepository(CronJob);
+    const entity = repo.create({
+      id: randomUUID(),
+      cloudUserId: overrides.cloudUserId,
+      sessionId: "s1",
+      title: overrides.title ?? "seeded",
+      prompt: "p",
+      kind: "cron",
+      cronExpr: "0 7 * * *",
+      timezone: "UTC",
+      runAt: null,
+      enabled: overrides.enabled ?? true,
+      lastFiredAt: null,
+      nextFireAt: new Date(Date.now() + 60_000),
+    });
+    return repo.save(entity);
+  }
+
+  beforeEach(async () => {
+    ds = new DataSource({
+      type: "better-sqlite3",
+      database: ":memory:",
+      entities: [CronJob],
+      synchronize: true,
+    });
+    await ds.initialize();
+    ctx = new AccountContextService();
+    const scopedFactory = new ScopedRepositoryFactory(ctx);
+    schedule = new ScheduleService(ds.getRepository(CronJob), scopedFactory);
+    registry = new SchedulerRegistry();
+    executor = new ScheduleExecutor(
+      schedule,
+      registry,
+      fakeSessions() as never,
+      fakeRunner() as never,
+      ctx,
+      // 把 u1 / u2 都视为在线，避免无关分支干扰
+      fakeRuntime(["u1", "u2"]).registry,
+    );
+  });
+
+  afterEach(async () => {
+    await ds.destroy();
+  });
+
+  it("onRuntimeTeardown：只反注册该账号的全部已注册定时器，他账号保留", async () => {
+    const u1a = await seedCronJob({ cloudUserId: "u1", title: "u1-a" });
+    const u1b = await seedCronJob({ cloudUserId: "u1", title: "u1-b" });
+    const u2a = await seedCronJob({ cloudUserId: "u2", title: "u2-a" });
+    // boot 把三条都装载进 registry
+    await executor.onApplicationBootstrap();
+    expect(registry.getCronJobs().has(u1a.id)).toBe(true);
+    expect(registry.getCronJobs().has(u1b.id)).toBe(true);
+    expect(registry.getCronJobs().has(u2a.id)).toBe(true);
+
+    executor.onRuntimeTeardown({ cloudUserId: "u1" });
+
+    // u1 两条都被撤销
+    expect(registry.getCronJobs().has(u1a.id)).toBe(false);
+    expect(registry.getCronJobs().has(u1b.id)).toBe(false);
+    // u2 保留
+    expect(registry.getCronJobs().has(u2a.id)).toBe(true);
+  });
+
+  it("onRuntimeCreated：注册该账号 enabled 任务（disabled 跳过）", async () => {
+    const enabled = await seedCronJob({ cloudUserId: "u1", title: "on" });
+    const disabled = await seedCronJob({
+      cloudUserId: "u1",
+      title: "off",
+      enabled: false,
+    });
+    // 他账号的任务不应被本账号事件注册
+    const other = await seedCronJob({ cloudUserId: "u2", title: "other" });
+
+    await executor.onRuntimeCreated({ cloudUserId: "u1" });
+
+    expect(registry.getCronJobs().has(enabled.id)).toBe(true);
+    expect(registry.getCronJobs().has(disabled.id)).toBe(false);
+    expect(registry.getCronJobs().has(other.id)).toBe(false);
+  });
+
+  it("onRuntimeCreated 幂等：与 boot 全量装载重复触发不会重复注册 / 抛错", async () => {
+    const job = await seedCronJob({ cloudUserId: "u1", title: "idem" });
+    // boot 已装载该 job
+    await executor.onApplicationBootstrap();
+    expect(registry.getCronJobs().has(job.id)).toBe(true);
+    const before = registry.getCronJobs().get(job.id);
+
+    // 再次触发 runtimeCreated 不应抛错（SchedulerRegistry 重复 addCronJob 会抛）
+    await expect(
+      executor.onRuntimeCreated({ cloudUserId: "u1" }),
+    ).resolves.toBeUndefined();
+
+    // 仍是同一个 CronJob 实例（未被替换 / 未重复注册）
+    expect(registry.getCronJobs().get(job.id)).toBe(before);
+  });
+});

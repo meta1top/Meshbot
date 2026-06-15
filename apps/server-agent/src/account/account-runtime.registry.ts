@@ -1,10 +1,12 @@
-import { Injectable, Logger } from "@nestjs/common";
 import {
   AccountContextService,
   McpService,
   PromptService,
 } from "@meshbot/agent";
+import { Injectable, Logger } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { ImRelayClientService } from "../cloud/im-relay-client.service";
+import { ACCOUNT_EVENTS } from "./account.events";
 
 /**
  * 每账号运行时注册表（v3）：登录 createRuntime / 登出 teardownRuntime / 改配置 reloadRuntime。
@@ -20,6 +22,7 @@ export class AccountRuntimeRegistry {
     private readonly mcp: McpService,
     private readonly prompt: PromptService,
     private readonly relay: ImRelayClientService,
+    private readonly emitter: EventEmitter2,
   ) {}
 
   /** 该账号运行时是否在线。 */
@@ -38,6 +41,7 @@ export class AccountRuntimeRegistry {
     });
     await this.relay.connect(cloudUserId);
     this.live.add(cloudUserId);
+    this.emitter.emit(ACCOUNT_EVENTS.runtimeCreated, { cloudUserId });
   }
 
   /**
@@ -61,6 +65,7 @@ export class AccountRuntimeRegistry {
       this.logger.error(`disconnect relay ${cloudUserId} 失败`, err as Error);
     }
     this.live.delete(cloudUserId);
+    this.emitter.emit(ACCOUNT_EVENTS.runtimeTeardown, { cloudUserId });
   }
 
   /** 改配置/切目录时重载（teardown + create）。 */

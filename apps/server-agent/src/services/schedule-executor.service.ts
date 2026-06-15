@@ -5,9 +5,12 @@ import {
   Logger,
   type OnApplicationBootstrap,
 } from "@nestjs/common";
+import { OnEvent } from "@nestjs/event-emitter";
 import { SchedulerRegistry } from "@nestjs/schedule";
 import { CronExpressionParser } from "cron-parser";
 import { CronJob as CronJobLib } from "cron";
+import { ACCOUNT_EVENTS } from "../account/account.events";
+import type { AccountRuntimeEvent } from "../account/account.events";
 import { AccountRuntimeRegistry } from "../account/account-runtime.registry";
 import type { CronJob } from "../entities/cron-job.entity";
 import { RunnerService } from "./runner.service";
@@ -18,6 +21,12 @@ import { SessionService } from "./session.service";
 @Injectable()
 export class ScheduleExecutor implements OnApplicationBootstrap {
   private readonly logger = new Logger(ScheduleExecutor.name);
+
+  /**
+   * 每账号已注册到 SchedulerRegistry 的 jobId 集合（cloudUserId → Set<jobId>）。
+   * 登出 teardown 时据此反注册该账号全部定时器，避免登出账号残留 cron。
+   */
+  private readonly accountJobIds = new Map<string, Set<string>>();
 
   constructor(
     private readonly schedule: ScheduleService,
@@ -45,9 +54,12 @@ export class ScheduleExecutor implements OnApplicationBootstrap {
     }
   }
 
-  /** 给 ScheduleService 在创建 / 启用时调用，注册一条调度。 */
+  /** 给 ScheduleService 在创建 / 启用时调用，注册一条调度（同时记录账号归属，供登出反注册）。 */
   async register(
-    job: Pick<CronJob, "id" | "kind" | "cronExpr" | "timezone" | "runAt">,
+    job: Pick<
+      CronJob,
+      "id" | "kind" | "cronExpr" | "timezone" | "runAt" | "cloudUserId"
+    >,
   ): Promise<void> {
     if (job.kind === "cron") {
       const cronJob = new CronJobLib(
@@ -62,6 +74,7 @@ export class ScheduleExecutor implements OnApplicationBootstrap {
         job.timezone ?? undefined,
       );
       this.registry.addCronJob(job.id, cronJob);
+      this.trackAccountJob(job.cloudUserId, job.id);
       return;
     }
     const ms = (job.runAt as Date).getTime() - Date.now();
@@ -78,9 +91,10 @@ export class ScheduleExecutor implements OnApplicationBootstrap {
       );
     }, ms);
     this.registry.addTimeout(job.id, timeout);
+    this.trackAccountJob(job.cloudUserId, job.id);
   }
 
-  /** 反注册一条调度（kind 不确定时两边都尝试）。 */
+  /** 反注册一条调度（kind 不确定时两边都尝试），并从账号归属表移除。 */
   deregister(jobId: string): void {
     if (this.registry.getCronJobs().has(jobId)) {
       this.registry.deleteCronJob(jobId);
@@ -88,6 +102,70 @@ export class ScheduleExecutor implements OnApplicationBootstrap {
     if (this.registry.getTimeouts().includes(jobId)) {
       this.registry.deleteTimeout(jobId);
     }
+    this.untrackAccountJob(jobId);
+  }
+
+  /** 记录 jobId 归属账号（供登出时批量反注册）。 */
+  private trackAccountJob(cloudUserId: string, jobId: string): void {
+    let set = this.accountJobIds.get(cloudUserId);
+    if (!set) {
+      set = new Set<string>();
+      this.accountJobIds.set(cloudUserId, set);
+    }
+    set.add(jobId);
+  }
+
+  /** 从所属账号集合移除 jobId（不确定归属哪个账号时遍历移除）。 */
+  private untrackAccountJob(jobId: string): void {
+    for (const [cloudUserId, set] of this.accountJobIds) {
+      if (set.delete(jobId) && set.size === 0) {
+        this.accountJobIds.delete(cloudUserId);
+      }
+    }
+  }
+
+  /**
+   * 账号运行时创建（登录 / boot 恢复）→ 注册该账号 enabled 任务到 SchedulerRegistry。
+   * 幂等：已在 registry 中的 job 跳过（boot 全量装载与本事件可能同时触发，不能重复注册）。
+   */
+  @OnEvent(ACCOUNT_EVENTS.runtimeCreated)
+  async onRuntimeCreated({ cloudUserId }: AccountRuntimeEvent): Promise<void> {
+    await this.registerAccountJobs(cloudUserId);
+  }
+
+  /** 账号运行时拆除（登出）→ 反注册该账号全部已注册定时器，杜绝登出后残留 cron。 */
+  @OnEvent(ACCOUNT_EVENTS.runtimeTeardown)
+  onRuntimeTeardown({ cloudUserId }: AccountRuntimeEvent): void {
+    this.deregisterAccountJobs(cloudUserId);
+  }
+
+  /**
+   * 在该账号上下文内列出其 enabled 任务并注册（作用域读，不走 unscoped 旁路）。
+   * 幂等：已在 SchedulerRegistry 的 job 跳过，避免与 boot 全量装载重复注册。
+   */
+  private async registerAccountJobs(cloudUserId: string): Promise<void> {
+    const jobs = await this.account.run(cloudUserId, () =>
+      this.schedule.list(),
+    );
+    for (const job of jobs) {
+      if (!job.enabled) continue;
+      const exists =
+        this.registry.doesExist("cron", job.id) ||
+        this.registry.doesExist("timeout", job.id);
+      if (exists) continue;
+      await this.register(job);
+    }
+  }
+
+  /** 反注册该账号已记录的全部定时器并清空其集合。 */
+  private deregisterAccountJobs(cloudUserId: string): void {
+    const ids = this.accountJobIds.get(cloudUserId);
+    if (!ids) return;
+    // 复制成数组：deregister 会改动 accountJobIds，避免遍历中修改 Set
+    for (const jobId of [...ids]) {
+      this.deregister(jobId);
+    }
+    this.accountJobIds.delete(cloudUserId);
   }
 
   /**

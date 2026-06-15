@@ -1,4 +1,6 @@
 import { AccountContextService } from "@meshbot/agent";
+import { EventEmitter2 } from "@nestjs/event-emitter";
+import { ACCOUNT_EVENTS } from "./account.events";
 import { AccountRuntimeRegistry } from "./account-runtime.registry";
 
 type StubMcp = jest.Mocked<
@@ -19,6 +21,7 @@ describe("AccountRuntimeRegistry", () => {
   let mcp: StubMcp;
   let prompt: StubPrompt;
   let relay: StubRelay;
+  let emitter: EventEmitter2;
   let registry: AccountRuntimeRegistry;
 
   beforeEach(() => {
@@ -36,12 +39,15 @@ describe("AccountRuntimeRegistry", () => {
       connect: jest.fn().mockResolvedValue(undefined),
       disconnect: jest.fn(),
     };
+    emitter = new EventEmitter2();
+    jest.spyOn(emitter, "emit");
 
     registry = new AccountRuntimeRegistry(
       ctx,
       mcp as unknown as import("@meshbot/agent").McpService,
       prompt as unknown as import("@meshbot/agent").PromptService,
       relay as unknown as import("../cloud/im-relay-client.service").ImRelayClientService,
+      emitter,
     );
   });
 
@@ -69,6 +75,14 @@ describe("AccountRuntimeRegistry", () => {
 
       expect(registry.has("u1")).toBe(true);
     });
+
+    it("createRuntime後に runtimeCreated イベントが cloudUserId 付きで発火すること", async () => {
+      await registry.createRuntime("u1");
+
+      expect(emitter.emit).toHaveBeenCalledWith(ACCOUNT_EVENTS.runtimeCreated, {
+        cloudUserId: "u1",
+      });
+    });
   });
 
   describe("teardownRuntime", () => {
@@ -86,6 +100,17 @@ describe("AccountRuntimeRegistry", () => {
       await registry.teardownRuntime("u1");
 
       expect(registry.has("u1")).toBe(false);
+    });
+
+    it("teardownRuntime後に runtimeTeardown イベントが cloudUserId 付きで発火すること", async () => {
+      await registry.teardownRuntime("u1");
+
+      expect(emitter.emit).toHaveBeenCalledWith(
+        ACCOUNT_EVENTS.runtimeTeardown,
+        {
+          cloudUserId: "u1",
+        },
+      );
     });
   });
 

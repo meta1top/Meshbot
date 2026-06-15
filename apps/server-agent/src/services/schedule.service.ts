@@ -15,6 +15,7 @@ import { CronJob } from "../entities/cron-job.entity";
 export interface ScheduleRegistrySink {
   register(job: {
     id: string;
+    cloudUserId: string;
     kind: "cron" | "once";
     cronExpr: string | null;
     timezone: string | null;
