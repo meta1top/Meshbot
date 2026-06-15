@@ -5,7 +5,6 @@ import { JwtService } from "@nestjs/jwt";
 
 import { AccountRuntimeRegistry } from "../account/account-runtime.registry";
 import { CloudClientService } from "../cloud/cloud-client.service";
-import { ImRelayClientService } from "../cloud/im-relay-client.service";
 import type { CloudAuthData, CloudProfileData } from "../cloud/cloud.types";
 import { AgentErrorCode } from "../errors/agent.error-codes";
 import { CloudIdentityService } from "./cloud-identity.service";
@@ -42,7 +41,6 @@ export class CloudAuthService {
     private readonly cloud: CloudClientService,
     private readonly identity: CloudIdentityService,
     private readonly jwt: JwtService,
-    private readonly imRelay: ImRelayClientService,
     private readonly account: AccountContextService,
     private readonly runtime: AccountRuntimeRegistry,
   ) {}
@@ -63,14 +61,13 @@ export class CloudAuthService {
   }
 
   /**
-   * 登出：置当前账号 loggedIn=false（保留行与 token，离线可用）。
+   * 登出：拆账号运行时（卸 MCP/技能/提示词缓存/云连接），置 loggedIn=false。
    * 本地 JWT 不主动吊销（无状态），登出语义 = 标记该云端账号已登出；profile /
    * 云端代理端点立即 401，纯本地路由在 JWT 剩余有效期内仍可用（单机桌面可接受）。
-   * 完整运行时拆解（teardownRuntime）见 Task 4.3。
    */
   async logout(): Promise<void> {
     const id = this.account.getOrThrow();
-    this.imRelay.disconnect(id);
+    await this.runtime.teardownRuntime(id); // 卸 MCP/技能/提示词/云连接（含 relay.disconnect）
     await this.identity.setLoggedOut(id);
   }
 

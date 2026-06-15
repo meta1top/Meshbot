@@ -14,7 +14,6 @@ import request from "supertest";
 import { AccountContextInterceptor } from "../../src/account/account-context.interceptor";
 import { AccountRuntimeRegistry } from "../../src/account/account-runtime.registry";
 import { CloudClientService } from "../../src/cloud/cloud-client.service";
-import { ImRelayClientService } from "../../src/cloud/im-relay-client.service";
 import { AuthController } from "../../src/controllers/auth.controller";
 import { CloudIdentity } from "../../src/entities/cloud-identity.entity";
 import { JwtAuthGuard } from "../../src/guards/jwt-auth.guard";
@@ -71,17 +70,6 @@ describe("Auth profile e2e（云端代理）", () => {
         // v3：profile 路由按账号读镜像，需账号上下文（拦截器在 JWT 守卫后注入 sub）
         AccountContextService,
         { provide: CloudClientService, useValue: cloudStub },
-        // C3 给 CloudAuthService 加了 ImRelayClientService 依赖；本 e2e 不演练 IM，桩掉即可
-        {
-          provide: ImRelayClientService,
-          useValue: {
-            connect: jest.fn(),
-            disconnect: jest.fn(),
-            send: jest.fn(),
-            read: jest.fn(),
-            isConnected: () => false,
-          },
-        },
         // T4.2：CloudAuthService 现在依赖 AccountRuntimeRegistry，桩掉避免完整初始化
         {
           provide: AccountRuntimeRegistry,

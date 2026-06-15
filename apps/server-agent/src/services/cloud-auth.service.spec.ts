@@ -24,14 +24,12 @@ describe("CloudAuthService.login", () => {
     };
     const identity = { upsert: jest.fn().mockResolvedValue(undefined) };
     const jwt = { sign: jest.fn().mockReturnValue("local-jwt") };
-    const imRelay = { connect: jest.fn(), disconnect: jest.fn() };
     const runtime = makeRuntime();
 
     const svc = new CloudAuthService(
       cloud as never,
       identity as never,
       jwt as never,
-      imRelay as never,
       new AccountContextService(),
       runtime as never,
     );
@@ -55,8 +53,6 @@ describe("CloudAuthService.login", () => {
     expect(runtime.createRuntime).toHaveBeenCalledWith("u1");
     expect(jwt.sign).toHaveBeenCalledWith({ sub: "u1", email: "a@x.io" });
     expect(out).toEqual({ access_token: "local-jwt" });
-    // login 不再直接调 imRelay.connect（由 createRuntime 内部处理）
-    expect(imRelay.connect).not.toHaveBeenCalled();
   });
 
   it("getProfile：无身份镜像抛 AUTH_UNAUTHORIZED", async () => {
@@ -66,7 +62,6 @@ describe("CloudAuthService.login", () => {
       {} as never,
       identity as never,
       {} as never,
-      { connect: jest.fn(), disconnect: jest.fn() } as never,
       account,
       makeRuntime() as never,
     );
@@ -94,14 +89,12 @@ describe("CloudAuthService.login", () => {
     };
     const identity = { upsert: jest.fn().mockResolvedValue(undefined) };
     const jwt = { sign: jest.fn().mockReturnValue("local-jwt-reg") };
-    const imRelay = { connect: jest.fn(), disconnect: jest.fn() };
     const runtime = makeRuntime();
 
     const svc = new CloudAuthService(
       cloud as never,
       identity as never,
       jwt as never,
-      imRelay as never,
       new AccountContextService(),
       runtime as never,
     );
@@ -118,7 +111,24 @@ describe("CloudAuthService.login", () => {
     });
     expect(out).toEqual({ access_token: "local-jwt-reg" });
     expect(runtime.createRuntime).toHaveBeenCalledWith("u2");
-    // register 不再直接调 imRelay.connect（由 createRuntime 内部处理）
-    expect(imRelay.connect).not.toHaveBeenCalled();
+  });
+
+  it("logout：调 runtime.teardownRuntime 再置 loggedIn=false，不直接调 relay", async () => {
+    const account = new AccountContextService();
+    const identity = { setLoggedOut: jest.fn().mockResolvedValue(undefined) };
+    const runtime = makeRuntime();
+
+    const svc = new CloudAuthService(
+      {} as never,
+      identity as never,
+      {} as never,
+      account,
+      runtime as never,
+    );
+
+    await account.run("u1", () => svc.logout());
+
+    expect(runtime.teardownRuntime).toHaveBeenCalledWith("u1");
+    expect(identity.setLoggedOut).toHaveBeenCalledWith("u1");
   });
 });
