@@ -1,3 +1,4 @@
+import { AccountContextService } from "@meshbot/agent";
 import { PROVIDERS } from "@meshbot/types-agent";
 import { Controller, Get } from "@nestjs/common";
 
@@ -14,6 +15,7 @@ export class SetupController {
     private readonly modelConfigService: ModelConfigService,
     private readonly identity: CloudIdentityService,
     private readonly cloudAuth: CloudAuthService,
+    private readonly account: AccountContextService,
   ) {}
 
   @Public()
@@ -33,7 +35,9 @@ export class SetupController {
     if (!id?.orgId) {
       return { step: "needs-org", needsSetup: true };
     }
-    const hasModels = await this.modelConfigService.hasEnabledModels();
+    const hasModels = await this.account.run(id.cloudUserId, () =>
+      this.modelConfigService.hasEnabledModels(),
+    );
     if (!hasModels) {
       return { step: "needs-model", needsSetup: true };
     }
