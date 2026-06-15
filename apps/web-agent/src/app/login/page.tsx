@@ -90,7 +90,8 @@ export default function LoginPage() {
               {loginMutation.error && (
                 <Alert variant="destructive">
                   <AlertDescription>
-                    {loginMutation.error instanceof Error
+                    {loginMutation.error instanceof Error &&
+                    loginMutation.error.message
                       ? loginMutation.error.message
                       : t("loginFailed")}
                   </AlertDescription>
