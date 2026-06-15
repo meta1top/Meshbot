@@ -4,8 +4,9 @@ import {
   ConflictException,
   NotFoundException,
 } from "@nestjs/common";
-import { GraphService } from "@meshbot/agent";
+import { AccountContextService, GraphService } from "@meshbot/agent";
 import { DataSource } from "typeorm";
+import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
 import { LlmCall } from "../entities/llm-call.entity";
 import { PendingMessage } from "../entities/pending-message.entity";
 import { Session } from "../entities/session.entity";
@@ -15,8 +16,18 @@ import { LlmCallService } from "./llm-call.service";
 import { SessionMessageService } from "./session-message.service";
 import { SessionService } from "./session.service";
 
+/** 默认测试账号：作用域仓库要求每次调用都处于账号上下文内。 */
+const DEFAULT_USER = "test-user";
+
 describe("SessionService", () => {
   let ds: DataSource;
+  let ctx: AccountContextService;
+  /** 真实 service（不包账号上下文，供 ctx.run 显式包裹的隔离测试用）。 */
+  let rawService: SessionService;
+  /**
+   * 自动包账号上下文的 service 代理：每个方法调用都跑在 DEFAULT_USER 上下文内，
+   * 让既有单测无需逐一改写。隔离测试用 rawService + ctx.run 显式切账号。
+   */
   let service: SessionService;
 
   beforeEach(async () => {
@@ -65,9 +76,12 @@ describe("SessionService", () => {
         this.__deletions.push(sessionId);
       },
     };
-    service = new SessionService(
+    ctx = new AccountContextService();
+    const scopedFactory = new ScopedRepositoryFactory(ctx);
+    rawService = new SessionService(
       ds.getRepository(Session),
       ds.getRepository(PendingMessage),
+      scopedFactory,
       llmCalls,
       sessionMessages,
       checkpointer,
@@ -76,11 +90,22 @@ describe("SessionService", () => {
     );
     // 暴露给 deleteSession / regenerateAfter 测试用
     (
-      service as unknown as { __ds: DataSource; __graph: typeof fakeGraph }
+      rawService as unknown as { __ds: DataSource; __graph: typeof fakeGraph }
     ).__ds = ds;
     (
-      service as unknown as { __ds: DataSource; __graph: typeof fakeGraph }
+      rawService as unknown as { __ds: DataSource; __graph: typeof fakeGraph }
     ).__graph = fakeGraph;
+    // 自动账号上下文代理：方法调用统一跑在 DEFAULT_USER 下，非函数属性透传。
+    service = new Proxy(rawService, {
+      get(target, prop, receiver) {
+        const value = Reflect.get(target, prop, receiver);
+        if (typeof value !== "function") return value;
+        return (...args: unknown[]) =>
+          ctx.run(DEFAULT_USER, () =>
+            (value as (...a: unknown[]) => unknown).apply(target, args),
+          );
+      },
+    });
   });
 
   afterEach(async () => {
@@ -202,8 +227,8 @@ describe("SessionService", () => {
     // 第一条 failed 已落入 session_messages（模拟 run.human 已记录），第二条没有
     const ds = (service as unknown as { __ds: DataSource }).__ds;
     await ds.query(
-      `INSERT INTO session_messages (id, session_id, role, content, seq) VALUES (?, ?, 'user', 'm1', 1)`,
-      [claimed[0].id, sessionId],
+      `INSERT INTO session_messages (id, session_id, cloud_user_id, role, content, seq) VALUES (?, ?, ?, 'user', 'm1', 1)`,
+      [claimed[0].id, sessionId, DEFAULT_USER],
     );
     const rows = await service.listActivePendingWithHistory(sessionId);
     const target = rows.find((r) => r.id === claimed[0].id);
@@ -287,16 +312,33 @@ describe("SessionService", () => {
   describe("listAllSorted", () => {
     it("已固定优先；都固定按 pinnedAt desc；未固定按 updatedAt desc", async () => {
       const a = await service.createSession({ content: "A" });
-      await new Promise((r) => setTimeout(r, 10));
       const b = await service.createSession({ content: "B" });
-      await new Promise((r) => setTimeout(r, 10));
       const c = await service.createSession({ content: "C" });
-      await new Promise((r) => setTimeout(r, 10));
       const d = await service.createSession({ content: "D" });
 
+      // 显式盖确定性时间戳，避免依赖墙钟（SQLite datetime 秒精度 + 同秒内
+      // updated_at 相等会让 id desc（随机 UUID）成 tie-breaker，导致 flaky）。
+      // b/d 固定：d 的 pinned_at 更晚 → 固定组里 d 在 b 前。
+      // a/c 未固定：c 的 updated_at 更晚 → 未固定组里 c 在 a 前。
+      const db = (service as unknown as { __ds: DataSource }).__ds;
+      await db.query(`UPDATE sessions SET updated_at = ? WHERE id = ?`, [
+        "2026-01-01 00:00:01",
+        a.sessionId,
+      ]);
+      await db.query(`UPDATE sessions SET updated_at = ? WHERE id = ?`, [
+        "2026-01-01 00:00:02",
+        c.sessionId,
+      ]);
       await service.patch(b.sessionId, { pinned: true });
-      await new Promise((r) => setTimeout(r, 10));
+      await db.query(`UPDATE sessions SET pinned_at = ? WHERE id = ?`, [
+        "2026-01-01 00:00:03",
+        b.sessionId,
+      ]);
       await service.patch(d.sessionId, { pinned: true });
+      await db.query(`UPDATE sessions SET pinned_at = ? WHERE id = ?`, [
+        "2026-01-01 00:00:04",
+        d.sessionId,
+      ]);
 
       const rows = await service.listAllSorted();
       const ids = rows.map((s) => s.id);
@@ -345,12 +387,12 @@ describe("SessionService", () => {
     async function seedAll(sessionId: string): Promise<void> {
       const ds = (service as unknown as { __ds: DataSource }).__ds;
       await ds.query(
-        `INSERT INTO session_messages (id, session_id, role, content) VALUES (?, ?, 'user', 'x')`,
-        [`msg-${sessionId}`, sessionId],
+        `INSERT INTO session_messages (id, session_id, cloud_user_id, role, content) VALUES (?, ?, ?, 'user', 'x')`,
+        [`msg-${sessionId}`, sessionId, DEFAULT_USER],
       );
       await ds.query(
-        `INSERT INTO llm_calls (id, session_id, message_id, provider_type, model, input_tokens, output_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, reasoning_tokens, duration_ms) VALUES (?, ?, 'm', 'p', 'mo', 0, 0, 0, 0, 0, 0, 0)`,
-        [`call-${sessionId}`, sessionId],
+        `INSERT INTO llm_calls (id, session_id, cloud_user_id, message_id, provider_type, model, input_tokens, output_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, reasoning_tokens, duration_ms) VALUES (?, ?, ?, 'm', 'p', 'mo', 0, 0, 0, 0, 0, 0, 0)`,
+        [`call-${sessionId}`, sessionId, DEFAULT_USER],
       );
       await ds.query(
         `INSERT INTO checkpoints (thread_id, checkpoint_id) VALUES (?, 'c')`,
@@ -466,20 +508,20 @@ describe("SessionService", () => {
     async function seedSession(sessionId: string): Promise<void> {
       const ds = (service as unknown as { __ds: DataSource }).__ds;
       await ds.query(
-        `INSERT INTO session_messages (id, session_id, role, content, seq, created_at) VALUES (?, ?, 'user', '你好', 1, datetime('now', '-3 seconds'))`,
-        [`u1-${sessionId}`, sessionId],
+        `INSERT INTO session_messages (id, session_id, cloud_user_id, role, content, seq, created_at) VALUES (?, ?, ?, 'user', '你好', 1, datetime('now', '-3 seconds'))`,
+        [`u1-${sessionId}`, sessionId, DEFAULT_USER],
       );
       await ds.query(
-        `INSERT INTO session_messages (id, session_id, role, content, seq, created_at) VALUES (?, ?, 'assistant', '回复', 2, datetime('now', '-2 seconds'))`,
-        [`a1-${sessionId}`, sessionId],
+        `INSERT INTO session_messages (id, session_id, cloud_user_id, role, content, seq, created_at) VALUES (?, ?, ?, 'assistant', '回复', 2, datetime('now', '-2 seconds'))`,
+        [`a1-${sessionId}`, sessionId, DEFAULT_USER],
       );
       await ds.query(
-        `INSERT INTO session_messages (id, session_id, role, content, seq, created_at) VALUES (?, ?, 'user', '再问', 3, datetime('now', '-1 seconds'))`,
-        [`u2-${sessionId}`, sessionId],
+        `INSERT INTO session_messages (id, session_id, cloud_user_id, role, content, seq, created_at) VALUES (?, ?, ?, 'user', '再问', 3, datetime('now', '-1 seconds'))`,
+        [`u2-${sessionId}`, sessionId, DEFAULT_USER],
       );
       await ds.query(
-        `INSERT INTO llm_calls (id, session_id, message_id, provider_type, model, input_tokens, output_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, reasoning_tokens, duration_ms, created_at) VALUES (?, ?, 'a1', 'p', 'm', 1, 1, 2, 0, 0, 0, 1, datetime('now', '-2 seconds'))`,
-        [`call-a1-${sessionId}`, sessionId],
+        `INSERT INTO llm_calls (id, session_id, cloud_user_id, message_id, provider_type, model, input_tokens, output_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, reasoning_tokens, duration_ms, created_at) VALUES (?, ?, ?, 'a1', 'p', 'm', 1, 1, 2, 0, 0, 0, 1, datetime('now', '-2 seconds'))`,
+        [`call-a1-${sessionId}`, sessionId, DEFAULT_USER],
       );
     }
 
@@ -532,6 +574,78 @@ describe("SessionService", () => {
       await expect(
         service.regenerateAfter(sessionId, `a1-${sessionId}`),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe("账号隔离（ScopedRepository）", () => {
+    it("两账号会话互不可见", async () => {
+      await ctx.run("u1", () => rawService.createSession({ content: "s-u1" }));
+      await ctx.run("u2", () => rawService.createSession({ content: "s-u2" }));
+      const listU1 = await ctx.run("u1", () => rawService.listAllSorted());
+      expect(listU1).toHaveLength(1);
+      expect(listU1[0].title).toBe("s-u1");
+      const listU2 = await ctx.run("u2", () => rawService.listAllSorted());
+      expect(listU2).toHaveLength(1);
+      expect(listU2[0].title).toBe("s-u2");
+    });
+
+    it("跨账号取他人 session 返回空", async () => {
+      const { sessionId } = await ctx.run("u1", () =>
+        rawService.createSession({ content: "s" }),
+      );
+      expect(
+        await ctx.run("u2", () => rawService.findOrNull(sessionId)),
+      ).toBeNull();
+      // 同账号仍可见，确认不是「都查不到」的假阴性
+      expect(
+        await ctx.run("u1", () => rawService.findOrNull(sessionId)),
+      ).not.toBeNull();
+    });
+
+    it("跨账号删他人 pending 消息不生效（NotFound）", async () => {
+      const { sessionId } = await ctx.run("u1", () =>
+        rawService.createSession({ content: "m1" }),
+      );
+      const messageId = randomUUID();
+      await ctx.run("u1", () =>
+        rawService.appendMessage(sessionId, { messageId, content: "owned" }),
+      );
+      await expect(
+        ctx.run("u2", () =>
+          rawService.deletePendingMessage(sessionId, messageId),
+        ),
+      ).rejects.toThrow(NotFoundException);
+      // u1 的消息仍在
+      const stillThere = await ctx.run("u1", () =>
+        rawService.listActivePending(sessionId),
+      );
+      expect(stillThere.find((m) => m.id === messageId)).toBeDefined();
+    });
+
+    it("无账号上下文调用作用域方法抛错", async () => {
+      await expect(rawService.listAllSorted()).rejects.toThrow();
+    });
+
+    it("rollbackProcessingToPending 跨账号全量重置（无上下文也可跑）", async () => {
+      const u1 = await ctx.run("u1", () =>
+        rawService.createSession({ content: "a" }),
+      );
+      const u2 = await ctx.run("u2", () =>
+        rawService.createSession({ content: "b" }),
+      );
+      await ctx.run("u1", () => rawService.claimPending(u1.sessionId));
+      await ctx.run("u2", () => rawService.claimPending(u2.sessionId));
+      // 无账号上下文直接调用（模拟 RunnerService.onModuleInit boot 路径）
+      const n = await rawService.rollbackProcessingToPending();
+      expect(n).toBe(2);
+      const a = await ctx.run("u1", () =>
+        rawService.listActivePending(u1.sessionId),
+      );
+      expect(a[0].status).toBe("pending");
+      const b = await ctx.run("u2", () =>
+        rawService.listActivePending(u2.sessionId),
+      );
+      expect(b[0].status).toBe("pending");
     });
   });
 });

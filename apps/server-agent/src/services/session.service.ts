@@ -14,6 +14,8 @@ import {
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, Repository } from "typeorm";
+import { ScopedRepository } from "../account/scoped-repository";
+import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
 import { PendingMessage } from "../entities/pending-message.entity";
 import { Session } from "../entities/session.entity";
 import { CheckpointerCleanupService } from "./checkpointer-cleanup.service";
@@ -40,17 +42,35 @@ function toSummary(s: Session): SessionSummary {
 /** 会话与待处理用户消息的归属 Service。 */
 @Injectable()
 export class SessionService {
+  /** Session 账号作用域仓库（自动按当前账号过滤/盖章）。 */
+  private readonly sessionRepo: ScopedRepository<Session>;
+  /** PendingMessage 账号作用域仓库（自动按当前账号过滤/盖章）。 */
+  private readonly pendingRepo: ScopedRepository<PendingMessage>;
+
+  /**
+   * 裸 Session 仓库：仅供 @Transactional() 的 findDataSource 反射遍历 service
+   * 字段定位 DataSource（作用域仓库不是 Repository 实例，取不到 DataSource），
+   * 业务读写一律走 sessionRepo / pendingRepo 作用域仓库。
+   */
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: findDataSource 反射读取
+  private readonly txAnchorRepo: Repository<Session>;
+
   constructor(
-    @InjectRepository(Session)
-    private readonly sessionRepo: Repository<Session>,
+    @InjectRepository(Session) rawSessionRepo: Repository<Session>,
     @InjectRepository(PendingMessage)
-    private readonly pendingRepo: Repository<PendingMessage>,
+    rawPendingRepo: Repository<PendingMessage>,
+    scopedFactory: ScopedRepositoryFactory,
     private readonly llmCalls: LlmCallService,
     private readonly sessionMessages: SessionMessageService,
     private readonly checkpointer: CheckpointerCleanupService,
     private readonly graph: GraphService,
     private readonly schedules: ScheduleService,
-  ) {}
+  ) {
+    // 包裹 tx-aware 注入代理：作用域仓库的操作仍参与外层 @Transactional 边界
+    this.sessionRepo = scopedFactory.create(rawSessionRepo);
+    this.pendingRepo = scopedFactory.create(rawPendingRepo);
+    this.txAnchorRepo = rawSessionRepo;
+  }
 
   /**
    * 创建会话：建 Session(running) + 写首条 pending 消息。
@@ -66,19 +86,15 @@ export class SessionService {
   private async createSessionInTx(
     input: CreateSessionInput,
   ): Promise<{ sessionId: string; session: SessionSummary }> {
-    const saved = await this.sessionRepo.save(
-      this.sessionRepo.create({
-        title: input.content.slice(0, TITLE_MAX),
-        status: "running",
-      }),
-    );
-    await this.pendingRepo.save(
-      this.pendingRepo.create({
-        sessionId: saved.id,
-        content: input.content,
-        status: "pending",
-      }),
-    );
+    const saved = (await this.sessionRepo.save({
+      title: input.content.slice(0, TITLE_MAX),
+      status: "running" as const,
+    })) as Session;
+    await this.pendingRepo.save({
+      sessionId: saved.id,
+      content: input.content,
+      status: "pending" as const,
+    });
     return { sessionId: saved.id, session: toSummary(saved) };
   }
 
@@ -92,15 +108,16 @@ export class SessionService {
     input: AppendMessageInput,
   ): Promise<{ messageId: string; queued: boolean }> {
     const session = await this.findSessionOrFail(sessionId);
-    const msg = await this.pendingRepo.save(
-      this.pendingRepo.create({
-        id: input.messageId,
-        sessionId,
-        content: input.content,
-        status: "pending",
-      }),
-    );
-    return { messageId: msg.id, queued: session.status === "running" };
+    const msg = await this.pendingRepo.save({
+      id: input.messageId,
+      sessionId,
+      content: input.content,
+      status: "pending" as const,
+    });
+    return {
+      messageId: msg.id as string,
+      queued: session.status === "running",
+    };
   }
 
   /**
@@ -239,10 +256,12 @@ export class SessionService {
    * 进程重启时 inflight 内存丢失，让这些消息可被重新消费。
    */
   async rollbackProcessingToPending(): Promise<number> {
-    const res = await this.pendingRepo.update(
-      { status: "processing" },
-      { status: "pending" },
-    );
+    // 启动时（RunnerService.onModuleInit）无账号上下文，作用域仓库会抛
+    // NO_ACCOUNT_CONTEXT；这里跨账号全量重置遗留 processing 是正确语义，故走裸仓库。
+    // scope-check: allow-unscoped
+    const res = await this.pendingRepo
+      .unscoped()
+      .update({ status: "processing" }, { status: "pending" });
     return res.affected ?? 0;
   }
 
@@ -260,7 +279,7 @@ export class SessionService {
    */
   async listAllSorted(): Promise<SessionSummary[]> {
     const rows = await this.sessionRepo
-      .createQueryBuilder("s")
+      .scopedQueryBuilder("s")
       .orderBy("CASE WHEN s.pinned_at IS NULL THEN 1 ELSE 0 END", "ASC")
       .addOrderBy("s.pinned_at", "DESC")
       .addOrderBy("s.updated_at", "DESC")
@@ -336,9 +355,9 @@ export class SessionService {
 
   /** 范围内创建的会话数。since 为 null 表示全部。 */
   async countCreatedSince(since: Date | null): Promise<number> {
-    const qb = this.sessionRepo.createQueryBuilder("s");
+    const qb = this.sessionRepo.scopedQueryBuilder("s");
     if (since) {
-      qb.where("datetime(s.created_at) >= datetime(:since)", {
+      qb.andWhere("datetime(s.created_at) >= datetime(:since)", {
         since: since.toISOString(),
       });
     }
