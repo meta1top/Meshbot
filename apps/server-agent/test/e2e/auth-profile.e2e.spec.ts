@@ -12,6 +12,7 @@ import { DataSource } from "typeorm";
 import { I18nJsonLoader, I18nModule, I18nService } from "nestjs-i18n";
 import request from "supertest";
 import { AccountContextInterceptor } from "../../src/account/account-context.interceptor";
+import { AccountRuntimeRegistry } from "../../src/account/account-runtime.registry";
 import { CloudClientService } from "../../src/cloud/cloud-client.service";
 import { ImRelayClientService } from "../../src/cloud/im-relay-client.service";
 import { AuthController } from "../../src/controllers/auth.controller";
@@ -79,6 +80,15 @@ describe("Auth profile e2e（云端代理）", () => {
             send: jest.fn(),
             read: jest.fn(),
             isConnected: () => false,
+          },
+        },
+        // T4.2：CloudAuthService 现在依赖 AccountRuntimeRegistry，桩掉避免完整初始化
+        {
+          provide: AccountRuntimeRegistry,
+          useValue: {
+            createRuntime: jest.fn().mockResolvedValue(undefined),
+            teardownRuntime: jest.fn().mockResolvedValue(undefined),
+            has: jest.fn().mockReturnValue(false),
           },
         },
         { provide: APP_GUARD, useClass: JwtAuthGuard },

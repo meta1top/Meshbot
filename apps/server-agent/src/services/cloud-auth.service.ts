@@ -3,6 +3,7 @@ import { AppError } from "@meshbot/common";
 import { Injectable } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 
+import { AccountRuntimeRegistry } from "../account/account-runtime.registry";
 import { CloudClientService } from "../cloud/cloud-client.service";
 import { ImRelayClientService } from "../cloud/im-relay-client.service";
 import type { CloudAuthData, CloudProfileData } from "../cloud/cloud.types";
@@ -43,25 +44,22 @@ export class CloudAuthService {
     private readonly jwt: JwtService,
     private readonly imRelay: ImRelayClientService,
     private readonly account: AccountContextService,
+    private readonly runtime: AccountRuntimeRegistry,
   ) {}
 
-  /** 代理云端注册，成功后写镜像并签本地 JWT，并尝试建立 IM 中继连接。 */
+  /** 代理云端注册，成功后写镜像、建账号运行时并签本地 JWT。 */
   async register(input: RegisterInput): Promise<LocalTokenResponse> {
     const auth = await this.cloud.post<CloudAuthData>(
       "/api/auth/register",
       input,
     );
-    const result = await this.afterCloudAuth(auth);
-    void this.imRelay.connect(auth.user.id);
-    return result;
+    return this.afterCloudAuth(auth);
   }
 
-  /** 代理云端登录，成功后写镜像并签本地 JWT，并建立 IM 中继连接。 */
+  /** 代理云端登录，成功后写镜像、建账号运行时并签本地 JWT。 */
   async login(input: Credentials): Promise<LocalTokenResponse> {
     const auth = await this.cloud.post<CloudAuthData>("/api/auth/login", input);
-    const result = await this.afterCloudAuth(auth);
-    void this.imRelay.connect(auth.user.id);
-    return result;
+    return this.afterCloudAuth(auth);
   }
 
   /**
@@ -135,6 +133,7 @@ export class CloudAuthService {
       orgName: profile.activeOrg?.name ?? null,
       role: profile.activeOrg?.role ?? null,
     });
+    await this.runtime.createRuntime(auth.user.id);
     const access_token = this.jwt.sign({
       sub: auth.user.id,
       email: auth.user.email,

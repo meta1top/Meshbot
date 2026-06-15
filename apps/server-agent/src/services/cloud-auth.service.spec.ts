@@ -1,9 +1,15 @@
 import { AccountContextService } from "@meshbot/agent";
 import { CloudAuthService } from "./cloud-auth.service";
 
-/** 用桩验证：登录调云端 login + profile，upsert 镜像，签本地 JWT。 */
+const makeRuntime = () => ({
+  createRuntime: jest.fn().mockResolvedValue(undefined),
+  teardownRuntime: jest.fn().mockResolvedValue(undefined),
+  has: jest.fn().mockReturnValue(false),
+});
+
+/** 用桩验证：登录调云端 login + profile，upsert 镜像，建运行时，签本地 JWT。 */
 describe("CloudAuthService.login", () => {
-  it("登录成功：调云端、写镜像、返回本地 access_token", async () => {
+  it("登录成功：调云端、写镜像、建运行时、返回本地 access_token", async () => {
     const cloud = {
       post: jest.fn().mockResolvedValue({
         token: "cloud-jwt",
@@ -18,14 +24,16 @@ describe("CloudAuthService.login", () => {
     };
     const identity = { upsert: jest.fn().mockResolvedValue(undefined) };
     const jwt = { sign: jest.fn().mockReturnValue("local-jwt") };
+    const imRelay = { connect: jest.fn(), disconnect: jest.fn() };
+    const runtime = makeRuntime();
 
-    const imRelay = { connect: jest.fn().mockResolvedValue(undefined) };
     const svc = new CloudAuthService(
       cloud as never,
       identity as never,
       jwt as never,
       imRelay as never,
       new AccountContextService(),
+      runtime as never,
     );
     const out = await svc.login({ email: "a@x.io", password: "p" });
 
@@ -44,9 +52,11 @@ describe("CloudAuthService.login", () => {
         cloudTokenExpiresAt: expect.stringMatching(/T/),
       }),
     );
+    expect(runtime.createRuntime).toHaveBeenCalledWith("u1");
     expect(jwt.sign).toHaveBeenCalledWith({ sub: "u1", email: "a@x.io" });
     expect(out).toEqual({ access_token: "local-jwt" });
-    expect(imRelay.connect).toHaveBeenCalledTimes(1);
+    // login 不再直接调 imRelay.connect（由 createRuntime 内部处理）
+    expect(imRelay.connect).not.toHaveBeenCalled();
   });
 
   it("getProfile：无身份镜像抛 AUTH_UNAUTHORIZED", async () => {
@@ -58,6 +68,7 @@ describe("CloudAuthService.login", () => {
       {} as never,
       { connect: jest.fn(), disconnect: jest.fn() } as never,
       account,
+      makeRuntime() as never,
     );
     // getProfile 现在按当前账号读镜像；在账号上下文内调用
     await expect(
@@ -68,7 +79,7 @@ describe("CloudAuthService.login", () => {
     expect(identity.get).toHaveBeenCalledWith("u1");
   });
 
-  it("register 成功：调云端、写镜像、返回本地 access_token，并触发 IM relay connect", async () => {
+  it("register 成功：调云端、写镜像、建运行时、返回本地 access_token", async () => {
     const cloud = {
       post: jest.fn().mockResolvedValue({
         token: "cloud-jwt-reg",
@@ -83,10 +94,8 @@ describe("CloudAuthService.login", () => {
     };
     const identity = { upsert: jest.fn().mockResolvedValue(undefined) };
     const jwt = { sign: jest.fn().mockReturnValue("local-jwt-reg") };
-    const imRelay = {
-      connect: jest.fn().mockResolvedValue(undefined),
-      disconnect: jest.fn(),
-    };
+    const imRelay = { connect: jest.fn(), disconnect: jest.fn() };
+    const runtime = makeRuntime();
 
     const svc = new CloudAuthService(
       cloud as never,
@@ -94,6 +103,7 @@ describe("CloudAuthService.login", () => {
       jwt as never,
       imRelay as never,
       new AccountContextService(),
+      runtime as never,
     );
     const out = await svc.register({
       email: "b@x.io",
@@ -107,6 +117,8 @@ describe("CloudAuthService.login", () => {
       displayName: "Bob",
     });
     expect(out).toEqual({ access_token: "local-jwt-reg" });
-    expect(imRelay.connect).toHaveBeenCalledTimes(1);
+    expect(runtime.createRuntime).toHaveBeenCalledWith("u2");
+    // register 不再直接调 imRelay.connect（由 createRuntime 内部处理）
+    expect(imRelay.connect).not.toHaveBeenCalled();
   });
 });
