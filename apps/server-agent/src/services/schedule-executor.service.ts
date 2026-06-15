@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { AccountContextService } from "@meshbot/agent";
 import {
   Injectable,
   Logger,
@@ -7,6 +8,7 @@ import {
 import { SchedulerRegistry } from "@nestjs/schedule";
 import { CronExpressionParser } from "cron-parser";
 import { CronJob as CronJobLib } from "cron";
+import { AccountRuntimeRegistry } from "../account/account-runtime.registry";
 import type { CronJob } from "../entities/cron-job.entity";
 import { RunnerService } from "./runner.service";
 import { ScheduleService } from "./schedule.service";
@@ -22,6 +24,8 @@ export class ScheduleExecutor implements OnApplicationBootstrap {
     private readonly registry: SchedulerRegistry,
     private readonly sessions: SessionService,
     private readonly runner: RunnerService,
+    private readonly account: AccountContextService,
+    private readonly runtime: AccountRuntimeRegistry,
   ) {}
 
   /**
@@ -86,43 +90,55 @@ export class ScheduleExecutor implements OnApplicationBootstrap {
     }
   }
 
-  /** 到点触发：投递 user 消息 + kick runner + 更新触发记录。 */
+  /**
+   * 到点触发：在任务归属账号的上下文内投递 user 消息 + kick runner + 更新触发记录。
+   *
+   * boot 时所有账号的定时器都注册在同一 SchedulerRegistry，timer 回调无账号上下文。
+   * 故先用 unscoped 反查任务归属账号（cloudUserId），再在该账号上下文内执行作用域写入。
+   * D8：账号未登录（运行时不在线）→ 不跑其 cron，并撤销该定时器。
+   */
   async fire(jobId: string): Promise<void> {
-    const job = await this.schedule.findById(jobId);
-    if (!job.enabled) return;
-
-    const session = await this.sessions.findOrNull(job.sessionId);
-    if (!session) {
-      this.logger.warn(
-        `fire ${jobId}：session ${job.sessionId} 已删，disable 该任务`,
-      );
-      await this.schedule.setEnabled(jobId, false);
+    const job = await this.schedule.findByIdUnscoped(jobId);
+    if (!job?.enabled) return;
+    // D8：账号未登录（运行时不在线）→ 不跑其 cron，并撤销该定时器
+    if (!this.runtime.has(job.cloudUserId)) {
       this.deregister(jobId);
       return;
     }
+    await this.account.run(job.cloudUserId, async () => {
+      const session = await this.sessions.findOrNull(job.sessionId);
+      if (!session) {
+        this.logger.warn(
+          `fire ${jobId}：session ${job.sessionId} 已删，disable 该任务`,
+        );
+        await this.schedule.setEnabled(jobId, false);
+        this.deregister(jobId);
+        return;
+      }
 
-    await this.sessions.appendMessage(job.sessionId, {
-      messageId: randomUUID(),
-      content: job.prompt,
-    });
-    this.runner.kick(job.sessionId);
+      await this.sessions.appendMessage(job.sessionId, {
+        messageId: randomUUID(),
+        content: job.prompt,
+      });
+      this.runner.kick(job.sessionId);
 
-    if (job.kind === "once") {
+      if (job.kind === "once") {
+        await this.schedule.markFired(jobId, {
+          lastFiredAt: new Date(),
+          enabled: false,
+        });
+        this.deregister(jobId);
+        return;
+      }
+      const next = CronExpressionParser.parse(job.cronExpr as string, {
+        tz: job.timezone ?? undefined,
+      })
+        .next()
+        .toDate();
       await this.schedule.markFired(jobId, {
         lastFiredAt: new Date(),
-        enabled: false,
+        nextFireAt: next,
       });
-      this.deregister(jobId);
-      return;
-    }
-    const next = CronExpressionParser.parse(job.cronExpr as string, {
-      tz: job.timezone ?? undefined,
-    })
-      .next()
-      .toDate();
-    await this.schedule.markFired(jobId, {
-      lastFiredAt: new Date(),
-      nextFireAt: next,
     });
   }
 }

@@ -100,6 +100,12 @@ export class ScheduleService {
     return row;
   }
 
+  /** 按 id 取任务（系统级，无账号上下文）：cron fire 用来反查任务归属账号。 */
+  async findByIdUnscoped(id: string): Promise<CronJob | null> {
+    // scope-check: allow-unscoped
+    return this.repo.unscoped().findOneBy({ id });
+  }
+
   /** 翻转任务启用状态。 */
   async setEnabled(id: string, enabled: boolean): Promise<CronJob> {
     const row = await this.findById(id);
