@@ -5,6 +5,8 @@ import { Column, CreateDateColumn, Entity, PrimaryColumn } from "typeorm";
 export class CronJob {
   @PrimaryColumn() id!: string;
 
+  @Column({ name: "cloud_user_id", type: "text" }) cloudUserId!: string;
+
   @Column({ name: "session_id" }) sessionId!: string;
 
   @Column({ type: "varchar" }) kind!: "cron" | "once";

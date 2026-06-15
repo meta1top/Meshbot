@@ -23,6 +23,9 @@ export class SessionMessage {
   @PrimaryColumn()
   id!: string;
 
+  @Column({ name: "cloud_user_id", type: "text" })
+  cloudUserId!: string;
+
   /**
    * 会话内单调递增序号（1-based）。唯一可靠排序键：
    * INSERT 时由 `(SELECT COALESCE(MAX(seq),0)+1 WHERE session_id=?)` 原子赋值。

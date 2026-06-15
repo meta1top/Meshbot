@@ -46,6 +46,7 @@ function fakeSessionService() {
     enqueue(sessionId: string, content: string) {
       store.push({
         id: `m${seq++}`,
+        cloudUserId: "",
         sessionId,
         content,
         status: "pending",

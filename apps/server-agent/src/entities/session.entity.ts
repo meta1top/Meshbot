@@ -13,6 +13,9 @@ export class Session {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
 
+  @Column({ name: "cloud_user_id", type: "text" })
+  cloudUserId!: string;
+
   @Column()
   title!: string;
 

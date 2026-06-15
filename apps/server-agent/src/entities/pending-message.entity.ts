@@ -12,6 +12,9 @@ export class PendingMessage {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
 
+  @Column({ name: "cloud_user_id", type: "text" })
+  cloudUserId!: string;
+
   /** 逻辑外键，无 DB 约束。 */
   @Column({ name: "session_id" })
   sessionId!: string;

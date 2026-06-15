@@ -11,6 +11,9 @@ export class ModelConfig {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
 
+  @Column({ name: "cloud_user_id", type: "text" })
+  cloudUserId!: string;
+
   @Column({ name: "provider_type" })
   providerType!: string;
 
