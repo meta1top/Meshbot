@@ -1,0 +1,16 @@
+import { Global, Module } from "@nestjs/common";
+import { AgentModule } from "@meshbot/agent";
+import { AuthModule } from "../auth.module";
+import { AccountRuntimeRegistry } from "./account-runtime.registry";
+
+/**
+ * @Global AccountRuntimeModule：让 AccountRuntimeRegistry 可被任意模块注入，
+ * 无需显式 import 本模块（解除 AuthModule 与本模块的循环依赖风险）。
+ */
+@Global()
+@Module({
+  imports: [AgentModule, AuthModule],
+  providers: [AccountRuntimeRegistry],
+  exports: [AccountRuntimeRegistry],
+})
+export class AccountRuntimeModule {}

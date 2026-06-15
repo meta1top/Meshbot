@@ -26,6 +26,7 @@ import {
 } from "nestjs-i18n";
 import { AccountContextInterceptor } from "./account/account-context.interceptor";
 import { AccountModule } from "./account/account.module";
+import { AccountRuntimeModule } from "./account/account-runtime.module";
 import { AuthModule } from "./auth.module";
 import { CronJobModule } from "./cron-job.module";
 import { ImModule } from "./im.module";
@@ -113,6 +114,7 @@ const meshbotDir = resolveMeshbotDir();
     // Phase 5 Track C1：结构化健康检查
     TerminusModule,
     AgentModule,
+    AccountRuntimeModule,
     AccountModule,
     CronJobModule,
     SessionModule,
