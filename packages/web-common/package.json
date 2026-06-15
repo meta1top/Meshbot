@@ -18,7 +18,8 @@
     "build": "tsc --project tsconfig.json",
     "dev": "tsc --project tsconfig.json --watch",
     "clean": "rm -rf dist",
-    "typecheck": "tsc --project tsconfig.json --noEmit"
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "test": "jest"
   },
   "dependencies": {
     "@meshbot/types": "workspace:*",
