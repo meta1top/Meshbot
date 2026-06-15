@@ -26,6 +26,12 @@ function isPackaged(): boolean {
 }
 
 function resolveMeshbotDir(): string {
+  // 显式指定（desktop 主进程 fork 每账号进程时注入）优先级最高，
+  // 与 apps/server-agent/src/utils/meshbot-dir.ts 保持一致——确保设了
+  // MESHBOT_HOME 后整棵本地数据树（db/mcp/skills/prompt/workspace）一起跟随。
+  if (process.env.MESHBOT_HOME) {
+    return process.env.MESHBOT_HOME;
+  }
   if (isPackaged()) {
     return path.join(homedir(), ".meshbot");
   }
