@@ -31,4 +31,9 @@ export const AgentErrorCode = defineErrorCode({
     message: "im.notConnected",
     httpStatus: 503,
   },
+  CROSS_ACCOUNT_WRITE: {
+    code: 3006,
+    message: "account.crossWrite",
+    httpStatus: 403,
+  },
 });
