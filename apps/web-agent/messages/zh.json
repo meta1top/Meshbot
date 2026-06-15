@@ -129,6 +129,7 @@
       "placeholder": "搜索 meshbot"
     },
     "userMenu": {
+      "addAccount": "添加账号",
       "org": "组织",
       "settings": "设置",
       "logout": "退出登录"
@@ -453,7 +454,8 @@
   "userMenu": {
     "settings": "",
     "org": "",
-    "logout": ""
+    "logout": "",
+    "addAccount": ""
   },
   "search": {
     "placeholder": ""

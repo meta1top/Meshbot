@@ -129,6 +129,7 @@
       "placeholder": "Search meshbot"
     },
     "userMenu": {
+      "addAccount": "Add account",
       "org": "Organization",
       "settings": "Settings",
       "logout": "Log out"
@@ -453,7 +454,8 @@
   "userMenu": {
     "settings": "",
     "org": "",
-    "logout": ""
+    "logout": "",
+    "addAccount": ""
   },
   "search": {
     "placeholder": ""

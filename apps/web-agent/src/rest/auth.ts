@@ -7,6 +7,7 @@ import type {
   RegisterInput,
 } from "@meshbot/types-agent";
 import {
+  addAccount,
   apiClient,
   clearAccessToken,
   setAccessToken,
@@ -30,12 +31,30 @@ export async function fetchAuthStatus(): Promise<AuthStatus> {
   return data;
 }
 
+function decodeJwtPayload(
+  token: string,
+): { sub?: string; email?: string } | null {
+  try {
+    const part = token.split(".")[1];
+    if (!part) return null;
+    return JSON.parse(atob(part)) as { sub?: string; email?: string };
+  } catch {
+    return null;
+  }
+}
+
 export async function login(input: LoginInput): Promise<LoginResponse> {
   const { data } = await apiClient.post<LoginResponse>(
     "/api/auth/login",
     input,
   );
   setAccessToken(data.access_token);
+  const payload = decodeJwtPayload(data.access_token);
+  if (payload?.sub) {
+    addAccount(payload.sub, data.access_token, {
+      email: payload.email,
+    });
+  }
   return data;
 }
 
@@ -45,6 +64,12 @@ export async function register(input: RegisterInput): Promise<LoginResponse> {
     input,
   );
   setAccessToken(data.access_token);
+  const payload = decodeJwtPayload(data.access_token);
+  if (payload?.sub) {
+    addAccount(payload.sub, data.access_token, {
+      email: payload.email,
+    });
+  }
   return data;
 }
 
