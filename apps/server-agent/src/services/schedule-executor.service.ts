@@ -24,13 +24,17 @@ export class ScheduleExecutor implements OnApplicationBootstrap {
     private readonly runner: RunnerService,
   ) {}
 
-  /** 启动时把所有 enabled job 注册到 SchedulerRegistry；过期 once 自动 disable。 */
+  /**
+   * 启动时把所有账号的 enabled job 注册到 SchedulerRegistry；过期 once 自动 disable。
+   * boot 阶段无账号上下文，故走 listAllForBootstrap（跨账号 unscoped 读），
+   * 避免作用域查询因缺上下文抛 NO_ACCOUNT_CONTEXT 致启动失败。
+   */
   async onApplicationBootstrap(): Promise<void> {
     this.schedule.setRegistrySink({
       register: (job) => this.register(job),
       deregister: (id) => this.deregister(id),
     });
-    const all = await this.schedule.list();
+    const all = await this.schedule.listAllForBootstrap();
     for (const job of all) {
       if (!job.enabled) continue;
       await this.register(job);

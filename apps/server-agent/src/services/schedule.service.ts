@@ -4,6 +4,8 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { CronExpressionParser } from "cron-parser";
 import { Repository } from "typeorm";
 import type { CreateCronJobInput } from "@meshbot/types-agent";
+import { ScopedRepository } from "../account/scoped-repository";
+import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
 import { CronJob } from "../entities/cron-job.entity";
 
 /**
@@ -21,13 +23,19 @@ export interface ScheduleRegistrySink {
   deregister(jobId: string): void;
 }
 
-/** ScheduleService CRUD —— SchedulerRegistry 同步在 ScheduleExecutor 接入。 */
+/** ScheduleService CRUD —— SchedulerRegistry 同步在 ScheduleExecutor 接入（按账号隔离）。 */
 @Injectable()
 export class ScheduleService {
+  /** CronJob 账号作用域仓库（自动按当前账号过滤/盖章）。 */
+  private readonly repo: ScopedRepository<CronJob>;
+
   constructor(
     @InjectRepository(CronJob)
-    private readonly repo: Repository<CronJob>,
-  ) {}
+    rawRepo: Repository<CronJob>,
+    scopedFactory: ScopedRepositoryFactory,
+  ) {
+    this.repo = scopedFactory.create(rawRepo);
+  }
 
   private sink: ScheduleRegistrySink | null = null;
 
@@ -50,11 +58,11 @@ export class ScheduleService {
       .toDate();
   }
 
-  /** 新增计划任务，自动计算 nextFireAt。 */
+  /** 新增计划任务，自动计算 nextFireAt（自动盖上当前账号 cloudUserId）。 */
   async create(input: CreateCronJobInput): Promise<CronJob> {
     const id = randomUUID();
     const nextFireAt = ScheduleService.computeNextFireAt(input);
-    const entity = this.repo.create({
+    const entity = await this.repo.save({
       id,
       sessionId: input.sessionId,
       title: input.title,
@@ -66,13 +74,12 @@ export class ScheduleService {
       enabled: true,
       lastFiredAt: null,
       nextFireAt,
-    });
-    await this.repo.save(entity);
+    } as CronJob);
     if (entity.enabled) await this.sink?.register(entity);
     return entity;
   }
 
-  /** 查询任务列表，可按 sessionId 过滤，默认按 createdAt 倒序。 */
+  /** 查询当前账号任务列表，可按 sessionId 过滤，默认按 createdAt 倒序。 */
   list(opts?: { sessionId?: string }): Promise<CronJob[]> {
     return this.repo.find({
       where: opts?.sessionId ? { sessionId: opts.sessionId } : {},
@@ -80,7 +87,13 @@ export class ScheduleService {
     });
   }
 
-  /** 按 id 查单条任务，不存在抛 NotFoundException。 */
+  /** 启动期全量装载（系统级，跨账号）：调度执行器在 boot 无账号上下文时用。 */
+  async listAllForBootstrap(): Promise<CronJob[]> {
+    // scope-check: allow-unscoped
+    return this.repo.unscoped().find({ where: { enabled: true } });
+  }
+
+  /** 按 id 查当前账号单条任务，不存在/不属于当前账号抛 NotFoundException。 */
   async findById(id: string): Promise<CronJob> {
     const row = await this.repo.findOneBy({ id });
     if (!row) throw new NotFoundException(`CronJob ${id} 不存在`);
