@@ -1,7 +1,10 @@
+import { AccountContextService } from "@meshbot/agent";
 import type { HeatmapCell } from "@meshbot/types-agent";
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, LessThan, MoreThan, Repository } from "typeorm";
+import { ScopedRepository } from "../account/scoped-repository";
+import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
 import { SessionMessage } from "../entities/session-message.entity";
 
 /** 写 user 消息入参。 */
@@ -60,10 +63,20 @@ export interface SessionMessagePage {
  */
 @Injectable()
 export class SessionMessageService {
+  /** SessionMessage 账号作用域仓库（自动按当前账号过滤/盖章）。 */
+  private readonly repo: ScopedRepository<SessionMessage>;
+  /** 当前账号上下文：insertWithSeq 手工盖章 cloud_user_id 用。 */
+  private readonly account: AccountContextService;
+
   constructor(
     @InjectRepository(SessionMessage)
-    private readonly repo: Repository<SessionMessage>,
-  ) {}
+    rawRepo: Repository<SessionMessage>,
+    scopedFactory: ScopedRepositoryFactory,
+    accountContext: AccountContextService,
+  ) {
+    this.repo = scopedFactory.create(rawRepo);
+    this.account = accountContext;
+  }
 
   /**
    * 统一插入入口：`seq` 由单条原子 INSERT 子查询 `(SELECT MAX(seq)+1 …)` 赋值，
@@ -74,19 +87,28 @@ export class SessionMessageService {
    * createdAt 用 `datetime('now')`（秒精度即可，排序已不依赖它）。
    */
   private async insertWithSeq(
-    row: Omit<Partial<SessionMessage>, "seq" | "createdAt">,
+    row: Omit<Partial<SessionMessage>, "seq" | "createdAt" | "cloudUserId">,
   ): Promise<void> {
+    // 当前账号：手工盖到新行 + 把 seq 子查询限定在「同账号同会话」内，
+    // 既保证 seq 按账号独立计数，又杜绝子查询读到他账号的 MAX(seq)。
+    const acct = this.account.getOrThrow();
+    // ScopedRepository 不暴露 insert（无法自动盖账号），故走裸 QueryBuilder
+    // 手工盖 cloudUserId 到 values + seq 子查询 WHERE，账号过滤在此显式补齐。
+    // scope-check: allow-unscoped
     await this.repo
+      .unscoped()
       .createQueryBuilder()
       .insert()
       .into(SessionMessage)
       .values({
         ...row,
+        cloudUserId: acct,
         createdAt: () => "datetime('now')",
         seq: () =>
-          "(SELECT COALESCE(MAX(seq), 0) + 1 FROM session_messages WHERE session_id = :sid)",
+          "(SELECT COALESCE(MAX(seq), 0) + 1 FROM session_messages WHERE session_id = :sid AND cloud_user_id = :acct)",
       })
       .setParameter("sid", row.sessionId)
+      .setParameter("acct", acct)
       .execute();
   }
 
@@ -220,8 +242,8 @@ export class SessionMessageService {
     if (slice.length > 0) {
       const lastSeq = slice[slice.length - 1].seq;
       const qb = this.repo
-        .createQueryBuilder("m")
-        .where("m.session_id = :sessionId", { sessionId })
+        .scopedQueryBuilder("m")
+        .andWhere("m.session_id = :sessionId", { sessionId })
         .andWhere("m.seq > :cutoff", { cutoff: lastSeq })
         .andWhere("m.role = :role", { role: "tool" })
         .orderBy("m.seq", "ASC");
@@ -282,9 +304,9 @@ export class SessionMessageService {
     since: Date | null,
   ): Promise<{ total: number; byDate: HeatmapCell[]; byHour: number[] }> {
     const base = () => {
-      const qb = this.repo.createQueryBuilder("m");
+      const qb = this.repo.scopedQueryBuilder("m");
       if (since) {
-        qb.where("datetime(m.created_at) >= datetime(:since)", {
+        qb.andWhere("datetime(m.created_at) >= datetime(:since)", {
           since: since.toISOString(),
         });
       }

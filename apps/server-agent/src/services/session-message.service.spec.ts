@@ -1,13 +1,41 @@
 import { randomUUID } from "node:crypto";
+import { AccountContextService } from "@meshbot/agent";
 import { NotFoundException } from "@nestjs/common";
-import { Test } from "@nestjs/testing";
-import { getRepositoryToken } from "@nestjs/typeorm";
-import { DataSource, type Repository } from "typeorm";
+import { DataSource } from "typeorm";
+import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
 import { SessionMessage } from "../entities/session-message.entity";
 import { SessionMessageService } from "./session-message.service";
 
+/** 默认测试账号：作用域仓库要求每次调用都处于账号上下文内。 */
+const DEFAULT_USER = "test-user";
+
+/**
+ * 构建一个自动包账号上下文的 service 代理：每个方法调用都跑在指定账号上下文内，
+ * 让既有单测无需逐一改写。隔离测试用 rawService + ctx.run 显式切账号。
+ */
+function wrapInAccount(
+  target: SessionMessageService,
+  ctx: AccountContextService,
+  user: string,
+): SessionMessageService {
+  return new Proxy(target, {
+    get(t, prop, receiver) {
+      const value = Reflect.get(t, prop, receiver);
+      if (typeof value !== "function") return value;
+      return (...args: unknown[]) =>
+        ctx.run(user, () =>
+          (value as (...a: unknown[]) => unknown).apply(t, args),
+        );
+    },
+  });
+}
+
 describe("SessionMessageService", () => {
   let ds: DataSource;
+  let ctx: AccountContextService;
+  /** 真实 service（不包账号上下文，供 ctx.run 显式包裹的隔离测试用）。 */
+  let rawService: SessionMessageService;
+  /** 自动包 DEFAULT_USER 账号上下文的 service 代理，供既有单测复用。 */
   let service: SessionMessageService;
 
   beforeEach(async () => {
@@ -18,7 +46,14 @@ describe("SessionMessageService", () => {
       synchronize: true,
     });
     await ds.initialize();
-    service = new SessionMessageService(ds.getRepository(SessionMessage));
+    ctx = new AccountContextService();
+    const scopedFactory = new ScopedRepositoryFactory(ctx);
+    rawService = new SessionMessageService(
+      ds.getRepository(SessionMessage),
+      scopedFactory,
+      ctx,
+    );
+    service = wrapInAccount(rawService, ctx, DEFAULT_USER);
   });
 
   afterEach(async () => {
@@ -33,6 +68,7 @@ describe("SessionMessageService", () => {
       content: string;
       offsetMs: number;
     }>,
+    user: string = DEFAULT_USER,
   ): Promise<string[]> {
     const base = Date.now();
     const ids: string[] = [];
@@ -44,6 +80,7 @@ describe("SessionMessageService", () => {
       await ds.getRepository(SessionMessage).insert({
         id,
         sessionId,
+        cloudUserId: user,
         role: r.role,
         content: r.content,
         reasoning: null,
@@ -62,6 +99,7 @@ describe("SessionMessageService", () => {
     expect(row).toMatchObject({
       id: "u1",
       sessionId: "s1",
+      cloudUserId: DEFAULT_USER,
       role: "user",
       content: "hi",
       reasoning: null,
@@ -143,6 +181,7 @@ describe("SessionMessageService", () => {
       await ds.getRepository(SessionMessage).insert({
         id: randomUUID(),
         sessionId: "s1",
+        cloudUserId: DEFAULT_USER,
         role: seq % 2 === 1 ? "user" : "assistant",
         content,
         reasoning: null,
@@ -276,6 +315,53 @@ describe("SessionMessageService", () => {
     expect(row?.toolCalls).toBe(JSON.stringify(calls));
   });
 
+  it("recordCompactionPlaceholder 写 role=system + metadata kind=compaction", async () => {
+    await service.recordCompactionPlaceholder({
+      id: "comp-1",
+      sessionId: "s1",
+      summary: "用户问了 X，已尝试 Y",
+      removedCount: 5,
+      fromMessageId: "m1",
+      toMessageId: "m5",
+    });
+    const row = await ds
+      .getRepository(SessionMessage)
+      .findOneBy({ id: "comp-1" });
+    expect(row?.role).toBe("system");
+    expect(row?.content).toBe("用户问了 X，已尝试 Y");
+    expect(row?.cloudUserId).toBe(DEFAULT_USER);
+    expect(JSON.parse(row?.metadata as string)).toEqual({
+      kind: "compaction",
+      removedCount: 5,
+      fromMessageId: "m1",
+      toMessageId: "m5",
+    });
+  });
+
+  it("recordCompactionPlaceholder id 已存在视为幂等成功，不重复 insert", async () => {
+    await service.recordCompactionPlaceholder({
+      id: "comp-1",
+      sessionId: "s1",
+      summary: "first",
+      removedCount: 1,
+      fromMessageId: "a",
+      toMessageId: "b",
+    });
+    await service.recordCompactionPlaceholder({
+      id: "comp-1",
+      sessionId: "s1",
+      summary: "second",
+      removedCount: 2,
+      fromMessageId: "c",
+      toMessageId: "d",
+    });
+    const rows = await ds
+      .getRepository(SessionMessage)
+      .findBy({ id: "comp-1" });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].content).toBe("first");
+  });
+
   it("existingIds 只返回本会话内确实存在的 id", async () => {
     await service.recordUser({ id: "u1", sessionId: "s1", content: "a" });
     await service.recordUser({ id: "u2", sessionId: "s1", content: "b" });
@@ -298,10 +384,146 @@ describe("SessionMessageService", () => {
     expect(p1.messages).toHaveLength(0);
     expect(p2.messages).toHaveLength(1);
   });
+
+  it("activitySince（since=null）统计本账号全部消息", async () => {
+    await service.recordUser({ id: "u1", sessionId: "s1", content: "a" });
+    await service.recordUser({ id: "u2", sessionId: "s1", content: "b" });
+    const stats = await service.activitySince(null);
+    expect(stats.total).toBe(2);
+    expect(stats.byDate.reduce((s, c) => s + c.count, 0)).toBe(2);
+    expect(stats.byHour.reduce((s, c) => s + c, 0)).toBe(2);
+  });
+
+  describe("账号隔离（ScopedRepository）", () => {
+    it("两账号同 session 的消息互不可见（getHistory / listPage）", async () => {
+      await ctx.run("u1", () =>
+        rawService.recordUser({ id: "m-u1", sessionId: "s1", content: "u1" }),
+      );
+      await ctx.run("u2", () =>
+        rawService.recordUser({ id: "m-u2", sessionId: "s1", content: "u2" }),
+      );
+      const pageU1 = await ctx.run("u1", () =>
+        rawService.listPage("s1", { limit: 10 }),
+      );
+      expect(pageU1.messages.map((m) => m.content)).toEqual(["u1"]);
+      const pageU2 = await ctx.run("u2", () =>
+        rawService.listPage("s1", { limit: 10 }),
+      );
+      expect(pageU2.messages.map((m) => m.content)).toEqual(["u2"]);
+    });
+
+    it("seq 按账号+会话独立计数（账号 A 的消息不影响账号 B 的 seq）", async () => {
+      // u1 在 s1 写 3 条 → seq 1,2,3
+      await ctx.run("u1", async () => {
+        await rawService.recordUser({
+          id: "a1",
+          sessionId: "s1",
+          content: "1",
+        });
+        await rawService.recordUser({
+          id: "a2",
+          sessionId: "s1",
+          content: "2",
+        });
+        await rawService.recordUser({
+          id: "a3",
+          sessionId: "s1",
+          content: "3",
+        });
+      });
+      // u2 在同一个 s1 首次写入 → seq 必须从 1 起，不被 u1 的 3 条带高
+      await ctx.run("u2", () =>
+        rawService.recordUser({ id: "b1", sessionId: "s1", content: "b1" }),
+      );
+      const b1 = await ds.getRepository(SessionMessage).findOneBy({ id: "b1" });
+      expect(b1?.seq).toBe(1);
+      // u1 续写仍接 max+1 = 4
+      await ctx.run("u1", () =>
+        rawService.recordUser({ id: "a4", sessionId: "s1", content: "4" }),
+      );
+      const a4 = await ds.getRepository(SessionMessage).findOneBy({ id: "a4" });
+      expect(a4?.seq).toBe(4);
+    });
+
+    it("跨账号消息不可见：findByIdOrFail 取他人消息抛 NotFound", async () => {
+      await ctx.run("u1", () =>
+        rawService.recordUser({ id: "owned", sessionId: "s1", content: "x" }),
+      );
+      await expect(
+        ctx.run("u2", () => rawService.findByIdOrFail("owned")),
+      ).rejects.toThrow(NotFoundException);
+      // 同账号仍可见，确认不是假阴性
+      const r = await ctx.run("u1", () => rawService.findByIdOrFail("owned"));
+      expect(r.id).toBe("owned");
+    });
+
+    it("activitySince 只统计本账号消息（两账号不串台）", async () => {
+      await ctx.run("u1", async () => {
+        await rawService.recordUser({
+          id: "a1",
+          sessionId: "s1",
+          content: "1",
+        });
+        await rawService.recordUser({
+          id: "a2",
+          sessionId: "s1",
+          content: "2",
+        });
+      });
+      await ctx.run("u2", () =>
+        rawService.recordUser({ id: "b1", sessionId: "s1", content: "1" }),
+      );
+      const u1Stats = await ctx.run("u1", () => rawService.activitySince(null));
+      expect(u1Stats.total).toBe(2);
+      const u2Stats = await ctx.run("u2", () => rawService.activitySince(null));
+      expect(u2Stats.total).toBe(1);
+    });
+
+    it("listPage（含 round-up 的 tool 查询）绝不捞回他账号的 tool 行", async () => {
+      // u1 同会话：assistant + 其 tool result
+      await ctx.run("u1", async () => {
+        await rawService.recordAssistant({
+          id: "a-u1",
+          sessionId: "s1",
+          content: "calling",
+          reasoning: null,
+        });
+        await rawService.recordToolResult({
+          id: "t-u1",
+          sessionId: "s1",
+          toolCallId: "t-u1",
+          content: "u1 tool",
+        });
+      });
+      // u2: 同会话也有一条 tool 行，账号过滤（含 round-up 子查询的 cloud_user_id）
+      // 必须把它挡在 u1 的视图之外。
+      await ctx.run("u2", () =>
+        rawService.recordToolResult({
+          id: "t-u2",
+          sessionId: "s1",
+          toolCallId: "t-u2",
+          content: "u2 tool",
+        }),
+      );
+      const page = await ctx.run("u1", () =>
+        rawService.listPage("s1", { limit: 10 }),
+      );
+      const ids = page.messages.map((m) => m.id);
+      expect(ids.sort()).toEqual(["a-u1", "t-u1"]);
+      expect(ids).not.toContain("t-u2");
+    });
+
+    it("无账号上下文调用作用域方法抛错", async () => {
+      await expect(
+        rawService.recordUser({ id: "x", sessionId: "s1", content: "x" }),
+      ).rejects.toThrow();
+    });
+  });
 });
 
 describe("findByIdOrFail / deleteAfter", () => {
   let ds: DataSource;
+  let ctx: AccountContextService;
   let service: SessionMessageService;
 
   beforeEach(async () => {
@@ -312,7 +534,14 @@ describe("findByIdOrFail / deleteAfter", () => {
       synchronize: true,
     });
     await ds.initialize();
-    service = new SessionMessageService(ds.getRepository(SessionMessage));
+    ctx = new AccountContextService();
+    const scopedFactory = new ScopedRepositoryFactory(ctx);
+    const raw = new SessionMessageService(
+      ds.getRepository(SessionMessage),
+      scopedFactory,
+      ctx,
+    );
+    service = wrapInAccount(raw, ctx, DEFAULT_USER);
   });
 
   afterEach(async () => {
@@ -354,78 +583,5 @@ describe("findByIdOrFail / deleteAfter", () => {
     await service.deleteAfter("s1", cutoff.seq);
     const p = await service.listPage("s2", { limit: 10 });
     expect(p.messages.map((m) => m.id)).toEqual(["y1"]);
-  });
-});
-
-describe("SessionMessageService.recordCompactionPlaceholder", () => {
-  let service: SessionMessageService;
-  let repo: jest.Mocked<Repository<SessionMessage>>;
-
-  /** QueryBuilder 链 mock；values 入参用于断言。 */
-  let qb: {
-    insert: jest.Mock;
-    into: jest.Mock;
-    values: jest.Mock;
-    setParameter: jest.Mock;
-    execute: jest.Mock;
-  };
-
-  beforeEach(async () => {
-    qb = {
-      insert: jest.fn().mockReturnThis(),
-      into: jest.fn().mockReturnThis(),
-      values: jest.fn().mockReturnThis(),
-      setParameter: jest.fn().mockReturnThis(),
-      execute: jest.fn().mockResolvedValue({}),
-    };
-    repo = {
-      findOneBy: jest.fn(),
-      createQueryBuilder: jest.fn().mockReturnValue(qb),
-    } as unknown as jest.Mocked<Repository<SessionMessage>>;
-    const moduleRef = await Test.createTestingModule({
-      providers: [
-        SessionMessageService,
-        { provide: getRepositoryToken(SessionMessage), useValue: repo },
-      ],
-    }).compile();
-    service = moduleRef.get(SessionMessageService);
-  });
-
-  it("插入一行 role=system + content=summary + metadata JSON", async () => {
-    repo.findOneBy.mockResolvedValue(null);
-    await service.recordCompactionPlaceholder({
-      id: "comp-1",
-      sessionId: "s1",
-      summary: "用户问了 X，已尝试 Y",
-      removedCount: 5,
-      fromMessageId: "m1",
-      toMessageId: "m5",
-    });
-    expect(qb.values).toHaveBeenCalledTimes(1);
-    const arg = qb.values.mock.calls[0][0] as Partial<SessionMessage>;
-    expect(arg.id).toBe("comp-1");
-    expect(arg.sessionId).toBe("s1");
-    expect(arg.role).toBe("system");
-    expect(arg.content).toBe("用户问了 X，已尝试 Y");
-    const meta = JSON.parse(arg.metadata as string);
-    expect(meta).toEqual({
-      kind: "compaction",
-      removedCount: 5,
-      fromMessageId: "m1",
-      toMessageId: "m5",
-    });
-  });
-
-  it("id 已存在视为幂等成功，不重复 insert", async () => {
-    repo.findOneBy.mockResolvedValue({ id: "comp-1" } as SessionMessage);
-    await service.recordCompactionPlaceholder({
-      id: "comp-1",
-      sessionId: "s1",
-      summary: "x",
-      removedCount: 1,
-      fromMessageId: "a",
-      toMessageId: "b",
-    });
-    expect(qb.values).not.toHaveBeenCalled();
   });
 });

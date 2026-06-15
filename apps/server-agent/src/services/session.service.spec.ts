@@ -57,9 +57,13 @@ describe("SessionService", () => {
         PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id, task_id, idx)
       )
     `);
+    ctx = new AccountContextService();
+    const scopedFactory = new ScopedRepositoryFactory(ctx);
     const llmCalls = new LlmCallService(ds.getRepository(LlmCall));
     const sessionMessages = new SessionMessageService(
       ds.getRepository(SessionMessage),
+      scopedFactory,
+      ctx,
     );
     const checkpointer = new CheckpointerCleanupService(ds);
     // 假 GraphService：cutMessagesAfter 只记调用，验证 regenerateAfter 触达 graph
@@ -76,8 +80,6 @@ describe("SessionService", () => {
         this.__deletions.push(sessionId);
       },
     };
-    ctx = new AccountContextService();
-    const scopedFactory = new ScopedRepositoryFactory(ctx);
     rawService = new SessionService(
       ds.getRepository(Session),
       ds.getRepository(PendingMessage),

@@ -1,12 +1,28 @@
+import { AccountContextService } from "@meshbot/agent";
 import { DataSource } from "typeorm";
+import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
 import { LlmCall } from "../entities/llm-call.entity";
 import { Session } from "../entities/session.entity";
 import { SessionMessage } from "../entities/session-message.entity";
 import { LlmCallService } from "./llm-call.service";
 import { SessionMessageService } from "./session-message.service";
 
+/** 默认测试账号：作用域仓库要求每次调用都处于账号上下文内。 */
+const DEFAULT_USER = "test-user";
+
 describe("stats 聚合方法", () => {
   let ds: DataSource;
+  let ctx: AccountContextService;
+  let scopedFactory: ScopedRepositoryFactory;
+
+  /** 在 DEFAULT_USER 账号上下文内构造作用域 SessionMessageService。 */
+  function makeMsgService(): SessionMessageService {
+    return new SessionMessageService(
+      ds.getRepository(SessionMessage),
+      scopedFactory,
+      ctx,
+    );
+  }
 
   beforeEach(async () => {
     ds = new DataSource({
@@ -16,6 +32,8 @@ describe("stats 聚合方法", () => {
       synchronize: true,
     });
     await ds.initialize();
+    ctx = new AccountContextService();
+    scopedFactory = new ScopedRepositoryFactory(ctx);
   });
 
   afterEach(async () => {
@@ -28,6 +46,7 @@ describe("stats 聚合方法", () => {
       {
         id: "m1",
         sessionId: "s1",
+        cloudUserId: DEFAULT_USER,
         role: "user",
         content: "a",
         reasoning: null,
@@ -39,6 +58,7 @@ describe("stats 聚合方法", () => {
       {
         id: "m2",
         sessionId: "s1",
+        cloudUserId: DEFAULT_USER,
         role: "assistant",
         content: "b",
         reasoning: null,
@@ -50,6 +70,7 @@ describe("stats 聚合方法", () => {
       {
         id: "m3",
         sessionId: "s1",
+        cloudUserId: DEFAULT_USER,
         role: "user",
         content: "c",
         reasoning: null,
@@ -59,8 +80,8 @@ describe("stats 聚合方法", () => {
         createdAt: new Date(2026, 4, 26, 9, 0),
       },
     ]);
-    const svc = new SessionMessageService(repo);
-    const r = await svc.activitySince(null);
+    const svc = makeMsgService();
+    const r = await ctx.run(DEFAULT_USER, () => svc.activitySince(null));
     expect(r.total).toBe(3);
     expect(r.byDate).toEqual([
       { date: "2026-05-26", count: 1 },
@@ -122,9 +143,9 @@ describe("stats 聚合方法", () => {
   });
 
   it("空库：sum=0 / topModel=null / activity 全空", async () => {
-    const mSvc = new SessionMessageService(ds.getRepository(SessionMessage));
+    const mSvc = makeMsgService();
     const lSvc = new LlmCallService(ds.getRepository(LlmCall));
-    const a = await mSvc.activitySince(null);
+    const a = await ctx.run(DEFAULT_USER, () => mSvc.activitySince(null));
     expect(a).toEqual({
       total: 0,
       byDate: [],
