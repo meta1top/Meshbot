@@ -6,16 +6,10 @@ import {
   UpdateDateColumn,
 } from "typeorm";
 
-/**
- * 云端身份的本地镜像（单机单行，id 固定 'default'）。
- * 持久化云端 token，供 server-agent 后台调云端（方案 A）。
- */
+/** 云端身份镜像（v3 多行）：每个登录过的云端账号一行，主键 = cloudUserId。 */
 @Entity("cloud_identity")
 export class CloudIdentity {
-  @PrimaryColumn({ type: "text" })
-  id!: string;
-
-  @Column({ name: "cloud_user_id", type: "text" })
+  @PrimaryColumn({ name: "cloud_user_id", type: "text" })
   cloudUserId!: string;
 
   @Column({ type: "text" })
@@ -38,6 +32,9 @@ export class CloudIdentity {
 
   @Column({ name: "cloud_token_expires_at", type: "text", nullable: true })
   cloudTokenExpiresAt!: string | null;
+
+  @Column({ name: "logged_in", type: "boolean", default: false })
+  loggedIn!: boolean;
 
   @CreateDateColumn({ name: "created_at" })
   createdAt!: Date;

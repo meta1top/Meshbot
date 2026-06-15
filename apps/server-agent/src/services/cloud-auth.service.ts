@@ -1,3 +1,4 @@
+import { AccountContextService } from "@meshbot/agent";
 import { AppError } from "@meshbot/common";
 import { Injectable } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
@@ -41,6 +42,7 @@ export class CloudAuthService {
     private readonly identity: CloudIdentityService,
     private readonly jwt: JwtService,
     private readonly imRelay: ImRelayClientService,
+    private readonly account: AccountContextService,
   ) {}
 
   /** 代理云端注册，成功后写镜像并签本地 JWT，并尝试建立 IM 中继连接。 */
@@ -63,21 +65,24 @@ export class CloudAuthService {
   }
 
   /**
-   * 登出：清空本地身份镜像（本地 JWT 由前端自行丢弃）。
-   * 本地 JWT 不主动吊销（无状态），登出语义 = 清云端身份；profile / 云端
-   * 代理端点立即 401，纯本地路由在 JWT 剩余有效期内仍可用（单机桌面可接受）。
+   * 登出：置当前账号 loggedIn=false（保留行与 token，离线可用）。
+   * 本地 JWT 不主动吊销（无状态），登出语义 = 标记该云端账号已登出；profile /
+   * 云端代理端点立即 401，纯本地路由在 JWT 剩余有效期内仍可用（单机桌面可接受）。
+   * 完整运行时拆解（teardownRuntime）见 Task 4.3。
    */
   async logout(): Promise<void> {
+    const id = this.account.getOrThrow();
     this.imRelay.disconnect();
-    await this.identity.clear();
+    await this.identity.setLoggedOut(id);
   }
 
   /**
-   * 镜像自愈：有 token 但无活跃组织时，从云端拉一次 profile 刷新组织镜像。
+   * 镜像自愈：指定账号有 token 但无活跃组织时，从云端拉一次 profile 刷新组织镜像。
    * 云端不可达 / 401 时静默失败（保持现状，由后续操作再触发）。
+   * 由 Public 的 setup-status 路由调用（无账号上下文），cloudUserId 显式传入。
    */
-  async trySyncActiveOrg(): Promise<void> {
-    const id = await this.identity.get();
+  async trySyncActiveOrg(cloudUserId: string): Promise<void> {
+    const id = await this.identity.get(cloudUserId);
     if (!id?.cloudToken || id.orgId) return;
     try {
       const profile = await this.cloud.get<CloudProfileData>(
@@ -86,6 +91,7 @@ export class CloudAuthService {
       );
       if (profile.activeOrg) {
         await this.identity.updateActiveOrg(
+          cloudUserId,
           profile.activeOrg.id,
           profile.activeOrg.name,
           profile.activeOrg.role,
@@ -98,7 +104,7 @@ export class CloudAuthService {
 
   /** 当前用户 profile（读本地镜像）。无镜像 → 401。 */
   async getProfile(): Promise<LocalProfile> {
-    const id = await this.identity.get();
+    const id = await this.identity.get(this.account.getOrThrow());
     if (!id) {
       throw new AppError(AgentErrorCode.AUTH_UNAUTHORIZED);
     }

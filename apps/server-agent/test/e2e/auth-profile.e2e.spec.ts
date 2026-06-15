@@ -1,14 +1,17 @@
 import "reflect-metadata";
 import path from "node:path";
+import { AccountContextService } from "@meshbot/agent";
 import { ErrorsFilter, TxTypeOrmModule } from "@meshbot/common";
 import { type INestApplication } from "@nestjs/common";
-import { APP_GUARD } from "@nestjs/core";
+import { APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 import { JwtModule } from "@nestjs/jwt";
 import { PassportModule } from "@nestjs/passport";
 import { Test } from "@nestjs/testing";
 import { TypeOrmModule } from "@nestjs/typeorm";
+import { DataSource } from "typeorm";
 import { I18nJsonLoader, I18nModule, I18nService } from "nestjs-i18n";
 import request from "supertest";
+import { AccountContextInterceptor } from "../../src/account/account-context.interceptor";
 import { CloudClientService } from "../../src/cloud/cloud-client.service";
 import { ImRelayClientService } from "../../src/cloud/im-relay-client.service";
 import { AuthController } from "../../src/controllers/auth.controller";
@@ -64,6 +67,8 @@ describe("Auth profile e2e（云端代理）", () => {
         CloudIdentityService,
         CloudAuthService,
         JwtStrategy,
+        // v3：profile 路由按账号读镜像，需账号上下文（拦截器在 JWT 守卫后注入 sub）
+        AccountContextService,
         { provide: CloudClientService, useValue: cloudStub },
         // C3 给 CloudAuthService 加了 ImRelayClientService 依赖；本 e2e 不演练 IM，桩掉即可
         {
@@ -77,6 +82,7 @@ describe("Auth profile e2e（云端代理）", () => {
           },
         },
         { provide: APP_GUARD, useClass: JwtAuthGuard },
+        { provide: APP_INTERCEPTOR, useClass: AccountContextInterceptor },
       ],
     }).compile();
     app = moduleRef.createNestApplication();
@@ -127,9 +133,12 @@ describe("Auth profile e2e（云端代理）", () => {
       .expect(401);
   });
 
-  it("GET /api/auth/profile —— JWT 有效但身份镜像已清空返回 401", async () => {
-    // 登出 / 云端 401 处理器清镜像后，本地 JWT 仍有效但 profile 必须 401
-    await app.get(CloudIdentityService).clear();
+  it("GET /api/auth/profile —— JWT 有效但身份镜像已删除返回 401", async () => {
+    // v3：镜像行被删除（如另端清理）后，本地 JWT 仍有效但 profile 必须 401。
+    // JWT sub = cloudUserId = 'u1'（登录响应里的 user.id）。
+    await app.get(DataSource).getRepository(CloudIdentity).delete({
+      cloudUserId: "u1",
+    });
 
     await request(app.getHttpServer())
       .get("/api/auth/profile")

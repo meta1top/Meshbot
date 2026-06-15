@@ -1,3 +1,4 @@
+import { AccountContextService } from "@meshbot/agent";
 import { AppError } from "@meshbot/common";
 import { Injectable } from "@nestjs/common";
 
@@ -17,6 +18,7 @@ export class CloudOrgService {
     private readonly cloud: CloudClientService,
     private readonly identity: CloudIdentityService,
     private readonly imRelay: ImRelayClientService,
+    private readonly account: AccountContextService,
   ) {}
 
   /** 我的组织列表。 */
@@ -36,7 +38,12 @@ export class CloudOrgService {
       { name },
       token,
     );
-    await this.identity.updateActiveOrg(org.id, org.name, "owner");
+    await this.identity.updateActiveOrg(
+      this.account.getOrThrow(),
+      org.id,
+      org.name,
+      "owner",
+    );
     void this.imRelay.connect();
     return org;
   }
@@ -51,7 +58,12 @@ export class CloudOrgService {
       { token: inviteToken },
       token,
     );
-    await this.identity.updateActiveOrg(res.orgId, res.orgName, "member");
+    await this.identity.updateActiveOrg(
+      this.account.getOrThrow(),
+      res.orgId,
+      res.orgName,
+      "member",
+    );
     void this.imRelay.connect();
     return res;
   }
@@ -99,7 +111,7 @@ export class CloudOrgService {
   }
 
   private async token(): Promise<string> {
-    const id = await this.identity.get();
+    const id = await this.identity.get(this.account.getOrThrow());
     if (!id?.cloudToken) {
       throw new AppError(AgentErrorCode.AUTH_UNAUTHORIZED);
     }

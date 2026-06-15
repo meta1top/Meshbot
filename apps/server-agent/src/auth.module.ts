@@ -1,3 +1,4 @@
+import { AccountContextService } from "@meshbot/agent";
 import { TxTypeOrmModule } from "@meshbot/common";
 import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -32,11 +33,19 @@ import { JWT_SECRET, JwtStrategy } from "./strategies/jwt.strategy";
     JwtStrategy,
     {
       provide: CloudClientService,
-      inject: [ConfigService, CloudIdentityService],
-      useFactory: (config: ConfigService, identity: CloudIdentityService) => {
+      inject: [ConfigService, CloudIdentityService, AccountContextService],
+      useFactory: (
+        config: ConfigService,
+        identity: CloudIdentityService,
+        account: AccountContextService,
+      ) => {
         const client = new CloudClientService(config);
-        // 云端 401（token 失效）→ 清本地身份 → setup-status 落回 needs-login
-        client.setUnauthorizedHandler(() => identity.clear());
+        // 云端 401（token 失效）→ 标记当前账号已登出 → setup-status 落回 needs-login。
+        // 401 发生在请求的账号上下文内；无上下文（后台路径）时跳过。
+        client.setUnauthorizedHandler(() => {
+          const id = account.get();
+          if (id) void identity.setLoggedOut(id);
+        });
         return client;
       },
     },

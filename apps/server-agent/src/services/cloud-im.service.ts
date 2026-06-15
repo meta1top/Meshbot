@@ -1,3 +1,4 @@
+import { AccountContextService } from "@meshbot/agent";
 import { AppError } from "@meshbot/common";
 import type { ConversationSummary, MessagePage } from "@meshbot/types";
 import { Injectable } from "@nestjs/common";
@@ -15,6 +16,7 @@ export class CloudImService {
   constructor(
     private readonly cloud: CloudClientService,
     private readonly identity: CloudIdentityService,
+    private readonly account: AccountContextService,
   ) {}
 
   /** 当前用户的会话列表。 */
@@ -63,7 +65,7 @@ export class CloudImService {
   }
 
   private async withToken<T>(fn: (token: string) => Promise<T>): Promise<T> {
-    const id = await this.identity.get();
+    const id = await this.identity.get(this.account.getOrThrow());
     if (!id?.cloudToken) {
       throw new AppError(AgentErrorCode.AUTH_UNAUTHORIZED);
     }

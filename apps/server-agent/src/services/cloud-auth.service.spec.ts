@@ -1,3 +1,4 @@
+import { AccountContextService } from "@meshbot/agent";
 import { CloudAuthService } from "./cloud-auth.service";
 
 /** 用桩验证：登录调云端 login + profile，upsert 镜像，签本地 JWT。 */
@@ -24,6 +25,7 @@ describe("CloudAuthService.login", () => {
       identity as never,
       jwt as never,
       imRelay as never,
+      new AccountContextService(),
     );
     const out = await svc.login({ email: "a@x.io", password: "p" });
 
@@ -48,15 +50,22 @@ describe("CloudAuthService.login", () => {
   });
 
   it("getProfile：无身份镜像抛 AUTH_UNAUTHORIZED", async () => {
+    const account = new AccountContextService();
+    const identity = { get: jest.fn().mockResolvedValue(null) };
     const svc = new CloudAuthService(
       {} as never,
-      { get: jest.fn().mockResolvedValue(null) } as never,
+      identity as never,
       {} as never,
       { connect: jest.fn(), disconnect: jest.fn() } as never,
+      account,
     );
-    await expect(svc.getProfile()).rejects.toMatchObject({
+    // getProfile 现在按当前账号读镜像；在账号上下文内调用
+    await expect(
+      account.run("u1", () => svc.getProfile()),
+    ).rejects.toMatchObject({
       name: "AppError",
     });
+    expect(identity.get).toHaveBeenCalledWith("u1");
   });
 
   it("register 成功：调云端、写镜像、返回本地 access_token，并触发 IM relay connect", async () => {
@@ -84,6 +93,7 @@ describe("CloudAuthService.login", () => {
       identity as never,
       jwt as never,
       imRelay as never,
+      new AccountContextService(),
     );
     const out = await svc.register({
       email: "b@x.io",
