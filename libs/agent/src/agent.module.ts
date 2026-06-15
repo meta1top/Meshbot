@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { DiscoveryModule } from "@nestjs/core";
 import { EventEmitterModule } from "@nestjs/event-emitter";
+import { AccountContextModule } from "./account/account-context.module";
 import { MeshbotConfigModule } from "./config/meshbot-config.module";
 import { MeshbotConfigService } from "./config/meshbot-config.service";
 import { GraphService } from "./graph/graph.service";
@@ -21,7 +22,12 @@ import { SkillLoadTool } from "./tools/builtins/skill-load.tool";
   // NestJS 对同一个 module 类的重复 forRoot 调用做去重，最终全局只有一个
   // EventEmitter2 实例。本处仍然 import 是为了 libs/agent 的独立集成测试
   // （tests/integration/agent.module.test.ts）能解析 GraphService 的依赖。
-  imports: [DiscoveryModule, MeshbotConfigModule, EventEmitterModule.forRoot()],
+  imports: [
+    AccountContextModule,
+    DiscoveryModule,
+    MeshbotConfigModule,
+    EventEmitterModule.forRoot(),
+  ],
   providers: [
     ToolRegistry,
     BashTool,
