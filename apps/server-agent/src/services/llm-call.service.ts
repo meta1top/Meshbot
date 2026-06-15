@@ -1,6 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, MoreThan, Repository } from "typeorm";
+import { ScopedRepository } from "../account/scoped-repository";
+import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
 import { LlmCall } from "../entities/llm-call.entity";
 
 /** LlmCallService.record 入参 —— 单次 LLM 调用的完整观测数据。 */
@@ -34,10 +36,16 @@ export interface SessionTotals {
 /** LlmCall 表的归属 Service —— LLM 调用观测的数据层。 */
 @Injectable()
 export class LlmCallService {
+  /** LlmCall 账号作用域仓库（自动按当前账号过滤/盖章）。 */
+  private readonly llmCallRepo: ScopedRepository<LlmCall>;
+
   constructor(
     @InjectRepository(LlmCall)
-    private readonly llmCallRepo: Repository<LlmCall>,
-  ) {}
+    rawRepo: Repository<LlmCall>,
+    scopedFactory: ScopedRepositoryFactory,
+  ) {
+    this.llmCallRepo = scopedFactory.create(rawRepo);
+  }
 
   /**
    * 落一条 LLM 调用记录。
@@ -47,9 +55,7 @@ export class LlmCallService {
    * MoreThan 漏剪，而 user 与 assistant 间隔常常小于 1s。
    */
   async record(input: RecordLlmCallInput): Promise<void> {
-    await this.llmCallRepo.save(
-      this.llmCallRepo.create({ ...input, createdAt: new Date() }),
-    );
+    await this.llmCallRepo.save({ ...input, createdAt: new Date() });
   }
 
   /** 列出某会话的全部 LLM 调用，按 createdAt 升序。 */
@@ -128,10 +134,10 @@ export class LlmCallService {
   /** 范围内 total_tokens 求和。since 为 null 表示全部。 */
   async sumTotalTokensSince(since: Date | null): Promise<number> {
     const qb = this.llmCallRepo
-      .createQueryBuilder("c")
+      .scopedQueryBuilder("c")
       .select("COALESCE(SUM(c.total_tokens), 0)", "sum");
     if (since) {
-      qb.where("datetime(c.created_at) >= datetime(:since)", {
+      qb.andWhere("datetime(c.created_at) >= datetime(:since)", {
         since: since.toISOString(),
       });
     }
@@ -142,14 +148,14 @@ export class LlmCallService {
   /** 范围内出现次数最多的 model；无记录返回 null。 */
   async topModelSince(since: Date | null): Promise<string | null> {
     const qb = this.llmCallRepo
-      .createQueryBuilder("c")
+      .scopedQueryBuilder("c")
       .select("c.model", "model")
       .addSelect("COUNT(*)", "count")
       .groupBy("c.model")
       .orderBy("count", "DESC")
       .limit(1);
     if (since) {
-      qb.where("datetime(c.created_at) >= datetime(:since)", {
+      qb.andWhere("datetime(c.created_at) >= datetime(:since)", {
         since: since.toISOString(),
       });
     }

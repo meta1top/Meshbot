@@ -97,6 +97,7 @@ describe("stats 聚合方法", () => {
       {
         sessionId: "s1",
         messageId: "m1",
+        cloudUserId: DEFAULT_USER,
         providerType: "openai",
         model: "gpt-4o",
         inputTokens: 10,
@@ -111,6 +112,7 @@ describe("stats 聚合方法", () => {
       {
         sessionId: "s1",
         messageId: "m2",
+        cloudUserId: DEFAULT_USER,
         providerType: "openai",
         model: "gpt-4o",
         inputTokens: 20,
@@ -125,6 +127,7 @@ describe("stats 聚合方法", () => {
       {
         sessionId: "s1",
         messageId: "m3",
+        cloudUserId: DEFAULT_USER,
         providerType: "anthropic",
         model: "claude",
         inputTokens: 1,
@@ -137,21 +140,29 @@ describe("stats 聚合方法", () => {
         createdAt: new Date(2026, 4, 27, 18, 10),
       },
     ]);
-    const svc = new LlmCallService(repo);
-    expect(await svc.sumTotalTokensSince(null)).toBe(47);
-    expect(await svc.topModelSince(null)).toBe("gpt-4o");
+    const svc = new LlmCallService(repo, scopedFactory);
+    expect(
+      await ctx.run(DEFAULT_USER, () => svc.sumTotalTokensSince(null)),
+    ).toBe(47);
+    expect(await ctx.run(DEFAULT_USER, () => svc.topModelSince(null))).toBe(
+      "gpt-4o",
+    );
   });
 
   it("空库：sum=0 / topModel=null / activity 全空", async () => {
     const mSvc = makeMsgService();
-    const lSvc = new LlmCallService(ds.getRepository(LlmCall));
+    const lSvc = new LlmCallService(ds.getRepository(LlmCall), scopedFactory);
     const a = await ctx.run(DEFAULT_USER, () => mSvc.activitySince(null));
     expect(a).toEqual({
       total: 0,
       byDate: [],
       byHour: Array.from({ length: 24 }, () => 0),
     });
-    expect(await lSvc.sumTotalTokensSince(null)).toBe(0);
-    expect(await lSvc.topModelSince(null)).toBeNull();
+    expect(
+      await ctx.run(DEFAULT_USER, () => lSvc.sumTotalTokensSince(null)),
+    ).toBe(0);
+    expect(
+      await ctx.run(DEFAULT_USER, () => lSvc.topModelSince(null)),
+    ).toBeNull();
   });
 });

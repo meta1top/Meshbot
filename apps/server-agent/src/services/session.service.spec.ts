@@ -59,7 +59,10 @@ describe("SessionService", () => {
     `);
     ctx = new AccountContextService();
     const scopedFactory = new ScopedRepositoryFactory(ctx);
-    const llmCalls = new LlmCallService(ds.getRepository(LlmCall));
+    const llmCalls = new LlmCallService(
+      ds.getRepository(LlmCall),
+      scopedFactory,
+    );
     const sessionMessages = new SessionMessageService(
       ds.getRepository(SessionMessage),
       scopedFactory,
