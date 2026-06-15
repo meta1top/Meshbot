@@ -1,5 +1,7 @@
 import {
+  AppError,
   BaseWebSocketGateway,
+  CommonErrorCode,
   WsAuthGuard,
   WsExceptionFilter,
 } from "@meshbot/common";
@@ -16,10 +18,13 @@ import { UseFilters, UseGuards } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
 import { JwtService } from "@nestjs/jwt";
 import {
+  ConnectedSocket,
   MessageBody,
   SubscribeMessage,
   WebSocketGateway,
+  WsException,
 } from "@nestjs/websockets";
+import type { Socket } from "socket.io";
 import { ImRelayClientService } from "../cloud/im-relay-client.service";
 
 /**
@@ -81,23 +86,45 @@ export class ImGateway extends BaseWebSocketGateway {
   /**
    * 上行：浏览器发送 IM 消息 → 转交 ImRelayClientService 经云端 socket 上行。
    *
+   * 账号来源：握手期 JWT middleware 写入的 `client.data.user`（payload
+   * `{ sub: cloudUserId, email }`），`WsAuthGuard` 已保证其存在，`sub` 即云端账号 id，
+   * 用以定位该账号的云连接（v3 每账号独立连接）。
    * 未连接时 ImRelayClientService.send 抛 AppError(IM_NOT_CONNECTED)，
    * WsExceptionFilter 统一转为 WsException 回传客户端。
    */
   @UseGuards(WsAuthGuard)
   @SubscribeMessage(IM_WS_EVENTS.send)
-  handleSend(@MessageBody() body: ImSendInput): void {
-    this.imRelay.send(body);
+  handleSend(
+    @MessageBody() body: ImSendInput,
+    @ConnectedSocket() client: Socket,
+  ): void {
+    this.imRelay.send(this.cloudUserId(client), body);
   }
 
   /**
    * 上行：浏览器标记消息已读 → 转交 ImRelayClientService 经云端 socket 上行。
    *
+   * 账号来源同 handleSend（`client.data.user.sub`）。
    * best-effort：ImRelayClientService.read 未连接时静默跳过，无需处理异常。
    */
   @UseGuards(WsAuthGuard)
   @SubscribeMessage(IM_WS_EVENTS.read)
-  handleRead(@MessageBody() body: ImReadInput): void {
-    this.imRelay.read(body);
+  handleRead(
+    @MessageBody() body: ImReadInput,
+    @ConnectedSocket() client: Socket,
+  ): void {
+    this.imRelay.read(this.cloudUserId(client), body);
+  }
+
+  /**
+   * 从已鉴权 socket 解析云端账号 id（本地 JWT 的 `sub`）。
+   * `WsAuthGuard` 保证 `client.data.user` 存在；缺 `sub` 视为未鉴权。
+   */
+  private cloudUserId(client: Socket): string {
+    const user = client.data?.user as { sub?: unknown } | undefined;
+    if (typeof user?.sub !== "string") {
+      throw new WsException(new AppError(CommonErrorCode.UNAUTHORIZED));
+    }
+    return user.sub;
   }
 }

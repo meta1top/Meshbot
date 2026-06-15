@@ -52,7 +52,7 @@ export class CloudAuthService {
       input,
     );
     const result = await this.afterCloudAuth(auth);
-    void this.imRelay.connect();
+    void this.imRelay.connect(auth.user.id);
     return result;
   }
 
@@ -60,7 +60,7 @@ export class CloudAuthService {
   async login(input: Credentials): Promise<LocalTokenResponse> {
     const auth = await this.cloud.post<CloudAuthData>("/api/auth/login", input);
     const result = await this.afterCloudAuth(auth);
-    void this.imRelay.connect();
+    void this.imRelay.connect(auth.user.id);
     return result;
   }
 
@@ -72,7 +72,7 @@ export class CloudAuthService {
    */
   async logout(): Promise<void> {
     const id = this.account.getOrThrow();
-    this.imRelay.disconnect();
+    this.imRelay.disconnect(id);
     await this.identity.setLoggedOut(id);
   }
 

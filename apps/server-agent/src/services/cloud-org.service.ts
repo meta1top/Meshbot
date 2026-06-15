@@ -44,7 +44,7 @@ export class CloudOrgService {
       org.name,
       "owner",
     );
-    void this.imRelay.connect();
+    void this.imRelay.connect(this.account.getOrThrow());
     return org;
   }
 
@@ -64,7 +64,7 @@ export class CloudOrgService {
       res.orgName,
       "member",
     );
-    void this.imRelay.connect();
+    void this.imRelay.connect(this.account.getOrThrow());
     return res;
   }
 
