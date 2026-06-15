@@ -9,7 +9,8 @@ import type {
 import {
   addAccount,
   apiClient,
-  clearAccessToken,
+  getActiveAccountId,
+  removeAccount,
   setAccessToken,
 } from "@meshbot/web-common";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -120,7 +121,8 @@ export function useLogout() {
   return useMutation({
     mutationFn: logout,
     onSettled: () => {
-      clearAccessToken();
+      const id = getActiveAccountId();
+      if (id) removeAccount(id);
       queryClient.invalidateQueries({ queryKey: profileQueryKey });
       queryClient.invalidateQueries({ queryKey: authStatusQueryKey });
     },

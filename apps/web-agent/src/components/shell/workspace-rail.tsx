@@ -70,7 +70,11 @@ export function WorkspaceRail() {
 
   const handleLogout = useCallback(async () => {
     await logoutMutation.mutateAsync().catch(() => {});
-    router.replace("/login");
+    if (listAccounts().length > 0) {
+      router.refresh();
+    } else {
+      router.replace("/login");
+    }
   }, [logoutMutation.mutateAsync, router]);
 
   const handleSwitchAccount = useCallback(
