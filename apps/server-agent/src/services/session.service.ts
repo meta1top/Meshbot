@@ -158,6 +158,16 @@ export class SessionService {
     return this.sessionRepo.findOneBy({ id: sessionId });
   }
 
+  /** 按 session 反查其归属账号（系统级，无账号上下文时用，如 runner/cron 建上下文）。 */
+  async findOwner(sessionId: string): Promise<string | null> {
+    // scope-check: allow-unscoped
+    const row = await this.sessionRepo.unscoped().findOne({
+      where: { id: sessionId },
+      select: { id: true, cloudUserId: true },
+    });
+    return row?.cloudUserId ?? null;
+  }
+
   /** 取会话，不存在抛 404。 */
   async findSessionOrFail(sessionId: string): Promise<Session> {
     const s = await this.sessionRepo.findOneBy({ id: sessionId });

@@ -631,6 +631,18 @@ describe("SessionService", () => {
       await expect(rawService.listAllSorted()).rejects.toThrow();
     });
 
+    it("findOwner 无账号上下文反查归属账号（系统级，runner/cron 建上下文用）", async () => {
+      const { sessionId } = await ctx.run("u1", () =>
+        rawService.createSession({ content: "s" }),
+      );
+      // 故意不包 ctx.run：findOwner 必须能在无账号上下文时跑（证明它是 unscoped）。
+      expect(await rawService.findOwner(sessionId)).toBe("u1");
+    });
+
+    it("findOwner 未知 sessionId 返回 null", async () => {
+      expect(await rawService.findOwner("nonexistent")).toBeNull();
+    });
+
     it("rollbackProcessingToPending 跨账号全量重置（无上下文也可跑）", async () => {
       const u1 = await ctx.run("u1", () =>
         rawService.createSession({ content: "a" }),

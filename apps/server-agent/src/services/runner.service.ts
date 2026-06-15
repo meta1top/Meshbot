@@ -1,4 +1,4 @@
-import { GraphService } from "@meshbot/agent";
+import { AccountContextService, GraphService } from "@meshbot/agent";
 import {
   type RunToolCallEndEvent,
   SESSION_WS_EVENTS,
@@ -70,6 +70,7 @@ export class RunnerService implements OnModuleInit {
     private readonly sessionMessages: SessionMessageService,
     private readonly compactor: ContextCompactor,
     private readonly modelConfig: ModelConfigService,
+    private readonly account: AccountContextService,
   ) {}
 
   /** 启动时把遗留的 processing 消息退回 pending（重启 inflight 丢失后可重跑）。 */
@@ -126,56 +127,76 @@ export class RunnerService implements OnModuleInit {
    * 消费循环：取 pending → 跑一次 run → 检查是否还有 pending → 续跑。
    * 测试直接 await 本方法；生产经 kick 触发不 await。
    *
+   * 先按 session 反查归属账号（系统级，无上下文），再把整段消费包进该账号的
+   * ALS 上下文里——后台触发（runner / cron）天生无请求上下文，必须显式建账号
+   * 上下文，否则下游作用域服务（Session / SessionMessage / LlmCall）会抛
+   * NO_ACCOUNT_CONTEXT。HTTP 触发路径包进来语义不变（仍是该 session 属主）。
+   *
    * running 哨兵在第一个 await 之前同步设置，防止同 tick 内双 kick 竞争。
    * runOnce 抛错时由内层 try/catch 记录日志后中断循环（避免毒消息无限重试），
    * 错误事件已在 runOnce 内发出，本方法对外正常 resolve。
    */
   async kickAndWait(sessionId: string): Promise<void> {
-    if (this.running.has(sessionId)) return;
-    this.running.add(sessionId);
-    await this.sessions.setStatus(sessionId, "running");
-    try {
-      while (true) {
-        const batch = await this.sessions.claimPending(sessionId);
-        if (batch.length === 0) break;
-        try {
-          await this.runOnce(sessionId, batch, false);
-        } catch (err) {
-          this.logger.warn(`runOnce 失败，停止消费循环：${sessionId}`, err);
-          break;
-        }
-      }
-    } finally {
-      this.running.delete(sessionId);
-      await this.sessions.setStatus(sessionId, "idle");
+    const owner = await this.sessions.findOwner(sessionId);
+    if (!owner) {
+      this.logger.warn(`kick ${sessionId}: 找不到归属账号，跳过`);
+      return;
     }
+    await this.account.run(owner, async () => {
+      if (this.running.has(sessionId)) return;
+      this.running.add(sessionId);
+      await this.sessions.setStatus(sessionId, "running");
+      try {
+        while (true) {
+          const batch = await this.sessions.claimPending(sessionId);
+          if (batch.length === 0) break;
+          try {
+            await this.runOnce(sessionId, batch, false);
+          } catch (err) {
+            this.logger.warn(`runOnce 失败，停止消费循环：${sessionId}`, err);
+            break;
+          }
+        }
+      } finally {
+        this.running.delete(sessionId);
+        await this.sessions.setStatus(sessionId, "idle");
+      }
+    });
   }
 
   /**
    * 重试消费循环：取 failed 消息 → resume run（不写新 HumanMessage）→
    * 检查是否还有 failed → 续跑。测试直接 await 本方法；生产经 kickRetry 触发不 await。
    *
-   * 结构与 kickAndWait 一致：running 哨兵防双 kick，runOnce 抛错时记录日志后中断循环。
+   * 结构与 kickAndWait 一致：先建该 session 属主的账号上下文（后台触发无请求
+   * 上下文），running 哨兵防双 kick，runOnce 抛错时记录日志后中断循环。
    */
   async kickRetryAndWait(sessionId: string): Promise<void> {
-    if (this.running.has(sessionId)) return;
-    this.running.add(sessionId);
-    await this.sessions.setStatus(sessionId, "running");
-    try {
-      while (true) {
-        const batch = await this.sessions.claimFailed(sessionId);
-        if (batch.length === 0) break;
-        try {
-          await this.runOnce(sessionId, batch, true);
-        } catch (err) {
-          this.logger.warn(`retry runOnce 失败：${sessionId}`, err);
-          break;
-        }
-      }
-    } finally {
-      this.running.delete(sessionId);
-      await this.sessions.setStatus(sessionId, "idle");
+    const owner = await this.sessions.findOwner(sessionId);
+    if (!owner) {
+      this.logger.warn(`kickRetry ${sessionId}: 找不到归属账号，跳过`);
+      return;
     }
+    await this.account.run(owner, async () => {
+      if (this.running.has(sessionId)) return;
+      this.running.add(sessionId);
+      await this.sessions.setStatus(sessionId, "running");
+      try {
+        while (true) {
+          const batch = await this.sessions.claimFailed(sessionId);
+          if (batch.length === 0) break;
+          try {
+            await this.runOnce(sessionId, batch, true);
+          } catch (err) {
+            this.logger.warn(`retry runOnce 失败：${sessionId}`, err);
+            break;
+          }
+        }
+      } finally {
+        this.running.delete(sessionId);
+        await this.sessions.setStatus(sessionId, "idle");
+      }
+    });
   }
 
   /**
@@ -193,17 +214,24 @@ export class RunnerService implements OnModuleInit {
   }
 
   async kickResumeAndWait(sessionId: string): Promise<void> {
-    if (this.running.has(sessionId)) return;
-    this.running.add(sessionId);
-    await this.sessions.setStatus(sessionId, "running");
-    try {
-      await this.runOnce(sessionId, [], true);
-    } catch (err) {
-      this.logger.warn(`resume runOnce 失败：${sessionId}`, err);
-    } finally {
-      this.running.delete(sessionId);
-      await this.sessions.setStatus(sessionId, "idle");
+    const owner = await this.sessions.findOwner(sessionId);
+    if (!owner) {
+      this.logger.warn(`kickResume ${sessionId}: 找不到归属账号，跳过`);
+      return;
     }
+    await this.account.run(owner, async () => {
+      if (this.running.has(sessionId)) return;
+      this.running.add(sessionId);
+      await this.sessions.setStatus(sessionId, "running");
+      try {
+        await this.runOnce(sessionId, [], true);
+      } catch (err) {
+        this.logger.warn(`resume runOnce 失败：${sessionId}`, err);
+      } finally {
+        this.running.delete(sessionId);
+        await this.sessions.setStatus(sessionId, "idle");
+      }
+    });
   }
 
   /**
