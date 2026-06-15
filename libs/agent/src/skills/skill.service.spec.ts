@@ -115,3 +115,68 @@ describe("SkillService", () => {
     expect(list[0].description).toBe("line one line two");
   });
 });
+
+describe("SkillService 账号隔离", () => {
+  let tmp: string;
+  let ctx: AccountContextService;
+  let svc: SkillService;
+
+  beforeEach(() => {
+    tmp = mkdtempSync(path.join(tmpdir(), "meshbot-skill-iso-"));
+    ctx = new AccountContextService();
+    svc = new SkillService(makeConfig(tmp));
+    // makeConfig 使用内部 ctx，需要使用同一个 ctx 以保证 ALS 链路一致
+    // — 因此重建 svc，传入共享 ctx 的 config
+    const sharedCfg = new (class extends MeshbotConfigService {
+      constructor() {
+        super(ctx);
+        (this as unknown as { meshbotDir: string }).meshbotDir = tmp;
+      }
+    })();
+    svc = new SkillService(sharedCfg);
+  });
+
+  afterEach(() => {
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it("u1 只能看到 accounts/u1/skills 下的技能，u2 只看到 accounts/u2/skills 下的技能", () => {
+    // 写入 u1 的技能
+    const u1SkillsDir = path.join(tmp, "accounts", "u1", "skills", "foo");
+    mkdirSync(u1SkillsDir, { recursive: true });
+    writeFileSync(
+      path.join(u1SkillsDir, "SKILL.md"),
+      `---\nname: foo\ndescription: u1-foo\n---\n\n# Foo`,
+      "utf8",
+    );
+
+    // 写入 u2 的技能
+    const u2SkillsDir = path.join(tmp, "accounts", "u2", "skills", "bar");
+    mkdirSync(u2SkillsDir, { recursive: true });
+    writeFileSync(
+      path.join(u2SkillsDir, "SKILL.md"),
+      `---\nname: bar\ndescription: u2-bar\n---\n\n# Bar`,
+      "utf8",
+    );
+
+    const u1List = ctx.run("u1", () => svc.list());
+    const u2List = ctx.run("u2", () => svc.list());
+
+    expect(u1List.map((e) => e.name)).toEqual(["foo"]);
+    expect(u2List.map((e) => e.name)).toEqual(["bar"]);
+  });
+
+  it("u1 ctx 下 load 不到 u2 的技能", () => {
+    const u2SkillsDir = path.join(tmp, "accounts", "u2", "skills", "secret");
+    mkdirSync(u2SkillsDir, { recursive: true });
+    writeFileSync(
+      path.join(u2SkillsDir, "SKILL.md"),
+      `---\nname: secret\ndescription: u2 secret\n---\n\n# Secret`,
+      "utf8",
+    );
+
+    // u1 上下文中尝试加载 u2 的 "secret" skill → 应返回 null（u1 目录下没有）
+    const result = ctx.run("u1", () => svc.load("secret"));
+    expect(result).toBeNull();
+  });
+});

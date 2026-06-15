@@ -7,23 +7,37 @@ import { ChatGenerationChunk } from "@langchain/core/outputs";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
+import { AccountContextService } from "../../src/account/account-context.service";
 import { MeshbotConfigService } from "../../src/config/meshbot-config.service";
 import { GraphService } from "../../src/graph/graph.service";
-import { AccountContextService } from "../../src/account/account-context.service";
 import { PromptService } from "../../src/prompt/prompt.service";
 import { ToolRegistry } from "../../src/tools/tool-registry";
 import type { MeshbotTool } from "../../src/tools/tool.types";
 
+const TEST_ACCOUNT = "test-account";
+
+function makeTestServices(testDir: string): {
+  ctx: AccountContextService;
+  configService: MeshbotConfigService;
+  promptService: PromptService;
+} {
+  const ctx = new AccountContextService();
+  const configService = new MeshbotConfigService(ctx);
+  (configService as unknown as Record<string, string>).meshbotDir = testDir;
+  const promptService = new PromptService(configService, ctx);
+  return { ctx, configService, promptService };
+}
+
 describe("GraphService", () => {
   let testDir: string;
+  let ctx: AccountContextService;
   let graphService: GraphService;
 
   beforeEach(() => {
     testDir = mkdtempSync(path.join(tmpdir(), "meshbot-graph-test-"));
     mkdirSync(path.join(testDir, "prompt"), { recursive: true });
-    const configService = new MeshbotConfigService();
-    (configService as unknown as Record<string, string>).meshbotDir = testDir;
-    const promptService = new PromptService(testDir);
+    const { ctx: c, configService, promptService } = makeTestServices(testDir);
+    ctx = c;
     // 注意：以下 fakeModel 是普通对象，不继承 BaseChatModel，stream() 不经过
     // LangChain 的 callback pipeline。配 streamMode:"messages" 单 mode 时凑合能用，
     // 但 streamMode:["messages","updates"] 多 mode 下不可靠（chunks 不进 messages 流）。
@@ -87,11 +101,13 @@ describe("GraphService", () => {
       | { kind: "chunk"; messageId: string; delta: string }
       | { kind: "usage"; messageId: string }
     > = [];
-    for await (const ev of graphService.streamMessage(threadId, [
-      { id: "pm-1", content: "hi" },
-    ])) {
-      events.push(ev);
-    }
+    await ctx.run(TEST_ACCOUNT, async () => {
+      for await (const ev of graphService.streamMessage(threadId, [
+        { id: "pm-1", content: "hi" },
+      ])) {
+        events.push(ev);
+      }
+    });
     const chunks = events.filter(
       (e): e is { kind: "chunk"; messageId: string; delta: string } =>
         e.kind === "chunk",
@@ -105,11 +121,13 @@ describe("GraphService", () => {
     const threadId = await graphService.startSession({ model: "fake" });
     // biome-ignore lint/suspicious/noExplicitAny: 测试方便起见用 any 装载事件
     const events: any[] = [];
-    for await (const ev of graphService.streamMessage(threadId, [
-      { id: "pm-1", content: "hi" },
-    ])) {
-      events.push(ev);
-    }
+    await ctx.run(TEST_ACCOUNT, async () => {
+      for await (const ev of graphService.streamMessage(threadId, [
+        { id: "pm-1", content: "hi" },
+      ])) {
+        events.push(ev);
+      }
+    });
     const usage = events.find((e) => e.kind === "usage");
     expect(usage).toBeTruthy();
     const firstChunk = events.find((e) => e.kind === "chunk");
@@ -128,11 +146,13 @@ describe("GraphService", () => {
 
   it("returns history after streamMessage", async () => {
     const threadId = await graphService.startSession({ model: "fake" });
-    for await (const _ev of graphService.streamMessage(threadId, [
-      { id: "pm-1", content: "hi" },
-    ])) {
-      // 仅消费流以驱动 checkpointer 落盘
-    }
+    await ctx.run(TEST_ACCOUNT, async () => {
+      for await (const _ev of graphService.streamMessage(threadId, [
+        { id: "pm-1", content: "hi" },
+      ])) {
+        // 仅消费流以驱动 checkpointer 落盘
+      }
+    });
     const history = await graphService.getHistory(threadId);
     expect(Array.isArray(history)).toBe(true);
     expect(history.length).toBeGreaterThan(0);
@@ -140,11 +160,13 @@ describe("GraphService", () => {
 
   it("streamMessage 用传入 id 构造 HumanMessage 并写入 checkpointer", async () => {
     const threadId = await graphService.startSession({ model: "fake" });
-    for await (const _ of graphService.streamMessage(threadId, [
-      { id: "pm-1", content: "hi" },
-    ])) {
-      // 消费完
-    }
+    await ctx.run(TEST_ACCOUNT, async () => {
+      for await (const _ of graphService.streamMessage(threadId, [
+        { id: "pm-1", content: "hi" },
+      ])) {
+        // 消费完
+      }
+    });
     const history = await graphService.getHistory(threadId);
     const userMsg = history.find((m) => m.role === "user");
     expect(userMsg?.id).toBe("pm-1");
@@ -152,17 +174,21 @@ describe("GraphService", () => {
 
   it("resumeStream 不加新消息，从现有状态继续流式", async () => {
     const threadId = await graphService.startSession({ model: "fake" });
-    for await (const _ of graphService.streamMessage(threadId, [
-      { id: "pm-1", content: "hi" },
-    ])) {
-      // 先跑一轮建立历史
-    }
+    await ctx.run(TEST_ACCOUNT, async () => {
+      for await (const _ of graphService.streamMessage(threadId, [
+        { id: "pm-1", content: "hi" },
+      ])) {
+        // 先跑一轮建立历史
+      }
+    });
     const before = await graphService.getHistory(threadId);
     const userCountBefore = before.filter((m) => m.role === "user").length;
     const chunks: unknown[] = [];
-    for await (const ev of graphService.resumeStream(threadId)) {
-      chunks.push(ev);
-    }
+    await ctx.run(TEST_ACCOUNT, async () => {
+      for await (const ev of graphService.resumeStream(threadId)) {
+        chunks.push(ev);
+      }
+    });
     const after = await graphService.getHistory(threadId);
     const userCountAfter = after.filter((m) => m.role === "user").length;
     expect(userCountAfter).toBe(userCountBefore);
@@ -268,12 +294,15 @@ describe("GraphService", () => {
     toolRegistry2.onModuleInit();
     // echoTool 是纯对象（无 @Tool() 装饰器），onModuleInit 扫不到，需手动注册
     toolRegistry2.register(echoTool);
-    const cfg2 = new MeshbotConfigService();
-    (cfg2 as unknown as Record<string, string>).meshbotDir = testDir;
+    const {
+      ctx: ctx2,
+      configService: cfg2,
+      promptService: ps2,
+    } = makeTestServices(testDir);
     const model2 = new TwoRoundModel({});
     const gs = new GraphService(
       cfg2,
-      new PromptService(testDir),
+      ps2,
       toolRegistry2,
       new EventEmitter2(),
       () => Promise.resolve(model2 as BaseChatModel),
@@ -281,15 +310,17 @@ describe("GraphService", () => {
     );
     const threadId = await gs.startSession({ model: "fake" });
     const events: Array<{ kind: string; messageId: string; t: number }> = [];
-    for await (const ev of gs.streamMessage(threadId, [
-      { id: "pm-1", content: "hi" },
-    ])) {
-      events.push({
-        kind: ev.kind,
-        messageId: (ev as { messageId?: string }).messageId ?? "",
-        t: Date.now(),
-      });
-    }
+    await ctx2.run(TEST_ACCOUNT, async () => {
+      for await (const ev of gs.streamMessage(threadId, [
+        { id: "pm-1", content: "hi" },
+      ])) {
+        events.push({
+          kind: ev.kind,
+          messageId: (ev as { messageId?: string }).messageId ?? "",
+          t: Date.now(),
+        });
+      }
+    });
     const adA = events.find(
       (e) => e.kind === "assistant_done" && e.messageId === "msg-A",
     );
