@@ -2,6 +2,7 @@ import { tool as createLcTool } from "@langchain/core/tools";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 import { Injectable, OnModuleInit } from "@nestjs/common";
 import { DiscoveryService } from "@nestjs/core";
+import { AccountContextService } from "../account/account-context.service";
 import { TOOL_METADATA_KEY } from "./tool.decorator";
 import type { MeshbotTool } from "./tool.types";
 
@@ -20,12 +21,21 @@ interface Entry {
  * asLangChainBindable() 返回的 LC tool 实例**不会**被 LangChain 真调（我们
  * 自写 toolsNode），仅用于 model.bindTools() 把 schema 注入 LLM。真正的
  * 执行在 toolsNode 里用 registry.get(name).execute(args, ctx)。
+ *
+ * 内置工具（@Tool() / register）写入全局 entries；MCP 工具写入
+ * accountEntries（按 cloudUserId 键），工具解析时与当前 ALS 账号上下文合并。
  */
 @Injectable()
 export class ToolRegistry implements OnModuleInit {
   private readonly entries = new Map<string, Entry>();
 
-  constructor(private readonly discovery: DiscoveryService) {}
+  /** MCP 工具按账号键：cloudUserId → (toolName → Entry) */
+  private readonly accountEntries = new Map<string, Map<string, Entry>>();
+
+  constructor(
+    private readonly discovery: DiscoveryService,
+    private readonly account: AccountContextService,
+  ) {}
 
   onModuleInit(): void {
     const providers = this.discovery.getProviders();
@@ -56,6 +66,35 @@ export class ToolRegistry implements OnModuleInit {
     this.entries.delete(name);
   }
 
+  /**
+   * 为指定账号注册一个 MCP 工具。同账号重名时覆盖（upsert）。
+   * @param cloudUserId 账号 ID（= JWT sub）
+   * @param tool MeshbotTool 实现
+   * @param lcTool 用于 model.bindTools() 的 LC tool（保留 MCP server 原始 schema）
+   */
+  registerForAccount(
+    cloudUserId: string,
+    tool: MeshbotTool,
+    lcTool: StructuredToolInterface,
+  ): void {
+    if (!this.accountEntries.has(cloudUserId)) {
+      this.accountEntries.set(cloudUserId, new Map());
+    }
+    // biome-ignore lint/style/noNonNullAssertion: just set above
+    this.accountEntries.get(cloudUserId)!.set(tool.name, {
+      meshbotTool: tool,
+      lcTool,
+    });
+  }
+
+  /**
+   * 清除指定账号的所有 MCP 工具（账号登出 / MCP 断开时调用）。
+   * @param cloudUserId 账号 ID
+   */
+  unregisterAccount(cloudUserId: string): void {
+    this.accountEntries.delete(cloudUserId);
+  }
+
   private registerInternal(
     tool: MeshbotTool,
     lcTool: StructuredToolInterface,
@@ -66,17 +105,35 @@ export class ToolRegistry implements OnModuleInit {
     this.entries.set(tool.name, { meshbotTool: tool, lcTool });
   }
 
-  /** LC tool 数组用于 model.bindTools()。MCP 工具走 server 原始 schema。 */
+  /**
+   * 返回当前 ALS 账号上下文对应的 MCP 工具 map。
+   * 无账号上下文时（get() 返回 null）返回空 Map，不抛错。
+   */
+  private currentAccountEntries(): Map<string, Entry> {
+    const id = this.account.get();
+    return (id && this.accountEntries.get(id)) || new Map();
+  }
+
+  /** LC tool 数组用于 model.bindTools()。内置 + 当前账号 MCP 工具合并。 */
   asLangChainBindable(): StructuredToolInterface[] {
-    return [...this.entries.values()].map((e) => e.lcTool);
+    return [
+      ...this.entries.values(),
+      ...this.currentAccountEntries().values(),
+    ].map((e) => e.lcTool);
   }
 
   get(name: string): MeshbotTool | undefined {
-    return this.entries.get(name)?.meshbotTool;
+    return (
+      this.entries.get(name)?.meshbotTool ??
+      this.currentAccountEntries().get(name)?.meshbotTool
+    );
   }
 
   list(): MeshbotTool[] {
-    return [...this.entries.values()].map((e) => e.meshbotTool);
+    return [
+      ...this.entries.values(),
+      ...this.currentAccountEntries().values(),
+    ].map((e) => e.meshbotTool);
   }
 }
 

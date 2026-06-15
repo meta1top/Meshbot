@@ -2,6 +2,7 @@ import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { z } from "zod";
+import { AccountContextService } from "../../account/account-context.service";
 import { ToolRegistry } from "../../tools/tool-registry";
 import { Tool } from "../../tools/tool.decorator";
 import type { MeshbotTool, ToolContext } from "../../tools/tool.types";
@@ -62,7 +63,7 @@ function makeRegistry(tools: MeshbotTool[]): ToolRegistry {
   const fakeDisc = {
     getProviders: () => tools.map((t) => ({ instance: t })) as never,
   };
-  const r = new ToolRegistry(fakeDisc as never);
+  const r = new ToolRegistry(fakeDisc as never, new AccountContextService());
   r.onModuleInit();
   return r;
 }

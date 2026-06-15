@@ -1,12 +1,14 @@
 import { DiscoveryService } from "@nestjs/core";
 import { beforeEach, describe, expect, it } from "vitest";
+import { AccountContextService } from "../account/account-context.service";
 import { ToolRegistry } from "../tools/tool-registry";
 import { McpService } from "./mcp.service";
 
 function makeRegistry(): ToolRegistry {
-  const r = new ToolRegistry({
-    getProviders: () => [],
-  } as unknown as DiscoveryService);
+  const r = new ToolRegistry(
+    { getProviders: () => [] } as unknown as DiscoveryService,
+    new AccountContextService(),
+  );
   r.onModuleInit();
   return r;
 }

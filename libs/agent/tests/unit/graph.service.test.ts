@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { MeshbotConfigService } from "../../src/config/meshbot-config.service";
 import { GraphService } from "../../src/graph/graph.service";
+import { AccountContextService } from "../../src/account/account-context.service";
 import { PromptService } from "../../src/prompt/prompt.service";
 import { ToolRegistry } from "../../src/tools/tool-registry";
 import type { MeshbotTool } from "../../src/tools/tool.types";
@@ -55,7 +56,10 @@ describe("GraphService", () => {
         return gen();
       },
     };
-    const toolRegistry = new ToolRegistry({ getProviders: () => [] } as never);
+    const toolRegistry = new ToolRegistry(
+      { getProviders: () => [] } as never,
+      new AccountContextService(),
+    );
     const eventEmitter = new EventEmitter2();
     graphService = new GraphService(
       configService,
@@ -257,7 +261,10 @@ describe("GraphService", () => {
     const fakeDisc = {
       getProviders: () => [{ instance: echoTool }] as never,
     };
-    const toolRegistry2 = new ToolRegistry(fakeDisc as never);
+    const toolRegistry2 = new ToolRegistry(
+      fakeDisc as never,
+      new AccountContextService(),
+    );
     toolRegistry2.onModuleInit();
     // echoTool 是纯对象（无 @Tool() 装饰器），onModuleInit 扫不到，需手动注册
     toolRegistry2.register(echoTool);

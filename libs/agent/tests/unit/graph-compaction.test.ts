@@ -6,6 +6,7 @@ import { EventEmitter2 } from "@nestjs/event-emitter";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MeshbotConfigService } from "../../src/config/meshbot-config.service";
 import { GraphService } from "../../src/graph/graph.service";
+import { AccountContextService } from "../../src/account/account-context.service";
 import { PromptService } from "../../src/prompt/prompt.service";
 import { ToolRegistry } from "../../src/tools/tool-registry";
 
@@ -33,7 +34,10 @@ describe("GraphService compaction hooks", () => {
         return new AIMessage({ id: "summary-resp", content: "MOCK_SUMMARY" });
       },
     };
-    const toolRegistry = new ToolRegistry({ getProviders: () => [] } as never);
+    const toolRegistry = new ToolRegistry(
+      { getProviders: () => [] } as never,
+      new AccountContextService(),
+    );
     graphService = new GraphService(
       configService,
       promptService,
