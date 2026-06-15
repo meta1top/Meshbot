@@ -10,7 +10,7 @@ import {
 } from "@meshbot/common";
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
-import { APP_GUARD } from "@nestjs/core";
+import { APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 import { EventEmitterModule } from "@nestjs/event-emitter";
 import { ScheduleModule } from "@nestjs/schedule";
 import { TerminusModule } from "@nestjs/terminus";
@@ -24,6 +24,8 @@ import {
   I18nModule,
   QueryResolver,
 } from "nestjs-i18n";
+import { AccountContextInterceptor } from "./account/account-context.interceptor";
+import { AccountModule } from "./account/account.module";
 import { AuthModule } from "./auth.module";
 import { CronJobModule } from "./cron-job.module";
 import { ImModule } from "./im.module";
@@ -111,6 +113,7 @@ const meshbotDir = resolveMeshbotDir();
     // Phase 5 Track C1：结构化健康检查
     TerminusModule,
     AgentModule,
+    AccountModule,
     CronJobModule,
     SessionModule,
     AuthModule,
@@ -129,6 +132,7 @@ const meshbotDir = resolveMeshbotDir();
     // 注意：guard 注册顺序 = 执行顺序（先 throttle、后 jwt）
     { provide: APP_GUARD, useClass: ProxyThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_INTERCEPTOR, useClass: AccountContextInterceptor },
   ],
 })
 export class AppModule {}
