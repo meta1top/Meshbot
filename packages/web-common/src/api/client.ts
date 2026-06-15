@@ -5,6 +5,9 @@ import axios, {
 
 const TOKEN_KEY = "meshbot_access_token";
 
+/** 多账号 store 的 localStorage key。值为 JSON 序列化的 AccountsStore。 */
+const ACCOUNTS_KEY = "meshbot_accounts";
+
 const DEFAULT_API_URL = "http://127.0.0.1:3100";
 
 function resolveBaseURL(): string {
@@ -126,10 +129,140 @@ export function setAccessToken(token: string): void {
   localStorage.setItem(TOKEN_KEY, token);
 }
 
+/**
+ * 清除活跃 token 并清空全部账号（全量登出）。
+ * 同时移除 ACCOUNTS_KEY，使多账号 store 回到初始状态。
+ */
 export function clearAccessToken(): void {
   localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(ACCOUNTS_KEY);
 }
 
+/** 返回活跃账号的 token（localStorage[TOKEN_KEY]），SSR 安全。 */
 export function getAccessToken(): string | null {
+  if (typeof window === "undefined") return null;
   return localStorage.getItem(TOKEN_KEY);
+}
+
+// ---------------------------------------------------------------------------
+// 多账号 token store
+// ---------------------------------------------------------------------------
+
+/** 存储在 localStorage 中的多账号内部结构。 */
+interface AccountsStore {
+  activeId: string | null;
+  accounts: Record<
+    string,
+    { token: string; email?: string; displayName?: string }
+  >;
+}
+
+/** `listAccounts()` 返回的公开账号条目，active 标志由 activeId 导出。 */
+export interface AccountEntry {
+  cloudUserId: string;
+  email?: string;
+  displayName?: string;
+  active: boolean;
+}
+
+/** 从 localStorage 读取 store；解析失败或不存在时视为空 store。 */
+function loadStore(): AccountsStore {
+  try {
+    const raw = localStorage.getItem(ACCOUNTS_KEY);
+    if (!raw) return { activeId: null, accounts: {} };
+    const parsed = JSON.parse(raw) as unknown;
+    if (
+      parsed !== null &&
+      typeof parsed === "object" &&
+      "accounts" in parsed &&
+      typeof (parsed as { accounts: unknown }).accounts === "object"
+    ) {
+      return parsed as AccountsStore;
+    }
+  } catch {
+    // malformed JSON → fall through
+  }
+  return { activeId: null, accounts: {} };
+}
+
+/** 将 store 写回 localStorage。 */
+function saveStore(store: AccountsStore): void {
+  localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(store));
+}
+
+/**
+ * 将指定账号 upsert 到 store 并设为活跃。
+ * 同时写入 `meshbot_access_token`，axios 拦截器无需额外配置即可使用该 token。
+ * SSR 环境下为 no-op。
+ */
+export function addAccount(
+  cloudUserId: string,
+  token: string,
+  meta?: { email?: string; displayName?: string },
+): void {
+  if (typeof window === "undefined") return;
+  const store = loadStore();
+  store.accounts[cloudUserId] = { token, ...meta };
+  store.activeId = cloudUserId;
+  saveStore(store);
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+/**
+ * 切换活跃账号。仅当 store 中存在该 cloudUserId 时生效，同步更新 TOKEN_KEY。
+ * SSR 环境下为 no-op。
+ */
+export function setActiveAccount(cloudUserId: string): void {
+  if (typeof window === "undefined") return;
+  const store = loadStore();
+  const entry = store.accounts[cloudUserId];
+  if (!entry) return;
+  store.activeId = cloudUserId;
+  saveStore(store);
+  localStorage.setItem(TOKEN_KEY, entry.token);
+}
+
+/**
+ * 返回全部已知账号列表，active 标志由 activeId 导出。SSR 返回空数组。
+ */
+export function listAccounts(): AccountEntry[] {
+  if (typeof window === "undefined") return [];
+  const store = loadStore();
+  return Object.entries(store.accounts).map(([cloudUserId, data]) => ({
+    cloudUserId,
+    email: data.email,
+    displayName: data.displayName,
+    active: cloudUserId === store.activeId,
+  }));
+}
+
+/** 返回当前活跃账号的 cloudUserId；SSR 或无活跃账号时返回 null。 */
+export function getActiveAccountId(): string | null {
+  if (typeof window === "undefined") return null;
+  return loadStore().activeId;
+}
+
+/**
+ * 从 store 中移除指定账号。
+ * - 若被移除账号是活跃账号，从剩余账号中任选一个作为新活跃并同步 TOKEN_KEY。
+ * - 若无剩余账号，清空 activeId 并删除 TOKEN_KEY（相当于登出）。
+ * SSR 环境下为 no-op。
+ */
+export function removeAccount(cloudUserId: string): void {
+  if (typeof window === "undefined") return;
+  const store = loadStore();
+  if (!(cloudUserId in store.accounts)) return;
+  delete store.accounts[cloudUserId];
+  if (store.activeId === cloudUserId) {
+    const remaining = Object.keys(store.accounts);
+    if (remaining.length > 0) {
+      const nextId = remaining[0];
+      store.activeId = nextId;
+      localStorage.setItem(TOKEN_KEY, store.accounts[nextId].token);
+    } else {
+      store.activeId = null;
+      localStorage.removeItem(TOKEN_KEY);
+    }
+  }
+  saveStore(store);
 }
