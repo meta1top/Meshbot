@@ -1,191 +1,115 @@
-# 本地 Agent 数据按云端账号隔离 —— 设计文档
+# 本地 Agent 数据按云端账号隔离 —— 设计文档（v2：单进程 + 共享库字段隔离 + 热重载）
 
 - 日期:2026-06-15
-- 状态:设计已确认,待实现计划(writing-plans)
-- 范围:`apps/desktop`(Electron 壳)、`apps/server-agent`、`libs/agent`、`apps/web-agent`
+- 状态:设计已确认,待重做实现计划
+- 范围:`apps/server-agent`、`libs/agent`、`apps/web-agent`、`apps/desktop`
+- 说明:本版**推翻 v1**(物理隔离 / 每账号一进程 / 进程池 + 反向代理)。转向**单进程多账号**架构,理由见 §2。
 
 ## 1. 背景与问题
 
-本地轨(server-agent + web-agent + desktop)当前被设计为**单用户**(CLAUDE.md:「单进程 + SQLite + 单用户」)。
-实测发现:用云端账号 A 登录后再切到账号 B,**两个账号看到同一批本地 Agent 会话**。
+本地轨当前按**单用户**设计:`Session` 等表无归属字段、本地会话是扁平共享池,`CloudIdentity` 单行(`id='default'`)。实测两个云端账号登录看到同一批本地会话。目标:**一个云端账号 = 一套独立本地数据**。
 
-根因(均已核对代码):
+## 2. 为什么选「单进程 + 共享库字段隔离」(而非物理隔离/进程池)
 
-- `Session` / `SessionMessage` 等实体**没有任何归属字段**,本地会话是一个扁平共享池
-  (`apps/server-agent/src/entities/session.entity.ts`)。
-- `CloudIdentity` 是**单行镜像**(`id='default'`),登录 B 会 upsert 覆盖 A,从不并存
-  (`apps/server-agent/src/services/cloud-identity.service.ts`,常量 `SINGLE_ROW_ID='default'`)。
-- 其它本地表(`Setting` / `ModelConfig` / `LlmCall` / `PendingMessage` / `CronJob`)同样无账号归属。
-- 文件型状态(提示词 / 技能 / mcp.json / workspace / 日志)也全是机器级单份(见 §3)。
+两个决定性的新约束:
 
-所以这不是 bug,而是「单用户」假设的直接结果。本设计推翻该假设:**一个云端账号对应一套完全独立的本地数据**。
+1. **运行时热加载是独立的硬需求**:产品后续要让用户**通过 Agent 对话修改提示词 / 安装移除技能 / 配置 MCP**。这要求提示词/技能/MCP 能在**不重启进程**的前提下动态重载 —— 无论是否多账号,都得建这套热重载机制。
+2. **切账号「重新加载」可接受**:用户确认切账号时重载 MCP/技能/提示词没问题,不需要并发多账号常驻。
 
-## 2. 目标 / 非目标
+既然热重载无论如何要建,「切账号 reload」就是顺带的;而**单库字段隔离绕开了运行时换 DataSource 的难题**(DB 连接固定不变,只改查询过滤)。物理隔离/进程池的额外价值(秒切、构造级隔离)不再值得其复杂度与内存代价。
 
-**目标**
+## 3. 已确认的设计决策
 
-- 一个 `cloudUserId` = 一套独立的本地 Agent 数据;切换账号即切换到另一套互不可见的数据。
-- 隔离覆盖**全部本地状态**:数据库(含 LangGraph checkpointer)、提示词、技能、mcp.json、workspace、日志。
-- 切换账号**近乎瞬时、无需重启整个桌面 App**。
+- **D1 单进程**:一个常驻 server-agent,**永不为切账号重启**,固定监听 3100。web-agent 仍直连 3100,**前端连接方式不变**。
+- **D2 共享 DB + 字段隔离**:一个 `~/.meshbot/agent.db`;按账号隔离的表加 `cloud_user_id`,查询按**当前活跃账号**过滤。
+- **D3 进程级活跃账号**:同一时刻**一个**活跃账号(非按请求并发多租户)。切换 = 改活跃账号 + 重载配置。
+- **D4 每账号文件 + 热重载**:`accounts/<cloudUserId>/{skills,prompt,mcp.json,workspace}` 按活跃账号**动态解析**;切账号 / 用户改配置都走同一套 reload(MCP 断开重连、技能/提示词缓存失效)。
+- **D5 登录必须**:无匿名桶;已登录后离线仍可用(token 缓存)。
+- **D6 不防偷看**:同 OS 用户能读所有账号数据;无静态加密。本设计是正确性/归属隔离。
+- **D7 不迁移**:升级后从空开始(旧单用户数据因缺 `cloud_user_id` 被过滤,等同消失;文件留盘)。
+- **D8 非活跃账号的 CronJob 不生效**:定时任务只在其账号为活跃账号时跑 → 无需「每作业账号上下文」,沿用全局活跃账号。
 
-**非目标(明确写入,避免范围蔓延)**
-
-- **不是防偷看的安全特性**:同一 OS 用户能读到所有账号目录;**不做静态加密、不做 OS 用户级隔离**。
-  本设计是「正确性 / 数据归属」的物理+逻辑分区。
-- **不保留免登录本地使用**:登录变为必须(详见 §7 的取舍说明)。
-- **不迁移历史数据**:升级后每个账号从空库开始(详见 §8)。
-- 进程池 + 路由是**桌面壳专属**;独立 `pnpm dev:server-agent` / cli-agent 仍是单账号单进程。
-
-## 3. 现状关键事实(设计依据)
-
-- 所有按账号隔离的状态都挂在同一个 `meshbotDir` 根下
-  (`libs/agent/src/config/meshbot-config.service.ts`):
-
-  | 状态 | 位置 |
-  |---|---|
-  | 会话/消息/任务/调用 + LangGraph checkpointer 表 | `<meshbotDir>/agent.db` |
-  | 提示词 | `<meshbotDir>/prompt/` |
-  | 技能 | `<meshbotDir>/skills/` |
-  | MCP 配置 | `<meshbotDir>/mcp.json` |
-  | Bash 工具工作区 | `<meshbotDir>/workspace/` |
-  | 日志 | `<meshbotDir>/logs/` |
-
-- LangGraph 的 `SqliteSaver` checkpointer(`checkpoints` / `writes` 表)就在同一个 `agent.db` 里
-  (`apps/server-agent/src/services/checkpointer-cleanup.service.ts` 用同一 DataSource 跑 raw query 清它们)。
-  → 因此「按目录隔离」能**自动隔离 checkpointer**,无需去 scope 库管理的表。
-
-- **存在两份 `resolveMeshbotDir`,行为不一致(必须先修)**:
-  - `apps/server-agent/src/utils/meshbot-dir.ts` **认 `MESHBOT_HOME`**。
-  - `libs/agent/src/config/meshbot-config.service.ts`(`resolveMeshbotDir`)**不认 `MESHBOT_HOME`**,
-    只看 isPackaged / repoRoot。
-  - 后果:现在即便设了 `MESHBOT_HOME`,DB 会搬,但 mcp.json / skills / prompt / workspace 不会搬。
-
-- JWT secret 本就按 `meshbotDir` 派生(`apps/server-agent/src/strategies/jwt.strategy.ts` 读
-  `meshbotDir` 下的 secret)→ 每账号目录天然各有一份 secret,token 自然账号隔离。
-
-- web-agent 的 API client base URL 硬编码 `http://127.0.0.1:3100`
-  (`packages/web-common/src/api/client.ts`)→ 反向代理监听该固定端口即可,前端无需改 base URL。
-
-## 4. 设计概览
+## 4. 架构概览
 
 ```
-桌面壳 (Electron main) ── Account Supervisor ─┐
-   ├─ 控制面:accounts.json(账号清单 + 活跃指针)+ 登录编排   │ 管理(spawn/route)
-   ├─ 进程池:每账号一个 server-agent 子进程                    ├─► server-agent#A (ephemeral port, MESHBOT_HOME=accounts/A)
-   └─ 反向代理:固定端口 3100 → 转发到活跃账号进程              └─► server-agent#B (ephemeral port, MESHBOT_HOME=accounts/B)
+单个 server-agent 进程（:3100，永不为切账号重启）
+├─ ActiveAccountContext：进程级当前 cloudUserId（持久化，重启后恢复）
+├─ DB：共享 ~/.meshbot/agent.db，按账号表带 cloud_user_id，查询按活跃账号过滤
+├─ 文件（按活跃账号动态解析）：accounts/<cloudUserId>/{skills,prompt,mcp.json,workspace}
+└─ Reloadable 配置：MCP client / 技能 / 提示词缓存 —— 切账号或用户改配置时重载
 
-web-agent (浏览器) ── 永远连固定端口 3100(代理) ──► 当前活跃账号的进程
-```
-
-**职责切分**
-
-- **server-agent 保持「单账号单进程」**:一个进程一个 `meshbotDir`,内含该账号完整数据。
-  本体几乎不改(只受益于 §5 的目录解析统一)。多账号复杂度**不进 server-agent**。
-- **Account Supervisor(Electron 主进程新增)**:进程池、控制面、登录编排、反向代理路由。
-
-## 5. 前置改造:统一 meshbotDir 解析(地基)
-
-让 `libs/agent` 的目录解析与 server-agent 一致,**整棵树跟随同一个根**:
-
-- 统一为单一解析逻辑(优先 `MESHBOT_HOME`,再 packaged / repoRoot / homedir 兜底),
-  `MeshbotConfigService` 改为使用该统一结果(注入或复用 server-agent 的 `resolveMeshbotDir` 语义)。
-- 验收:设 `MESHBOT_HOME=/tmp/x` 后,`getDatabasePath` / `getMcpConfigPath` / `getSkillsDir` /
-  `getPromptDir` / `getWorkspaceDir` 全部落在 `/tmp/x` 下。
-
-这是「按目录隔离」成立的前提,必须最先做。
-
-## 6. 目录布局与控制面
-
-```
 ~/.meshbot/
-├── accounts.json              # 控制面
-└── accounts/
-    ├── <cloudUserId-A>/       # = 进程 A 的 MESHBOT_HOME
-    │   ├── agent.db  prompt/  skills/  mcp.json  workspace/  logs/
-    └── <cloudUserId-B>/ ...
+├── agent.db                      # 共享，字段隔离
+└── accounts/<cloudUserId>/       # 仅文件型，每账号一套
+    ├── skills/  prompt/  mcp.json  workspace/
 ```
 
-- **分区键 = `cloudUserId`**(org 是该账号内的元数据,不参与分区)。
-- **控制面 `accounts.json`** 形如:
-  ```json
-  {
-    "activeAccount": "<cloudUserId>",
-    "accounts": [
-      { "cloudUserId": "...", "email": "...", "displayName": "..." }
-    ]
-  }
-  ```
-  只存路由/展示所需的最小信息;云端 token 仍只存各账号自己的 `agent.db`(沿用现有 CloudAuthService)。
-  用 JSON 文件而非额外 DB —— 信息量小、可读、改动小。
+## 5. 数据模型变更
 
-## 7. 流程(data flow)
+- 给**按账号隔离的表**加 `cloud_user_id`(snake_case):`sessions` / `session_messages` / `pending_messages` / `llm_calls` / `model_configs` / `settings` / `cron_jobs`。
+- `CloudIdentity` 由**单行**改为**多行**(键 = `cloudUserId`),保存各账号云端 token/镜像。
+- **活跃账号指针**单独持久化(全局,不属于任何账号):用一张极小的单行表(如 `app_state(active_account)`),或一条 `cloud_user_id IS NULL` 的全局 setting。**不要**塞进按账号过滤的表。
+- LangGraph checkpointer 的 `checkpoints`/`writes` 表**不加列**:thread_id(=session id)全局唯一,会话列表按 `cloud_user_id` 过滤后,他账号的 thread_id 不可达 → **传递式隔离**。
+- **SQLite 迁移**(TypeORM):新增列 + 多行 CloudIdentity + app_state 表。旧单用户数据无 `cloud_user_id` → 被过滤,符合 D7「从空开始」。
 
-**登录(新账号或已存在账号)**
+## 6. 活跃账号作用域与防串数据(核心风险)
 
-1. 壳内登录页提交邮箱/密码。
-2. Supervisor 调云端鉴权**一次**,获得 `{cloudUserId, cloudToken, ...}`(失败沿用现有错误信封展示)。
-   鉴权必须发生在「选定/创建账号目录」之前 —— 解决「先有账号才能起进程、先有鉴权才知账号」的循环依赖。
-3. 若 `accounts/<cloudUserId>/` 不存在则创建。
-4. 启动该账号的 server-agent 子进程(`MESHBOT_HOME` 指向其目录),并把第 2 步已取得的 `cloudToken`
-   经 env/IPC 交给它;进程**不重复登录**,只复用 `CloudAuthService.afterCloudAuth` 的后半段
-   (`apps/server-agent/src/services/cloud-auth.service.ts`):写身份镜像进**它自己的** `agent.db`
-   + 拉 profile + 签发该账号的本地 JWT。
-5. 反向代理指向该进程;`accounts.json` 更新 `activeAccount` 与账号清单。
+唯一真实风险是「漏过滤 → 跨账号串数据」。缓解:**集中式作用域**,不靠每个查询各自记得加 `where`。
 
-**切换**
+- 一个 `ActiveAccountService` 持有当前 `cloudUserId`(登录/切换时设置;启动从 app_state 恢复)。
+- 各 Entity 归属 Service 的查询统一经一个 **scoped helper**(自动注入 `cloud_user_id = active`),写入自动带上 `cloud_user_id`。
+- **加一个静态围栏**(类比现有 `check:repo`):校验按账号表的查询都经过 scoped helper / 带了过滤,挡住裸 `find` / 裸 raw query。
+- 写时校验:跨账号写入(active 与目标行的 cloud_user_id 不一致)直接拒绝。
 
-- 从账号清单选一个 → 目标进程已预热则**瞬间改路由**(DB / MCP / checkpointer 均现成);
-  未预热则先懒启再路由。
-- 浏览器需持有目标账号的本地 JWT(由该账号进程签发);socket.io **重连一次**到新进程。
+## 7. 每账号文件 + 热重载机制
 
-**登出**
+- `MeshbotConfigService` 拆分语义:
+  - **DB 路径固定共享**(`<root>/agent.db`,不随账号变)。
+  - **文件 getter 按活跃账号动态返回**:`getSkillsDir()/getPromptDir()/getMcpConfigPath()/getWorkspaceDir()` → `accounts/<activeAccount>/...`,且活跃账号变化后返回新值。
+  - (v1 已合入的「全树跟随 MESHBOT_HOME」对 DB 这块回退为固定共享;`MESHBOT_HOME` 仍作为顶层 root。)
+- **Reload 服务**:一个 `reloadAccountRuntime()`,做:① MCP client 断开 + 按新 `mcp.json` 重连;② 技能/提示词缓存失效(下次按新目录读)。触发点:(a) 切账号,(b) 未来「用户对话改配置」。
+- MCP:`McpService` 从「onModuleInit 起一次」改为「可被 reload 重新初始化」(幂等的 teardown + init)。
 
-- 停止路由(可选停掉进程);清 `activeAccount`。账号数据留盘,下次登录直接进。
+## 8. 登录 / 切换 / 登出
 
-**取舍说明(登录必须)**:这放弃了「免登录本地可用」,与产品「本地优先」slogan 有偏离。
-但**已登录后离线仍可用**——身份 + token 缓存在该账号 `agent.db`,「必须」指首次身份建立,
-不是每次都要联网。
+- **登录**(renderer → 现有 `/api/auth/login`):云端鉴权 → upsert 该账号 `CloudIdentity`(多行)→ 设活跃账号 = 该 cloudUserId → `reloadAccountRuntime()` → 签发本地 JWT 返回。
+- **切换**(新端点 `/api/accounts/switch {cloudUserId}`,需已登录):若该账号 `CloudIdentity` 存在 → 设活跃账号 + `reloadAccountRuntime()` → 返回(浏览器既有 JWT 仍有效,因单进程单 secret;前端切换后刷新数据视图即可)。**近乎秒切,无需重启、通常无需重新登录**。
+- **登出**:清活跃账号指针 + 前端 `clearAccessToken()`。账号数据/文件留盘。
+- 备注:活跃账号是**服务端全局状态**,不由 token 的 sub 决定(D3)。单用户桌面下成立;非安全边界(D6)。
 
-## 8. 迁移策略:不迁移
+## 9. CronJob(D8)
 
-- 升级后**不**自动搬运旧数据;每个账号从空 `accounts/<cloudUserId>/` 开始。
-- 旧的 `~/.meshbot/` 顶层文件(agent.db / mcp.json / skills / prompt / workspace)**留在盘上、不删、不读**,
-  需要时用户可手动找回。
-- 文档需提示:升级后会"看不到"旧会话/配置(数据仍在盘上,只是不再被读取)。
+调度执行器只跑「`cloud_user_id` = 当前活跃账号」的任务;切账号后,新活跃账号的任务才参与调度。无需每作业账号上下文。
 
-## 9. 关键技术点 / 边界情况
+## 10. 桌面壳变更(极小)
 
-- **反向代理固定端口**:监听 3100(web-agent 硬编码端口);各账号进程用 ephemeral port。
-  前端 base URL 不变。
-- **JWT 账号隔离**:JWT secret 随账号目录各一份 → A 进程签的 token 在 B 进程不通过验证(符合预期,
-  增强隔离)。浏览器只持有活跃账号的 token,切换时换成目标账号的 token。
-- **切换时的在飞 run**:被切走的账号若有正在跑的 run,其进程仍在(进程池常驻),run 不被打断;
-  仅路由改变。若选择停掉旧进程,则需先 abort 在飞 run(沿用现有 abort 机制)。
-- **socket.io 重连**:切换后浏览器需重连到新进程并重新订阅活跃会话。
-- **内存成本**:多账号常驻 = 多进程内存。策略:只保留最近使用的若干进程常驻,其余懒启/回收。
+- 仍 fork **一个** server-agent(沿用 [agent-runtime.ts](../../../apps/desktop/src/agent-runtime.ts)),`MESHBOT_HOME=~/.meshbot`。**不需要进程池、不需要反向代理**。
+- 多账号逻辑全在 server-agent 内(活跃账号 + 字段过滤 + reload)。
+- 渲染端:登录走现有流程;新增「账号切换」调 `/api/accounts/switch`(Plan 前端部分)。强制登录闸已由现有 [auth-guard.tsx](../../../apps/web-agent/src/components/auth-guard.tsx) 覆盖。
 
-## 10. 测试策略
+## 11. 本版推翻了什么
 
-- **单元**
-  - 统一后的目录解析:设 `MESHBOT_HOME` 后所有路径(db/mcp/skills/prompt/workspace)随之改变。
-  - `accounts.json` 读写 + `activeAccount` 指针的增删改。
-  - Supervisor 的 spawn / route / 懒启逻辑(以桩进程验证)。
-- **集成**
-  - 两账号 → 两目录 → 切换 → **断言隔离**:B 下看不到 A 的会话、技能、mcp.json 生效项。
-- **前端**(若纳入测试通道,参照 web-common 既有最小 jest 设施)
-  - 强制登录闸:未登录跳登录页。
-  - 账号切换 UI 取自控制面清单。
+- v1 的物理隔离 / 每账号一进程 / 进程池 / 反向代理 / WS 转发 —— **全部作废**。
+- 已合入的 commit `f99c344`(MeshbotConfigService 遵循 MESHBOT_HOME)**保留**,但文件 getter 将进一步改为按活跃账号动态解析(§7);DB 路径回退为固定共享。
 
-## 11. 实现阶段
+## 12. 测试策略
 
-1. **地基**:统一 `resolveMeshbotDir`,`MeshbotConfigService` 跟随同一根(含单测)。
-2. **控制面 + 登录编排上移**:`accounts.json` 读写;登录在壳内编排出 `cloudUserId` 并建目录。
-3. **进程池 + 反向代理**:Supervisor 管理每账号子进程 + 固定端口转发(HTTP + WS)。
-4. **前端**:强制登录闸 + 账号切换 UI(取自控制面清单)。
-5. **隔离集成测试**:两账号端到端验证。
+- **单元**:`ActiveAccountService`(设/恢复活跃账号);scoped helper 自动过滤;`MeshbotConfigService` 文件 getter 随活跃账号变化、DB 路径固定;reload 幂等。
+- **集成(server-agent,jest)**:两账号写入 → 各自 `cloud_user_id` → 切活跃账号 → 断言只看到当前账号的会话/设置/模型配置;CronJob 只跑活跃账号的。
+- **围栏**:新增「按账号表查询必须 scoped」静态检查的单测。
+- **热重载**:切账号后 MCP 按新 mcp.json 重连、技能列表来自新目录。
 
-## 12. 风险 / 开放问题
+## 13. 实现阶段
 
-- 反向代理对 WebSocket 转发 + 切换重连的细节(socket.io 握手 / 房间重建)需在实现期验证。
-- 进程池的内存/生命周期策略(常驻几个、何时回收)需定一个默认值。
-- 独立 `pnpm dev:server-agent` 与 cli-agent 的多账号体验:仅靠手动设 `MESHBOT_HOME`,文档说明即可。
+1. **数据模型 + 迁移**:7 张表加 `cloud_user_id`;`CloudIdentity` 多行;`app_state(active_account)`;SQLite 迁移。
+2. **活跃账号 + 集中作用域**:`ActiveAccountService` + scoped 查询封装 + 静态围栏(防漏过滤)。各归属 Service 接入。
+3. **文件按账号 + 热重载**:`MeshbotConfigService` 文件 getter 账号化(DB 固定);`reloadAccountRuntime()`(MCP 重连 + 技能/提示词缓存失效);`McpService` 可重载化。
+4. **登录/切换/登出**:登录设活跃 + reload;`/api/accounts/switch`;登出清活跃。
+5. **前端**:账号切换入口(调 switch);登出清 token;复用现有 auth-guard。
+6. **CronJob 作用域**:调度只跑活跃账号任务。
+
+## 14. 风险
+
+- **漏过滤串数据**:靠 §6 集中作用域 + 静态围栏兜底;是本设计的主要持续维护点。
+- **后台与活跃账号耦合**:非活跃账号的后台(cron)按 D8 不跑;若将来要后台多账号并行,本架构需再扩展(每作业账号上下文)。
+- **reload 正确性**:MCP teardown/reconnect 的幂等与时序需在执行期真机验证(切账号时无悬挂连接、工具列表正确刷新)。
