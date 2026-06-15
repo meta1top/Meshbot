@@ -1,6 +1,7 @@
 import { Global, Module } from "@nestjs/common";
 import { AgentModule } from "@meshbot/agent";
 import { AuthModule } from "../auth.module";
+import { AccountBootstrapService } from "./account-bootstrap.service";
 import { AccountRuntimeRegistry } from "./account-runtime.registry";
 
 /**
@@ -10,7 +11,7 @@ import { AccountRuntimeRegistry } from "./account-runtime.registry";
 @Global()
 @Module({
   imports: [AgentModule, AuthModule],
-  providers: [AccountRuntimeRegistry],
+  providers: [AccountRuntimeRegistry, AccountBootstrapService],
   exports: [AccountRuntimeRegistry],
 })
 export class AccountRuntimeModule {}
