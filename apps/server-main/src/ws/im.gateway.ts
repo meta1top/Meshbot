@@ -254,4 +254,25 @@ export class ImGateway extends BaseWebSocketGateway {
       this.logger.error("im onConversationCreated failed", err as Error);
     }
   }
+
+  /** 成员退出私有频道：让其在线 socket 离开 conv 房间并下发移除通知。 */
+  @OnEvent(IM_WS_EVENTS.conversationRemoved)
+  async onConversationRemoved(payload: {
+    conversationId: string;
+    userId: string;
+    orgId: string;
+  }): Promise<void> {
+    try {
+      const { conversationId, userId, orgId } = payload;
+      const sockets = await this.server.in(`org:${orgId}`).fetchSockets();
+      for (const s of sockets) {
+        if (s.data.user?.userId === userId) {
+          s.leave(`conv:${conversationId}`);
+          s.emit(IM_WS_EVENTS.conversationRemoved, { conversationId });
+        }
+      }
+    } catch (err) {
+      this.logger.error("im onConversationRemoved failed", err as Error);
+    }
+  }
 }
