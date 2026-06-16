@@ -3,6 +3,7 @@ import { injectLockProvider } from "@meshbot/common";
 import type { ConversationSummary } from "@meshbot/types";
 import { Repository } from "typeorm";
 import { MainErrorCode } from "../errors/main.error-codes";
+import type { MembershipService } from "./membership.service";
 import type { MessageService } from "./message.service";
 import type { UserService } from "./user.service";
 import { ConversationService } from "./conversation.service";
@@ -57,6 +58,7 @@ function makeConv(
     dmKey: string | null;
     createdBy: string;
     createdAt: Date;
+    visibility: "public" | "private";
   }> = {},
 ) {
   return {
@@ -67,6 +69,7 @@ function makeConv(
     dmKey: null,
     createdBy: "user-1",
     createdAt: new Date(),
+    visibility: "public" as "public" | "private",
     ...overrides,
   };
 }
@@ -163,6 +166,7 @@ function makeMemberRepo(overrides: Record<string, jest.Mock> = {}) {
     findOne: jest.fn().mockResolvedValue(null),
     find: jest.fn().mockResolvedValue([]),
     upsert: jest.fn().mockResolvedValue(undefined),
+    delete: jest.fn().mockResolvedValue(undefined),
     count: jest.fn().mockResolvedValue(0),
     ...overrides,
   });
@@ -192,18 +196,33 @@ function makeUserSvc(
   } as unknown as UserService;
 }
 
+function makeMembershipSvc(
+  overrides: Partial<Record<keyof MembershipService, jest.Mock>> = {},
+): MembershipService {
+  return {
+    isMember: jest.fn().mockResolvedValue(true),
+    assertMember: jest.fn().mockResolvedValue(undefined),
+    listOrgsForUser: jest.fn().mockResolvedValue([]),
+    listMembers: jest.fn().mockResolvedValue([]),
+    roleOf: jest.fn().mockResolvedValue(null),
+    ...overrides,
+  } as unknown as MembershipService;
+}
+
 /** 构造 ConversationService，注入 passthrough lock。 */
 function buildSvc(
   convRepo: ReturnType<typeof makeConvRepo>,
   memberRepo: ReturnType<typeof makeMemberRepo>,
   messageSvc: MessageService,
   userSvc: UserService,
+  membershipSvc: MembershipService = makeMembershipSvc(),
 ) {
   const svc = new ConversationService(
     convRepo as never,
     memberRepo as never,
     messageSvc,
     userSvc,
+    membershipSvc,
   );
   injectLockProvider(svc, passthroughLock as never);
   return svc;
@@ -383,6 +402,7 @@ describe("ConversationService", () => {
         makeMemberRepo() as never,
         makeMessageSvc(),
         userSvc,
+        makeMembershipSvc() as never,
       );
       // biome-ignore lint/suspicious/noExplicitAny: test instrumentation
       (injectLockProvider as (svc: any, p: any) => void)(svc, capturingLock);
@@ -682,6 +702,387 @@ describe("ConversationService", () => {
       );
       await svc.markRead("conv-1", "user-1");
       expect(memberRepo.upsert).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ── 私有频道 ──────────────────────────────────────────────────────
+  describe("私有频道", () => {
+    // ── listConversations 可见性 ────────────────────────────────────
+    describe("listConversations", () => {
+      it("公开频道对非成员可见", async () => {
+        const publicCh = makeConv({
+          id: "ch-pub",
+          type: "channel",
+          visibility: "public",
+          name: "公开",
+        });
+        // convRepo.find 第一次（公开频道）返回 publicCh；后续调用返回空
+        const findMock = jest
+          .fn()
+          .mockResolvedValueOnce([publicCh]) // public channels
+          .mockResolvedValue([]); // candidates (no private convs)
+        const convRepo = makeConvRepo({
+          count: jest.fn().mockResolvedValue(1),
+          find: findMock,
+        });
+        // 非成员：memberRepo.find({where:{userId}}) 返回空（无任何会话成员行）
+        const memberRepo = makeMemberRepo({
+          find: jest.fn().mockResolvedValue([]),
+          findOne: jest.fn().mockResolvedValue(null),
+        });
+        const svc = buildSvc(
+          convRepo,
+          memberRepo,
+          makeMessageSvc(),
+          makeUserSvc(),
+        );
+        const list = await svc.listConversations("non-member", "org-1");
+        expect(list.some((c) => c.id === "ch-pub")).toBe(true);
+      });
+
+      it("私有频道只对成员可见，非成员看不到", async () => {
+        const privateCh = makeConv({
+          id: "ch-priv",
+          type: "channel",
+          visibility: "private",
+          name: "私密",
+        });
+        const publicCh = makeConv({
+          id: "ch-pub",
+          type: "channel",
+          visibility: "public",
+          name: "公开",
+        });
+        // 成员：在私有频道有 member 行
+        const memberRow = makeMember({
+          conversationId: "ch-priv",
+          userId: "user-member",
+        });
+
+        // 非成员的 convRepo.find 调用
+        const findMockNonMember = jest
+          .fn()
+          .mockResolvedValueOnce([publicCh]) // public channels
+          .mockResolvedValue([publicCh, privateCh]); // candidates (org channels)
+        const convRepoNonMember = makeConvRepo({
+          count: jest.fn().mockResolvedValue(2),
+          find: findMockNonMember,
+        });
+        // 非成员无 member 行
+        const memberRepoNonMember = makeMemberRepo({
+          find: jest.fn().mockResolvedValue([]),
+          findOne: jest.fn().mockResolvedValue(null),
+        });
+        const svcNonMember = buildSvc(
+          convRepoNonMember,
+          memberRepoNonMember,
+          makeMessageSvc(),
+          makeUserSvc(),
+        );
+        const listNonMember = await svcNonMember.listConversations(
+          "non-member",
+          "org-1",
+        );
+        expect(listNonMember.some((c) => c.id === "ch-priv")).toBe(false);
+        expect(listNonMember.some((c) => c.id === "ch-pub")).toBe(true);
+
+        // 成员能看到私有频道
+        const findMockMember = jest
+          .fn()
+          .mockResolvedValueOnce([publicCh]) // public channels
+          .mockResolvedValue([publicCh, privateCh]); // candidates (all org convs)
+        const convRepoMember = makeConvRepo({
+          count: jest.fn().mockResolvedValue(2),
+          find: findMockMember,
+        });
+        const memberRepoMember = makeMemberRepo({
+          // find({where:{userId}}) → 有 ch-priv 的 member 行
+          find: jest.fn().mockResolvedValue([memberRow]),
+          findOne: jest.fn().mockResolvedValue(memberRow),
+        });
+        const svcMember = buildSvc(
+          convRepoMember,
+          memberRepoMember,
+          makeMessageSvc(),
+          makeUserSvc(),
+        );
+        const listMember = await svcMember.listConversations(
+          "user-member",
+          "org-1",
+        );
+        expect(listMember.some((c) => c.id === "ch-priv")).toBe(true);
+      });
+    });
+
+    // ── getVisibleOrThrow 私有频道 ──────────────────────────────────
+    describe("getVisibleOrThrow 私有频道", () => {
+      it("私有频道：非成员抛 CONVERSATION_FORBIDDEN", async () => {
+        const conv = makeConv({
+          id: "ch-priv",
+          orgId: "org-1",
+          type: "channel",
+          visibility: "private",
+        });
+        const convRepo = makeConvRepo({
+          findOne: jest.fn().mockResolvedValue(conv),
+        });
+        const memberRepo = makeMemberRepo({
+          findOne: jest.fn().mockResolvedValue(null),
+        });
+        const svc = buildSvc(
+          convRepo,
+          memberRepo,
+          makeMessageSvc(),
+          makeUserSvc(),
+        );
+        await expect(
+          svc.getVisibleOrThrow("ch-priv", "non-member", "org-1"),
+        ).rejects.toMatchObject({
+          errorCode: MainErrorCode.CONVERSATION_FORBIDDEN,
+        });
+      });
+
+      it("私有频道：成员可以访问", async () => {
+        const conv = makeConv({
+          id: "ch-priv",
+          orgId: "org-1",
+          type: "channel",
+          visibility: "private",
+        });
+        const member = makeMember({
+          conversationId: "ch-priv",
+          userId: "user-1",
+        });
+        const convRepo = makeConvRepo({
+          findOne: jest.fn().mockResolvedValue(conv),
+        });
+        const memberRepo = makeMemberRepo({
+          findOne: jest.fn().mockResolvedValue(member),
+        });
+        const svc = buildSvc(
+          convRepo,
+          memberRepo,
+          makeMessageSvc(),
+          makeUserSvc(),
+        );
+        const result = await svc.getVisibleOrThrow(
+          "ch-priv",
+          "user-1",
+          "org-1",
+        );
+        expect(result.id).toBe("ch-priv");
+      });
+    });
+
+    // ── addMember ───────────────────────────────────────────────────
+    describe("addMember", () => {
+      it("actor 非频道成员 → CONVERSATION_FORBIDDEN", async () => {
+        const conv = makeConv({
+          id: "ch-priv",
+          orgId: "org-1",
+          type: "channel",
+          visibility: "private",
+        });
+        const convRepo = makeConvRepo({
+          findOne: jest.fn().mockResolvedValue(conv),
+        });
+        // actor 在频道无 member 行
+        const memberRepo = makeMemberRepo({
+          findOne: jest.fn().mockResolvedValue(null),
+        });
+        const svc = buildSvc(
+          convRepo,
+          memberRepo,
+          makeMessageSvc(),
+          makeUserSvc(),
+        );
+        await expect(
+          svc.addMember("ch-priv", "actor-not-member", "target"),
+        ).rejects.toMatchObject({
+          errorCode: MainErrorCode.CONVERSATION_FORBIDDEN,
+        });
+      });
+
+      it("target 非组织成员 → CHANNEL_MEMBER_INVALID", async () => {
+        const conv = makeConv({
+          id: "ch-priv",
+          orgId: "org-1",
+          type: "channel",
+          visibility: "private",
+        });
+        const actorMember = makeMember({
+          conversationId: "ch-priv",
+          userId: "actor",
+        });
+        const convRepo = makeConvRepo({
+          findOne: jest.fn().mockResolvedValue(conv),
+        });
+        const memberRepo = makeMemberRepo({
+          findOne: jest.fn().mockResolvedValue(actorMember),
+        });
+        // target 不是 org 成员
+        const membershipSvc = makeMembershipSvc({
+          isMember: jest.fn().mockResolvedValue(false),
+        });
+        const svc = buildSvc(
+          convRepo,
+          memberRepo,
+          makeMessageSvc(),
+          makeUserSvc(),
+          membershipSvc,
+        );
+        await expect(
+          svc.addMember("ch-priv", "actor", "non-org-user"),
+        ).rejects.toMatchObject({
+          errorCode: MainErrorCode.CHANNEL_MEMBER_INVALID,
+        });
+      });
+
+      it("happy path：成功添加成员，调用 upsert", async () => {
+        const conv = makeConv({
+          id: "ch-priv",
+          orgId: "org-1",
+          type: "channel",
+          visibility: "private",
+        });
+        const actorMember = makeMember({
+          conversationId: "ch-priv",
+          userId: "actor",
+        });
+        const convRepo = makeConvRepo({
+          findOne: jest.fn().mockResolvedValue(conv),
+        });
+        const upsert = jest.fn().mockResolvedValue(undefined);
+        const memberRepo = makeMemberRepo({
+          findOne: jest.fn().mockResolvedValue(actorMember),
+          upsert,
+        });
+        const membershipSvc = makeMembershipSvc({
+          isMember: jest.fn().mockResolvedValue(true),
+        });
+        const svc = buildSvc(
+          convRepo,
+          memberRepo,
+          makeMessageSvc(),
+          makeUserSvc(),
+          membershipSvc,
+        );
+        const result = await svc.addMember("ch-priv", "actor", "new-member");
+        expect(upsert).toHaveBeenCalledTimes(1);
+        expect(result.orgId).toBe("org-1");
+      });
+
+      it("幂等：重复 addMember 不抛错，再次调用 upsert", async () => {
+        const conv = makeConv({
+          id: "ch-priv",
+          orgId: "org-1",
+          type: "channel",
+          visibility: "private",
+        });
+        const actorMember = makeMember({
+          conversationId: "ch-priv",
+          userId: "actor",
+        });
+        const convRepo = makeConvRepo({
+          findOne: jest.fn().mockResolvedValue(conv),
+        });
+        const upsert = jest.fn().mockResolvedValue(undefined);
+        const memberRepo = makeMemberRepo({
+          findOne: jest.fn().mockResolvedValue(actorMember),
+          upsert,
+        });
+        const membershipSvc = makeMembershipSvc({
+          isMember: jest.fn().mockResolvedValue(true),
+        });
+        const svc = buildSvc(
+          convRepo,
+          memberRepo,
+          makeMessageSvc(),
+          makeUserSvc(),
+          membershipSvc,
+        );
+        await svc.addMember("ch-priv", "actor", "new-member");
+        await svc.addMember("ch-priv", "actor", "new-member");
+        expect(upsert).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    // ── leave ───────────────────────────────────────────────────────
+    describe("leave", () => {
+      it("成员退出：调用 delete，返回 orgId", async () => {
+        const conv = makeConv({
+          id: "ch-priv",
+          orgId: "org-1",
+          type: "channel",
+          visibility: "private",
+        });
+        const member = makeMember({
+          conversationId: "ch-priv",
+          userId: "user-1",
+        });
+        const convRepo = makeConvRepo({
+          findOne: jest.fn().mockResolvedValue(conv),
+        });
+        const deleteFn = jest.fn().mockResolvedValue(undefined);
+        const memberRepo = makeMemberRepo({
+          findOne: jest.fn().mockResolvedValue(member),
+          delete: deleteFn,
+        });
+        const svc = buildSvc(
+          convRepo,
+          memberRepo,
+          makeMessageSvc(),
+          makeUserSvc(),
+        );
+        const result = await svc.leave("ch-priv", "user-1");
+        expect(deleteFn).toHaveBeenCalledTimes(1);
+        expect(result.orgId).toBe("org-1");
+      });
+
+      it("非成员调用 leave → CONVERSATION_FORBIDDEN", async () => {
+        const conv = makeConv({
+          id: "ch-priv",
+          orgId: "org-1",
+          type: "channel",
+          visibility: "private",
+        });
+        const convRepo = makeConvRepo({
+          findOne: jest.fn().mockResolvedValue(conv),
+        });
+        const memberRepo = makeMemberRepo({
+          findOne: jest.fn().mockResolvedValue(null),
+        });
+        const svc = buildSvc(
+          convRepo,
+          memberRepo,
+          makeMessageSvc(),
+          makeUserSvc(),
+        );
+        await expect(svc.leave("ch-priv", "non-member")).rejects.toMatchObject({
+          errorCode: MainErrorCode.CONVERSATION_FORBIDDEN,
+        });
+      });
+
+      it("公开频道调用 leave → CONVERSATION_FORBIDDEN", async () => {
+        const conv = makeConv({
+          id: "ch-pub",
+          orgId: "org-1",
+          type: "channel",
+          visibility: "public",
+        });
+        const convRepo = makeConvRepo({
+          findOne: jest.fn().mockResolvedValue(conv),
+        });
+        const svc = buildSvc(
+          convRepo,
+          makeMemberRepo(),
+          makeMessageSvc(),
+          makeUserSvc(),
+        );
+        await expect(svc.leave("ch-pub", "user-1")).rejects.toMatchObject({
+          errorCode: MainErrorCode.CONVERSATION_FORBIDDEN,
+        });
+      });
     });
   });
 });

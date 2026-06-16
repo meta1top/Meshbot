@@ -1,5 +1,9 @@
 import { AppError, Transactional, WithLock } from "@meshbot/common";
-import type { ConversationSummary, ImPeer } from "@meshbot/types";
+import type {
+  ChannelMember,
+  ConversationSummary,
+  ImPeer,
+} from "@meshbot/types";
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import type { Repository } from "typeorm";
@@ -7,6 +11,7 @@ import type { Repository } from "typeorm";
 import { Conversation } from "../entities/conversation.entity";
 import { ConversationMember } from "../entities/conversation-member.entity";
 import { MainErrorCode } from "../errors/main.error-codes";
+import { MembershipService } from "./membership.service";
 import { MessageService } from "./message.service";
 import { UserService } from "./user.service";
 
@@ -18,8 +23,11 @@ import { UserService } from "./user.service";
  * - DM 去重（findOrCreateDm）：先排序 dmKey，再 @WithLock（按 orgId+dmKey）包 @Transactional()
  * - 默认频道保障（ensureDefaultChannel）：@WithLock（按 orgId）包单表写
  * - 可见性校验（getVisibleOrThrow）：只读，无需事务
- * - 会话列表（listConversations）：组合 MessageService + UserService
+ * - 会话列表（listConversations）：公开频道 ∪ 成员所在私有频道/DM
  * - 已读标记（markRead）：单表 upsert，无需事务
+ * - 添加成员（addMember）：单表 upsert，无需事务
+ * - 退出频道（leave）：单表 delete，无需事务
+ * - 成员列表（listMembers）：只读，无需事务
  *
  * 装饰器顺序：@WithLock 在 @Transactional 外层（check:lock-tx 要求）。
  */
@@ -32,13 +40,13 @@ export class ConversationService {
     private readonly memberRepo: Repository<ConversationMember>,
     private readonly messageService: MessageService,
     private readonly userService: UserService,
+    private readonly membership: MembershipService,
   ) {}
 
   /**
    * 列出 userId 在 orgId 内可见的会话。
-   * = 该 org 全部 channel + userId 参与的 dm。
+   * = 公开频道 ∪ userId 所在私有频道 ∪ userId 参与的 DM。
    * 先调 ensureDefaultChannel 保证至少一个频道。
-   * 每项组装 ConversationSummary（name / peer / unreadCount / lastMessage）。
    */
   async listConversations(
     userId: string,
@@ -46,40 +54,40 @@ export class ConversationService {
   ): Promise<ConversationSummary[]> {
     await this.ensureDefaultChannel(orgId, userId);
 
-    // 全部频道（按 org）
-    const channels = await this.convRepo.find({
-      where: { orgId, type: "channel" },
+    const publicChannels = await this.convRepo.find({
+      where: { orgId, type: "channel", visibility: "public" },
     });
 
-    // 用户参与的 DM（通过 member 表找到 conversationId）
-    const dmMembers = await this.memberRepo.find({ where: { userId } });
-    const dmConvIds = dmMembers.map((m) => m.conversationId);
+    const myMembers = await this.memberRepo.find({ where: { userId } });
+    const myConvIds = myMembers.map((m) => m.conversationId);
 
-    let dms: Conversation[] = [];
-    if (dmConvIds.length > 0) {
-      // 只取属于该 org 的 dm
-      const allDms = await this.convRepo.find({ where: { orgId, type: "dm" } });
-      dms = allDms.filter((c) => dmConvIds.includes(c.id));
+    let memberConvs: Conversation[] = [];
+    if (myConvIds.length > 0) {
+      const candidates = await this.convRepo.find({ where: { orgId } });
+      memberConvs = candidates.filter(
+        (c) =>
+          myConvIds.includes(c.id) &&
+          (c.type === "dm" ||
+            (c.type === "channel" && c.visibility === "private")),
+      );
     }
 
-    const allConvs = [...channels, ...dms];
-
-    const summaries: ConversationSummary[] = await Promise.all(
-      allConvs.map((conv) => this.toSummary(conv, userId)),
-    );
-
-    return summaries;
+    const allConvs = [...publicChannels, ...memberConvs];
+    return Promise.all(allConvs.map((conv) => this.toSummary(conv, userId)));
   }
 
   /**
    * 建频道。跨表写（conversation + member），走 @Transactional()。
    * 命名遵循 *InTx 约定（check:naming）。
+   * visibility='private' 时将 memberIds 中属于组织的成员一并写入。
    */
   @Transactional()
   async persistChannelInTx(
     orgId: string,
     name: string,
     createdBy: string,
+    visibility: "public" | "private" = "public",
+    memberIds: string[] = [],
   ): Promise<ConversationSummary> {
     const conv = await this.convRepo.save(
       this.convRepo.create({
@@ -88,15 +96,32 @@ export class ConversationService {
         name,
         dmKey: null,
         createdBy,
+        visibility,
       }),
     );
     const memberRepo = this.convRepo.manager.getRepository(ConversationMember);
+    let ids = [createdBy];
+    if (visibility === "private" && memberIds.length > 0) {
+      const checks = await Promise.all(
+        memberIds.map(async (id) =>
+          (await this.membership.isMember(orgId, id)) ? id : null,
+        ),
+      );
+      ids = [
+        ...new Set([
+          createdBy,
+          ...checks.filter((x): x is string => x !== null),
+        ]),
+      ];
+    }
     await memberRepo.save(
-      memberRepo.create({
-        conversationId: conv.id,
-        userId: createdBy,
-        lastReadAt: null,
-      }),
+      ids.map((userId) =>
+        memberRepo.create({
+          conversationId: conv.id,
+          userId,
+          lastReadAt: null,
+        }),
+      ),
     );
     return this.toSummary(conv, createdBy);
   }
@@ -179,8 +204,9 @@ export class ConversationService {
 
   /**
    * 可见性校验：
-   * - channel → conversation.orgId === orgId（调用方已保证 org 成员）
-   * - dm      → 必须有 conversation_member 行
+   * - channel(public) → conversation.orgId === orgId 即可
+   * - channel(private) → 必须有 conversation_member 行
+   * - dm → 必须有 conversation_member 行
    * 不存在抛 CONVERSATION_NOT_FOUND；无权限抛 CONVERSATION_FORBIDDEN。
    */
   async getVisibleOrThrow(
@@ -195,7 +221,10 @@ export class ConversationService {
       throw new AppError(MainErrorCode.CONVERSATION_NOT_FOUND);
     }
 
-    if (conv.type === "dm") {
+    const requiresMembership =
+      conv.type === "dm" ||
+      (conv.type === "channel" && conv.visibility === "private");
+    if (requiresMembership) {
       const member = await this.memberRepo.findOne({
         where: { conversationId, userId },
       });
@@ -249,6 +278,70 @@ export class ConversationService {
     );
   }
 
+  /** 拉人：actor 必须是该私有频道成员；target 必须是本组织成员；幂等。返回对 target 的 summary。 */
+  async addMember(
+    conversationId: string,
+    actorUserId: string,
+    targetUserId: string,
+  ): Promise<{ summary: ConversationSummary; orgId: string }> {
+    const conv = await this.convRepo.findOne({ where: { id: conversationId } });
+    if (!conv) throw new AppError(MainErrorCode.CONVERSATION_NOT_FOUND);
+    if (conv.type !== "channel" || conv.visibility !== "private") {
+      throw new AppError(MainErrorCode.CONVERSATION_FORBIDDEN);
+    }
+    const actorMember = await this.memberRepo.findOne({
+      where: { conversationId, userId: actorUserId },
+    });
+    if (!actorMember) throw new AppError(MainErrorCode.CONVERSATION_FORBIDDEN);
+    const targetIsOrgMember = await this.membership.isMember(
+      conv.orgId,
+      targetUserId,
+    );
+    if (!targetIsOrgMember)
+      throw new AppError(MainErrorCode.CHANNEL_MEMBER_INVALID);
+    await this.memberRepo.upsert(
+      { conversationId, userId: targetUserId, lastReadAt: null },
+      { conflictPaths: ["conversationId", "userId"] },
+    );
+    const summary = await this.toSummary(conv, targetUserId);
+    return { summary, orgId: conv.orgId };
+  }
+
+  /** 成员主动退出私有频道。 */
+  async leave(
+    conversationId: string,
+    userId: string,
+  ): Promise<{ orgId: string }> {
+    const conv = await this.convRepo.findOne({ where: { id: conversationId } });
+    if (!conv) throw new AppError(MainErrorCode.CONVERSATION_NOT_FOUND);
+    if (conv.type !== "channel" || conv.visibility !== "private") {
+      throw new AppError(MainErrorCode.CONVERSATION_FORBIDDEN);
+    }
+    const member = await this.memberRepo.findOne({
+      where: { conversationId, userId },
+    });
+    if (!member) throw new AppError(MainErrorCode.CONVERSATION_FORBIDDEN);
+    await this.memberRepo.delete({ conversationId, userId });
+    return { orgId: conv.orgId };
+  }
+
+  /** 成员列表（调用者需可见该会话）。 */
+  async listMembers(
+    conversationId: string,
+    userId: string,
+    orgId: string,
+  ): Promise<ChannelMember[]> {
+    await this.getVisibleOrThrow(conversationId, userId, orgId);
+    const members = await this.memberRepo.find({ where: { conversationId } });
+    const out: ChannelMember[] = [];
+    for (const m of members) {
+      const u = await this.userService.findById(m.userId);
+      if (u)
+        out.push({ userId: u.id, displayName: u.displayName, email: u.email });
+    }
+    return out;
+  }
+
   // ─── 私有辅助 ────────────────────────────────────────────────────
 
   /** Conversation 实体 → ConversationSummary（组合 MessageService + UserService）。 */
@@ -284,6 +377,7 @@ export class ConversationService {
     return {
       id: conv.id,
       type: conv.type as "channel" | "dm",
+      visibility: (conv.visibility ?? "public") as "public" | "private",
       name: conv.name,
       peer,
       unreadCount,
