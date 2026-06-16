@@ -1,7 +1,23 @@
-import type { ConversationSummary, MessagePage } from "@meshbot/types";
-import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
+import type {
+  ChannelMember,
+  ConversationSummary,
+  MessagePage,
+} from "@meshbot/types";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Query,
+} from "@nestjs/common";
 
-import { CreateChannelDto, CreateDmDto } from "../dto/im.dto";
+import {
+  AddChannelMemberDto,
+  CreateChannelDto,
+  CreateDmDto,
+} from "../dto/im.dto";
 import { CloudImService } from "../services/cloud-im.service";
 
 /**
@@ -18,10 +34,31 @@ export class CloudImController {
     return this.cloudIm.listConversations();
   }
 
-  /** 创建频道会话。 */
+  /** 创建频道会话（支持公开/私有，可附带初始成员）。 */
   @Post("channels")
   createChannel(@Body() dto: CreateChannelDto): Promise<ConversationSummary> {
-    return this.cloudIm.createChannel(dto.name);
+    return this.cloudIm.createChannel(dto.name, dto.visibility, dto.memberIds);
+  }
+
+  /** 向频道添加成员。 */
+  @Post("channels/:id/members")
+  addMember(
+    @Param("id") id: string,
+    @Body() dto: AddChannelMemberDto,
+  ): Promise<ConversationSummary> {
+    return this.cloudIm.addChannelMember(id, dto.userId);
+  }
+
+  /** 退出频道（移除当前用户）。 */
+  @Delete("channels/:id/members/me")
+  leave(@Param("id") id: string): Promise<{ ok: true }> {
+    return this.cloudIm.leaveChannel(id);
+  }
+
+  /** 获取频道成员列表。 */
+  @Get("channels/:id/members")
+  listMembers(@Param("id") id: string): Promise<ChannelMember[]> {
+    return this.cloudIm.listChannelMembers(id);
   }
 
   /** 创建私信会话。 */

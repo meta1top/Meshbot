@@ -84,6 +84,17 @@ export class ImGateway extends BaseWebSocketGateway {
   }
 
   /**
+   * 云端下行：频道被移除通知 → namespace 广播。
+   *
+   * ImRelayClientService 收到云端 `im.conversation_removed` 后经 EventEmitter2
+   * 触发此方法，浏览器刷新会话列表。
+   */
+  @OnEvent(IM_WS_EVENTS.conversationRemoved)
+  onConversationRemoved(payload: { conversationId: string }): void {
+    this.server.emit(IM_WS_EVENTS.conversationRemoved, payload);
+  }
+
+  /**
    * 上行：浏览器发送 IM 消息 → 转交 ImRelayClientService 经云端 socket 上行。
    *
    * 账号来源：握手期 JWT middleware 写入的 `client.data.user`（payload
