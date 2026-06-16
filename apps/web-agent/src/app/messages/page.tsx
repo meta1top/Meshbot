@@ -23,6 +23,7 @@ import {
   currentConversationIdAtom,
   loadConversationsAtom,
   messagesAtom,
+  removeConversationAtom,
   setPresenceAtom,
   upsertConversationAtom,
 } from "@/atoms/im";
@@ -47,6 +48,7 @@ function MessagesView() {
   const applyIncomingMessage = useSetAtom(applyIncomingMessageAtom);
   const setPresence = useSetAtom(setPresenceAtom);
   const upsertConversation = useSetAtom(upsertConversationAtom);
+  const removeConversation = useSetAtom(removeConversationAtom);
   const setMessages = useSetAtom(messagesAtom);
   const messages = useAtomValue(messagesAtom);
   const currentUser = useAtomValue(currentUserAtom);
@@ -111,17 +113,27 @@ function MessagesView() {
     const onConversationCreated = (payload: ConversationSummary) => {
       upsertConversation(payload);
     };
+    const onConversationRemoved = (payload: { conversationId: string }) => {
+      removeConversation(payload.conversationId);
+    };
 
     socket.on(IM_WS_EVENTS.message, onMessage);
     socket.on(IM_WS_EVENTS.presence, onPresence);
     socket.on(IM_WS_EVENTS.conversationCreated, onConversationCreated);
+    socket.on(IM_WS_EVENTS.conversationRemoved, onConversationRemoved);
 
     return () => {
       socket.off(IM_WS_EVENTS.message, onMessage);
       socket.off(IM_WS_EVENTS.presence, onPresence);
       socket.off(IM_WS_EVENTS.conversationCreated, onConversationCreated);
+      socket.off(IM_WS_EVENTS.conversationRemoved, onConversationRemoved);
     };
-  }, [applyIncomingMessage, setPresence, upsertConversation]);
+  }, [
+    applyIncomingMessage,
+    setPresence,
+    upsertConversation,
+    removeConversation,
+  ]);
 
   // 4. Load history when conversation id changes
   useEffect(() => {
