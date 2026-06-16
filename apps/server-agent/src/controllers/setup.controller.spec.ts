@@ -13,12 +13,17 @@ describe("SetupController.getSetupStatus（Public 路由，无环境上下文）
       orgId: string | null;
     }>;
     hasEnabledModels: boolean;
+    /** jwt.verify 解出的 sub；undefined=无 token，null=token 无效（verify 抛错）。 */
+    tokenUserId?: string | null;
   }) => {
     const ctx = new AccountContextService(); // 真实 ALS，无活跃上下文
 
+    const byId = Object.fromEntries(
+      opts.loggedIn.map((i) => [i.cloudUserId, i]),
+    );
     const identityService: any = {
       listLoggedIn: jest.fn().mockResolvedValue(opts.loggedIn),
-      get: jest.fn().mockResolvedValue(opts.loggedIn[0] ?? null),
+      get: jest.fn((uid: string) => Promise.resolve(byId[uid] ?? null)),
     };
 
     const cloudAuthService: any = {
@@ -29,14 +34,22 @@ describe("SetupController.getSetupStatus（Public 路由，无环境上下文）
       hasEnabledModels: jest.fn().mockResolvedValue(opts.hasEnabledModels),
     };
 
+    const jwtService: any = {
+      verify: jest.fn(() => {
+        if (opts.tokenUserId == null) throw new Error("invalid token");
+        return { sub: opts.tokenUserId };
+      }),
+    };
+
     const controller = new SetupController(
       modelConfigService,
       identityService,
       cloudAuthService,
       ctx,
+      jwtService,
     );
 
-    return { controller, modelConfigService };
+    return { controller, modelConfigService, identityService };
   };
 
   it("needs-login：无已登录账号 → 返回 needs-login，不调用 hasEnabledModels", async () => {
@@ -87,5 +100,36 @@ describe("SetupController.getSetupStatus（Public 路由，无环境上下文）
 
     expect(result).toEqual({ step: "needs-org", needsSetup: true });
     expect(modelConfigService.hasEnabledModels).not.toHaveBeenCalled();
+  });
+
+  it("多账号：按 token 解出的活跃账号判定，而非 listLoggedIn()[0]", async () => {
+    // A 已 ready（listLoggedIn 首位），B 刚注册无 org。带 B 的 token → 应返回 B 的 needs-org，
+    // 而不是 A 的 ready —— 这正是导致「注册成功后没进创建组织页」的判定错位修复点。
+    const { controller, identityService } = makeController({
+      loggedIn: [
+        { cloudUserId: "A", cloudToken: "tokA", orgId: "orgA" },
+        { cloudUserId: "B", cloudToken: "tokB", orgId: null },
+      ],
+      hasEnabledModels: true,
+      tokenUserId: "B",
+    });
+
+    const result = await controller.getSetupStatus("Bearer tokenB");
+
+    expect(result).toEqual({ step: "needs-org", needsSetup: true });
+    expect(identityService.listLoggedIn).not.toHaveBeenCalled();
+  });
+
+  it("token 无效 → 回退第一个已登录账号", async () => {
+    const { controller, identityService } = makeController({
+      loggedIn: [{ cloudUserId: "A", cloudToken: "tokA", orgId: "orgA" }],
+      hasEnabledModels: true,
+      tokenUserId: null, // verify 抛错
+    });
+
+    const result = await controller.getSetupStatus("Bearer garbage");
+
+    expect(result).toEqual({ step: "ready", needsSetup: false });
+    expect(identityService.listLoggedIn).toHaveBeenCalled();
   });
 });

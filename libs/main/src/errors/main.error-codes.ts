@@ -61,4 +61,8 @@ export const MainErrorCode = defineErrorCode({
     code: 2010,
     message: "im.dmTargetInvalid",
   },
+  CHANNEL_MEMBER_INVALID: {
+    code: 2011,
+    message: "im.channelMemberInvalid",
+  },
 });

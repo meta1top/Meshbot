@@ -18,7 +18,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { AuthShellLayout } from "@/components/layouts/auth-shell-layout";
-import { useLogin } from "@/rest/auth";
+import { fetchAuthStatus, useLogin } from "@/rest/auth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -29,9 +29,21 @@ export default function LoginPage() {
   const onSubmit = async (values: LoginInput) => {
     try {
       await loginMutation.mutateAsync(values);
-      router.push("/assistant");
     } catch {
-      // error is available via loginMutation.error
+      // 登录失败：错误经 loginMutation.error 展示
+      return;
+    }
+    // 登录成功后按「本账号」setup 状态分流：未配置 org / 模型 → 进向导补齐，
+    // 否则进主页。fetchAuthStatus 走 apiClient，已带上刚登录账号的活跃 token。
+    try {
+      const status = await fetchAuthStatus();
+      router.replace(
+        status.step === "needs-org" || status.step === "needs-model"
+          ? "/setup"
+          : "/assistant",
+      );
+    } catch {
+      router.replace("/assistant");
     }
   };
 

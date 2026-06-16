@@ -1,3 +1,4 @@
+import { AccountContextService } from "@meshbot/agent";
 import { type SessionSummary, SESSION_WS_EVENTS } from "@meshbot/types-agent";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { SessionTitleService } from "./session-title.service";
@@ -26,6 +27,9 @@ function fakeSessionService(initialTitleGenerated = false) {
   };
   return {
     summary,
+    async findOwner() {
+      return "u1";
+    },
     async findSessionOrFail() {
       return summary;
     },
@@ -88,6 +92,7 @@ describe("SessionTitleService", () => {
       sess as never,
       fakePromptService() as never,
       emitter,
+      new AccountContextService(),
     );
     svc.schedule("s1", "first user content");
     await flushPromises();
@@ -106,6 +111,7 @@ describe("SessionTitleService", () => {
       sess as never,
       fakePromptService() as never,
       emitter,
+      new AccountContextService(),
     );
     svc.schedule("s1", "content");
     await flushPromises();
@@ -124,6 +130,7 @@ describe("SessionTitleService", () => {
       sess as never,
       fakePromptService() as never,
       emitter,
+      new AccountContextService(),
     );
     svc.schedule("s1", "content");
     await flushPromises();
@@ -139,6 +146,7 @@ describe("SessionTitleService", () => {
       sess as never,
       fakePromptService() as never,
       emitter,
+      new AccountContextService(),
     );
     svc.schedule("s1", "content");
     await flushPromises();
@@ -163,6 +171,7 @@ describe("SessionTitleService", () => {
       sess as never,
       fakePromptService() as never,
       emitter,
+      new AccountContextService(),
     );
     svc.schedule("s1", "content");
     await flushPromises();
@@ -194,6 +203,7 @@ describe("SessionTitleService", () => {
       sess as never,
       fakePromptService() as never,
       emitter,
+      new AccountContextService(),
     );
     svc.schedule("s1", "content");
     await flushPromises();
@@ -211,6 +221,7 @@ describe("SessionTitleService", () => {
       sess as never,
       fakePromptService() as never,
       emitter,
+      new AccountContextService(),
     );
     expect(() => svc.schedule("s1", "content")).not.toThrow();
     await flushPromises();
@@ -238,6 +249,7 @@ describe("SessionTitleService", () => {
       sess as never,
       fakePromptService("Title: {{content}}") as never,
       emitter,
+      new AccountContextService(),
     );
     svc.schedule("s1", "USER MSG");
     await flushPromises();

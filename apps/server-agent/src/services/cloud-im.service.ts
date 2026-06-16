@@ -1,6 +1,10 @@
 import { AccountContextService } from "@meshbot/agent";
 import { AppError } from "@meshbot/common";
-import type { ConversationSummary, MessagePage } from "@meshbot/types";
+import type {
+  ChannelMember,
+  ConversationSummary,
+  MessagePage,
+} from "@meshbot/types";
 import { Injectable } from "@nestjs/common";
 
 import { CloudClientService } from "../cloud/cloud-client.service";
@@ -26,10 +30,52 @@ export class CloudImService {
     );
   }
 
-  /** 创建频道会话。 */
-  createChannel(name: string): Promise<ConversationSummary> {
-    return this.withToken((token) =>
-      this.cloud.post<ConversationSummary>("/api/channels", { name }, token),
+  /** 创建频道会话（支持公开/私有，可附带初始成员）。 */
+  createChannel(
+    name: string,
+    visibility: "public" | "private",
+    memberIds?: string[],
+  ): Promise<ConversationSummary> {
+    return this.withToken((t) =>
+      this.cloud.post<ConversationSummary>(
+        "/api/channels",
+        { name, visibility, memberIds },
+        t,
+      ),
+    );
+  }
+
+  /** 向频道添加成员。 */
+  addChannelMember(
+    conversationId: string,
+    userId: string,
+  ): Promise<ConversationSummary> {
+    return this.withToken((t) =>
+      this.cloud.post<ConversationSummary>(
+        `/api/channels/${conversationId}/members`,
+        { userId },
+        t,
+      ),
+    );
+  }
+
+  /** 退出频道（移除当前用户）。 */
+  leaveChannel(conversationId: string): Promise<{ ok: true }> {
+    return this.withToken((t) =>
+      this.cloud.del<{ ok: true }>(
+        `/api/channels/${conversationId}/members/me`,
+        t,
+      ),
+    );
+  }
+
+  /** 获取频道成员列表。 */
+  listChannelMembers(conversationId: string): Promise<ChannelMember[]> {
+    return this.withToken((t) =>
+      this.cloud.get<ChannelMember[]>(
+        `/api/channels/${conversationId}/members`,
+        t,
+      ),
     );
   }
 

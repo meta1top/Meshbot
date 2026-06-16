@@ -91,6 +91,7 @@ export class ImRelayClientService implements OnModuleDestroy {
         IM_WS_EVENTS.message,
         IM_WS_EVENTS.presence,
         IM_WS_EVENTS.conversationCreated,
+        IM_WS_EVENTS.conversationRemoved,
       ] as const) {
         socket.on(event, (payload: unknown) => {
           this.emitter.emit(event, payload);

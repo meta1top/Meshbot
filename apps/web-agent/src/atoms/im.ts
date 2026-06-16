@@ -129,6 +129,25 @@ export const setPresenceAtom = atom(null, (get, set, state: PresenceState) => {
 });
 
 /**
+ * 移除指定会话（退出私有频道时调用）。
+ * - 从 conversationsAtom 中删除该 id。
+ * - 若正在查看该会话，同时将 currentConversationIdAtom 复位为 null。
+ */
+export const removeConversationAtom = atom(
+  null,
+  (get, set, conversationId: string) => {
+    const arr = get(conversationsAtom);
+    set(
+      conversationsAtom,
+      arr.filter((c) => c.id !== conversationId),
+    );
+    if (get(currentConversationIdAtom) === conversationId) {
+      set(currentConversationIdAtom, null);
+    }
+  },
+);
+
+/**
  * 乐观追加已发送消息（D4 可直接调用；去重逻辑与 applyIncomingMessageAtom 一致）。
  */
 export const appendSentMessageAtom = atom(

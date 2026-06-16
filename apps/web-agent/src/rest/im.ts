@@ -1,6 +1,10 @@
 "use client";
 
-import type { ConversationSummary, MessagePage } from "@meshbot/types";
+import type {
+  ChannelMember,
+  ConversationSummary,
+  MessagePage,
+} from "@meshbot/types";
 import { apiClient } from "@meshbot/web-common";
 
 /**
@@ -15,15 +19,46 @@ export async function fetchConversations(): Promise<ConversationSummary[]> {
 }
 
 /**
- * 创建频道。返回新会话摘要。
+ * 创建频道。visibility 默认 public；private 时可带初始成员。返回新会话摘要。
  */
 export async function createChannel(
   name: string,
+  visibility: "public" | "private" = "public",
+  memberIds?: string[],
 ): Promise<ConversationSummary> {
   const { data } = await apiClient.post<ConversationSummary>("/api/channels", {
     name,
+    visibility,
+    memberIds,
   });
   return data;
+}
+
+/** 把组织成员拉入私有频道。 */
+export async function addChannelMember(
+  conversationId: string,
+  userId: string,
+): Promise<ConversationSummary> {
+  const { data } = await apiClient.post<ConversationSummary>(
+    `/api/channels/${conversationId}/members`,
+    { userId },
+  );
+  return data;
+}
+
+/** 退出私有频道（自身）。 */
+export async function leaveChannel(conversationId: string): Promise<void> {
+  await apiClient.delete(`/api/channels/${conversationId}/members/me`);
+}
+
+/** 私有频道成员列表。 */
+export async function listChannelMembers(
+  conversationId: string,
+): Promise<ChannelMember[]> {
+  const { data } = await apiClient.get<ChannelMember[]>(
+    `/api/channels/${conversationId}/members`,
+  );
+  return Array.isArray(data) ? data : [];
 }
 
 /**

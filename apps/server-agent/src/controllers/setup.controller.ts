@@ -1,6 +1,7 @@
 import { AccountContextService } from "@meshbot/agent";
 import { PROVIDERS } from "@meshbot/types-agent";
-import { Controller, Get } from "@nestjs/common";
+import { Controller, Get, Headers } from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
 
 import type { CloudIdentity } from "../entities/cloud-identity.entity";
 import { Public } from "../guards/jwt-auth.guard";
@@ -16,14 +17,19 @@ export class SetupController {
     private readonly identity: CloudIdentityService,
     private readonly cloudAuth: CloudAuthService,
     private readonly account: AccountContextService,
+    private readonly jwt: JwtService,
   ) {}
 
   @Public()
   @Get("setup-status")
-  async getSetupStatus() {
-    // Public 路由无账号上下文：以「是否有已登录账号」判定（v3 多行，取第一个已登录账号）
-    let id: CloudIdentity | null =
-      (await this.identity.listLoggedIn())[0] ?? null;
+  async getSetupStatus(@Headers("authorization") authHeader?: string) {
+    // 优先按请求携带的活跃账号 token 判定 —— 多账号下桌面/浏览器各自的活跃账号
+    // 不同，不能再用 listLoggedIn()[0] 猜（会报错账号的状态，导致 UI 与实际错位）。
+    // 无有效 token（首启 / 未登录）才回退到第一个已登录账号。
+    const tokenUserId = this.extractCloudUserId(authHeader);
+    let id: CloudIdentity | null = tokenUserId
+      ? await this.identity.get(tokenUserId)
+      : ((await this.identity.listLoggedIn())[0] ?? null);
     if (!id?.cloudToken) {
       return { step: "needs-login", needsSetup: true };
     }
@@ -42,6 +48,19 @@ export class SetupController {
       return { step: "needs-model", needsSetup: true };
     }
     return { step: "ready", needsSetup: false };
+  }
+
+  /** 从 Bearer token 解出 cloudUserId（sub）；无 / 过期 / 无效 → null（回退）。 */
+  private extractCloudUserId(authHeader?: string): string | null {
+    if (!authHeader?.startsWith("Bearer ")) return null;
+    const token = authHeader.slice("Bearer ".length).trim();
+    if (!token) return null;
+    try {
+      const payload = this.jwt.verify<{ sub?: string }>(token);
+      return payload.sub ?? null;
+    } catch {
+      return null;
+    }
   }
 
   @Public()

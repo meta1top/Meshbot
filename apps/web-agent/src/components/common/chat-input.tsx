@@ -196,9 +196,9 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             onClick={handleSend}
             disabled={!hasContent}
             className={cn(
-              "flex h-8 w-8 shrink-0 items-center justify-center transition-colors",
+              "flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors",
               hasContent
-                ? "rounded-md bg-(--shell-accent) text-white"
+                ? "bg-(--shell-accent) text-white"
                 : "text-muted-foreground",
             )}
             title={tChat("send")}

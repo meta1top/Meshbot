@@ -2,5 +2,6 @@
   "conversationNotFound": "Conversation not found",
   "conversationForbidden": "No permission for this conversation",
   "channelNameInvalid": "Channel name is invalid",
-  "dmTargetInvalid": "Direct message target is invalid"
+  "dmTargetInvalid": "Direct message target is invalid",
+  "channelMemberInvalid": "Target user is not a member of this organization"
 }

@@ -11,6 +11,7 @@ export const IM_WS_EVENTS = {
   message: "im.message",
   presence: "im.presence",
   conversationCreated: "im.conversation_created",
+  conversationRemoved: "im.conversation_removed",
   // client → server（上行）
   send: "im.send",
   read: "im.read",

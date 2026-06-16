@@ -111,7 +111,7 @@ pre code.hljs {
 @source "../../../../packages/design/src";
 
 :root {
-  --titlebar-height: 52px;
+  --titlebar-height: 42px;
   --mac-controls-safe-left: 92px;
   /* Slack 风格外壳配色（web-agent 局部，不进共享 design 系统） */
   --shell-chrome: #241c15;
@@ -127,7 +127,7 @@ pre code.hljs {
 }
 
 .drag-region {
-  height: 52px;
+  height: 42px;
 }
 
 .electron-shell.app-shell-mode .drag-region {

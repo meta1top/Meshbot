@@ -31,6 +31,10 @@ export class Conversation {
   @Column({ type: "uuid" })
   createdBy!: string;
 
+  /** 'public'（组织级可见）| 'private'（仅成员可见）。dm 不参与判定。 */
+  @Column({ type: "varchar", length: 16, default: "public" })
+  visibility!: "public" | "private";
+
   @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 }

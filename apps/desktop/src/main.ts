@@ -15,7 +15,7 @@ function createWindow(agentUrl: string) {
     width: 1200,
     height: 800,
     titleBarStyle: "hidden",
-    trafficLightPosition: { x: 16, y: 18 },
+    trafficLightPosition: { x: 16, y: 14 },
     backgroundColor: "#1a1a1a",
     ...(process.platform === "win32" && {
       titleBarOverlay: {

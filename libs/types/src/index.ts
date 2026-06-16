@@ -13,6 +13,9 @@ export {
   type MessagePage,
 } from "./im/im.events";
 export {
+  type AddChannelMemberInput,
+  AddChannelMemberSchema,
+  type ChannelMember,
   type ConversationSummary,
   type ConversationType,
   type CreateChannelInput,

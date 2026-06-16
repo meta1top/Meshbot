@@ -1,7 +1,7 @@
 "use client";
 
 import type { AuthStatus } from "@meshbot/types-agent";
-import { getBrowserApiBaseUrl } from "@meshbot/web-common";
+import { getAccessToken, getBrowserApiBaseUrl } from "@meshbot/web-common";
 import { useAtomValue } from "jotai";
 import { Loader2 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
@@ -58,14 +58,15 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
             return;
           }
         } else if (step === "needs-login") {
-          // 新用户默认进 /setup 注册；允许停留 /login（已有账号登录）
-          if (pathname !== "/setup" && pathname !== "/login") {
+          // 默认进 /login 登录；允许停留 /setup（新用户主动注册）
+          if (pathname !== "/login" && pathname !== "/setup") {
             setResolved(false);
-            router.replace("/setup");
+            router.replace("/login");
             return;
           }
-        } else if (pathname !== "/login") {
-          // ready 但本地无 JWT → 去 /login 重新登录
+        } else if (pathname !== "/login" && pathname !== "/setup") {
+          // ready 但本地无 JWT → 默认去 /login 重新登录；
+          // 放行停留 /setup（已完成本地配置仍可注册新账号）
           setResolved(false);
           router.replace("/login");
           return;
@@ -94,8 +95,14 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 /** 拉 setup-status —— 仅在 profile 401 时用于分流。 */
 async function fetchSetupStatus(): Promise<AuthStatus> {
   const base = getBrowserApiBaseUrl();
+  // 带上活跃账号 token —— 让服务端按当前账号判定 setup 状态（多账号下不能用
+  // 服务端的 listLoggedIn()[0] 猜，否则会拿到别的账号的状态）。
+  const token = getAccessToken();
   const res = await fetch(`${base}/api/setup-status`, {
-    headers: { Accept: "application/json" },
+    headers: {
+      Accept: "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
   });
   if (!res.ok) {
     throw new Error(`setup-status failed: HTTP ${res.status}`);
@@ -107,7 +114,7 @@ async function fetchSetupStatus(): Promise<AuthStatus> {
 function SplashScreen() {
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background">
-      <div className="drag-handle fixed top-0 right-0 left-0 h-[52px]" />
+      <div className="drag-handle fixed top-0 right-0 left-0 h-[42px]" />
 
       <div className="flex flex-col items-center gap-6">
         <div className="flex items-center gap-3">
