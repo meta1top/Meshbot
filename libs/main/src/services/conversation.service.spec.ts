@@ -1007,6 +1007,405 @@ describe("ConversationService", () => {
       });
     });
 
+    // ── toSummary visibility 断言 ───────────────────────────────────
+    describe("toSummary visibility", () => {
+      it("listConversations 返回私有频道 summary 时 visibility='private'", async () => {
+        const privateCh = makeConv({
+          id: "ch-priv-v",
+          type: "channel",
+          visibility: "private",
+          name: "私密",
+        });
+        const memberRow = makeMember({
+          conversationId: "ch-priv-v",
+          userId: "user-v",
+        });
+        // find 第一次（public channels）返回空；第二次（candidates）返回 privateCh
+        const findMock = jest
+          .fn()
+          .mockResolvedValueOnce([]) // public channels
+          .mockResolvedValue([privateCh]); // candidates
+        const convRepo = makeConvRepo({
+          count: jest.fn().mockResolvedValue(1),
+          find: findMock,
+        });
+        const memberRepo = makeMemberRepo({
+          find: jest.fn().mockResolvedValue([memberRow]),
+          findOne: jest.fn().mockResolvedValue(memberRow),
+        });
+        const svc = buildSvc(
+          convRepo,
+          memberRepo,
+          makeMessageSvc(),
+          makeUserSvc(),
+        );
+        const list = await svc.listConversations("user-v", "org-1");
+        const ch = list.find((c) => c.id === "ch-priv-v");
+        expect(ch).toBeDefined();
+        expect(ch?.visibility).toBe("private");
+      });
+
+      it("listConversations 返回公开频道 summary 时 visibility='public'", async () => {
+        const publicCh = makeConv({
+          id: "ch-pub-v",
+          type: "channel",
+          visibility: "public",
+          name: "公开",
+        });
+        const memberRow = makeMember({
+          conversationId: "ch-pub-v",
+          userId: "user-v",
+        });
+        const findMock = jest
+          .fn()
+          .mockResolvedValueOnce([publicCh]) // public channels
+          .mockResolvedValue([]); // candidates
+        const convRepo = makeConvRepo({
+          count: jest.fn().mockResolvedValue(1),
+          find: findMock,
+        });
+        const memberRepo = makeMemberRepo({
+          find: jest.fn().mockResolvedValue([memberRow]),
+          findOne: jest.fn().mockResolvedValue(memberRow),
+        });
+        const svc = buildSvc(
+          convRepo,
+          memberRepo,
+          makeMessageSvc(),
+          makeUserSvc(),
+        );
+        const list = await svc.listConversations("user-v", "org-1");
+        const ch = list.find((c) => c.id === "ch-pub-v");
+        expect(ch).toBeDefined();
+        expect(ch?.visibility).toBe("public");
+      });
+    });
+
+    // ── persistChannelInTx 私有分支 ────────────────────────────────
+    describe("persistChannelInTx 私有分支", () => {
+      it("private + memberIds：只保存 creator + 属于组织的成员，过滤非组织成员", async () => {
+        const savedConv = makeConv({
+          id: "ch-priv-new",
+          type: "channel",
+          visibility: "private",
+          name: "私密频道",
+        });
+        // 捕获 memberRepo.save 的调用参数
+        const memberSaveSpy = jest
+          .fn()
+          .mockImplementation((rows: object[]) =>
+            Promise.resolve(
+              rows.map((r) => ({ id: "mem-new", joinedAt: new Date(), ...r })),
+            ),
+          );
+        const memberCreateSpy = jest
+          .fn()
+          .mockImplementation((data: object) => ({ ...data }));
+        const convRepo = makeConvRepo({
+          save: jest.fn().mockResolvedValue(savedConv),
+        });
+        // 覆盖 manager.getRepository 的桩，使其使用 memberSaveSpy
+        convRepo.manager.getRepository = jest.fn().mockReturnValue({
+          create: memberCreateSpy,
+          save: memberSaveSpy,
+          findOne: jest.fn().mockResolvedValue(null),
+          upsert: jest.fn().mockResolvedValue(undefined),
+          count: jest.fn().mockResolvedValue(0),
+        });
+
+        // validMember 是组织成员，nonOrgMember 不是
+        const isMemberMock = jest.fn().mockImplementation((_orgId, userId) => {
+          return Promise.resolve(userId === "valid-member");
+        });
+        const membershipSvc = makeMembershipSvc({ isMember: isMemberMock });
+
+        const svc = buildSvc(
+          convRepo,
+          makeMemberRepo(),
+          makeMessageSvc(),
+          makeUserSvc(),
+          membershipSvc,
+        );
+
+        await svc.persistChannelInTx(
+          "org-1",
+          "私密频道",
+          "creator-1",
+          "private",
+          ["valid-member", "non-org-member"],
+        );
+
+        // isMember 应被调用以过滤 memberIds
+        expect(isMemberMock).toHaveBeenCalled();
+
+        // memberRepo.save 传入的数组应只含 creator + validMember
+        expect(memberSaveSpy).toHaveBeenCalledTimes(1);
+        const savedRows = memberSaveSpy.mock.calls[0][0] as Array<{
+          userId: string;
+        }>;
+        const savedUserIds = savedRows.map((r) => r.userId).sort();
+        expect(savedUserIds).toEqual(["creator-1", "valid-member"].sort());
+        expect(savedUserIds).not.toContain("non-org-member");
+      });
+
+      it("public：只保存 creator member 行，不调用 isMember 过滤", async () => {
+        const savedConv = makeConv({
+          id: "ch-pub-new",
+          type: "channel",
+          visibility: "public",
+          name: "公开频道",
+        });
+        const memberSaveSpy = jest
+          .fn()
+          .mockImplementation((rows: object[]) =>
+            Promise.resolve(
+              rows.map((r) => ({ id: "mem-new", joinedAt: new Date(), ...r })),
+            ),
+          );
+        const isMemberMock = jest.fn().mockResolvedValue(true);
+        const convRepo = makeConvRepo({
+          save: jest.fn().mockResolvedValue(savedConv),
+        });
+        convRepo.manager.getRepository = jest.fn().mockReturnValue({
+          create: jest.fn().mockImplementation((data: object) => ({ ...data })),
+          save: memberSaveSpy,
+          findOne: jest.fn().mockResolvedValue(null),
+          upsert: jest.fn().mockResolvedValue(undefined),
+          count: jest.fn().mockResolvedValue(0),
+        });
+        const membershipSvc = makeMembershipSvc({ isMember: isMemberMock });
+
+        const svc = buildSvc(
+          convRepo,
+          makeMemberRepo(),
+          makeMessageSvc(),
+          makeUserSvc(),
+          membershipSvc,
+        );
+
+        await svc.persistChannelInTx(
+          "org-1",
+          "公开频道",
+          "creator-1",
+          "public",
+          ["other-user"],
+        );
+
+        // 公开频道：isMember 不应被调用过滤成员
+        expect(isMemberMock).not.toHaveBeenCalled();
+
+        // 只保存 creator 一行
+        expect(memberSaveSpy).toHaveBeenCalledTimes(1);
+        const savedRows = memberSaveSpy.mock.calls[0][0] as Array<{
+          userId: string;
+        }>;
+        expect(savedRows).toHaveLength(1);
+        expect(savedRows[0].userId).toBe("creator-1");
+      });
+    });
+
+    // ── listMembers ─────────────────────────────────────────────────
+    describe("listMembers", () => {
+      it("happy path：返回私有频道所有成员的 userId/displayName/email", async () => {
+        const conv = makeConv({
+          id: "ch-priv-lm",
+          orgId: "org-1",
+          type: "channel",
+          visibility: "private",
+        });
+        const creator = makeUser({
+          id: "creator-lm",
+          displayName: "Creator",
+          email: "creator@x.io",
+        });
+        const bob = makeUser({
+          id: "bob-lm",
+          displayName: "Bob",
+          email: "bob@x.io",
+        });
+        const memberRowCreator = makeMember({
+          id: "mem-c",
+          conversationId: "ch-priv-lm",
+          userId: "creator-lm",
+        });
+        const memberRowBob = makeMember({
+          id: "mem-b",
+          conversationId: "ch-priv-lm",
+          userId: "bob-lm",
+        });
+
+        const convRepo = makeConvRepo({
+          findOne: jest.fn().mockResolvedValue(conv),
+        });
+        const memberRepo = makeMemberRepo({
+          // getVisibleOrThrow 内部 findOne({where:{conversationId,userId}})
+          findOne: jest.fn().mockResolvedValue(memberRowCreator),
+          // listMembers 内部 find({where:{conversationId}})
+          find: jest.fn().mockResolvedValue([memberRowCreator, memberRowBob]),
+        });
+        const userSvc = makeUserSvc({
+          findById: jest.fn().mockImplementation((id: string) => {
+            if (id === "creator-lm") return Promise.resolve(creator);
+            if (id === "bob-lm") return Promise.resolve(bob);
+            return Promise.resolve(null);
+          }),
+        });
+
+        const svc = buildSvc(convRepo, memberRepo, makeMessageSvc(), userSvc);
+
+        const members = await svc.listMembers(
+          "ch-priv-lm",
+          "creator-lm",
+          "org-1",
+        );
+        expect(members).toHaveLength(2);
+        const creatorEntry = members.find((m) => m.userId === "creator-lm");
+        const bobEntry = members.find((m) => m.userId === "bob-lm");
+        expect(creatorEntry).toMatchObject({
+          userId: "creator-lm",
+          displayName: "Creator",
+          email: "creator@x.io",
+        });
+        expect(bobEntry).toMatchObject({
+          userId: "bob-lm",
+          displayName: "Bob",
+          email: "bob@x.io",
+        });
+      });
+
+      it("非成员调用 listMembers → CONVERSATION_FORBIDDEN（来自 getVisibleOrThrow）", async () => {
+        const conv = makeConv({
+          id: "ch-priv-lm2",
+          orgId: "org-1",
+          type: "channel",
+          visibility: "private",
+        });
+        const convRepo = makeConvRepo({
+          findOne: jest.fn().mockResolvedValue(conv),
+        });
+        // 非成员无 member 行
+        const memberRepo = makeMemberRepo({
+          findOne: jest.fn().mockResolvedValue(null),
+          find: jest.fn().mockResolvedValue([]),
+        });
+        const svc = buildSvc(
+          convRepo,
+          memberRepo,
+          makeMessageSvc(),
+          makeUserSvc(),
+        );
+
+        await expect(
+          svc.listMembers("ch-priv-lm2", "non-member", "org-1"),
+        ).rejects.toMatchObject({
+          errorCode: MainErrorCode.CONVERSATION_FORBIDDEN,
+        });
+      });
+    });
+
+    // ── leave-then-invisible ────────────────────────────────────────
+    describe("leave-then-invisible", () => {
+      it("成员退出私有频道后，listConversations 不再包含该频道", async () => {
+        const privateCh = makeConv({
+          id: "ch-priv-leave",
+          orgId: "org-1",
+          type: "channel",
+          visibility: "private",
+          name: "私密退出测试",
+        });
+        const memberRow = makeMember({
+          id: "mem-leave",
+          conversationId: "ch-priv-leave",
+          userId: "user-leave",
+        });
+
+        // 用真实 backing store 模拟 memberRepo，使 delete 影响后续 find
+        const memberStore: (typeof memberRow)[] = [memberRow];
+
+        const convRepo = makeConvRepo({
+          count: jest.fn().mockResolvedValue(1),
+          // listConversations 调用 find({where:{orgId}})
+          find: jest
+            .fn()
+            .mockResolvedValueOnce([]) // public channels（空）
+            .mockResolvedValue([privateCh]), // candidates
+          findOne: jest.fn().mockResolvedValue(privateCh),
+        });
+        const memberRepo = makeMemberRepo({
+          // findOne({where:{conversationId,userId}}) — 用于 getVisibleOrThrow / leave
+          findOne: jest
+            .fn()
+            .mockImplementation(
+              (opts: {
+                where: { conversationId?: string; userId?: string };
+              }) => {
+                const { conversationId, userId } = opts.where;
+                const found = memberStore.find(
+                  (m) =>
+                    (!conversationId || m.conversationId === conversationId) &&
+                    (!userId || m.userId === userId),
+                );
+                return Promise.resolve(found ?? null);
+              },
+            ),
+          // find({where:{userId}}) — listConversations 中查用户所有 member 行
+          find: jest
+            .fn()
+            .mockImplementation(
+              (opts: {
+                where: { userId?: string; conversationId?: string };
+              }) => {
+                const { userId, conversationId } = opts.where ?? {};
+                const results = memberStore.filter(
+                  (m) =>
+                    (!userId || m.userId === userId) &&
+                    (!conversationId || m.conversationId === conversationId),
+                );
+                return Promise.resolve(results);
+              },
+            ),
+          // delete({conversationId,userId}) — 从 backing store 移除
+          delete: jest
+            .fn()
+            .mockImplementation(
+              (criteria: { conversationId?: string; userId?: string }) => {
+                const { conversationId, userId } = criteria;
+                const idx = memberStore.findIndex(
+                  (m) =>
+                    (!conversationId || m.conversationId === conversationId) &&
+                    (!userId || m.userId === userId),
+                );
+                if (idx >= 0) memberStore.splice(idx, 1);
+                return Promise.resolve(undefined);
+              },
+            ),
+        });
+
+        const svc = buildSvc(
+          convRepo,
+          memberRepo,
+          makeMessageSvc(),
+          makeUserSvc(),
+        );
+
+        // 退出前：能看到私有频道
+        const listBefore = await svc.listConversations("user-leave", "org-1");
+        expect(listBefore.some((c) => c.id === "ch-priv-leave")).toBe(true);
+
+        // 退出
+        await svc.leave("ch-priv-leave", "user-leave");
+
+        // 退出后：find 调用会重新从 backing store 返回，ch-priv-leave 已从 memberStore 移除
+        // 需要让 convRepo.find 再次返回候选项（重新 mockImplementation）
+        (convRepo.find as jest.Mock)
+          .mockResolvedValueOnce([]) // public channels
+          .mockResolvedValue([privateCh]); // candidates（频道本身还在，但用户不再是成员）
+
+        const listAfter = await svc.listConversations("user-leave", "org-1");
+        expect(listAfter.some((c) => c.id === "ch-priv-leave")).toBe(false);
+      });
+    });
+
     // ── leave ───────────────────────────────────────────────────────
     describe("leave", () => {
       it("成员退出：调用 delete，返回 orgId", async () => {
