@@ -264,7 +264,13 @@
     "empty": "暂无内容",
     "emptyHint": "选择一个会话开始聊天",
     "inputPlaceholder": "发消息…",
-    "historyStart": "会话开头"
+    "historyStart": "会话开头",
+    "privateChannelMembers": "成员",
+    "privateChannelAddMember": "添加成员",
+    "privateChannelNoMoreMembers": "没有更多可添加的成员",
+    "privateChannelLeave": "退出频道",
+    "privateChannelLeaveConfirm": "确定退出「{name}」频道吗？退出后你将无法再查看该频道的消息。",
+    "privateChannelLeaving": "退出中…"
   },
   "home": {
     "title": "接下来做什么？",
@@ -497,5 +503,11 @@
   "channelNoMembers": "",
   "channelCancel": "",
   "channelCreating": "",
-  "channelCreate": ""
+  "channelCreate": "",
+  "privateChannelMembers": "",
+  "privateChannelAddMember": "",
+  "privateChannelNoMoreMembers": "",
+  "privateChannelLeave": "",
+  "privateChannelLeaveConfirm": "",
+  "privateChannelLeaving": ""
 }

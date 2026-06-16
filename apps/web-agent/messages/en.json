@@ -264,7 +264,13 @@
     "empty": "Nothing here yet",
     "emptyHint": "Select a conversation to start chatting",
     "inputPlaceholder": "Send a message…",
-    "historyStart": "Beginning of conversation"
+    "historyStart": "Beginning of conversation",
+    "privateChannelMembers": "Members",
+    "privateChannelAddMember": "Add member",
+    "privateChannelNoMoreMembers": "No more members to add",
+    "privateChannelLeave": "Leave channel",
+    "privateChannelLeaveConfirm": "Leave \"{name}\"? You won't be able to see messages in this channel anymore.",
+    "privateChannelLeaving": "Leaving…"
   },
   "home": {
     "title": "What's up next?",
@@ -497,5 +503,11 @@
   "channelNoMembers": "",
   "channelCancel": "",
   "channelCreating": "",
-  "channelCreate": ""
+  "channelCreate": "",
+  "privateChannelMembers": "",
+  "privateChannelAddMember": "",
+  "privateChannelNoMoreMembers": "",
+  "privateChannelLeave": "",
+  "privateChannelLeaveConfirm": "",
+  "privateChannelLeaving": ""
 }
