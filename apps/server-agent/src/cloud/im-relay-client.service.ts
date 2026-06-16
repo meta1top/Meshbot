@@ -80,6 +80,7 @@ export class ImRelayClientService implements OnModuleDestroy {
 
       const socket = this.ioFactory(url, {
         auth: { token: identity.cloudToken },
+        transports: ["websocket"],
         reconnection: true,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 10_000,
