@@ -188,8 +188,8 @@ describe("server-main IM e2e", () => {
   function parseUserId(token: string): string {
     const payload = JSON.parse(
       Buffer.from(token.split(".")[1], "base64").toString(),
-    ) as { sub: string };
-    return payload.sub;
+    ) as { userId: string };
+    return payload.userId;
   }
 
   /**

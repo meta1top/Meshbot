@@ -152,12 +152,12 @@ describe("server-main 私有频道 e2e", () => {
     return res.body.data.token as string;
   }
 
-  /** 从 JWT token 中提取 userId（base64 decode middle segment）。 */
+  /** 从 JWT token 中提取 userId（base64 decode middle segment）。server-main payload 用 userId。 */
   function parseUserId(token: string): string {
     const payload = JSON.parse(
       Buffer.from(token.split(".")[1], "base64").toString(),
-    ) as { sub: string };
-    return payload.sub;
+    ) as { userId: string };
+    return payload.userId;
   }
 
   /**
