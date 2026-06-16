@@ -1,4 +1,8 @@
-import { GraphService, PromptService } from "@meshbot/agent";
+import {
+  AccountContextService,
+  GraphService,
+  PromptService,
+} from "@meshbot/agent";
 import {
   SESSION_WS_EVENTS,
   type SessionTitleUpdatedEvent,
@@ -38,6 +42,7 @@ export class SessionTitleService {
     private readonly sessions: SessionService,
     private readonly prompt: PromptService,
     private readonly emitter: EventEmitter2,
+    private readonly account: AccountContextService,
   ) {}
 
   /** fire-and-forget 入队；setImmediate 让 controller 立即返回。 */
@@ -52,6 +57,24 @@ export class SessionTitleService {
   }
 
   private async generate(sessionId: string, content: string): Promise<void> {
+    // fire-and-forget 脱离了请求的 ALS 账号上下文，这里按 session owner 显式重建，
+    // 否则下游作用域查询 / getTitleModel（按账号读模型凭证）会因无上下文抛错。
+    const owner = await this.sessions.findOwner(sessionId);
+    if (!owner) {
+      this.logger.warn(
+        `session-title 找不到 session owner session=${sessionId}，跳过`,
+      );
+      return;
+    }
+    await this.account.run(owner, () =>
+      this.generateInContext(sessionId, content),
+    );
+  }
+
+  private async generateInContext(
+    sessionId: string,
+    content: string,
+  ): Promise<void> {
     const t0 = Date.now();
     const cur = await this.sessions.findSessionOrFail(sessionId);
     if (cur.titleGenerated) return;

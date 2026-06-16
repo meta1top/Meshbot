@@ -9,6 +9,7 @@ import {
 } from "@langchain/core/messages";
 import { Injectable, Optional } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
+import { AccountContextService } from "../account/account-context.service";
 import { createSqliteCheckpointer } from "../checkpoint/sqlite-checkpointer";
 import { MeshbotConfigService } from "../config/meshbot-config.service";
 import { readActiveModelConfig } from "../config/model-config.reader";
@@ -113,6 +114,7 @@ export class GraphService {
     private promptService: PromptService,
     private readonly toolRegistry: ToolRegistry,
     private readonly eventEmitter: EventEmitter2,
+    private readonly account: AccountContextService,
     @Optional() modelProvider?: ModelProvider,
     @Optional() modelMeta?: { providerType: string; model: string },
   ) {
@@ -138,11 +140,12 @@ export class GraphService {
    * 命中缓存直接返回；key 把可能影响行为的字段都拼上，配置变化自动 miss。
    */
   private async resolveModel(): Promise<BaseChatModel> {
-    const cfg = readActiveModelConfig(this.configService.getDatabasePath());
+    const cfg = readActiveModelConfig(
+      this.configService.getDatabasePath(),
+      this.account.getOrThrow(),
+    );
     if (!cfg) {
-      throw new Error(
-        "没有启用的模型配置（model_configs 表为空或全部 disabled）",
-      );
+      throw new Error("当前账号没有启用的模型配置，请先在设置中配置模型");
     }
     this.modelMeta = { providerType: cfg.providerType, model: cfg.model };
     const key = `${cfg.providerType}|${cfg.model}|${cfg.baseUrl ?? ""}|${cfg.apiKey ?? ""}`;
@@ -162,11 +165,12 @@ export class GraphService {
    * 独立 cache key 跟主 graph model 共存，避免互相覆盖。
    */
   async getTitleModel(): Promise<BaseChatModel> {
-    const cfg = readActiveModelConfig(this.configService.getDatabasePath());
+    const cfg = readActiveModelConfig(
+      this.configService.getDatabasePath(),
+      this.account.getOrThrow(),
+    );
     if (!cfg) {
-      throw new Error(
-        "没有启用的模型配置（model_configs 表为空或全部 disabled）",
-      );
+      throw new Error("当前账号没有启用的模型配置，请先在设置中配置模型");
     }
     const key = `title|${cfg.providerType}|${cfg.model}|${cfg.baseUrl ?? ""}|${cfg.apiKey ?? ""}`;
     const cached = this.modelCache.get(key);

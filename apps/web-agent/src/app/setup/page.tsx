@@ -56,6 +56,13 @@ type SetupRegisterValues = {
 
 type WizardStep = "register" | "org" | "model";
 
+/** 向导步骤顺序 —— setup-status 只能「向前」推进，不能把用户已推进的步骤往回拽。 */
+const STEP_ORDER: Record<WizardStep, number> = {
+  register: 0,
+  org: 1,
+  model: 2,
+};
+
 type SimpleIconLike = {
   path: string;
   hex: string;
@@ -140,8 +147,16 @@ export default function SetupPage() {
 
   useEffect(() => {
     if (!authStatus) return;
-    if (authStatus.step === "needs-org") setStep("org");
-    else if (authStatus.step === "needs-model") setStep("model");
+    const target: WizardStep | null =
+      authStatus.step === "needs-org"
+        ? "org"
+        : authStatus.step === "needs-model"
+          ? "model"
+          : null;
+    if (!target) return;
+    // 只向前推进（如刷新后从正确步骤续上），绝不回拽用户已推进的步骤
+    // —— 避免 setup-status 刷新延迟把 model 步骤拽回 org。
+    setStep((cur) => (STEP_ORDER[target] > STEP_ORDER[cur] ? target : cur));
   }, [authStatus]);
 
   useEffect(() => {

@@ -80,6 +80,7 @@ describe("GraphService", () => {
       promptService,
       toolRegistry,
       eventEmitter,
+      ctx,
       () => Promise.resolve(fakeModel as never),
       { providerType: "fake", model: "fake-model" },
     );
@@ -305,6 +306,7 @@ describe("GraphService", () => {
       ps2,
       toolRegistry2,
       new EventEmitter2(),
+      ctx2,
       () => Promise.resolve(model2 as BaseChatModel),
       { providerType: "fake", model: "fake-model" },
     );

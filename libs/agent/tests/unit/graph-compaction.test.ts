@@ -47,6 +47,7 @@ describe("GraphService compaction hooks", () => {
       promptService,
       toolRegistry,
       new EventEmitter2(),
+      ctx,
       () => Promise.resolve(fakeModel as never),
       { providerType: "fake", model: "fake-model" },
     );
