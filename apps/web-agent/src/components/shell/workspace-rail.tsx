@@ -92,7 +92,7 @@ export function WorkspaceRail() {
     .toUpperCase();
 
   return (
-    <div className="flex h-full w-[68px] shrink-0 flex-col items-center gap-2 bg-(--shell-chrome) px-1.5 pt-2 pb-2">
+    <div className="flex h-full w-[68px] shrink-0 flex-col items-center gap-2 bg-(--shell-chrome) px-1.5 pt-2 pb-4">
       <div className="flex h-8 w-8 items-center justify-center rounded-(--shell-radius) bg-(--shell-accent) text-[15px] font-extrabold text-white">
         M
       </div>
