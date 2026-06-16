@@ -5,11 +5,13 @@ import {
   ResponseInterceptor,
   traceIdMiddleware,
 } from "@meshbot/common";
+import { Logger } from "@nestjs/common";
 import { NestFactory, Reflector } from "@nestjs/core";
 import { I18nService } from "nestjs-i18n";
 import { AppModule } from "./app.module";
 import { setupSwagger } from "./app.swagger";
 import { AppConfigSchema } from "./config/app-config.schema";
+import { RedisIoAdapter } from "./ws/redis-io.adapter";
 
 async function bootstrap() {
   // 配置加载在 Nest 生命周期之外：从 YAML / Nacos 读成强类型嵌套 AppConfig 并校验。
@@ -41,6 +43,15 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule.forRoot(config));
 
+  const ioAdapter = new RedisIoAdapter(app);
+  await ioAdapter.connectToRedis(config.redis);
+  app.useWebSocketAdapter(ioAdapter);
+  new Logger("IM").log(
+    ioAdapter.isClustered()
+      ? "IM WebSocket: 多 pod 模式（Redis adapter）"
+      : "IM WebSocket: 单 pod 模式（内存 adapter，未配置 Redis）",
+  );
+
   // 标准全局链路（顺序：trace → pipe → interceptor → filter）
   app.use(traceIdMiddleware);
   const i18n = app.get(I18nService);
@@ -57,6 +68,12 @@ async function bootstrap() {
 
   await app.listen(config.port);
   console.log(`server-main running on http://localhost:${config.port}`);
+
+  const closeIo = () => {
+    void ioAdapter.close();
+  };
+  process.once("SIGTERM", closeIo);
+  process.once("SIGINT", closeIo);
 }
 
 bootstrap();
