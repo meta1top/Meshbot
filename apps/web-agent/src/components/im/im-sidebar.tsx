@@ -10,9 +10,8 @@ import {
   currentConversationIdAtom,
   loadConversationsAtom,
   presenceAtom,
-  upsertConversationAtom,
 } from "@/atoms/im";
-import { createChannel } from "@/rest/im";
+import { ChannelPicker } from "./channel-picker";
 import { DmPicker } from "./dm-picker";
 
 export function ImSidebar() {
@@ -24,15 +23,11 @@ export function ImSidebar() {
   const presence = useAtomValue(presenceAtom);
   const loadConversations = useSetAtom(loadConversationsAtom);
   const setCurrentId = useSetAtom(currentConversationIdAtom);
-  const upsertConversation = useSetAtom(upsertConversationAtom);
 
   const [menuOpen, setMenuOpen] = useState(false);
-  const [creatingChannel, setCreatingChannel] = useState(false);
-  const [channelName, setChannelName] = useState("");
+  const [channelPickerOpen, setChannelPickerOpen] = useState(false);
   const [dmPickerOpen, setDmPickerOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const submittingRef = useRef(false);
 
   const channels = conversations.filter((c) => c.type === "channel");
   const dms = conversations.filter((c) => c.type === "dm");
@@ -41,7 +36,7 @@ export function ImSidebar() {
     void loadConversations();
   }, [loadConversations]);
 
-  // close menu on outside click
+  // 点击菜单外部关闭下拉菜单
   useEffect(() => {
     if (!menuOpen) return;
     function handler(e: MouseEvent) {
@@ -53,43 +48,9 @@ export function ImSidebar() {
     return () => document.removeEventListener("mousedown", handler);
   }, [menuOpen]);
 
-  useEffect(() => {
-    if (creatingChannel && inputRef.current) {
-      inputRef.current.focus();
-    }
-  }, [creatingChannel]);
-
   function navigate(id: string) {
     setCurrentId(id);
     router.push(`/messages?id=${id}`);
-  }
-
-  // 关闭内联输入并清空名称（取消路径，不会创建频道）
-  function cancelChannel() {
-    setCreatingChannel(false);
-    setChannelName("");
-  }
-
-  // 提交路径：仅由 Enter 触发。空名直接取消；非空才创建频道。
-  // submittingRef 同步置位防重入，避免任何残留的二次提交（如 finally 移除输入后再触发）。
-  async function submitChannel() {
-    if (submittingRef.current) return;
-    const name = channelName.trim();
-    if (!name) {
-      cancelChannel();
-      return;
-    }
-    submittingRef.current = true;
-    try {
-      const conv = await createChannel(name);
-      upsertConversation(conv);
-      navigate(conv.id);
-    } catch {
-      // swallow — user can retry
-    } finally {
-      submittingRef.current = false;
-      cancelChannel();
-    }
   }
 
   return (
@@ -115,7 +76,7 @@ export function ImSidebar() {
                   type="button"
                   onClick={() => {
                     setMenuOpen(false);
-                    setCreatingChannel(true);
+                    setChannelPickerOpen(true);
                   }}
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-[13px] text-white/90 hover:bg-white/15"
                 >
@@ -145,32 +106,7 @@ export function ImSidebar() {
             {t("channels")}
           </div>
 
-          {/* Inline new-channel input */}
-          {creatingChannel && (
-            <div className="mb-1 flex items-center gap-1.5 rounded-md px-2 py-1">
-              <Hash className="h-3.5 w-3.5 shrink-0 text-white/60" />
-              <input
-                ref={inputRef}
-                value={channelName}
-                onChange={(e) => setChannelName(e.target.value)}
-                onKeyDown={(e) => {
-                  // IME 组合期间（中文/日文/韩文输入法未确认）不拦截 Enter，
-                  // 让 IME 自己用回车 confirm 候选词。
-                  if (e.nativeEvent.isComposing || e.keyCode === 229) return;
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    void submitChannel();
-                  }
-                  if (e.key === "Escape") cancelChannel();
-                }}
-                onBlur={cancelChannel}
-                placeholder={t("channelNamePlaceholder")}
-                className="min-w-0 flex-1 bg-transparent text-[13px] text-white outline-none placeholder:text-white/40"
-              />
-            </div>
-          )}
-
-          {channels.length === 0 && !creatingChannel && (
+          {channels.length === 0 && (
             <p className="px-2 py-1 text-[12px] text-white/40">{t("empty")}</p>
           )}
 
@@ -239,6 +175,12 @@ export function ImSidebar() {
           })}
         </div>
       </div>
+
+      <ChannelPicker
+        open={channelPickerOpen}
+        onClose={() => setChannelPickerOpen(false)}
+        onNavigate={(id) => navigate(id)}
+      />
 
       <DmPicker
         open={dmPickerOpen}
