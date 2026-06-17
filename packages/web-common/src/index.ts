@@ -12,6 +12,10 @@ export {
   setAccessToken,
   setActiveAccount,
 } from "./api/client";
+export {
+  type CandidateMessage,
+  latestAssistantCandidate,
+} from "./im/companion";
 export type { ProviderDef } from "./providers";
 export { PROVIDERS } from "./providers";
 export type { ModelConfigInput } from "./providers/schema";
