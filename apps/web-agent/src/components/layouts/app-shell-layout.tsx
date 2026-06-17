@@ -23,6 +23,11 @@ interface AppShellLayoutProps {
    * 整条横贯内容卡宽度，不随消息滚动、不受滚动条影响。
    */
   header?: ReactNode;
+  /**
+   * 右侧并列面板（如 IM 伴生 Agent 侧栏）。提供时内容卡分两列：
+   * 左=居中滚动主区，右=固定宽面板（xl 以上显示）；不提供时布局不变。
+   */
+  rightPanel?: ReactNode;
 }
 
 export function AppShellLayout({
@@ -31,6 +36,7 @@ export function AppShellLayout({
   scrollContainerRef,
   sidebar,
   header,
+  rightPanel,
 }: AppShellLayoutProps) {
   const pathname = usePathname();
   const t = useTranslations("appShell");
@@ -75,17 +81,36 @@ export function AppShellLayout({
             )}
           >
             {header}
-            <div
-              ref={scrollContainerRef}
-              className={cn(
-                "flex min-h-0 flex-1 flex-col overflow-y-auto",
-                className,
-              )}
-            >
-              <div className="mx-auto flex w-full max-w-[900px] flex-1 flex-col p-4 lg:px-10">
-                {children}
+            {rightPanel ? (
+              <div className="flex min-h-0 flex-1 flex-row">
+                <div
+                  ref={scrollContainerRef}
+                  className={cn(
+                    "flex min-h-0 flex-1 flex-col overflow-y-auto",
+                    className,
+                  )}
+                >
+                  <div className="mx-auto flex w-full max-w-[900px] flex-1 flex-col p-4 lg:px-10">
+                    {children}
+                  </div>
+                </div>
+                <aside className="hidden w-[420px] shrink-0 flex-col border-l border-border xl:flex">
+                  {rightPanel}
+                </aside>
               </div>
-            </div>
+            ) : (
+              <div
+                ref={scrollContainerRef}
+                className={cn(
+                  "flex min-h-0 flex-1 flex-col overflow-y-auto",
+                  className,
+                )}
+              >
+                <div className="mx-auto flex w-full max-w-[900px] flex-1 flex-col p-4 lg:px-10">
+                  {children}
+                </div>
+              </div>
+            )}
           </section>
         </div>
       </div>
