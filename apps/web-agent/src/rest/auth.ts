@@ -9,8 +9,7 @@ import type {
 import {
   addAccount,
   apiClient,
-  getActiveAccountId,
-  removeAccount,
+  clearAccessToken,
   setAccessToken,
 } from "@meshbot/web-common";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -115,14 +114,16 @@ export function useRegister() {
 /**
  * 登出：先调服务端登出（需要 Bearer），settle 后再清本地 token + 缓存。
  * 云端不可达时调用方可 catch 忽略，onSettled 仍保证本地登出。
+ *
+ * 单账号模型：清空整个本地账号 store（token + meshbot_accounts），
+ * 退出后回登录页；切换账号 = 退出后重新登录。
  */
 export function useLogout() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: logout,
     onSettled: () => {
-      const id = getActiveAccountId();
-      if (id) removeAccount(id);
+      clearAccessToken();
       queryClient.invalidateQueries({ queryKey: profileQueryKey });
       queryClient.invalidateQueries({ queryKey: authStatusQueryKey });
     },

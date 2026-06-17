@@ -7,32 +7,23 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@meshbot/design";
-import {
-  type AccountEntry,
-  listAccounts,
-  setActiveAccount,
-} from "@meshbot/web-common";
 import { useTheme } from "@meshbot/web-common/react";
-import { useQueryClient } from "@tanstack/react-query";
 import { useAtomValue } from "jotai";
 import {
   Building2,
-  Check,
   Home,
   MessageSquare,
   Moon,
   MoreHorizontal,
-  Plus,
   Sparkles,
   Sun,
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { currentUserAtom } from "@/atoms/auth";
 import { RailNavItem } from "@/components/shell/rail-nav-item";
-import { profileQueryKey } from "@/lib/profile-client";
-import { authStatusQueryKey, useLogout } from "@/rest/auth";
+import { useLogout } from "@/rest/auth";
 
 /** 由 pathname 推断当前 rail 区域。 */
 export function areaFromPath(
@@ -58,34 +49,13 @@ export function WorkspaceRail() {
   const { theme, toggleTheme } = useTheme();
   const user = useAtomValue(currentUserAtom);
   const logoutMutation = useLogout();
-  const queryClient = useQueryClient();
   const area = areaFromPath(pathname);
 
-  // Re-render the account list when the dropdown opens.
-  const [accounts, setAccounts] = useState<AccountEntry[]>([]);
-
-  const handleMenuOpen = useCallback((open: boolean) => {
-    if (open) setAccounts(listAccounts());
-  }, []);
-
+  // 单账号：退出即彻底登出回登录页；切换账号 = 退出后重新登录。
   const handleLogout = useCallback(async () => {
     await logoutMutation.mutateAsync().catch(() => {});
-    if (listAccounts().length > 0) {
-      router.refresh();
-    } else {
-      router.replace("/login");
-    }
+    router.replace("/login");
   }, [logoutMutation.mutateAsync, router]);
-
-  const handleSwitchAccount = useCallback(
-    (cloudUserId: string) => {
-      setActiveAccount(cloudUserId);
-      queryClient.invalidateQueries({ queryKey: profileQueryKey });
-      queryClient.invalidateQueries({ queryKey: authStatusQueryKey });
-      router.refresh();
-    },
-    [queryClient, router],
-  );
 
   const initial = (user?.displayName ?? user?.email ?? "?")
     .charAt(0)
@@ -139,7 +109,7 @@ export function WorkspaceRail() {
           <Moon className="h-4 w-4" />
         )}
       </button>
-      <DropdownMenu onOpenChange={handleMenuOpen}>
+      <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
             type="button"
@@ -150,24 +120,6 @@ export function WorkspaceRail() {
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent side="right" align="end">
-          {accounts.map((acct) => (
-            <DropdownMenuItem
-              key={acct.cloudUserId}
-              onClick={() =>
-                !acct.active && handleSwitchAccount(acct.cloudUserId)
-              }
-            >
-              <Check
-                className={`mr-2 h-4 w-4 ${acct.active ? "opacity-100" : "opacity-0"}`}
-              />
-              {acct.email ?? acct.cloudUserId}
-            </DropdownMenuItem>
-          ))}
-          <DropdownMenuItem onClick={() => router.push("/login")}>
-            <Plus className="mr-2 h-4 w-4" />
-            {t("userMenu.addAccount")}
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => router.push("/settings/org")}>
             <Building2 className="mr-2 h-4 w-4" />
             {t("userMenu.org")}
