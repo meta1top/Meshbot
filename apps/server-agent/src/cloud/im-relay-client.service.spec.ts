@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import { AccountContextService } from "@meshbot/agent";
 import { IM_WS_EVENTS } from "@meshbot/types";
 import type { ImReadInput, ImSendInput } from "@meshbot/types";
 import { EventEmitter2 } from "@nestjs/event-emitter";
@@ -64,6 +65,7 @@ function makeService(
     cloudIdentityService as never,
     emitter,
     "http://cloud.test",
+    new AccountContextService(),
     ioFactory as never,
   );
 
@@ -187,6 +189,7 @@ describe("ImRelayClientService", () => {
         cloudIdentityService as never,
         new EventEmitter2(),
         "http://cloud.test",
+        new AccountContextService(),
         ioFactory as never,
       );
 

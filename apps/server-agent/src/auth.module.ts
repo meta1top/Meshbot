@@ -51,12 +51,18 @@ import { JWT_SECRET, JwtStrategy } from "./strategies/jwt.strategy";
     },
     {
       provide: ImRelayClientService,
-      inject: [ConfigService, CloudIdentityService, EventEmitter2],
+      inject: [
+        ConfigService,
+        CloudIdentityService,
+        EventEmitter2,
+        AccountContextService,
+      ],
       useFactory: (
         config: ConfigService,
         identity: CloudIdentityService,
         emitter: EventEmitter2,
-      ) => new ImRelayClientService(identity, emitter, config),
+        account: AccountContextService,
+      ) => new ImRelayClientService(identity, emitter, config, account),
     },
   ],
   exports: [

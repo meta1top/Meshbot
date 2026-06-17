@@ -1,3 +1,4 @@
+import { AccountContextService } from "@meshbot/agent";
 import { AppError } from "@meshbot/common";
 import { IM_WS_EVENTS, IM_WS_NAMESPACE } from "@meshbot/types";
 import type { ImReadInput, ImSendInput } from "@meshbot/types";
@@ -50,6 +51,8 @@ export class ImRelayClientService implements OnModuleDestroy {
      * 直接传字符串供测试使用（与 CloudClientService 构造函数同构）。
      */
     private readonly cloudWsUrl: string | ConfigService,
+    /** 账号上下文服务；下行事件 emit 包裹在对应账号的 AsyncLocalStorage 上下文内。 */
+    private readonly account: AccountContextService,
     /** socket.io-client io 函数；测试可注入伪实现。 */
     private readonly ioFactory: IoFactory = io as unknown as IoFactory,
   ) {}
@@ -94,7 +97,9 @@ export class ImRelayClientService implements OnModuleDestroy {
         IM_WS_EVENTS.conversationRemoved,
       ] as const) {
         socket.on(event, (payload: unknown) => {
-          this.emitter.emit(event, payload);
+          this.account.run(cloudUserId, () => {
+            this.emitter.emit(event, payload);
+          });
         });
       }
 
