@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 
 import { CloudImController } from "./controllers/cloud-im.controller";
+import { ImAgentController } from "./controllers/im-agent.controller";
 import { AuthModule } from "./auth.module";
 import { SessionModule } from "./session.module";
 import { CloudImService } from "./services/cloud-im.service";
@@ -20,7 +21,7 @@ import { ImGateway } from "./ws/im.gateway";
  */
 @Module({
   imports: [AuthModule, SessionModule],
-  controllers: [CloudImController],
+  controllers: [CloudImController, ImAgentController],
   providers: [CloudImService, ImGateway, ImAgentService],
 })
 export class ImModule {}
