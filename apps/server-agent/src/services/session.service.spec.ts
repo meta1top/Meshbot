@@ -629,6 +629,18 @@ describe("SessionService", () => {
       expect(found?.agentEnabled).toBe(false);
     });
 
+    it("findOrCreateImCompanion: 并发首建只产生一条（唯一索引兜底 + 重读返回赢家）", async () => {
+      const [a, b] = await Promise.all([
+        service.findOrCreateImCompanion("conv-race", "dm", "对端R"),
+        service.findOrCreateImCompanion("conv-race", "dm", "对端R"),
+      ]);
+      expect(a.id).toBe(b.id);
+      const rows = await ds
+        .getRepository(Session)
+        .find({ where: { imConversationId: "conv-race", kind: "im" } });
+      expect(rows).toHaveLength(1);
+    });
+
     it("listAllSorted：伴生会话不出现在结果中，普通会话正常出现", async () => {
       const normal = await service.createSession({ content: "普通" });
       await service.findOrCreateImCompanion("conv-3", "dm", "对端C");

@@ -3,12 +3,17 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from "typeorm";
 
 /** 会话表。id 同时作为 LangGraph thread_id 与 socket.io room id。 */
 @Entity("sessions")
+@Index("uq_sessions_im_companion", ["cloudUserId", "imConversationId"], {
+  unique: true,
+  where: "kind = 'im'",
+})
 export class Session {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
