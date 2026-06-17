@@ -32,42 +32,49 @@ export class ImAgentService {
   /** 入站 IM 消息钩子（relay → EventEmitter2，账号上下文内同步派发）。 */
   @OnEvent(IM_WS_EVENTS.message)
   async onImMessage(msg: ImMessage): Promise<void> {
-    const selfId = this.account.get();
-    if (!selfId) return;
+    try {
+      const selfId = this.account.get();
+      if (!selfId) return;
 
-    const convs = await this.cloudIm.listConversations();
-    const conv = convs.find((c) => c.id === msg.conversationId);
-    if (!conv || (conv.type !== "channel" && conv.type !== "dm")) return;
-    const title = conv.name ?? conv.peer?.displayName ?? "IM 会话";
+      const convs = await this.cloudIm.listConversations();
+      const conv = convs.find((c) => c.id === msg.conversationId);
+      if (!conv || (conv.type !== "channel" && conv.type !== "dm")) return;
+      const title = conv.name ?? conv.peer?.displayName ?? "IM 会话";
 
-    const companion = await this.sessions.findOrCreateImCompanion(
-      msg.conversationId,
-      conv.type,
-      title,
-    );
+      const companion = await this.sessions.findOrCreateImCompanion(
+        msg.conversationId,
+        conv.type,
+        title,
+      );
 
-    if (!companion.agentEnabled) return;
+      if (!companion.agentEnabled) return;
 
-    const self = await this.identity.get(selfId);
-    const who = msg.senderId === selfId ? "我" : "对端";
-    await this.sessions.appendMessage(companion.id, {
-      messageId: msg.id,
-      content: `[${who}] ${msg.content}`,
-    });
+      const self = await this.identity.get(selfId);
+      const who = msg.senderId === selfId ? "我" : "对端";
+      await this.sessions.appendMessage(companion.id, {
+        messageId: msg.id,
+        content: `[${who}] ${msg.content}`,
+      });
 
-    const selfHandles = self
-      ? [self.displayName, self.email.split("@")[0]].filter(Boolean)
-      : [];
-    const trigger = shouldTriggerCompanion({
-      convType: companion.imConvType ?? conv.type,
-      senderId: msg.senderId,
-      selfId,
-      content: msg.content,
-      selfHandles,
-      agentEnabled: companion.agentEnabled,
-    });
-    if (trigger) {
-      this.runner.kick(companion.id);
+      const selfHandles = self
+        ? [self.displayName, self.email.split("@")[0]].filter(Boolean)
+        : [];
+      const trigger = shouldTriggerCompanion({
+        convType: companion.imConvType ?? conv.type,
+        senderId: msg.senderId,
+        selfId,
+        content: msg.content,
+        selfHandles,
+        agentEnabled: companion.agentEnabled,
+      });
+      if (trigger) {
+        this.runner.kick(companion.id);
+      }
+    } catch (err) {
+      this.logger.error(
+        `IM 伴生 Agent 处理入站消息失败 conv=${msg.conversationId} msg=${msg.id}`,
+        err instanceof Error ? err.stack : String(err),
+      );
     }
   }
 }

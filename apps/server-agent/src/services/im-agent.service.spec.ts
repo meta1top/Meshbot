@@ -115,4 +115,19 @@ describe("ImAgentService.onImMessage", () => {
     });
     expect(appended).toEqual([]);
   });
+  it("处理异常被吞掉（不抛出未处理 rejection）", async () => {
+    const { svc, sessions } = makeSvc({ convType: "dm", selfId: "me" });
+    sessions.findOrCreateImCompanion = jest
+      .fn()
+      .mockRejectedValue(new Error("boom"));
+    await expect(
+      svc.onImMessage({
+        id: "m7",
+        conversationId: "conv-1",
+        senderId: "peer",
+        content: "x",
+        createdAt: "t",
+      }),
+    ).resolves.toBeUndefined();
+  });
 });
