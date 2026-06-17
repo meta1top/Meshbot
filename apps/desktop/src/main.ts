@@ -1,10 +1,17 @@
 import path from "node:path";
-import { app, BrowserWindow, dialog } from "electron";
+import { app, BrowserWindow, dialog, nativeImage } from "electron";
 import { startAgentRuntime, stopAgentRuntime } from "./agent-runtime";
 import { registerIpcHandlers } from "./ipc-handlers";
 import { startStaticServer } from "./static-server";
 
+const APP_NAME = "Meshbot";
 const DEV_AGENT_URL = "http://localhost:3001";
+
+// 覆盖应用名（须在 app ready 前调用）：默认菜单的 About / Hide / Quit 文案取自 app.name，
+// 不改的话开发期会显示 package.json 的 "@meshbot/desktop"。注意 macOS 菜单栏首项的「粗体
+// 应用名」由运行中 bundle 的 CFBundleName 决定 —— 打包产物已是 Meshbot；`electron .` 开发
+// 期则锁死为 Electron 自带 bundle，JS 无法改写，仅打包后正确。
+app.setName(APP_NAME);
 
 let mainWindow: BrowserWindow | null = null;
 let staticServer: { server: import("node:http").Server; port: number } | null =
@@ -14,6 +21,7 @@ function createWindow(agentUrl: string) {
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
+    title: APP_NAME,
     titleBarStyle: "hidden",
     trafficLightPosition: { x: 16, y: 14 },
     backgroundColor: "#1a1a1a",
@@ -54,6 +62,20 @@ async function getAgentUrl(): Promise<string> {
 
 app.whenReady().then(async () => {
   try {
+    // macOS「关于」面板标题与版本（默认会显示 Electron 字样）
+    app.setAboutPanelOptions({
+      applicationName: APP_NAME,
+      applicationVersion: app.getVersion(),
+    });
+
+    // 开发期 macOS dock 默认是 Electron 图标；显式贴上品牌图标（打包产物由 bundle 自带 .icns）。
+    if (!app.isPackaged && process.platform === "darwin" && app.dock) {
+      const devIcon = nativeImage.createFromPath(
+        path.join(__dirname, "..", "build", "icon.png"),
+      );
+      if (!devIcon.isEmpty()) app.dock.setIcon(devIcon);
+    }
+
     const agentUrl = await getAgentUrl();
     registerIpcHandlers(() => mainWindow);
     mainWindow = createWindow(agentUrl);

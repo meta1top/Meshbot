@@ -37,13 +37,17 @@ npmRebuild: true
 # 一台机器同机连构双架构又会让 after-pack 注入的 node_modules 撞 UnpackElectron 的
 # EnsureEmptyDir（unlinkat directory not empty）。所以这里只声明 target 类型，arch 留给
 # CLI 单一来源。CI 矩阵：macos-14=arm64 / macos-13=x64 / windows=x64 / linux=x64。
+# 图标路径相对 projectDir（release-stage）；build/ 由 stage.js 从 apps/desktop/build 拷入。
 mac:
+  icon: build/icon.icns
   target:
     - dmg
   artifactName: ${productName}-${version}-${arch}.${ext}
 win:
+  icon: build/icon.ico
   target:
     - nsis
 linux:
+  icon: build/icon.png
   target:
     - AppImage

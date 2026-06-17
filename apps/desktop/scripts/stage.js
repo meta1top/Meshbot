@@ -45,12 +45,24 @@ function findPackageDir(depName, fromDir) {
 //   - 仅剩 .bin 里的软链，after-pack 会整目录删掉（运行时 fork 不依赖 .bin）。
 //   - --prod 正确排除 devDependencies（electron / vitest 等不进树，避免嵌套 Electron.app
 //     的框架软链破坏 codesign --deep）；--legacy 绕开 v10+ inject-workspace-packages 限制。
-console.log("[stage] pnpm deploy --prod --legacy (hoisted) -> release-stage ...");
+console.log(
+  "[stage] pnpm deploy --prod --legacy (hoisted) -> release-stage ...",
+);
 fs.rmSync(stageDir, { recursive: true, force: true });
 execSync(
   `pnpm --filter @meshbot/desktop deploy --prod --legacy --config.node-linker=hoisted "${stageDir}"`,
   { cwd: desktopDir, stdio: "inherit" },
 );
+
+// 图标资源（buildResources）：pnpm deploy 受 package.json files 字段约束、不保证带上
+// build/，这里显式把图标拷进 release-stage/build，供 electron-builder.yml 的 icon 路径解析。
+const buildSrc = path.join(desktopDir, "build");
+const buildDest = path.join(stageDir, "build");
+fs.mkdirSync(buildDest, { recursive: true });
+for (const icon of ["icon.icns", "icon.ico", "icon.png"]) {
+  fs.copyFileSync(path.join(buildSrc, icon), path.join(buildDest, icon));
+}
+console.log("[stage] copied build/ icons -> release-stage/build");
 
 // electron 是 devDependency，--prod deploy 不会装进 release-stage/node_modules；
 // electron-builder 需要一个「固定」的 electron 版本号去下载对应二进制（package.json
