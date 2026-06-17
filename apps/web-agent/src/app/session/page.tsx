@@ -66,6 +66,12 @@ function SessionView() {
     if (!sessionId) router.replace("/assistant");
   }, [sessionId, router]);
 
+  // 切换会话：复位首次跳底哨兵，让新会话首条消息渲染时走 instant（无「先看顶→滑下来」闪烁）。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: sessionId 是触发 key，initialScrollDoneRef 是 RefObject（.current 故意不进依赖）
+  useEffect(() => {
+    initialScrollDoneRef.current = false;
+  }, [sessionId]);
+
   const stream = useSessionStream(sessionId, scrollContainerRef);
 
   const timelineMessages = useMemo(

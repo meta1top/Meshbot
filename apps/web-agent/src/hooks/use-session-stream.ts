@@ -612,7 +612,7 @@ export function useSessionStream(
    * - 锚定视口：prepend 前后 scrollTop 自动补偿，使用户当前看的消息不动
    * - 并发去重：loadingMoreRef 期间忽略重复触发
    */
-  // biome-ignore lint/correctness/useExhaustiveDependencies: scrollContainerRef は RefObject（.current は mutable）、依赖数组に加えるのは正しくない
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scrollContainerRef 是 RefObject，.current 故意不进依赖（与原实现一致）
   const loadMoreHistory = useCallback(async () => {
     if (!sessionId) return;
     if (!hasMoreHistoryRef.current) return;
