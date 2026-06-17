@@ -582,6 +582,65 @@ describe("SessionService", () => {
     });
   });
 
+  describe("IM 伴生会话", () => {
+    it("findOrCreateImCompanion：首次调用创建 kind='im' 的伴生会话", async () => {
+      const session = await service.findOrCreateImCompanion(
+        "conv-1",
+        "channel",
+        "频道A",
+      );
+      expect(session.id).toBeDefined();
+      expect(session.kind).toBe("im");
+      expect(session.imConversationId).toBe("conv-1");
+      expect(session.imConvType).toBe("channel");
+      expect(session.agentEnabled).toBe(true);
+    });
+
+    it("findOrCreateImCompanion：同 conversationId 第二次调用返回同一个会话（幂等）", async () => {
+      const first = await service.findOrCreateImCompanion(
+        "conv-2",
+        "dm",
+        "对端B",
+      );
+      const second = await service.findOrCreateImCompanion(
+        "conv-2",
+        "dm",
+        "对端B",
+      );
+      expect(second.id).toBe(first.id);
+    });
+
+    it("getImCompanion：不存在时返回 null", async () => {
+      const result = await service.getImCompanion("conv-not-exist");
+      expect(result).toBeNull();
+    });
+
+    it("getImCompanion：创建后可通过 conversationId 查到", async () => {
+      await service.findOrCreateImCompanion("conv-get", "channel", "频道Get");
+      const found = await service.getImCompanion("conv-get");
+      expect(found).not.toBeNull();
+      expect(found?.imConversationId).toBe("conv-get");
+    });
+
+    it("setCompanionAgentEnabled：关闭后 getImCompanion 返回 agentEnabled=false", async () => {
+      await service.findOrCreateImCompanion("conv-toggle", "dm", "对端Toggle");
+      await service.setCompanionAgentEnabled("conv-toggle", false);
+      const found = await service.getImCompanion("conv-toggle");
+      expect(found?.agentEnabled).toBe(false);
+    });
+
+    it("listAllSorted：伴生会话不出现在结果中，普通会话正常出现", async () => {
+      const normal = await service.createSession({ content: "普通" });
+      await service.findOrCreateImCompanion("conv-3", "dm", "对端C");
+      const list = await service.listAllSorted();
+      const ids = list.map((s) => s.id);
+      expect(ids).toContain(normal.sessionId);
+      // 确认伴生会话不在列表里（通过 getImCompanion 拿到它的 id 再比对）
+      const companion = await service.getImCompanion("conv-3");
+      expect(ids).not.toContain(companion?.id);
+    });
+  });
+
   describe("账号隔离（ScopedRepository）", () => {
     it("两账号会话互不可见", async () => {
       await ctx.run("u1", () => rawService.createSession({ content: "s-u1" }));

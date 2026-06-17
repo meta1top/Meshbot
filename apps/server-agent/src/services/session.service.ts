@@ -282,20 +282,67 @@ export class SessionService {
 
   /**
    * 列出全部会话，按「固定优先 / 固定组按 pinnedAt desc / 其余按 updatedAt desc」
-   * 排序。客户端 sortSessions 与之等价。
+   * 排序。仅返回 kind='user' 的普通会话，伴生会话（kind='im'）隐藏。
    *
    * id desc 作 tie-breaker（避免同毫秒漂移）。当前 dev 量级一次性全取，未来上
    * 千再加分页。
+   *
+   * 注意：scopedQueryBuilder("s") 已用 .where() 注入账号过滤；kind 过滤必须用
+   * .andWhere()，否则会覆盖账号 where 条件导致账号隔离失效。
    */
   async listAllSorted(): Promise<SessionSummary[]> {
     const rows = await this.sessionRepo
       .scopedQueryBuilder("s")
+      .andWhere("s.kind = :kind", { kind: "user" })
       .orderBy("CASE WHEN s.pinned_at IS NULL THEN 1 ELSE 0 END", "ASC")
       .addOrderBy("s.pinned_at", "DESC")
       .addOrderBy("s.updated_at", "DESC")
       .addOrderBy("s.id", "DESC")
       .getMany();
     return rows.map(toSummary);
+  }
+
+  /**
+   * 找/建某 IM 会话的伴生会话（kind='im'）；同 conversationId 幂等。
+   * 单表写入，无需事务。
+   */
+  async findOrCreateImCompanion(
+    conversationId: string,
+    convType: "channel" | "dm",
+    title: string,
+  ): Promise<Session> {
+    const existing = await this.sessionRepo.findOneBy({
+      imConversationId: conversationId,
+      kind: "im",
+    });
+    if (existing) return existing;
+    return (await this.sessionRepo.save({
+      title,
+      status: "idle" as const,
+      kind: "im" as const,
+      imConversationId: conversationId,
+      imConvType: convType,
+      agentEnabled: true,
+    })) as Session;
+  }
+
+  /** 取某 IM 会话的伴生会话；无则 null。 */
+  async getImCompanion(conversationId: string): Promise<Session | null> {
+    return this.sessionRepo.findOneBy({
+      imConversationId: conversationId,
+      kind: "im",
+    });
+  }
+
+  /** 切换某 IM 会话伴生 Agent 开关。 */
+  async setCompanionAgentEnabled(
+    conversationId: string,
+    enabled: boolean,
+  ): Promise<void> {
+    await this.sessionRepo.update(
+      { imConversationId: conversationId, kind: "im" },
+      { agentEnabled: enabled },
+    );
   }
 
   /**

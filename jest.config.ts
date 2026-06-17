@@ -23,14 +23,10 @@ const config: Config = {
     "^@meshbot/types-agent$": "<rootDir>/libs/types-agent/src",
     "^@meshbot/types-main$": "<rootDir>/libs/types-main/src",
     // 强制 framework 包从单一物理路径解析，避免多份实例（同 token 不同
-    // identity → Nest DI 解析失败）。@nestjs/typeorm 在 pnpm hoisted 模式下
-    // 不提升到根；指向 apps/server-agent 下的稳定符号链接（链接名不随版本
-    // 变化，只目标变），避免硬编码 .pnpm 哈希路径。typeorm 已成功提升至
-    // 根 node_modules，保持原指向。
-    "^@nestjs/typeorm$":
-      "<rootDir>/apps/server-agent/node_modules/@nestjs/typeorm",
-    "^@nestjs/typeorm/(.*)$":
-      "<rootDir>/apps/server-agent/node_modules/@nestjs/typeorm/$1",
+    // identity → Nest DI 解析失败）。hoisted 模式下 @nestjs/typeorm 提升到根
+    // node_modules，直接指向根路径即可。typeorm 同理。
+    "^@nestjs/typeorm$": "<rootDir>/node_modules/@nestjs/typeorm",
+    "^@nestjs/typeorm/(.*)$": "<rootDir>/node_modules/@nestjs/typeorm/$1",
     "^typeorm$": "<rootDir>/node_modules/typeorm",
     "^typeorm/(.*)$": "<rootDir>/node_modules/typeorm/$1",
   },
