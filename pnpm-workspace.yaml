@@ -9,6 +9,12 @@ packages:
 # REMOVE_MODULES_DIR_NO_TTY 中断整个构建。
 verifyDepsBeforeRun: false
 
+# 强制 hoisted 扁平 node_modules（同样从 .npmrc 迁来——pnpm 11 不再读 .npmrc 的 node-linker）。
+# 必须 hoisted：默认 isolated 下 @nestjs/core 的 peer 变体会分裂成两份物理副本，
+# server-agent 与 libs/common 各拿一份，NestJS ModulesContainer 跨副本身份不匹配，
+# DiscoveryService 注入直接崩。hoisted 把 @nestjs/core 提到 root 单副本共享，规避此问题。
+nodeLinker: hoisted
+
 overrides:
   '@types/node': ^22
   '@langchain/langgraph-checkpoint': ~0.0.18
