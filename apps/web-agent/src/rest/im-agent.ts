@@ -40,9 +40,7 @@ export function agentSessionKey(conversationId: string): string[] {
 /** 订阅某会话的伴生会话信息；conversationId 为空时不发请求。 */
 export function useAgentSession(conversationId: string | null) {
   return useQuery({
-    queryKey: conversationId
-      ? agentSessionKey(conversationId)
-      : ["im-agent-session", "none"],
+    queryKey: agentSessionKey(conversationId ?? ""),
     queryFn: () => fetchAgentSession(conversationId as string),
     enabled: !!conversationId,
   });
