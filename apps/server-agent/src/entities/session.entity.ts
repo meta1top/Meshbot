@@ -39,6 +39,22 @@ export class Session {
   @Column({ name: "title_generated", default: false })
   titleGenerated!: boolean;
 
+  /** 'user' = 用户主动会话（默认）；'im' = IM 会话的伴生 Agent 会话（隐藏）。 */
+  @Column({ type: "varchar", default: "user" })
+  kind!: "user" | "im";
+
+  /** 伴生会话绑定的 IM conversationId；kind='user' 为 null。 */
+  @Column({ name: "im_conversation_id", type: "text", nullable: true })
+  imConversationId!: string | null;
+
+  /** 伴生会话对应的 IM 会话类型，用于触发判定；kind='user' 为 null。 */
+  @Column({ name: "im_conv_type", type: "varchar", nullable: true })
+  imConvType!: "channel" | "dm" | null;
+
+  /** 仅 kind='im' 有意义：该 IM 会话是否启用伴生 Agent，默认开。 */
+  @Column({ name: "agent_enabled", type: "boolean", default: true })
+  agentEnabled!: boolean;
+
   @CreateDateColumn({ name: "created_at" })
   createdAt!: Date;
 
