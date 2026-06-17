@@ -36,6 +36,13 @@ export function useChatScroll(opts: {
    * 直接到底，之后再用 smooth 跟流。切会话时消息清空（messages.length===0）会被重置 false。
    */
   const initialScrollDoneRef = useRef(false);
+  /**
+   * 用 ref 持有最新 onLoadMore：调用方常传内联箭头（每渲染新引用），
+   * 若直接进顶部哨兵 effect 依赖会导致 IO 每渲染 disconnect+reconnect
+   * （流式期间频繁 re-render 时尤甚）。ref pattern 让 effect 只随 hasMore 重建。
+   */
+  const onLoadMoreRef = useRef(opts.onLoadMore);
+  onLoadMoreRef.current = opts.onLoadMore;
 
   /**
    * 新消息或流式增量到达时，仅在 stickToBottom=true 时自动滚到底。
@@ -87,8 +94,9 @@ export function useChatScroll(opts: {
     return () => io.disconnect();
   }, []);
 
-  // 顶部哨兵触发上拉加载更早历史
-  // biome-ignore lint/correctness/useExhaustiveDependencies: topSentinelRef 是稳定 RefObject（.current 故意不进依赖，与原实现一致）
+  // 顶部哨兵触发上拉加载更早历史。仅随 hasMore 重建 IO（onLoadMore 走 ref，
+  // 不进依赖，避免内联箭头每渲染重建 observer）。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: topSentinelRef 稳定 RefObject、onLoadMore 走 onLoadMoreRef（.current 故意不进依赖）
   useEffect(() => {
     if (!opts.hasMore) return;
     const sentinel = opts.topSentinelRef.current;
@@ -96,14 +104,14 @@ export function useChatScroll(opts: {
     const io = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) {
-          opts.onLoadMore();
+          onLoadMoreRef.current();
         }
       },
       { rootMargin: "100px" },
     );
     io.observe(sentinel);
     return () => io.disconnect();
-  }, [opts.onLoadMore, opts.hasMore]);
+  }, [opts.hasMore]);
 
   const scrollToBottom = useCallback(() => {
     setStickToBottom(true);
