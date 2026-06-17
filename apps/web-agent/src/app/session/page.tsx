@@ -15,6 +15,7 @@ import { AppShellLayout } from "@/components/layouts/app-shell-layout";
 import { MessageList } from "@/components/session/message-list";
 import { PendingList } from "@/components/session/pending-list";
 import { SessionHeader } from "@/components/session/session-header";
+import { useChatScroll } from "@/hooks/use-chat-scroll";
 import { useSessionStream } from "@/hooks/use-session-stream";
 import { toI18nList } from "@/lib/i18n-list";
 import { useModelConfigs } from "@/rest/model-config";
@@ -26,7 +27,6 @@ function SessionView() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const sessionId = searchParams.get("id");
-  const bottomRef = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState("");
   const chatInputRef = useRef<ChatInputHandle>(null);
 
@@ -41,18 +41,8 @@ function SessionView() {
   }, [placeholders.length]);
   const inputPlaceholder = placeholders[phIdx];
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  /**
-   * 是否吸附到底部：决定流式输出时是否自动滚到底。
-   * - 初始 true（默认 follow）
-   * - 用户主动滚离底部 → bottomRef IO 报 not intersecting → false
-   * - 用户滚回底部（或点「滚到底」按钮）→ bottomRef IO 报 intersecting → true
-   */
-  const [stickToBottom, setStickToBottom] = useState(true);
-  /**
-   * 首次进入会话的 instant 跳底哨兵：跟随 effect 第一次触发时用 instant（无动画）
-   * 直接到底，之后再用 smooth 跟流。切会话时（initSession effect）会被重置 false。
-   */
-  const initialScrollDoneRef = useRef(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const topSentinelRef = useRef<HTMLDivElement>(null);
 
   const usageByMessage = useAtomValue(usageByMessageAtom);
   const sessionTotals = useAtomValue(sessionTotalsAtom);
@@ -66,12 +56,6 @@ function SessionView() {
     if (!sessionId) router.replace("/assistant");
   }, [sessionId, router]);
 
-  // 切换会话：复位首次跳底哨兵，让新会话首条消息渲染时走 instant（无「先看顶→滑下来」闪烁）。
-  // biome-ignore lint/correctness/useExhaustiveDependencies: sessionId 是触发 key，initialScrollDoneRef 是 RefObject（.current 故意不进依赖）
-  useEffect(() => {
-    initialScrollDoneRef.current = false;
-  }, [sessionId]);
-
   const stream = useSessionStream(sessionId, scrollContainerRef);
 
   const timelineMessages = useMemo(
@@ -83,47 +67,14 @@ function SessionView() {
     [stream.messages],
   );
 
-  /**
-   * 新消息或流式增量到达时，仅在 stickToBottom=true 时自动滚到底。
-   * 用户主动滚离底部时停止跟随；点右下角按钮可恢复。
-   *
-   * 首次触发（initialScrollDoneRef=false）走 instant：history fetch 完成后
-   * 视口直接到底，无「先看顶 → 滑下来」闪烁。之后才用 smooth 跟流。
-   */
-  useEffect(() => {
-    if (!stickToBottom) return;
-    // 消息还没就位（fetchHistory 未 resolve）：跳过；避免空 timeline
-    // 那次 effect 提前把首次哨兵置 true，导致下一次有内容时已走 smooth。
-    if (timelineMessages.length === 0) return;
-    if (!initialScrollDoneRef.current) {
-      initialScrollDoneRef.current = true;
-      // 不传 block：与 smooth 跟随保持一致（默认 "start"，sticky 输入框
-      // 不会遮挡末尾消息）。
-      bottomRef.current?.scrollIntoView({ behavior: "instant" });
-      return;
-    }
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [timelineMessages, stickToBottom]);
-
-  /**
-   * 底部哨兵 IO：bottomRef 可见 = 用户在底部 → stickToBottom=true；
-   * 不可见 = 用户滚走了 → false。直接基于"哨兵在不在视口"判断，比 scroll
-   * 事件 + 阈值检测更稳（不受 smooth 动画期间的瞬时偏移干扰）。
-   */
-  useEffect(() => {
-    const sentinel = bottomRef.current;
-    const root = scrollContainerRef.current;
-    if (!sentinel || !root) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        const visible = entries[0]?.isIntersecting ?? false;
-        setStickToBottom(visible);
-      },
-      { root, threshold: 0 },
-    );
-    io.observe(sentinel);
-    return () => io.disconnect();
-  }, []);
+  const { stickToBottom, scrollToBottom } = useChatScroll({
+    scrollContainerRef,
+    bottomRef,
+    topSentinelRef,
+    messages: timelineMessages,
+    hasMore: stream.hasMoreHistory,
+    onLoadMore: () => void stream.loadMoreHistory(),
+  });
 
   /**
    * 删除一条 pending 消息。
@@ -189,24 +140,6 @@ function SessionView() {
     }
   };
 
-  // 顶部哨兵触发上拉加载更早历史
-  const topSentinelRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!stream.hasMoreHistory) return;
-    const sentinel = topSentinelRef.current;
-    if (!sentinel) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) {
-          void stream.loadMoreHistory();
-        }
-      },
-      { rootMargin: "100px" },
-    );
-    io.observe(sentinel);
-    return () => io.disconnect();
-  }, [stream.loadMoreHistory, stream.hasMoreHistory]);
-
   return (
     <AppShellLayout
       scrollContainerRef={scrollContainerRef}
@@ -270,10 +203,7 @@ function SessionView() {
             type="button"
             aria-label={t("scrollToBottom")}
             className="absolute right-2 -top-12 flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background text-foreground shadow-sm hover:bg-muted"
-            onClick={() => {
-              setStickToBottom(true);
-              bottomRef.current?.scrollIntoView({ behavior: "instant" });
-            }}
+            onClick={scrollToBottom}
           >
             <ArrowDown className="h-4 w-4" />
           </button>
