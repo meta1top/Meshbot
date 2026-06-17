@@ -270,7 +270,16 @@
     "privateChannelNoMoreMembers": "No more members to add",
     "privateChannelLeave": "Leave channel",
     "privateChannelLeaveConfirm": "Leave \"{name}\"? You won't be able to see messages in this channel anymore.",
-    "privateChannelLeaving": "Leaving…"
+    "privateChannelLeaving": "Leaving…",
+    "agentPanelTitle": "Agent",
+    "agentSuggestion": "Agent suggestions",
+    "agentOn": "On",
+    "agentOff": "Off",
+    "agentSendToConversation": "Send to conversation",
+    "agentNoCandidate": "No candidate reply to send yet",
+    "agentInputPlaceholder": "Keep chatting with the agent to refine…",
+    "agentEmptyHint": "When a peer message arrives, the agent's suggestion appears here",
+    "agentDisabledHint": "Agent suggestions are off for this conversation"
   },
   "home": {
     "title": "What's up next?",
@@ -509,5 +518,14 @@
   "privateChannelNoMoreMembers": "",
   "privateChannelLeave": "",
   "privateChannelLeaveConfirm": "",
-  "privateChannelLeaving": ""
+  "privateChannelLeaving": "",
+  "agentPanelTitle": "",
+  "agentSuggestion": "",
+  "agentOn": "",
+  "agentOff": "",
+  "agentSendToConversation": "",
+  "agentNoCandidate": "",
+  "agentInputPlaceholder": "",
+  "agentEmptyHint": "",
+  "agentDisabledHint": ""
 }
