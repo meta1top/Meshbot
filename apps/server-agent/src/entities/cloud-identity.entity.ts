@@ -1,15 +1,11 @@
-import {
-  Column,
-  CreateDateColumn,
-  Entity,
-  PrimaryColumn,
-  UpdateDateColumn,
-} from "typeorm";
+import { SnowflakeBaseEntity } from "@meshbot/common";
+import { Column, CreateDateColumn, Entity, UpdateDateColumn } from "typeorm";
 
-/** 云端身份镜像（v3 多行）：每个登录过的云端账号一行，主键 = cloudUserId。 */
+/** 云端身份镜像（v3 多行）：每个登录过的云端账号一行，cloudUserId 唯一。 */
 @Entity("cloud_identity")
-export class CloudIdentity {
-  @PrimaryColumn({ name: "cloud_user_id", type: "text" })
+export class CloudIdentity extends SnowflakeBaseEntity {
+  /** 原主键，现为唯一索引列，业务查询仍用此字段。 */
+  @Column({ name: "cloud_user_id", type: "text", unique: true })
   cloudUserId!: string;
 
   @Column({ type: "text" })

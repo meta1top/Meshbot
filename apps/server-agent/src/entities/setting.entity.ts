@@ -1,11 +1,13 @@
-import { Column, Entity, PrimaryColumn } from "typeorm";
+import { SnowflakeBaseEntity } from "@meshbot/common";
+import { Column, Entity, Unique } from "typeorm";
 
 @Entity("settings")
-export class Setting {
-  @PrimaryColumn({ name: "cloud_user_id", type: "text" })
+@Unique(["cloudUserId", "key"])
+export class Setting extends SnowflakeBaseEntity {
+  @Column({ name: "cloud_user_id", type: "text" })
   cloudUserId!: string;
 
-  @PrimaryColumn()
+  @Column()
   key!: string;
 
   @Column()

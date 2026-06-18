@@ -117,10 +117,10 @@ export class SessionMessageService {
    * 单表写入，无需事务。seq 由 insertWithSeq 原子赋值。
    */
   async recordUser(input: RecordUserInput): Promise<void> {
-    const exists = await this.repo.findOneBy({ id: input.id });
+    const exists = await this.repo.findOneBy({ langgraphId: input.id });
     if (exists) return;
     await this.insertWithSeq({
-      id: input.id,
+      langgraphId: input.id,
       sessionId: input.sessionId,
       role: "user",
       content: input.content,
@@ -134,10 +134,10 @@ export class SessionMessageService {
    * 记录一条 assistant 消息（含可选 reasoning / toolCalls）。幂等。
    */
   async recordAssistant(input: RecordAssistantInput): Promise<void> {
-    const exists = await this.repo.findOneBy({ id: input.id });
+    const exists = await this.repo.findOneBy({ langgraphId: input.id });
     if (exists) return;
     await this.insertWithSeq({
-      id: input.id,
+      langgraphId: input.id,
       sessionId: input.sessionId,
       role: "assistant",
       content: input.content,
@@ -155,11 +155,11 @@ export class SessionMessageService {
    * metadata 用途单一（仅本字段），无需 kind 区分符。
    */
   async recordToolResult(input: RecordToolResultInput): Promise<void> {
-    const exists = await this.repo.findOneBy({ id: input.id });
+    const exists = await this.repo.findOneBy({ langgraphId: input.id });
     if (exists) return;
     const metadata = input.ok === false ? JSON.stringify({ ok: false }) : null;
     await this.insertWithSeq({
-      id: input.id,
+      langgraphId: input.id,
       sessionId: input.sessionId,
       role: "tool",
       content: input.content,
@@ -180,10 +180,10 @@ export class SessionMessageService {
   async recordCompactionPlaceholder(
     input: RecordCompactionPlaceholderInput,
   ): Promise<void> {
-    const exists = await this.repo.findOneBy({ id: input.id });
+    const exists = await this.repo.findOneBy({ langgraphId: input.id });
     if (exists) return;
     await this.insertWithSeq({
-      id: input.id,
+      langgraphId: input.id,
       sessionId: input.sessionId,
       role: "system",
       content: input.summary,
@@ -270,10 +270,10 @@ export class SessionMessageService {
   async existingIds(sessionId: string, ids: string[]): Promise<Set<string>> {
     if (ids.length === 0) return new Set();
     const rows = await this.repo.find({
-      where: { sessionId, id: In(ids) },
-      select: { id: true },
+      where: { sessionId, langgraphId: In(ids) },
+      select: { langgraphId: true },
     });
-    return new Set(rows.map((r) => r.id));
+    return new Set(rows.flatMap((r) => (r.langgraphId ? [r.langgraphId] : [])));
   }
 
   /** 取一条消息，按 id 查；不存在抛 NotFoundException。 */

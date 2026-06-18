@@ -1,28 +1,14 @@
-import {
-  Column,
-  CreateDateColumn,
-  Entity,
-  Index,
-  PrimaryColumn,
-} from "typeorm";
+import { SnowflakeBaseEntity } from "@meshbot/common";
+import { Column, CreateDateColumn, Entity, Index } from "typeorm";
 
 /**
  * 会话消息表（append-only，永不删）。
- *
- * 用作展示反面：与 LangGraph checkpointer 解耦，未来 LLM context 被 summarize
- * 压缩时不影响这里。所有 user / assistant / tool 消息都进此表。
- *
- * id 与 checkpointer 里 HumanMessage / AIMessage 的 id 对齐（user 消息亦是
- * pending_messages.id），三方一致便于关联查询和前后端去重。
+ * id = 雪花 PK；langgraphId = 原 LangGraph / checkpointer message UUID，用于三方关联查询。
  */
 @Entity("session_messages")
 @Index(["sessionId", "createdAt", "id"])
 @Index(["sessionId", "seq"])
-export class SessionMessage {
-  /** 与 checkpointer / pending_messages.id 对齐。 */
-  @PrimaryColumn()
-  id!: string;
-
+export class SessionMessage extends SnowflakeBaseEntity {
   @Column({ name: "cloud_user_id", type: "text" })
   cloudUserId!: string;
 
@@ -38,6 +24,13 @@ export class SessionMessage {
   /** 逻辑外键，无 DB 约束。 */
   @Column({ name: "session_id" })
   sessionId!: string;
+
+  /**
+   * 原 LangGraph / checkpointer message UUID（用于幂等检查和前端 pending 消息关联）。
+   * 新写入行必填；历史行迁移时无需回填（数据清空重建）。
+   */
+  @Column({ name: "langgraph_id", type: "varchar", nullable: true })
+  langgraphId!: string | null;
 
   /** "user" | "assistant" | "system" | "tool"；本次仅 user/assistant 写入。 */
   @Column({ type: "varchar" })
