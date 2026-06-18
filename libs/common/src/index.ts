@@ -3,6 +3,7 @@ export { CommonModule, type CommonModuleOptions } from "./common.module";
 export * from "./config";
 export * from "./decorators";
 export * from "./dto";
+export * from "./entities";
 export * from "./errors";
 export * from "./guards";
 export * from "./health";
