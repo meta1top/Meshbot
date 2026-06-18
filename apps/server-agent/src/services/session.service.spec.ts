@@ -232,8 +232,8 @@ describe("SessionService", () => {
     // 第一条 failed 已落入 session_messages（模拟 run.human 已记录），第二条没有
     const ds = (service as unknown as { __ds: DataSource }).__ds;
     await ds.query(
-      `INSERT INTO session_messages (id, session_id, cloud_user_id, role, content, seq) VALUES (?, ?, ?, 'user', 'm1', 1)`,
-      [claimed[0].id, sessionId, DEFAULT_USER],
+      `INSERT INTO session_messages (id, langgraph_id, session_id, cloud_user_id, role, content, seq) VALUES (?, ?, ?, ?, 'user', 'm1', 1)`,
+      ["hist-1", claimed[0].id, sessionId, DEFAULT_USER],
     );
     const rows = await service.listActivePendingWithHistory(sessionId);
     const target = rows.find((r) => r.id === claimed[0].id);

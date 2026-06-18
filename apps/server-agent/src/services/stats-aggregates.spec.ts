@@ -1,4 +1,5 @@
 import { AccountContextService } from "@meshbot/agent";
+import { generateSnowflakeId } from "@meshbot/common";
 import { DataSource } from "typeorm";
 import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
 import { LlmCall } from "../entities/llm-call.entity";
@@ -95,6 +96,7 @@ describe("stats 聚合方法", () => {
     const repo = ds.getRepository(LlmCall);
     await repo.insert([
       {
+        id: generateSnowflakeId(),
         sessionId: "s1",
         messageId: "m1",
         cloudUserId: DEFAULT_USER,
@@ -110,6 +112,7 @@ describe("stats 聚合方法", () => {
         createdAt: new Date(2026, 4, 27, 18, 0),
       },
       {
+        id: generateSnowflakeId(),
         sessionId: "s1",
         messageId: "m2",
         cloudUserId: DEFAULT_USER,
@@ -125,6 +128,7 @@ describe("stats 聚合方法", () => {
         createdAt: new Date(2026, 4, 27, 18, 5),
       },
       {
+        id: generateSnowflakeId(),
         sessionId: "s1",
         messageId: "m3",
         cloudUserId: DEFAULT_USER,

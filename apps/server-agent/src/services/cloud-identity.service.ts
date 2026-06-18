@@ -23,7 +23,17 @@ export class CloudIdentityService {
     return this.repo.findOne({ where: { cloudUserId } });
   }
 
-  /** 登录时 upsert 该账号镜像并置 loggedIn=true。 */
+  /**
+   * 登录时 upsert 该账号镜像并置 loggedIn=true。
+   *
+   * 雪花 ID 迁移后主键从 cloudUserId 改为代理 id：旧的 `save({...})` 既无法靠
+   * @BeforeInsert 生成 id（plain object 不触发 hook），又因主键不再是 cloudUserId
+   * 而无法按账号 upsert（每次都 INSERT → 撞 cloud_user_id 唯一约束）。
+   * 故改为按 cloudUserId find-then-update/insert：命中则更新（保留既有 id），
+   * 否则 create() 成实例再 save（@BeforeInsert 生成雪花 id）。
+   *
+   * tx-check: ignore —— 单表(cloud_identity) upsert：update / insert 二选一互斥，单次写入。
+   */
   async upsert(fields: {
     cloudUserId: string;
     email: string;
@@ -34,7 +44,17 @@ export class CloudIdentityService {
     orgName: string | null;
     role: string | null;
   }): Promise<void> {
-    await this.repo.save({ ...fields, loggedIn: true });
+    const existing = await this.repo.findOne({
+      where: { cloudUserId: fields.cloudUserId },
+    });
+    if (existing) {
+      await this.repo.update(
+        { cloudUserId: fields.cloudUserId },
+        { ...fields, loggedIn: true },
+      );
+      return;
+    }
+    await this.repo.save(this.repo.create({ ...fields, loggedIn: true }));
   }
 
   /** 更新某账号当前组织。 */

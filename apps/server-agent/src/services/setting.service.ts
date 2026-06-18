@@ -32,9 +32,18 @@ export class SettingService {
 
   /**
    * 设置指定 key 的值（upsert）。
-   * 复合主键 (cloudUserId, key)：save 自动盖上当前账号，TypeORM 对已存在行做更新。
+   * 雪花 ID 迁移后主键改为代理 id（key 退化为 cloudUserId+key 唯一索引），
+   * save 不再能按 key upsert，故按 (当前账号,key) find-then-update/insert：
+   * 命中则改值后 save（实例带 id → 更新），否则 save 新行（scoped 会 create 实例 → 生成雪花 id）。
+   *
+   * tx-check: ignore —— 单表(setting) upsert：两分支二选一互斥，单次写入。
    */
   async set(key: string, value: string): Promise<Setting> {
+    const existing = await this.repo.findOneBy({ key });
+    if (existing) {
+      existing.value = value;
+      return this.repo.save(existing);
+    }
     return this.repo.save({ key, value } as Setting);
   }
 
