@@ -37,11 +37,9 @@ export default function LoginPage() {
     // 否则进主页。fetchAuthStatus 走 apiClient，已带上刚登录账号的活跃 token。
     try {
       const status = await fetchAuthStatus();
-      router.replace(
-        status.step === "needs-org" || status.step === "needs-model"
-          ? "/setup"
-          : "/assistant",
-      );
+      // needs-org 必须走 /setup 补完组织创建流程；
+      // needs-model / ready 均进 /assistant，由 AuthGuard 布局层决定是否显示模型配置引导。
+      router.replace(status.step === "needs-org" ? "/setup" : "/assistant");
     } catch {
       router.replace("/assistant");
     }
