@@ -18,34 +18,20 @@ import {
   FormLabel,
   FormMessage,
   Input,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
 } from "@meshbot/design";
 import { useSchema } from "@meshbot/design/hooks";
 import { registerSchema } from "@meshbot/types-agent";
-import type { ModelConfigInput, ProviderDef } from "@meshbot/web-common";
 import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
-import {
-  siAnthropic,
-  siDeepseek,
-  siGooglegemini,
-  siOllama,
-  siOpenaigym,
-  siOpenrouter,
-} from "simple-icons";
 import { z } from "zod";
 import { AuthShellLayout } from "@/components/layouts/auth-shell-layout";
-import ModelForm from "@/components/setup/model-form";
+import { ModelStep } from "@/components/setup/model-step";
 import { OrgStep } from "@/components/setup/org-step";
 import { useAuthStatus, useRegister } from "@/rest/auth";
-import { useCreateModelConfig, useProviders } from "@/rest/model-config";
 
 type SetupRegisterValues = {
   email: string;
@@ -63,66 +49,15 @@ const STEP_ORDER: Record<WizardStep, number> = {
   model: 2,
 };
 
-type SimpleIconLike = {
-  path: string;
-  hex: string;
-};
-
-const PROVIDER_ICON_MAP: Record<string, SimpleIconLike> = {
-  openai: siOpenaigym,
-  anthropic: siAnthropic,
-  google: siGooglegemini,
-  deepseek: siDeepseek,
-  ollama: siOllama,
-  "openai-compatible": siOpenrouter,
-};
-
-function ProviderOption({ provider }: { provider: ProviderDef }) {
-  const icon = PROVIDER_ICON_MAP[provider.type];
-
-  return (
-    <div className="flex w-full min-w-0 items-center gap-2.5">
-      <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-muted">
-        {icon ? (
-          <svg
-            viewBox="0 0 24 24"
-            className="h-3.5 w-3.5"
-            role="img"
-            aria-hidden="true"
-            style={{ color: `#${icon.hex}` }}
-          >
-            <path d={icon.path} fill="currentColor" />
-          </svg>
-        ) : (
-          <span className="text-[10px] font-semibold tracking-wide text-muted-foreground">
-            {provider.name.slice(0, 2).toUpperCase()}
-          </span>
-        )}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-current">
-          {provider.name}
-        </p>
-        <p className="truncate text-xs leading-5 text-current/70">
-          {provider.description}
-        </p>
-      </div>
-    </div>
-  );
-}
-
 export default function SetupPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const t = useTranslations("setup");
 
   const { data: authStatus } = useAuthStatus();
-  const { data: providers = [] } = useProviders();
   const registerMutation = useRegister();
-  const createModelMutation = useCreateModelConfig();
 
   const [step, setStep] = useState<WizardStep>("register");
-  const [selected, setSelected] = useState<ProviderDef | null>(null);
   const translatedRegisterSchema = useSchema(registerSchema);
   const setupRegisterSchema = translatedRegisterSchema
     .extend({
@@ -159,12 +94,6 @@ export default function SetupPage() {
     setStep((cur) => (STEP_ORDER[target] > STEP_ORDER[cur] ? target : cur));
   }, [authStatus]);
 
-  useEffect(() => {
-    if (step === "model" && !selected && providers.length > 0) {
-      setSelected(providers[0] ?? null);
-    }
-  }, [providers, selected, step]);
-
   const onSubmit = async ({
     email,
     displayName,
@@ -178,12 +107,6 @@ export default function SetupPage() {
         message: err instanceof Error ? err.message : t("registerFailed"),
       });
     }
-  };
-
-  const handleModelSubmit = async (data: ModelConfigInput) => {
-    await createModelMutation.mutateAsync(data);
-    await queryClient.invalidateQueries({ queryKey: ["auth", "status"] });
-    router.push("/assistant");
   };
 
   return (
@@ -325,78 +248,12 @@ export default function SetupPage() {
           )}
 
           {step === "model" && (
-            <Card>
-              <CardHeader className="space-y-1">
-                <CardTitle>{t("chooseProvider")}</CardTitle>
-                <CardDescription>
-                  {t("chooseProviderDescription")}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-3">
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold tracking-wide text-muted-foreground">
-                      {t("provider")}
-                    </p>
-                    <Select
-                      value={selected?.type ?? ""}
-                      onValueChange={(type) => {
-                        const provider = providers.find(
-                          (item) => item.type === type,
-                        );
-                        setSelected(provider ?? null);
-                      }}
-                    >
-                      <SelectTrigger className="h-12 px-3 text-left [&>span]:flex [&>span]:w-full [&>span]:items-center [&>span]:text-left [&>svg]:text-muted-foreground">
-                        {selected ? (
-                          <ProviderOption provider={selected} />
-                        ) : (
-                          <span className="text-sm text-muted-foreground">
-                            {t("chooseProviderPlaceholder")}
-                          </span>
-                        )}
-                      </SelectTrigger>
-                      <SelectContent>
-                        {providers.map((provider) => (
-                          <SelectItem
-                            key={provider.type}
-                            value={provider.type}
-                            className="py-2.5 pr-9"
-                          >
-                            <ProviderOption provider={provider} />
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {selected ? (
-                    <div className="pr-1">
-                      <h3 className="mb-3 border-t border-border pt-4 text-sm font-semibold tracking-wide text-foreground/80">
-                        {t("modelConfig")}
-                      </h3>
-                      <ModelForm
-                        key={selected.type}
-                        provider={selected}
-                        onSubmit={handleModelSubmit}
-                        submitting={createModelMutation.isPending}
-                        error={
-                          createModelMutation.error instanceof Error
-                            ? createModelMutation.error.message
-                            : createModelMutation.error
-                              ? t("saveFailed")
-                              : null
-                        }
-                      />
-                    </div>
-                  ) : (
-                    <div className="flex min-h-[220px] items-center justify-center rounded-md border border-dashed border-border text-sm text-muted-foreground">
-                      {t("chooseProviderToStart")}
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+            <ModelStep
+              onDone={() => {
+                queryClient.invalidateQueries({ queryKey: ["auth", "status"] });
+                router.push("/assistant");
+              }}
+            />
           )}
         </div>
       </div>
