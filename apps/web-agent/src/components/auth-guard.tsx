@@ -2,12 +2,15 @@
 
 import type { AuthStatus } from "@meshbot/types-agent";
 import { getAccessToken, getBrowserApiBaseUrl } from "@meshbot/web-common";
+import { useQuery } from "@tanstack/react-query";
 import { useAtomValue } from "jotai";
 import { Loader2 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { profileQueryAtom } from "@/atoms/auth";
+import { ModelSetupOverlay } from "@/components/model-setup-overlay";
 import { ProfileUnauthorizedError } from "@/rest/auth";
+import { fetchModelConfigs } from "@/rest/model-config";
 
 /** 启动鉴权守卫：profile 优先判定，401 时拉 setup-status 分流。 */
 export function AuthGuard({ children }: { children: React.ReactNode }) {
@@ -15,6 +18,17 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const profile = useAtomValue(profileQueryAtom);
   const [resolved, setResolved] = useState(false);
+
+  const isAuthenticated = profile.isSuccess && profile.data != null;
+  const isPreLoginRoute = pathname === "/login" || pathname === "/setup";
+
+  const { data: modelConfigs, isPending: modelsPending } = useQuery({
+    queryKey: ["model-configs"],
+    queryFn: fetchModelConfigs,
+    // 仅在已认证且不在登录前路由时才拉取，避免未认证状态发出无效请求
+    enabled: isAuthenticated && !isPreLoginRoute,
+    staleTime: 60_000,
+  });
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: isSuccess gates data
   useEffect(() => {
@@ -87,6 +101,13 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
   if (profile.isPending || !resolved) {
     return <SplashScreen />;
+  }
+
+  // 已认证 + 非登录前路由：追加模型配置守卫
+  if (isAuthenticated && !isPreLoginRoute) {
+    if (modelsPending) return <SplashScreen />;
+    // 成功拉到空列表 → 引导配置；拉取失败（网络异常等）不阻塞用户
+    if (modelConfigs?.length === 0) return <ModelSetupOverlay />;
   }
 
   return <>{children}</>;
