@@ -22,6 +22,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback } from "react";
 import { currentUserAtom } from "@/atoms/auth";
+import { BrandLogo } from "@/components/brand-logo";
 import { RailNavItem } from "@/components/shell/rail-nav-item";
 import { useLogout } from "@/rest/auth";
 
@@ -63,9 +64,7 @@ export function WorkspaceRail() {
 
   return (
     <div className="flex h-full w-[68px] shrink-0 flex-col items-center gap-2 bg-(--shell-chrome) px-1.5 pt-2 pb-4">
-      <div className="flex h-8 w-8 items-center justify-center rounded-(--shell-radius) bg-(--shell-accent) text-[15px] font-extrabold text-white">
-        M
-      </div>
+      <BrandLogo size="sm" />
       <nav className="mt-1 flex w-full flex-col gap-1">
         <RailNavItem
           icon={<Home className="h-5 w-5" />}

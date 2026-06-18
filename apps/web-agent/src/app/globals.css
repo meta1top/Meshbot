@@ -159,6 +159,12 @@ pre code.hljs {
   padding-left: max(0.5rem, calc(var(--mac-controls-safe-left) - 0.75rem));
 }
 
+/* 桌面端：auth 品牌区下移，避开 macOS 红绿灯 / 顶部拖拽区。
+   浏览器无 .electron-shell，不受影响；左面板仅 lg+ 可见，此规则在窄屏无副作用。 */
+.electron-shell.auth-shell-mode .auth-brand {
+  margin-top: var(--titlebar-height);
+}
+
 @media (min-width: 1024px) {
   .electron-shell .titlebar-safe {
     padding-top: 0;

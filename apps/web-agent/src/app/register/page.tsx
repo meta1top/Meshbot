@@ -112,9 +112,6 @@ export default function SetupPage() {
     <AuthShellLayout>
       <div className={cn("w-full max-w-[420px]")}>
         <div className="pr-1">
-          <span className="mb-4 inline-flex items-center rounded-md border border-border bg-card px-2.5 py-1 text-[11px] font-semibold tracking-[0.08em] text-muted-foreground">
-            {t("getStarted")}
-          </span>
           {step === "register" && (
             <Card className="border-0 shadow-none">
               <CardHeader className="space-y-1">

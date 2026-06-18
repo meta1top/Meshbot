@@ -8,6 +8,7 @@ import { Loader2 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { profileQueryAtom } from "@/atoms/auth";
+import { BrandLogo } from "@/components/brand-logo";
 import { ModelSetupGate } from "@/components/model-setup-gate";
 import { ProfileUnauthorizedError } from "@/rest/auth";
 import { fetchModelConfigs } from "@/rest/model-config";
@@ -138,14 +139,7 @@ function SplashScreen() {
       <div className="drag-handle fixed top-0 right-0 left-0 h-[42px]" />
 
       <div className="flex flex-col items-center gap-6">
-        <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-foreground shadow-[0_2px_8px_rgba(0,0,0,0.12)]">
-            <span className="text-base font-semibold text-background">🤖</span>
-          </div>
-          <span className="text-[22px] font-semibold tracking-tight text-foreground">
-            AnyBOT
-          </span>
-        </div>
+        <BrandLogo size="lg" withWordmark />
 
         <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
