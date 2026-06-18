@@ -23,6 +23,7 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { ACCENT_BTN } from "@/lib/ui";
 
 type ModelConfigFormValues = {
   name?: string;
@@ -225,7 +226,7 @@ export default function ModelForm({
 
         <Button
           type="submit"
-          className="mt-2 bg-(--shell-accent) text-white hover:opacity-90"
+          className={`mt-2 ${ACCENT_BTN}`}
           disabled={submitting}
         >
           {submitting ? t("saving") : t("saveAndStart")}

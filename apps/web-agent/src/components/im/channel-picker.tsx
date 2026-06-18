@@ -262,7 +262,7 @@ export function ChannelPicker({
             <button
               type="submit"
               disabled={submitting || !channelName.trim()}
-              className="rounded-md bg-(--shell-accent) px-3.5 py-1.5 text-[13px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              className="rounded-md bg-(--shell-accent) px-3.5 py-1.5 text-[13px] font-medium text-white transition-colors hover:bg-(--shell-accent-hover) disabled:opacity-50"
             >
               {submitting ? t("channelCreating") : t("channelCreate")}
             </button>

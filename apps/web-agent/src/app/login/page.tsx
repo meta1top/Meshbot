@@ -18,6 +18,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { AuthShellLayout } from "@/components/layouts/auth-shell-layout";
+import { ACCENT_BTN } from "@/lib/ui";
 import { fetchAuthStatus, useLogin } from "@/rest/auth";
 
 export default function LoginPage() {
@@ -110,7 +111,7 @@ export default function LoginPage() {
 
               <Button
                 type="submit"
-                className="mt-2 w-full bg-(--shell-accent) text-white hover:opacity-90"
+                className={`mt-2 w-full ${ACCENT_BTN}`}
                 disabled={loginMutation.isPending}
               >
                 {loginMutation.isPending ? t("signingIn") : t("signIn")}

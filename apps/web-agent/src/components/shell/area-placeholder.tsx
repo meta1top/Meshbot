@@ -19,7 +19,7 @@ export function AreaPlaceholder({
       <button
         type="button"
         onClick={() => router.push("/assistant")}
-        className="mt-2 rounded-(--shell-radius) bg-(--shell-accent) px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+        className="mt-2 rounded-(--shell-radius) bg-(--shell-accent) px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-(--shell-accent-hover)"
       >
         {t("placeholder.goAssistant")}
       </button>

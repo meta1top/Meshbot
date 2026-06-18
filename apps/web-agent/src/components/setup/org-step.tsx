@@ -21,6 +21,7 @@ import {
 } from "@meshbot/types-agent";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { ACCENT_BTN } from "@/lib/ui";
 import { useCreateOrg, useJoinOrg } from "@/rest/org";
 
 type Tab = "create" | "join";
@@ -96,7 +97,7 @@ export function OrgStep({ onDone }: { onDone: () => void }) {
             ) : null}
             <Button
               type="submit"
-              className="bg-(--shell-accent) text-white hover:opacity-90"
+              className={ACCENT_BTN}
               disabled={createOrg.isPending}
             >
               {createOrg.isPending
@@ -125,7 +126,7 @@ export function OrgStep({ onDone }: { onDone: () => void }) {
             ) : null}
             <Button
               type="submit"
-              className="bg-(--shell-accent) text-white hover:opacity-90"
+              className={ACCENT_BTN}
               disabled={joinOrg.isPending}
             >
               {joinOrg.isPending ? t("orgJoining") : t("orgJoinAndContinue")}

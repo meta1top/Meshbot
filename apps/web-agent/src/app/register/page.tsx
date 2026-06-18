@@ -31,6 +31,7 @@ import { z } from "zod";
 import { AuthShellLayout } from "@/components/layouts/auth-shell-layout";
 import { ModelStep } from "@/components/setup/model-step";
 import { OrgStep } from "@/components/setup/org-step";
+import { ACCENT_BTN } from "@/lib/ui";
 import { useAuthStatus, useRegister } from "@/rest/auth";
 
 type SetupRegisterValues = {
@@ -215,7 +216,7 @@ export default function SetupPage() {
 
                     <Button
                       type="submit"
-                      className="mt-1 bg-(--shell-accent) text-white hover:opacity-90"
+                      className={`mt-1 ${ACCENT_BTN}`}
                       disabled={registerMutation.isPending}
                     >
                       {registerMutation.isPending
