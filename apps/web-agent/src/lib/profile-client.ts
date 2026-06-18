@@ -18,7 +18,7 @@ export class ProfileUnauthorizedError extends Error {
  * 请求当前用户 profile。
  *
  * 独立于 apiClient —— apiClient 的 401 拦截器会硬跳转 /login，与 AuthGuard
- * 的 401 分流（可能要去 /setup）冲突。这里 401 抛 ProfileUnauthorizedError
+ * 的 401 分流（可能要去 /register）冲突。这里 401 抛 ProfileUnauthorizedError
  * 交给 AuthGuard 决策。响应走 server envelope，手动取内层 data。
  */
 export async function fetchProfile(): Promise<UserInfo> {
