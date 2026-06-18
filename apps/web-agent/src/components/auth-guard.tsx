@@ -8,7 +8,7 @@ import { Loader2 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { profileQueryAtom } from "@/atoms/auth";
-import { ModelSetupOverlay } from "@/components/model-setup-overlay";
+import { ModelSetupGate } from "@/components/model-setup-gate";
 import { ProfileUnauthorizedError } from "@/rest/auth";
 import { fetchModelConfigs } from "@/rest/model-config";
 
@@ -65,7 +65,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
           return;
         }
         const step = setup.step;
-        if (step === "needs-org" || step === "needs-model") {
+        if (step === "needs-org") {
           if (pathname !== "/register") {
             setResolved(false);
             router.replace("/register");
@@ -79,8 +79,8 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
             return;
           }
         } else if (pathname !== "/login" && pathname !== "/register") {
-          // ready 但本地无 JWT → 默认去 /login 重新登录；
-          // 放行停留 /register（已完成本地配置仍可注册新账号）
+          // needs-model / ready 但本地无 JWT → 默认去 /login 重新登录；
+          // 模型未配置的判定统一交给登录后的 model-configs 守卫（ModelSetupGate）
           setResolved(false);
           router.replace("/login");
           return;
@@ -107,7 +107,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   if (isAuthenticated && !isPreLoginRoute) {
     if (modelsPending) return <SplashScreen />;
     // 成功拉到空列表 → 引导配置；拉取失败（网络异常等）不阻塞用户
-    if (modelConfigs?.length === 0) return <ModelSetupOverlay />;
+    if (modelConfigs?.length === 0) return <ModelSetupGate />;
   }
 
   return <>{children}</>;

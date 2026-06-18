@@ -29,7 +29,7 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { AuthShellLayout } from "@/components/layouts/auth-shell-layout";
-import { ModelStep } from "@/components/setup/model-step";
+
 import { OrgStep } from "@/components/setup/org-step";
 import { ACCENT_BTN } from "@/lib/ui";
 import { useAuthStatus, useRegister } from "@/rest/auth";
@@ -41,13 +41,12 @@ type SetupRegisterValues = {
   confirmPassword: string;
 };
 
-type WizardStep = "register" | "org" | "model";
+type WizardStep = "register" | "org";
 
 /** 向导步骤顺序 —— setup-status 只能「向前」推进，不能把用户已推进的步骤往回拽。 */
 const STEP_ORDER: Record<WizardStep, number> = {
   register: 0,
   org: 1,
-  model: 2,
 };
 
 export default function SetupPage() {
@@ -83,17 +82,16 @@ export default function SetupPage() {
 
   useEffect(() => {
     if (!authStatus) return;
-    const target: WizardStep | null =
-      authStatus.step === "needs-org"
-        ? "org"
-        : authStatus.step === "needs-model"
-          ? "model"
-          : null;
-    if (!target) return;
-    // 只向前推进（如刷新后从正确步骤续上），绝不回拽用户已推进的步骤
-    // —— 避免 setup-status 刷新延迟把 model 步骤拽回 org。
-    setStep((cur) => (STEP_ORDER[target] > STEP_ORDER[cur] ? target : cur));
-  }, [authStatus]);
+    // 模型配置已移出向导：服务端判定 needs-model 时，交给登录后 shell 的模型引导处理
+    if (authStatus.step === "needs-model") {
+      router.replace("/assistant");
+      return;
+    }
+    // 注册成功 → 服务端转 needs-org，向导只向前推进到 org，绝不回拽用户已推进的步骤
+    if (authStatus.step === "needs-org") {
+      setStep((cur) => (STEP_ORDER.org > STEP_ORDER[cur] ? "org" : cur));
+    }
+  }, [authStatus, router]);
 
   const onSubmit = async ({
     email,
@@ -241,15 +239,6 @@ export default function SetupPage() {
 
           {step === "org" && (
             <OrgStep
-              onDone={() => {
-                queryClient.invalidateQueries({ queryKey: ["auth", "status"] });
-                setStep("model");
-              }}
-            />
-          )}
-
-          {step === "model" && (
-            <ModelStep
               onDone={() => {
                 queryClient.invalidateQueries({ queryKey: ["auth", "status"] });
                 router.push("/assistant");
