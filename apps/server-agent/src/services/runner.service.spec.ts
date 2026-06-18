@@ -60,7 +60,7 @@ function fakeSessionService() {
         status: "pending",
         createdAt: new Date(),
         processedAt: null,
-      });
+      } as PendingMessage);
     },
   };
 }

@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { CronExpressionParser } from "cron-parser";
@@ -61,10 +60,8 @@ export class ScheduleService {
 
   /** 新增计划任务，自动计算 nextFireAt（自动盖上当前账号 cloudUserId）。 */
   async create(input: CreateCronJobInput): Promise<CronJob> {
-    const id = randomUUID();
     const nextFireAt = ScheduleService.computeNextFireAt(input);
     const entity = await this.repo.save({
-      id,
       sessionId: input.sessionId,
       title: input.title,
       prompt: input.prompt,

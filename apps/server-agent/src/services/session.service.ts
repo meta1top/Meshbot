@@ -210,7 +210,12 @@ export class SessionService {
       sessionId,
       rows.map((r) => r.id),
     );
-    return rows.map((r) => ({ ...r, inHistory: existing.has(r.id) }));
+    return rows.map(
+      (r) =>
+        ({ ...r, inHistory: existing.has(r.id) }) as PendingMessage & {
+          inHistory: boolean;
+        },
+    );
   }
 
   /**
@@ -227,7 +232,9 @@ export class SessionService {
       { id: In(rows.map((r) => r.id)) },
       { status: "processing" },
     );
-    return rows.map((r) => ({ ...r, status: "processing" as const }));
+    return rows.map(
+      (r) => ({ ...r, status: "processing" as const }) as PendingMessage,
+    );
   }
 
   /**
@@ -244,7 +251,9 @@ export class SessionService {
       { id: In(rows.map((r) => r.id)) },
       { status: "processing" },
     );
-    return rows.map((r) => ({ ...r, status: "processing" as const }));
+    return rows.map(
+      (r) => ({ ...r, status: "processing" as const }) as PendingMessage,
+    );
   }
 
   /** 把一批消息标记为 failed（run 出错时调用；HumanMessage 已在 checkpointer）。 */

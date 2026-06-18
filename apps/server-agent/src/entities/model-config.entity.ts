@@ -1,16 +1,8 @@
-import {
-  Column,
-  CreateDateColumn,
-  Entity,
-  PrimaryGeneratedColumn,
-  UpdateDateColumn,
-} from "typeorm";
+import { SnowflakeBaseEntity } from "@meshbot/common";
+import { Column, CreateDateColumn, Entity, UpdateDateColumn } from "typeorm";
 
 @Entity("model_configs")
-export class ModelConfig {
-  @PrimaryGeneratedColumn("uuid")
-  id!: string;
-
+export class ModelConfig extends SnowflakeBaseEntity {
   @Column({ name: "cloud_user_id", type: "text" })
   cloudUserId!: string;
 
@@ -32,10 +24,6 @@ export class ModelConfig {
   @Column({ default: true })
   enabled!: boolean;
 
-  /**
-   * 模型上下文窗口（token），配置入库时一次性解析固化（spec 后续变化不回填）。
-   * 解析优先级：用户显式给 > MODEL_SPECS > FALLBACK_CONTEXT_WINDOW（128_000）。
-   */
   @Column({ name: "context_window", type: "int", default: 128_000 })
   contextWindow!: number;
 
