@@ -1,4 +1,5 @@
 import { AccountContextService } from "@meshbot/agent";
+import { generateSnowflakeId } from "@meshbot/common";
 import type { HeatmapCell } from "@meshbot/types-agent";
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -102,6 +103,7 @@ export class SessionMessageService {
       .into(SessionMessage)
       .values({
         ...row,
+        id: generateSnowflakeId(),
         cloudUserId: acct,
         createdAt: () => "datetime('now')",
         seq: () =>

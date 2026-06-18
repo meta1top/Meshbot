@@ -95,9 +95,11 @@ describe("SessionMessageService", () => {
 
   it("recordUser 写入 user 消息", async () => {
     await service.recordUser({ id: "u1", sessionId: "s1", content: "hi" });
-    const row = await ds.getRepository(SessionMessage).findOneBy({ id: "u1" });
+    const row = await ds
+      .getRepository(SessionMessage)
+      .findOneBy({ langgraphId: "u1" });
     expect(row).toMatchObject({
-      id: "u1",
+      langgraphId: "u1",
       sessionId: "s1",
       cloudUserId: DEFAULT_USER,
       role: "user",
@@ -109,7 +111,9 @@ describe("SessionMessageService", () => {
   it("recordUser 重复 id 幂等（不抛、不覆盖）", async () => {
     await service.recordUser({ id: "u1", sessionId: "s1", content: "first" });
     await service.recordUser({ id: "u1", sessionId: "s1", content: "second" });
-    const row = await ds.getRepository(SessionMessage).findOneBy({ id: "u1" });
+    const row = await ds
+      .getRepository(SessionMessage)
+      .findOneBy({ langgraphId: "u1" });
     expect(row?.content).toBe("first");
   });
 
@@ -120,7 +124,9 @@ describe("SessionMessageService", () => {
       content: "你好",
       reasoning: "thinking...",
     });
-    const row = await ds.getRepository(SessionMessage).findOneBy({ id: "a1" });
+    const row = await ds
+      .getRepository(SessionMessage)
+      .findOneBy({ langgraphId: "a1" });
     expect(row).toMatchObject({
       role: "assistant",
       content: "你好",
@@ -135,7 +141,7 @@ describe("SessionMessageService", () => {
     const rows = await ds
       .getRepository(SessionMessage)
       .find({ where: { sessionId: "s1" }, order: { seq: "ASC" } });
-    expect(rows.map((r) => [r.id, r.seq])).toEqual([
+    expect(rows.map((r) => [r.langgraphId, r.seq])).toEqual([
       ["u1", 1],
       ["u2", 2],
       ["u3", 3],
@@ -146,8 +152,12 @@ describe("SessionMessageService", () => {
     await service.recordUser({ id: "a1", sessionId: "sA", content: "a" });
     await service.recordUser({ id: "b1", sessionId: "sB", content: "b" });
     await service.recordUser({ id: "a2", sessionId: "sA", content: "c" });
-    const a = await ds.getRepository(SessionMessage).findOneBy({ id: "a2" });
-    const b = await ds.getRepository(SessionMessage).findOneBy({ id: "b1" });
+    const a = await ds
+      .getRepository(SessionMessage)
+      .findOneBy({ langgraphId: "a2" });
+    const b = await ds
+      .getRepository(SessionMessage)
+      .findOneBy({ langgraphId: "b1" });
     expect(a?.seq).toBe(2);
     expect(b?.seq).toBe(1);
   });
@@ -166,8 +176,12 @@ describe("SessionMessageService", () => {
       toolCallId: "tc1",
       content: "r",
     });
-    const a = await ds.getRepository(SessionMessage).findOneBy({ id: "a1" });
-    const t = await ds.getRepository(SessionMessage).findOneBy({ id: "tc1" });
+    const a = await ds
+      .getRepository(SessionMessage)
+      .findOneBy({ langgraphId: "a1" });
+    const t = await ds
+      .getRepository(SessionMessage)
+      .findOneBy({ langgraphId: "tc1" });
     expect(a?.seq).toBe(2);
     expect(t?.seq).toBe(3);
   });
@@ -208,14 +222,15 @@ describe("SessionMessageService", () => {
   });
 
   it("listPage 有 before 返 before 之前的 N 条", async () => {
-    const ids = await seed("s1", [
+    const msgIds = await seed("s1", [
       { role: "user", content: "m1", offsetMs: 0 },
       { role: "assistant", content: "m2", offsetMs: 1 },
       { role: "user", content: "m3", offsetMs: 2 },
       { role: "assistant", content: "m4", offsetMs: 3 },
     ]);
+    // 从 seed 返回的是随机 UUID，用作 id。listPage 的 before 参数需要 id。
     // before = m3（index 2）→ 应返 [m1, m2]
-    const res = await service.listPage("s1", { before: ids[2], limit: 10 });
+    const res = await service.listPage("s1", { before: msgIds[2], limit: 10 });
     expect(res.messages.map((m) => m.content)).toEqual(["m1", "m2"]);
     expect(res.hasMore).toBe(false);
   });
@@ -231,25 +246,27 @@ describe("SessionMessageService", () => {
   });
 
   it("listPage before 指向不属于 session 的 id → NotFoundException（防越权）", async () => {
-    const aIds = await seed("sA", [
+    const aMsgIds = await seed("sA", [
       { role: "user", content: "in-a", offsetMs: 0 },
     ]);
     await seed("sB", [{ role: "user", content: "in-b", offsetMs: 0 }]);
     await expect(
-      service.listPage("sB", { before: aIds[0], limit: 10 }),
+      service.listPage("sB", { before: aMsgIds[0], limit: 10 }),
     ).rejects.toThrow(NotFoundException);
   });
 
-  it("recordToolResult 写入 role=tool 行，id = toolCallId", async () => {
+  it("recordToolResult 写入 role=tool 行，langgraphId = toolCallId", async () => {
     await service.recordToolResult({
       id: "tc1",
       sessionId: "s1",
       toolCallId: "tc1",
       content: "result text",
     });
-    const row = await ds.getRepository(SessionMessage).findOneBy({ id: "tc1" });
+    const row = await ds
+      .getRepository(SessionMessage)
+      .findOneBy({ langgraphId: "tc1" });
     expect(row).toMatchObject({
-      id: "tc1",
+      langgraphId: "tc1",
       sessionId: "s1",
       role: "tool",
       content: "result text",
@@ -267,7 +284,7 @@ describe("SessionMessageService", () => {
     });
     const row = await ds
       .getRepository(SessionMessage)
-      .findOneBy({ id: "tc-ok" });
+      .findOneBy({ langgraphId: "tc-ok" });
     expect(row?.metadata).toBeNull();
   });
 
@@ -281,7 +298,7 @@ describe("SessionMessageService", () => {
     });
     const row = await ds
       .getRepository(SessionMessage)
-      .findOneBy({ id: "tc-err" });
+      .findOneBy({ langgraphId: "tc-err" });
     expect(row?.metadata).toBe(JSON.stringify({ ok: false }));
   });
 
@@ -298,7 +315,9 @@ describe("SessionMessageService", () => {
       toolCallId: "tc1",
       content: "second",
     });
-    const row = await ds.getRepository(SessionMessage).findOneBy({ id: "tc1" });
+    const row = await ds
+      .getRepository(SessionMessage)
+      .findOneBy({ langgraphId: "tc1" });
     expect(row?.content).toBe("first");
   });
 
@@ -311,7 +330,9 @@ describe("SessionMessageService", () => {
       reasoning: null,
       toolCalls: JSON.stringify(calls),
     });
-    const row = await ds.getRepository(SessionMessage).findOneBy({ id: "a1" });
+    const row = await ds
+      .getRepository(SessionMessage)
+      .findOneBy({ langgraphId: "a1" });
     expect(row?.toolCalls).toBe(JSON.stringify(calls));
   });
 
@@ -326,7 +347,7 @@ describe("SessionMessageService", () => {
     });
     const row = await ds
       .getRepository(SessionMessage)
-      .findOneBy({ id: "comp-1" });
+      .findOneBy({ langgraphId: "comp-1" });
     expect(row?.role).toBe("system");
     expect(row?.content).toBe("用户问了 X，已尝试 Y");
     expect(row?.cloudUserId).toBe(DEFAULT_USER);
@@ -357,7 +378,7 @@ describe("SessionMessageService", () => {
     });
     const rows = await ds
       .getRepository(SessionMessage)
-      .findBy({ id: "comp-1" });
+      .findBy({ langgraphId: "comp-1" });
     expect(rows).toHaveLength(1);
     expect(rows[0].content).toBe("first");
   });
@@ -435,13 +456,17 @@ describe("SessionMessageService", () => {
       await ctx.run("u2", () =>
         rawService.recordUser({ id: "b1", sessionId: "s1", content: "b1" }),
       );
-      const b1 = await ds.getRepository(SessionMessage).findOneBy({ id: "b1" });
+      const b1 = await ds
+        .getRepository(SessionMessage)
+        .findOneBy({ langgraphId: "b1" });
       expect(b1?.seq).toBe(1);
       // u1 续写仍接 max+1 = 4
       await ctx.run("u1", () =>
         rawService.recordUser({ id: "a4", sessionId: "s1", content: "4" }),
       );
-      const a4 = await ds.getRepository(SessionMessage).findOneBy({ id: "a4" });
+      const a4 = await ds
+        .getRepository(SessionMessage)
+        .findOneBy({ langgraphId: "a4" });
       expect(a4?.seq).toBe(4);
     });
 
@@ -449,12 +474,20 @@ describe("SessionMessageService", () => {
       await ctx.run("u1", () =>
         rawService.recordUser({ id: "owned", sessionId: "s1", content: "x" }),
       );
+      const u1Row = await ctx.run("u1", async () => {
+        const row = await ds
+          .getRepository(SessionMessage)
+          .findOneBy({ langgraphId: "owned" });
+        if (!row) throw new Error("u1Row not found");
+        return row;
+      });
+      const u1Id = u1Row.id;
       await expect(
-        ctx.run("u2", () => rawService.findByIdOrFail("owned")),
+        ctx.run("u2", () => rawService.findByIdOrFail(u1Id)),
       ).rejects.toThrow(NotFoundException);
       // 同账号仍可见，确认不是假阴性
-      const r = await ctx.run("u1", () => rawService.findByIdOrFail("owned"));
-      expect(r.id).toBe("owned");
+      const r = await ctx.run("u1", () => rawService.findByIdOrFail(u1Id));
+      expect(r.langgraphId).toBe("owned");
     });
 
     it("activitySince 只统计本账号消息（两账号不串台）", async () => {
@@ -508,9 +541,11 @@ describe("SessionMessageService", () => {
       const page = await ctx.run("u1", () =>
         rawService.listPage("s1", { limit: 10 }),
       );
-      const ids = page.messages.map((m) => m.id);
-      expect(ids.sort()).toEqual(["a-u1", "t-u1"]);
-      expect(ids).not.toContain("t-u2");
+      const langgraphIds = page.messages
+        .map((m) => m.langgraphId)
+        .filter((id) => id !== null);
+      expect(langgraphIds.sort()).toEqual(["a-u1", "t-u1"]);
+      expect(langgraphIds).not.toContain("t-u2");
     });
 
     it("无账号上下文调用作用域方法抛错", async () => {
@@ -556,8 +591,12 @@ describe("findByIdOrFail / deleteAfter", () => {
 
   it("findByIdOrFail 存在返回 entity", async () => {
     await service.recordUser({ id: "u1", sessionId: "s1", content: "a" });
-    const r = await service.findByIdOrFail("u1");
-    expect(r.id).toBe("u1");
+    const row = await ds
+      .getRepository(SessionMessage)
+      .findOneBy({ langgraphId: "u1" });
+    if (!row) throw new Error("u1 not found");
+    const r = await service.findByIdOrFail(row.id);
+    expect(r.langgraphId).toBe("u1");
     expect(r.content).toBe("a");
   });
 
@@ -570,18 +609,26 @@ describe("findByIdOrFail / deleteAfter", () => {
       reasoning: null,
     });
     await service.recordUser({ id: "u2", sessionId: "s1", content: "C" });
-    const cutoffMsg = await service.findByIdOrFail("u1");
+    const u1Row = await ds
+      .getRepository(SessionMessage)
+      .findOneBy({ langgraphId: "u1" });
+    if (!u1Row) throw new Error("u1 not found");
+    const cutoffMsg = await service.findByIdOrFail(u1Row.id);
     await service.deleteAfter("s1", cutoffMsg.seq);
     const page = await service.listPage("s1", { limit: 10 });
-    expect(page.messages.map((m) => m.id)).toEqual(["u1"]);
+    expect(page.messages.map((m) => m.langgraphId)).toEqual(["u1"]);
   });
 
   it("deleteAfter 不影响其他 session", async () => {
     await service.recordUser({ id: "x1", sessionId: "s1", content: "x" });
     await service.recordUser({ id: "y1", sessionId: "s2", content: "y" });
-    const cutoff = await service.findByIdOrFail("x1");
+    const x1Row = await ds
+      .getRepository(SessionMessage)
+      .findOneBy({ langgraphId: "x1" });
+    if (!x1Row) throw new Error("x1 not found");
+    const cutoff = await service.findByIdOrFail(x1Row.id);
     await service.deleteAfter("s1", cutoff.seq);
     const p = await service.listPage("s2", { limit: 10 });
-    expect(p.messages.map((m) => m.id)).toEqual(["y1"]);
+    expect(p.messages.map((m) => m.langgraphId)).toEqual(["y1"]);
   });
 });
