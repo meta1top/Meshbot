@@ -96,6 +96,7 @@ export class ScopedRepository<T extends ObjectLiteral> {
    */
   async save<E extends DeepPartial<T>>(entity: E): Promise<E>;
   async save<E extends DeepPartial<T>>(entities: E[]): Promise<E[]>;
+  // tx-check: ignore —— 单表单次写入：array / 单条两分支互斥，一次调用仅一次 save，无需事务。
   async save<E extends DeepPartial<T>>(entity: E | E[]): Promise<E | E[]> {
     const acct = this.acct();
     const stampOne = (e: E): E => {
@@ -105,10 +106,16 @@ export class ScopedRepository<T extends ObjectLiteral> {
       }
       return { ...e, cloudUserId: acct } as E;
     };
-    const stamped = Array.isArray(entity)
-      ? entity.map(stampOne)
-      : stampOne(entity);
-    return this.repo.save(stamped as DeepPartial<T>) as Promise<E | E[]>;
+    // 关键：先 create() 成真实体实例再 save()。直接 save(plain object) 不会触发
+    // SnowflakeBaseEntity 的 @BeforeInsert（TypeORM 仅对实体类实例派发实体监听器，
+    // plain object 的 instanceof 判定为 false），会导致雪花 id 为 NULL → NOT NULL 失败。
+    // create() 把 plain 提升为实例，@BeforeInsert 正常生成雪花 id。
+    if (Array.isArray(entity)) {
+      const rows = this.repo.create(entity.map(stampOne) as DeepPartial<T>[]);
+      return this.repo.save(rows) as Promise<E[]>;
+    }
+    const row = this.repo.create(stampOne(entity) as DeepPartial<T>);
+    return this.repo.save(row) as Promise<E>;
   }
 
   /** 按 where 局部更新，where 合并当前账号（不误改他账号同条件行）。 */

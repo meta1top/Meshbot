@@ -1,4 +1,5 @@
 import { AccountContextService } from "@meshbot/agent";
+import { generateSnowflakeId } from "@meshbot/common";
 import { DataSource } from "typeorm";
 import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
 import { LlmCall } from "../entities/llm-call.entity";
@@ -38,6 +39,7 @@ async function seedLlmCall(
   },
 ): Promise<void> {
   await ds.getRepository(LlmCall).insert({
+    id: generateSnowflakeId(),
     sessionId: overrides.sessionId,
     messageId: overrides.messageId,
     cloudUserId: overrides.cloudUserId,
