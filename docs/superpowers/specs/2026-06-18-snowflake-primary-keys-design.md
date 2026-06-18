@@ -54,7 +54,7 @@ export abstract class SnowflakeBaseEntity {
 
 - `protected` 让子类可 override（例如需要外部传入固定 ID 的测试场景）
 - `!this.id` 守卫：外部显式赋值时不覆盖（测试用）
-- 从 `libs/common/src/index.ts` 导出，供所有 server 使用
+- 放入 `libs/common/src/entities/` 目录，在 `libs/common/src/index.ts` 追加 `export * from "./entities"` 导出
 
 ---
 
@@ -68,7 +68,7 @@ export abstract class SnowflakeBaseEntity {
 | server-agent | `llm-call.entity.ts` | 同上 |
 | server-agent | `model-config.entity.ts` | 同上 |
 | server-agent | `pending-message.entity.ts` | 同上（id 仍由服务层生成，改用 `generateSnowflakeId()`） |
-| server-agent | `cron-job.entity.ts` | `@PrimaryColumn()` + 服务层 `randomUUID()` → `extends SnowflakeBaseEntity`（服务层删掉手动赋 id 逻辑） |
+| server-agent | `cron-job.entity.ts` | `@PrimaryColumn()` + 服务层 `randomUUID()` → `extends SnowflakeBaseEntity`；`schedule.service.ts` 的 `create()` 删掉 `const id = randomUUID()` 和 `repo.save({ id, ... })` 中的 `id` 字段，让 `@BeforeInsert` 接管 |
 | server-main | `app-user.entity.ts` | `@PrimaryGeneratedColumn("uuid")` → `extends SnowflakeBaseEntity` |
 | server-main | `organization.entity.ts` | 同上 |
 | server-main | `membership.entity.ts` | 同上 |
