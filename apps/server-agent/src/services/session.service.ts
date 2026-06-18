@@ -474,6 +474,6 @@ export class SessionService {
     // 但 assistant 调用天然晚于该 user 消息，createdAt 裁剪正确。
     await this.sessionMessages.deleteAfter(sessionId, msg.seq);
     await this.llmCalls.deleteAfter(sessionId, msg.createdAt);
-    await this.graph.cutMessagesAfter(sessionId, messageId);
+    await this.graph.cutMessagesAfter(sessionId, msg.langgraphId ?? messageId);
   }
 }
