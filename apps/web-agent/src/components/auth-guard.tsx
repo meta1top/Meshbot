@@ -20,7 +20,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const [resolved, setResolved] = useState(false);
 
   const isAuthenticated = profile.isSuccess && profile.data != null;
-  const isPreLoginRoute = pathname === "/login" || pathname === "/setup";
+  const isPreLoginRoute = pathname === "/login" || pathname === "/register";
 
   const { data: modelConfigs, isPending: modelsPending } = useQuery({
     queryKey: ["model-configs"],
@@ -39,7 +39,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     if (profile.isSuccess && profile.data) {
-      // 已登录用户停留在 /login 无意义 → 回主页；但 /setup 是多步向导，
+      // 已登录用户停留在 /login 无意义 → 回主页；但 /register 是多步向导，
       // 注册后仍需停留配置模型，由向导自己控制离开
       if (pathname === "/login") {
         setResolved(false);
@@ -66,21 +66,21 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
         }
         const step = setup.step;
         if (step === "needs-org" || step === "needs-model") {
-          if (pathname !== "/setup") {
+          if (pathname !== "/register") {
             setResolved(false);
-            router.replace("/setup");
+            router.replace("/register");
             return;
           }
         } else if (step === "needs-login") {
-          // 默认进 /login 登录；允许停留 /setup（新用户主动注册）
-          if (pathname !== "/login" && pathname !== "/setup") {
+          // 默认进 /login 登录；允许停留 /register（新用户主动注册）
+          if (pathname !== "/login" && pathname !== "/register") {
             setResolved(false);
             router.replace("/login");
             return;
           }
-        } else if (pathname !== "/login" && pathname !== "/setup") {
+        } else if (pathname !== "/login" && pathname !== "/register") {
           // ready 但本地无 JWT → 默认去 /login 重新登录；
-          // 放行停留 /setup（已完成本地配置仍可注册新账号）
+          // 放行停留 /register（已完成本地配置仍可注册新账号）
           setResolved(false);
           router.replace("/login");
           return;
