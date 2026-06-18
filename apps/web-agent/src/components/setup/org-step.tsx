@@ -53,7 +53,7 @@ export function OrgStep({ onDone }: { onDone: () => void }) {
   };
 
   return (
-    <Card>
+    <Card className="border-0 shadow-none">
       <CardHeader className="space-y-1">
         <CardTitle>{t("orgTitle")}</CardTitle>
         <CardDescription>{t("orgDescription")}</CardDescription>

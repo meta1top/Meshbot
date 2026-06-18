@@ -118,7 +118,7 @@ export default function SetupPage() {
             {t("getStarted")}
           </span>
           {step === "register" && (
-            <Card>
+            <Card className="border-0 shadow-none">
               <CardHeader className="space-y-1">
                 <CardTitle>{t("createAccount")}</CardTitle>
                 <CardDescription>
