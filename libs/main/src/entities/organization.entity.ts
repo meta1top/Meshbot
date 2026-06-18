@@ -1,21 +1,13 @@
-import {
-  Column,
-  CreateDateColumn,
-  Entity,
-  PrimaryGeneratedColumn,
-  UpdateDateColumn,
-} from "typeorm";
+import { SnowflakeBaseEntity } from "@meshbot/common";
+import { Column, CreateDateColumn, Entity, UpdateDateColumn } from "typeorm";
 
-/** 企业/组织（单层）。owner_id 与 Membership.role=owner 冗余，便于直查。 */
+/** 企业/组织（单层）。ownerId 与 Membership.role=owner 冗余，便于直查。 */
 @Entity("organization")
-export class Organization {
-  @PrimaryGeneratedColumn("uuid")
-  id!: string;
-
+export class Organization extends SnowflakeBaseEntity {
   @Column({ type: "varchar", length: 64 })
   name!: string;
 
-  @Column({ type: "uuid" })
+  @Column({ type: "varchar", length: 20 })
   ownerId!: string;
 
   @CreateDateColumn({ type: "timestamptz" })

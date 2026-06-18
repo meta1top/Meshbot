@@ -1,10 +1,5 @@
-import {
-  Column,
-  CreateDateColumn,
-  Entity,
-  Index,
-  PrimaryGeneratedColumn,
-} from "typeorm";
+import { SnowflakeBaseEntity } from "@meshbot/common";
+import { Column, CreateDateColumn, Entity, Index } from "typeorm";
 
 /** 组织邀请。token 即邮件邀请码。 */
 @Entity("invitation")
@@ -13,11 +8,8 @@ import {
   unique: true,
   where: "status = 'pending'",
 })
-export class Invitation {
-  @PrimaryGeneratedColumn("uuid")
-  id!: string;
-
-  @Column({ type: "uuid" })
+export class Invitation extends SnowflakeBaseEntity {
+  @Column({ type: "varchar", length: 20 })
   orgId!: string;
 
   @Column({ type: "varchar", length: 255 })
@@ -26,17 +18,16 @@ export class Invitation {
   @Column({ type: "varchar", length: 64 })
   token!: string;
 
-  /** "pending" | "accepted" | "revoked" | "expired"。 */
   @Column({ type: "varchar", length: 16, default: "pending" })
   status!: string;
 
-  @Column({ type: "uuid" })
+  @Column({ type: "varchar", length: 20 })
   invitedBy!: string;
 
   @Column({ type: "timestamptz" })
   expiresAt!: Date;
 
-  @Column({ type: "uuid", nullable: true })
+  @Column({ type: "varchar", length: 20, nullable: true })
   acceptedBy!: string | null;
 
   @Column({ type: "timestamptz", nullable: true })
