@@ -23,7 +23,7 @@ import { SessionListItem } from "@/components/sidebar/session-list-item";
 
 /**
  * 统一消息侧栏：频道 / 私信 / 助手三段。频道+私信来自 IM atom，
- * 助手来自 session atom。点击频道/私信→/messages?id=，助手→/session?id=。
+ * 助手来自 session atom。点击频道/私信→/messages?id=，助手→/messages?kind=assistant&id=。
  */
 export function MessagesSidebar() {
   const t = useTranslations("messagesSidebar");
