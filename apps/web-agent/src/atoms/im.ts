@@ -109,6 +109,25 @@ export const applyIncomingMessageAtom = atom(
 );
 
 /**
+ * 标记会话已读：把指定会话的 unreadCount 本地置 0（乐观）。
+ * 打开会话时调用——后端 markRead 已更新 lastReadAt，这里同步前端 atom，使未读
+ * badge 立即消失，不依赖重新请求侧栏（loadSidebar 已 guard）。unread 不参与排序，
+ * 故不重排；已是 0 / 不存在则不写，避免无谓更新。
+ */
+export const markConversationReadAtom = atom(
+  null,
+  (get, set, conversationId: string) => {
+    const arr = get(conversationsAtom);
+    const idx = arr.findIndex((c) => c.id === conversationId);
+    if (idx < 0 || arr[idx].unreadCount === 0) return;
+    set(
+      conversationsAtom,
+      arr.map((c) => (c.id === conversationId ? { ...c, unreadCount: 0 } : c)),
+    );
+  },
+);
+
+/**
  * 更新在线状态，合并到 presenceAtom。
  */
 export const setPresenceAtom = atom(null, (get, set, state: PresenceState) => {

@@ -20,6 +20,7 @@ import { currentUserAtom } from "@/atoms/auth";
 import {
   applyIncomingMessageAtom,
   currentConversationIdAtom,
+  markConversationReadAtom,
   messagesAtom,
   removeConversationAtom,
   setPresenceAtom,
@@ -51,6 +52,7 @@ export function ImConversationBody({ id, scrollRef }: ImConversationBodyProps) {
   const upsertConversation = useSetAtom(upsertConversationAtom);
   const removeConversation = useSetAtom(removeConversationAtom);
   const setMessages = useSetAtom(messagesAtom);
+  const markConversationRead = useSetAtom(markConversationReadAtom);
   const messages = useAtomValue(messagesAtom);
   const currentUser = useAtomValue(currentUserAtom);
 
@@ -152,14 +154,15 @@ export function ImConversationBody({ id, scrollRef }: ImConversationBodyProps) {
       setHasMoreHistory(page.hasMore);
     });
 
-    // Mark as read
+    // 标记已读：通知后端更新 lastReadAt + 本地乐观清零该会话未读 badge
     const socket = getImSocket();
     socket.emit(IM_WS_EVENTS.read, { conversationId: id });
+    markConversationRead(id);
 
     return () => {
       cancelled = true;
     };
-  }, [id, setMessages]);
+  }, [id, setMessages, markConversationRead]);
 
   // 5. History pagination: top-sentinel IntersectionObserver
   const loadMoreHistory = useCallback(async () => {
