@@ -99,6 +99,7 @@ export class SessionService {
     const saved = (await this.sessionRepo.save({
       title: input.content.slice(0, TITLE_MAX),
       status: "running" as const,
+      kind: input.kind ?? "user",
     })) as Session;
     await this.pendingRepo.save({
       sessionId: saved.id,
@@ -319,6 +320,27 @@ export class SessionService {
       .addOrderBy("s.id", "DESC")
       .getMany();
     return rows.map(toSummary);
+  }
+
+  /** 列出随手问临时会话（kind="quick"），按更新时间倒序——供随手问面板「历史」。 */
+  async listQuickSessions(): Promise<SessionSummary[]> {
+    const rows = await this.sessionRepo
+      .scopedQueryBuilder("s")
+      .andWhere("s.kind = :kind", { kind: "quick" })
+      .orderBy("s.updated_at", "DESC")
+      .addOrderBy("s.id", "DESC")
+      .getMany();
+    return rows.map(toSummary);
+  }
+
+  /** 把随手问临时会话沉淀为侧栏会话（kind: quick→user）。 */
+  async promoteToSidebar(sessionId: string): Promise<SessionSummary> {
+    await this.sessionRepo.update(
+      { id: sessionId, kind: "quick" },
+      { kind: "user" },
+    );
+    const s = await this.findSessionOrFail(sessionId);
+    return toSummary(s);
   }
 
   /**

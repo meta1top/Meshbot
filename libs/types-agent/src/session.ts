@@ -62,6 +62,8 @@ export type PendingMessageStatus = z.infer<typeof PendingMessageStatus>;
 /** POST /api/sessions 入参。 */
 export const CreateSessionSchema = z.object({
   content: z.string().min(1),
+  /** "quick" = 随手问临时会话（不进侧栏）；缺省 "user"。 */
+  kind: z.enum(["user", "quick"]).optional(),
 });
 export type CreateSessionInput = z.infer<typeof CreateSessionSchema>;
 

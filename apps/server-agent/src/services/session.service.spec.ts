@@ -653,6 +653,37 @@ describe("SessionService", () => {
     });
   });
 
+  describe("quick sessions", () => {
+    it("createSession(kind='quick') 建的会话不出现在 listAllSorted()", async () => {
+      await service.createSession({ content: "临时问题", kind: "quick" });
+      const list = await service.listAllSorted();
+      expect(list).toHaveLength(0);
+    });
+
+    it("listQuickSessions() 只返回 quick 会话", async () => {
+      await service.createSession({ content: "正常", kind: "user" });
+      const { sessionId } = await service.createSession({
+        content: "随手",
+        kind: "quick",
+      });
+      const quick = await service.listQuickSessions();
+      expect(quick.map((s) => s.id)).toEqual([sessionId]);
+    });
+
+    it("promoteToSidebar() 把 quick 提升为 user，进入 listAllSorted、移出 listQuickSessions", async () => {
+      const { sessionId } = await service.createSession({
+        content: "随手",
+        kind: "quick",
+      });
+      const summary = await service.promoteToSidebar(sessionId);
+      expect(summary.id).toBe(sessionId);
+      expect((await service.listAllSorted()).map((s) => s.id)).toContain(
+        sessionId,
+      );
+      expect(await service.listQuickSessions()).toHaveLength(0);
+    });
+  });
+
   describe("账号隔离（ScopedRepository）", () => {
     it("两账号会话互不可见", async () => {
       await ctx.run("u1", () => rawService.createSession({ content: "s-u1" }));

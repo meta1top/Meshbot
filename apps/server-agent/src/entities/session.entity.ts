@@ -31,7 +31,7 @@ export class Session extends SnowflakeBaseEntity {
   titleGenerated!: boolean;
 
   @Column({ type: "varchar", default: "user" })
-  kind!: "user" | "im";
+  kind!: "user" | "quick" | "im";
 
   @Column({ name: "im_conversation_id", type: "text", nullable: true })
   imConversationId!: string | null;
