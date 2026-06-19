@@ -1,11 +1,14 @@
 "use client";
 
 import { cn } from "@meshbot/design";
-import { useAtomValue } from "jotai";
+import { useAtom, useAtomValue } from "jotai";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { type ReactNode, Suspense, useEffect } from "react";
-import { assistantPanelOpenAtom } from "@/atoms/assistant-panel";
+import { type ReactNode, Suspense, useCallback, useEffect } from "react";
+import {
+  assistantPanelOpenAtom,
+  assistantPanelWidthAtom,
+} from "@/atoms/assistant-panel";
 import { DragRegion } from "@/components/drag-region";
 import { AssistantDock } from "@/components/im/assistant-dock";
 import { MessagesSidebar } from "@/components/shell/messages-sidebar";
@@ -45,6 +48,32 @@ export function AppShellLayout({
   const t = useTranslations("appShell");
   const area = areaFromPath(pathname);
   const panelOpen = useAtomValue(assistantPanelOpenAtom);
+  const [panelWidth, setPanelWidth] = useAtom(assistantPanelWidthAtom);
+
+  // 随手问面板左缘拖拽改宽：面板在右侧，鼠标左移→变宽；clamp 300–640；持久化在 atom。
+  const startPanelResize = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startW = panelWidth;
+      const onMove = (ev: MouseEvent) => {
+        const next = Math.min(
+          Math.max(startW + (startX - ev.clientX), 300),
+          640,
+        );
+        setPanelWidth(next);
+      };
+      const onUp = () => {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        document.body.style.userSelect = "";
+      };
+      document.body.style.userSelect = "none";
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    },
+    [panelWidth, setPanelWidth],
+  );
 
   useEffect(() => {
     document.body.classList.add("app-shell-mode");
@@ -115,7 +144,15 @@ export function AppShellLayout({
             )}
           </section>
           {panelOpen && (
-            <aside className="ml-1.5 hidden w-[340px] shrink-0 overflow-hidden rounded-(--shell-radius) bg-(--shell-content) xl:flex">
+            <aside
+              style={{ width: panelWidth }}
+              className="relative ml-1.5 hidden shrink-0 overflow-hidden rounded-(--shell-radius) bg-(--shell-content) xl:flex"
+            >
+              <div
+                aria-hidden
+                onMouseDown={startPanelResize}
+                className="absolute top-0 left-0 z-20 h-full w-1.5 cursor-col-resize hover:bg-(--shell-accent)/40"
+              />
               <AssistantDock />
             </aside>
           )}
