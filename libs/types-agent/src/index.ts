@@ -20,4 +20,5 @@ export {
 } from "./auth";
 export * from "./schedule";
 export * from "./session";
+export * from "./sidebar";
 export * from "./stats";
