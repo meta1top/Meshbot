@@ -252,6 +252,18 @@
       "toastError": "Compaction failed: {message}"
     }
   },
+  "newMessage": {
+    "title": "New message",
+    "toLabel": "To:",
+    "toPlaceholder": "#channel, @someone, or ✦ assistant",
+    "groupChannels": "Channels",
+    "groupMembers": "People",
+    "groupAssistant": "Assistant",
+    "createChannel": "Create new channel…",
+    "startSession": "Start a new assistant chat",
+    "bodyPlaceholder": "Write a message…",
+    "empty": "Pick a recipient above, write your message below, and send."
+  },
   "messagesSidebar": {
     "title": "Messages",
     "newMessage": "New message",
@@ -546,7 +558,6 @@
   "agentInputPlaceholder": "",
   "agentEmptyHint": "",
   "agentDisabledHint": "",
-  "newMessage": "",
   "assistant": "",
   "assistantEmpty": "",
   "format": {
@@ -559,5 +570,13 @@
     "linkText": "",
     "bulletList": "",
     "numberedList": ""
-  }
+  },
+  "startSession": "",
+  "toLabel": "",
+  "toPlaceholder": "",
+  "groupChannels": "",
+  "createChannel": "",
+  "groupMembers": "",
+  "groupAssistant": "",
+  "bodyPlaceholder": ""
 }

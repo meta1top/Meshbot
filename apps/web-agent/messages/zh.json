@@ -252,6 +252,18 @@
       "toastError": "压缩失败：{message}"
     }
   },
+  "newMessage": {
+    "title": "新消息",
+    "toLabel": "至：",
+    "toPlaceholder": "#频道、@某人 或 ✦ 助手",
+    "groupChannels": "频道",
+    "groupMembers": "成员",
+    "groupAssistant": "助手",
+    "createChannel": "创建新频道…",
+    "startSession": "开启新助手会话",
+    "bodyPlaceholder": "写条消息…",
+    "empty": "选好上面的「至：」对象，下面写好内容，一次发出。"
+  },
   "messagesSidebar": {
     "title": "消息",
     "newMessage": "新消息",
@@ -546,7 +558,6 @@
   "agentInputPlaceholder": "",
   "agentEmptyHint": "",
   "agentDisabledHint": "",
-  "newMessage": "",
   "assistant": "",
   "assistantEmpty": "",
   "format": {
@@ -559,5 +570,13 @@
     "linkText": "",
     "bulletList": "",
     "numberedList": ""
-  }
+  },
+  "startSession": "",
+  "toLabel": "",
+  "toPlaceholder": "",
+  "groupChannels": "",
+  "createChannel": "",
+  "groupMembers": "",
+  "groupAssistant": "",
+  "bodyPlaceholder": ""
 }
