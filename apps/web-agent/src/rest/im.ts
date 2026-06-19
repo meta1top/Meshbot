@@ -9,17 +9,6 @@ import type { SessionSummary } from "@meshbot/types-agent";
 import { apiClient } from "@meshbot/web-common";
 
 /**
- * 获取当前用户的所有会话（频道 + DM）。
- */
-export async function fetchConversations(): Promise<ConversationSummary[]> {
-  const { data } =
-    await apiClient.get<ConversationSummary[]>("/api/conversations");
-  // 未登录云端时后端返回 401 错误 envelope，解包后 data 可能为 null/undefined；
-  // 兜底成空数组以遵守 Promise<ConversationSummary[]> 契约，避免下游 [...arr] 崩溃。
-  return Array.isArray(data) ? data : [];
-}
-
-/**
  * 侧栏聚合：一次取回 频道/私信 + 助手会话（server-agent /api/sidebar）。
  * 频道/私信若云端故障由后端降级为空数组。
  */

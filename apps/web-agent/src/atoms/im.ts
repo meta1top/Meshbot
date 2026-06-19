@@ -6,7 +6,6 @@ import type {
   PresenceState,
 } from "@meshbot/types";
 import { atom } from "jotai";
-import { fetchConversations } from "@/rest/im";
 
 /** 全部会话列表（最近消息时间 desc 排序）。 */
 export const conversationsAtom = atom<ConversationSummary[]>([]);
@@ -45,20 +44,6 @@ export function sortConversations(
 }
 
 // ─── Write-only action atoms ──────────────────────────────────────────────────
-
-/**
- * 拉取会话列表并写入 conversationsAtom（排序后）。
- */
-export const loadConversationsAtom = atom(null, async (_get, set) => {
-  try {
-    const arr = await fetchConversations();
-    set(conversationsAtom, sortConversations(arr));
-  } catch {
-    // 拉取失败（未登录云端 / 网络错误 / 云端未启动）时降级为空列表，
-    // 不抛出，避免 page.tsx 里 `void loadConversations()` 产生 unhandledRejection。
-    set(conversationsAtom, []);
-  }
-});
 
 /**
  * UPSERT 单条会话（按 id 去重）。

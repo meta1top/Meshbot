@@ -22,8 +22,8 @@ export const loadSidebarAtom = atom(null, async (_get, set) => {
     set(sessionsAtom, sortSessions(sessions));
     set(sessionsStatusAtom, "loaded");
   } catch {
-    set(conversationsAtom, []);
-    set(sessionsAtom, []);
+    // 总失败（server-agent 不可达）：保留已有数据（如 WS 已填充的会话），
+    // 仅退出骨架；首次加载时两 atom 本就为空，空段会正确显示空态。
     set(sessionsStatusAtom, "loaded");
   }
 });

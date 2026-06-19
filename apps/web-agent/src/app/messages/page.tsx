@@ -21,7 +21,6 @@ import { currentUserAtom } from "@/atoms/auth";
 import {
   applyIncomingMessageAtom,
   currentConversationIdAtom,
-  loadConversationsAtom,
   messagesAtom,
   removeConversationAtom,
   setPresenceAtom,
@@ -44,7 +43,6 @@ function MessagesView() {
   const id = searchParams.get("id");
 
   const setCurrentConversationId = useSetAtom(currentConversationIdAtom);
-  const loadConversations = useSetAtom(loadConversationsAtom);
   const applyIncomingMessage = useSetAtom(applyIncomingMessageAtom);
   const setPresence = useSetAtom(setPresenceAtom);
   const upsertConversation = useSetAtom(upsertConversationAtom);
@@ -95,10 +93,8 @@ function MessagesView() {
     setCurrentConversationId(id);
   }, [id, setCurrentConversationId]);
 
-  // 2. On mount: load conversations
-  useEffect(() => {
-    void loadConversations();
-  }, [loadConversations]);
+  // 2. conversations 由侧栏 MessagesSidebar 的 loadSidebarAtom（/api/sidebar 聚合）
+  //    填充 conversationsAtom——侧栏在 messages 区必定挂载，这里不再重复请求。
 
   // 3. Socket subscription (once on mount, not per-id)
   useEffect(() => {
