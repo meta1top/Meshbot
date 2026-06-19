@@ -6,7 +6,6 @@ import { useTranslations } from "next-intl";
 import { type ReactNode, useEffect } from "react";
 import { DragRegion } from "@/components/drag-region";
 import { ImSidebar } from "@/components/im/im-sidebar";
-import { AssistantSidebar } from "@/components/shell/assistant-sidebar";
 import { PlaceholderSidebar } from "@/components/shell/placeholder-sidebar";
 import { ShellTopBar } from "@/components/shell/shell-top-bar";
 import { areaFromPath, WorkspaceRail } from "@/components/shell/workspace-rail";
@@ -48,14 +47,10 @@ export function AppShellLayout({
   }, []);
 
   const autoSidebar =
-    area === "assistant" ? (
-      <AssistantSidebar />
-    ) : area === "messages" ? (
+    area === "messages" ? (
       <ImSidebar />
     ) : area === "more" ? (
       <PlaceholderSidebar title={t("rail.more")} />
-    ) : area === "home" ? (
-      <PlaceholderSidebar title={t("rail.home")} />
     ) : null;
   const resolvedSidebar = sidebar === undefined ? autoSidebar : sidebar;
 

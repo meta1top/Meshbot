@@ -11,11 +11,9 @@ import { useTheme } from "@meshbot/web-common/react";
 import { useAtomValue } from "jotai";
 import {
   Building2,
-  Home,
   MessageSquare,
   Moon,
   MoreHorizontal,
-  Sparkles,
   Sun,
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
@@ -24,23 +22,10 @@ import { useCallback } from "react";
 import { currentUserAtom } from "@/atoms/auth";
 import { BrandLogo } from "@/components/brand-logo";
 import { RailNavItem } from "@/components/shell/rail-nav-item";
+import { areaFromPath } from "@/lib/area-from-path";
 import { useLogout } from "@/rest/auth";
 
-/** 由 pathname 推断当前 rail 区域。 */
-export function areaFromPath(
-  pathname: string,
-): "home" | "messages" | "assistant" | "more" | "other" {
-  if (pathname.startsWith("/messages")) return "messages";
-  if (
-    pathname.startsWith("/assistant") ||
-    pathname.startsWith("/session") ||
-    pathname.startsWith("/schedule")
-  )
-    return "assistant";
-  if (pathname.startsWith("/more")) return "more";
-  if (pathname === "/") return "home";
-  return "other";
-}
+export { areaFromPath } from "@/lib/area-from-path";
 
 export function WorkspaceRail() {
   const router = useRouter();
@@ -67,22 +52,10 @@ export function WorkspaceRail() {
       <BrandLogo size="sm" />
       <nav className="mt-1 flex w-full flex-col gap-1">
         <RailNavItem
-          icon={<Home className="h-5 w-5" />}
-          label={t("rail.home")}
-          active={area === "home"}
-          onClick={() => router.push("/")}
-        />
-        <RailNavItem
           icon={<MessageSquare className="h-5 w-5" />}
           label={t("rail.messages")}
           active={area === "messages"}
           onClick={() => router.push("/messages")}
-        />
-        <RailNavItem
-          icon={<Sparkles className="h-5 w-5" />}
-          label={t("rail.assistant")}
-          active={area === "assistant"}
-          onClick={() => router.push("/assistant")}
         />
         <RailNavItem
           icon={<MoreHorizontal className="h-5 w-5" />}
