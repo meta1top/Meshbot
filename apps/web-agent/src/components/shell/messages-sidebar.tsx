@@ -123,7 +123,7 @@ export function MessagesSidebar() {
               >
                 <span
                   className={cn(
-                    "h-2 w-2 shrink-0 rounded-full",
+                    "h-2.5 w-2.5 shrink-0 rounded-full",
                     online ? "bg-green-400" : "bg-white/30",
                   )}
                 />

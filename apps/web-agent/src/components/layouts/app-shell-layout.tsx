@@ -90,7 +90,7 @@ export function AppShellLayout({
                     className,
                   )}
                 >
-                  <div className="mx-auto flex w-full max-w-[900px] flex-1 flex-col p-4 lg:px-10">
+                  <div className="flex w-full flex-1 flex-col p-4 lg:px-6">
                     {children}
                   </div>
                 </div>
@@ -106,7 +106,7 @@ export function AppShellLayout({
                   className,
                 )}
               >
-                <div className="mx-auto flex w-full max-w-[900px] flex-1 flex-col p-4 lg:px-10">
+                <div className="flex w-full flex-1 flex-col p-4 lg:px-6">
                   {children}
                 </div>
               </div>

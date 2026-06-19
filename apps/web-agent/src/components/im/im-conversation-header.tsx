@@ -408,7 +408,7 @@ export function ImConversationHeader() {
 
   return (
     <div className="shrink-0 border-b border-border bg-(--shell-content)">
-      <div className="mx-auto flex h-11 w-full max-w-[900px] items-center gap-2 px-4 lg:px-10">
+      <div className="flex h-11 w-full items-center gap-2 px-4 lg:px-6">
         {isChannel ? (
           isPrivateChannel ? (
             <Lock className="h-4 w-4 shrink-0 text-muted-foreground" />

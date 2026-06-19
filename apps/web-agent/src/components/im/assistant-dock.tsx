@@ -153,7 +153,7 @@ export function AssistantDock() {
               <button
                 type="button"
                 onClick={() => void handleSave()}
-                className="mt-2 self-start rounded-md border border-(--shell-accent)/40 bg-(--shell-accent)/10 px-2.5 py-1 text-[11.5px] font-medium text-(--shell-accent) hover:bg-(--shell-accent)/15"
+                className="mt-2 self-start rounded-md border border-dashed border-(--shell-accent)/40 bg-(--shell-accent)/10 px-2.5 py-1 text-[11.5px] font-medium text-(--shell-accent) hover:bg-(--shell-accent)/15"
               >
                 💾 {t("save")}
               </button>

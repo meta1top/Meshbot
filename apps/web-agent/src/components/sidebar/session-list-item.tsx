@@ -10,11 +10,11 @@ import {
 import type { SessionSummary } from "@meshbot/types-agent";
 import { useSetAtom } from "jotai";
 import {
-  MessageSquare,
   MoreHorizontal,
   Pencil,
   Pin,
   PinOff,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -114,7 +114,7 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
             : "text-white/85 hover:bg-white/12 hover:text-white",
         )}
       >
-        <MessageSquare
+        <Sparkles
           className={cn(
             "h-3.5 w-3.5 shrink-0",
             active ? "text-white" : "text-white/70 group-hover:text-white",

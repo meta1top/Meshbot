@@ -67,7 +67,7 @@ export default function AssistantHome() {
 
   return (
     <AppShellLayout>
-      <div className="w-full max-w-[620px] flex-1">
+      <div className="mx-auto w-full max-w-[620px] flex-1">
         <div className="mb-4 flex items-center gap-3">
           <Image
             src="/logo.svg"
