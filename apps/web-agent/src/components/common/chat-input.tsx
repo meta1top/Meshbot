@@ -1,7 +1,19 @@
 "use client";
 
 import { cn, Tooltip, TooltipContent, TooltipTrigger } from "@meshbot/design";
-import { Paperclip, Send, Square } from "lucide-react";
+import {
+  Bold,
+  Code,
+  Italic,
+  Link,
+  List,
+  ListOrdered,
+  Paperclip,
+  Send,
+  Square,
+  SquareCode,
+  Strikethrough,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
 import {
   forwardRef,
@@ -11,6 +23,13 @@ import {
   useRef,
 } from "react";
 import { formatTokens } from "@/lib/format-tokens";
+import {
+  applyCodeBlock,
+  applyLinePrefix,
+  applyLink,
+  type EditState,
+  wrapInline,
+} from "@/lib/markdown-format";
 
 interface ChatInputProps {
   /** 受控值。父组件维护 draft state。 */
@@ -95,6 +114,26 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       [value],
     );
 
+    // 对 textarea 当前选区应用一个 EditState 变换，更新值并恢复选区
+    const applyFormat = useCallback(
+      (fn: (s: EditState) => EditState) => {
+        const el = editorRef.current;
+        if (!el) return;
+        const next = fn({
+          text: value,
+          start: el.selectionStart,
+          end: el.selectionEnd,
+        });
+        onChange(next.text);
+        // 值受控更新是异步的；下一帧恢复选区
+        requestAnimationFrame(() => {
+          el.focus();
+          el.setSelectionRange(next.start, next.end);
+        });
+      },
+      [value, onChange],
+    );
+
     const handleSend = useCallback(() => {
       const trimmed = value.trim();
       if (!trimmed) return;
@@ -108,12 +147,31 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         // 自己用回车 confirm 候选词。nativeEvent.isComposing / keyCode===229
         // 任一为 true 都视为组合中。
         if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+        const mod = e.metaKey || e.ctrlKey;
+        if (mod && !e.shiftKey) {
+          const k = e.key.toLowerCase();
+          if (k === "b") {
+            e.preventDefault();
+            applyFormat((s) => wrapInline(s, "**"));
+            return;
+          }
+          if (k === "i") {
+            e.preventDefault();
+            applyFormat((s) => wrapInline(s, "*"));
+            return;
+          }
+          if (k === "k") {
+            e.preventDefault();
+            applyFormat((s) => applyLink(s, "url"));
+            return;
+          }
+        }
         if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault();
           handleSend();
         }
       },
-      [handleSend],
+      [handleSend, applyFormat],
     );
 
     const handleInterrupt = useCallback(() => {
@@ -128,13 +186,63 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
 
     return (
       <div className="overflow-hidden rounded-[10px] border border-border bg-card">
-        {/* Decorative formatting toolbar — visual only, no editing logic */}
-        <div className="flex items-center gap-3 border-b border-border px-3 py-1.5 text-muted-foreground">
-          <span className="text-[13px] font-bold">B</span>
-          <span className="text-[13px] italic">I</span>
-          <span className="text-[13px] underline">U</span>
-          <span className="text-[13px]">≡</span>
-          <span className="font-mono text-[12px]">{"</>"}</span>
+        <div className="flex items-center gap-1 border-b border-border px-2 py-1 text-muted-foreground">
+          {(
+            [
+              {
+                key: "bold",
+                Icon: Bold,
+                run: () => applyFormat((s) => wrapInline(s, "**")),
+              },
+              {
+                key: "italic",
+                Icon: Italic,
+                run: () => applyFormat((s) => wrapInline(s, "*")),
+              },
+              {
+                key: "strikethrough",
+                Icon: Strikethrough,
+                run: () => applyFormat((s) => wrapInline(s, "~~")),
+              },
+              {
+                key: "code",
+                Icon: Code,
+                run: () => applyFormat((s) => wrapInline(s, "`")),
+              },
+              {
+                key: "codeBlock",
+                Icon: SquareCode,
+                run: () => applyFormat(applyCodeBlock),
+              },
+              {
+                key: "link",
+                Icon: Link,
+                run: () => applyFormat((s) => applyLink(s, "url")),
+              },
+              {
+                key: "bulletList",
+                Icon: List,
+                run: () => applyFormat((s) => applyLinePrefix(s, "- ")),
+              },
+              {
+                key: "numberedList",
+                Icon: ListOrdered,
+                run: () => applyFormat((s) => applyLinePrefix(s, "1. ")),
+              },
+            ] as const
+          ).map(({ key, Icon, run }) => (
+            <button
+              key={key}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={run}
+              title={tChat(`format.${key}`)}
+              aria-label={tChat(`format.${key}`)}
+              className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <Icon className="h-3.5 w-3.5" />
+            </button>
+          ))}
         </div>
 
         <div className="flex items-center gap-2 px-3 py-2">

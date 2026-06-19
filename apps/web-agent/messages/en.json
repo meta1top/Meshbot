@@ -166,7 +166,17 @@
     "placeholder": "Type here",
     "send": "Send",
     "interrupt": "Interrupt",
-    "attachment": "Add attachment"
+    "attachment": "Add attachment",
+    "format": {
+      "bold": "Bold",
+      "italic": "Italic",
+      "strikethrough": "Strikethrough",
+      "code": "Inline code",
+      "codeBlock": "Code block",
+      "link": "Link",
+      "bulletList": "Bulleted list",
+      "numberedList": "Numbered list"
+    }
   },
   "schedule": {
     "title": "Scheduled tasks",
@@ -537,5 +547,15 @@
   "agentDisabledHint": "",
   "newMessage": "",
   "assistant": "",
-  "assistantEmpty": ""
+  "assistantEmpty": "",
+  "format": {
+    "bold": "",
+    "italic": "",
+    "strikethrough": "",
+    "code": "",
+    "codeBlock": "",
+    "link": "",
+    "bulletList": "",
+    "numberedList": ""
+  }
 }

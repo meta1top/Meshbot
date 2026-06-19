@@ -166,7 +166,17 @@
     "placeholder": "请输入",
     "send": "发送",
     "interrupt": "中断",
-    "attachment": "添加附件"
+    "attachment": "添加附件",
+    "format": {
+      "bold": "加粗",
+      "italic": "斜体",
+      "strikethrough": "删除线",
+      "code": "行内代码",
+      "codeBlock": "代码块",
+      "link": "链接",
+      "bulletList": "无序列表",
+      "numberedList": "有序列表"
+    }
   },
   "schedule": {
     "title": "计划任务",
@@ -537,5 +547,15 @@
   "agentDisabledHint": "",
   "newMessage": "",
   "assistant": "",
-  "assistantEmpty": ""
+  "assistantEmpty": "",
+  "format": {
+    "bold": "",
+    "italic": "",
+    "strikethrough": "",
+    "code": "",
+    "codeBlock": "",
+    "link": "",
+    "bulletList": "",
+    "numberedList": ""
+  }
 }
