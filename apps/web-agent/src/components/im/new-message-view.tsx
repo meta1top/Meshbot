@@ -55,7 +55,7 @@ export function NewMessageView() {
     if (recipient.kind === "session") {
       const res = await createSession(body);
       addSession(res.session);
-      router.push(`/session?id=${res.sessionId}`);
+      router.push(`/messages?kind=assistant&id=${res.sessionId}`);
       return;
     }
     if (recipient.kind === "channel") {

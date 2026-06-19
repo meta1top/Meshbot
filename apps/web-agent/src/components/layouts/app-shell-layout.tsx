@@ -4,7 +4,7 @@ import { cn } from "@meshbot/design";
 import { useAtomValue } from "jotai";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, Suspense, useEffect } from "react";
 import { assistantPanelOpenAtom } from "@/atoms/assistant-panel";
 import { DragRegion } from "@/components/drag-region";
 import { AssistantDock } from "@/components/im/assistant-dock";
@@ -53,7 +53,9 @@ export function AppShellLayout({
 
   const autoSidebar =
     area === "messages" ? (
-      <MessagesSidebar />
+      <Suspense fallback={null}>
+        <MessagesSidebar />
+      </Suspense>
     ) : area === "more" ? (
       <PlaceholderSidebar title={t("rail.more")} />
     ) : null;

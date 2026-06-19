@@ -48,9 +48,11 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  // 会话页路由是 /session?id=<sid>（query string），不是 /session/<sid>
+  // 会话页路由已合并到 /messages?kind=assistant&id=<sid>
   const active =
-    pathname === "/session" && searchParams.get("id") === session.id;
+    pathname === "/messages" &&
+    searchParams.get("id") === session.id &&
+    searchParams.get("kind") === "assistant";
 
   const startEditing = useCallback(() => {
     setEditing(true);
@@ -131,7 +133,9 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
         ) : (
           <button
             type="button"
-            onClick={() => router.push(`/session?id=${session.id}`)}
+            onClick={() =>
+              router.push(`/messages?kind=assistant&id=${session.id}`)
+            }
             className="min-w-0 flex-1 truncate text-left"
             title={session.title}
           >

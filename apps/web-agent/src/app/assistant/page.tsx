@@ -53,7 +53,7 @@ export default function AssistantHome() {
     try {
       const { sessionId, session } = await createSession(msg);
       addSession(session);
-      router.push(`/session?id=${sessionId}`);
+      router.push(`/messages?kind=assistant&id=${sessionId}`);
     } catch (err) {
       console.error("创建会话失败", err);
       setSending(false);

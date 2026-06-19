@@ -3,7 +3,7 @@
 import { cn } from "@meshbot/design";
 import { useAtomValue, useSetAtom } from "jotai";
 import { Clock, Hash, Lock, SquarePen } from "lucide-react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import {
@@ -29,6 +29,7 @@ export function MessagesSidebar() {
   const t = useTranslations("messagesSidebar");
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   const conversations = useAtomValue(conversationsAtom);
   const currentConvId = useAtomValue(currentConversationIdAtom);
@@ -79,7 +80,9 @@ export function MessagesSidebar() {
             <SidebarSection title={t("channels")}>
               {channels.map((c) => {
                 const active =
-                  pathname === "/messages" && c.id === currentConvId;
+                  pathname === "/messages" &&
+                  c.id === currentConvId &&
+                  searchParams.get("kind") !== "assistant";
                 return (
                   <button
                     key={c.id}
@@ -114,7 +117,9 @@ export function MessagesSidebar() {
             <SidebarSection title={t("directMessages")}>
               {dms.map((c) => {
                 const active =
-                  pathname === "/messages" && c.id === currentConvId;
+                  pathname === "/messages" &&
+                  c.id === currentConvId &&
+                  searchParams.get("kind") !== "assistant";
                 const peerId = c.peer?.userId ?? "";
                 const online = peerId !== "" && (presence[peerId] ?? false);
                 return (
