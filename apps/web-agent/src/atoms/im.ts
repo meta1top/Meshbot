@@ -32,7 +32,9 @@ export const presenceAtom = atom<Record<string, boolean>>({});
 // ─── 排序辅助 ────────────────────────────────────────────────────────────────
 
 /** 按 lastMessage.createdAt desc，无 lastMessage 的靠后再按 name 排。 */
-function sortConversations(arr: ConversationSummary[]): ConversationSummary[] {
+export function sortConversations(
+  arr: ConversationSummary[],
+): ConversationSummary[] {
   if (!Array.isArray(arr)) return [];
   return [...arr].sort((a, b) => {
     const aTime = a.lastMessage?.createdAt ?? "";

@@ -27,7 +27,7 @@ export const recentSessionsAtom = atom((get) =>
 );
 
 /** 排序：pinned 优先；pinned 内 pinnedAt desc；其余 updatedAt desc。 */
-function sortSessions(arr: SessionSummary[]): SessionSummary[] {
+export function sortSessions(arr: SessionSummary[]): SessionSummary[] {
   return [...arr].sort((a, b) => {
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
     if (a.pinned && b.pinned) {

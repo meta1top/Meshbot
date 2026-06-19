@@ -5,20 +5,20 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { Clock, Hash, Lock, SquarePen } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   conversationsAtom,
   currentConversationIdAtom,
-  loadConversationsAtom,
   presenceAtom,
 } from "@/atoms/im";
 import {
-  loadSessionsAtom,
   pinnedSessionsAtom,
   recentSessionsAtom,
   sessionsStatusAtom,
 } from "@/atoms/sessions";
+import { loadSidebarAtom } from "@/atoms/sidebar";
 import { SidebarSection } from "@/components/shell/sidebar-section";
+import { SidebarSkeleton } from "@/components/shell/sidebar-skeleton";
 import { SessionListItem } from "@/components/sidebar/session-list-item";
 
 /**
@@ -33,17 +33,19 @@ export function MessagesSidebar() {
   const conversations = useAtomValue(conversationsAtom);
   const currentConvId = useAtomValue(currentConversationIdAtom);
   const presence = useAtomValue(presenceAtom);
-  const loadConversations = useSetAtom(loadConversationsAtom);
 
   const pinned = useAtomValue(pinnedSessionsAtom);
   const recent = useAtomValue(recentSessionsAtom);
   const sessionsStatus = useAtomValue(sessionsStatusAtom);
-  const loadSessions = useSetAtom(loadSessionsAtom);
 
+  const loadSidebar = useSetAtom(loadSidebarAtom);
+  const [loading, setLoading] = useState(true);
+
+  // 单请求聚合加载（/api/sidebar）：三段一起出现，加载期间显示骨架。
   useEffect(() => {
-    void loadConversations();
-    void loadSessions();
-  }, [loadConversations, loadSessions]);
+    setLoading(true);
+    void loadSidebar().finally(() => setLoading(false));
+  }, [loadSidebar]);
 
   const channels = conversations.filter((c) => c.type === "channel");
   const dms = conversations.filter((c) => c.type === "dm");
@@ -69,93 +71,102 @@ export function MessagesSidebar() {
 
       {/* Body */}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 py-2">
-        {/* 频道 */}
-        <SidebarSection title={t("channels")}>
-          {channels.map((c) => {
-            const active = pathname === "/messages" && c.id === currentConvId;
-            return (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => router.push(`/messages?id=${c.id}`)}
-                className={cn(
-                  rowBase,
-                  active
-                    ? "bg-(--shell-accent) text-white"
-                    : "text-white/80 hover:bg-white/12",
-                )}
-              >
-                {c.visibility === "private" ? (
-                  <Lock className="h-3.5 w-3.5 shrink-0 opacity-70" />
-                ) : (
-                  <Hash className="h-3.5 w-3.5 shrink-0 opacity-70" />
-                )}
-                <span className="min-w-0 flex-1 truncate text-left">
-                  {c.name}
-                </span>
-                {c.unreadCount > 0 && (
-                  <span className="shrink-0 rounded-full bg-(--shell-accent) px-1.5 py-0.5 text-[10px] font-bold leading-none">
-                    {c.unreadCount > 99 ? "99+" : c.unreadCount}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </SidebarSection>
+        {loading ? (
+          <SidebarSkeleton />
+        ) : (
+          <>
+            {/* 频道 */}
+            <SidebarSection title={t("channels")}>
+              {channels.map((c) => {
+                const active =
+                  pathname === "/messages" && c.id === currentConvId;
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => router.push(`/messages?id=${c.id}`)}
+                    className={cn(
+                      rowBase,
+                      active
+                        ? "bg-(--shell-accent) text-white"
+                        : "text-white/80 hover:bg-white/12",
+                    )}
+                  >
+                    {c.visibility === "private" ? (
+                      <Lock className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                    ) : (
+                      <Hash className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                    )}
+                    <span className="min-w-0 flex-1 truncate text-left">
+                      {c.name}
+                    </span>
+                    {c.unreadCount > 0 && (
+                      <span className="shrink-0 rounded-full bg-(--shell-accent) px-1.5 py-0.5 text-[10px] font-bold leading-none">
+                        {c.unreadCount > 99 ? "99+" : c.unreadCount}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </SidebarSection>
 
-        {/* 私信 */}
-        <SidebarSection title={t("directMessages")}>
-          {dms.map((c) => {
-            const active = pathname === "/messages" && c.id === currentConvId;
-            const peerId = c.peer?.userId ?? "";
-            const online = peerId !== "" && (presence[peerId] ?? false);
-            return (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => router.push(`/messages?id=${c.id}`)}
-                className={cn(
-                  rowBase,
-                  active
-                    ? "bg-(--shell-accent) text-white"
-                    : "text-white/80 hover:bg-white/12",
-                )}
-              >
-                <span
-                  className={cn(
-                    "h-2.5 w-2.5 shrink-0 rounded-full",
-                    online ? "bg-green-400" : "bg-white/30",
-                  )}
-                />
-                <span className="min-w-0 flex-1 truncate text-left">
-                  {c.peer?.displayName ?? ""}
-                </span>
-                {c.unreadCount > 0 && (
-                  <span className="shrink-0 rounded-full bg-(--shell-accent) px-1.5 py-0.5 text-[10px] font-bold leading-none">
-                    {c.unreadCount > 99 ? "99+" : c.unreadCount}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </SidebarSection>
+            {/* 私信 */}
+            <SidebarSection title={t("directMessages")}>
+              {dms.map((c) => {
+                const active =
+                  pathname === "/messages" && c.id === currentConvId;
+                const peerId = c.peer?.userId ?? "";
+                const online = peerId !== "" && (presence[peerId] ?? false);
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => router.push(`/messages?id=${c.id}`)}
+                    className={cn(
+                      rowBase,
+                      active
+                        ? "bg-(--shell-accent) text-white"
+                        : "text-white/80 hover:bg-white/12",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "h-2.5 w-2.5 shrink-0 rounded-full",
+                        online ? "bg-green-400" : "bg-white/30",
+                      )}
+                    />
+                    <span className="min-w-0 flex-1 truncate text-left">
+                      {c.peer?.displayName ?? ""}
+                    </span>
+                    {c.unreadCount > 0 && (
+                      <span className="shrink-0 rounded-full bg-(--shell-accent) px-1.5 py-0.5 text-[10px] font-bold leading-none">
+                        {c.unreadCount > 99 ? "99+" : c.unreadCount}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </SidebarSection>
 
-        {/* 助手 */}
-        <SidebarSection title={t("assistant")}>
-          {sessionsStatus === "error" ? (
-            <div className="px-2 py-1 text-[12px] text-white/55">
-              {t("loadFailed")}
-            </div>
-          ) : assistantSessions.length === 0 && sessionsStatus === "loaded" ? (
-            <div className="px-2 py-1 text-[12px] text-white/55">
-              {t("assistantEmpty")}
-            </div>
-          ) : (
-            assistantSessions.map((s) => (
-              <SessionListItem key={s.id} session={s} />
-            ))
-          )}
-        </SidebarSection>
+            {/* 助手 */}
+            <SidebarSection title={t("assistant")}>
+              {sessionsStatus === "error" ? (
+                <div className="px-2 py-1 text-[12px] text-white/55">
+                  {t("loadFailed")}
+                </div>
+              ) : assistantSessions.length === 0 &&
+                sessionsStatus === "loaded" ? (
+                <div className="px-2 py-1 text-[12px] text-white/55">
+                  {t("assistantEmpty")}
+                </div>
+              ) : (
+                assistantSessions.map((s) => (
+                  <SessionListItem key={s.id} session={s} />
+                ))
+              )}
+            </SidebarSection>
+          </>
+        )}
       </div>
 
       {/* 助手区底部：定时任务入口 */}
