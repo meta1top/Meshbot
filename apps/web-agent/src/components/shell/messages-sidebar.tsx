@@ -72,7 +72,7 @@ export function MessagesSidebar() {
         {/* 频道 */}
         <SidebarSection title={t("channels")}>
           {channels.map((c) => {
-            const active = c.id === currentConvId;
+            const active = pathname === "/messages" && c.id === currentConvId;
             return (
               <button
                 key={c.id}
@@ -106,7 +106,7 @@ export function MessagesSidebar() {
         {/* 私信 */}
         <SidebarSection title={t("directMessages")}>
           {dms.map((c) => {
-            const active = c.id === currentConvId;
+            const active = pathname === "/messages" && c.id === currentConvId;
             const peerId = c.peer?.userId ?? "";
             const online = peerId !== "" && (presence[peerId] ?? false);
             return (
