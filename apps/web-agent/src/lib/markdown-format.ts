@@ -56,10 +56,14 @@ export function applyCodeBlock(s: EditState): EditState {
   };
 }
 
-/** 把选区变成 [文字](url)；选中 url 占位便于继续输入。空选区用 "文字" 作占位文本。 */
-export function applyLink(s: EditState, url: string): EditState {
+/** 把选区变成 [label](url)；选中 url 占位便于继续输入。空选区用 label 作占位文本。 */
+export function applyLink(
+  s: EditState,
+  url: string,
+  label = "text",
+): EditState {
   const before = s.text.slice(0, s.start);
-  const sel = s.text.slice(s.start, s.end) || "文字";
+  const sel = s.text.slice(s.start, s.end) || label;
   const after = s.text.slice(s.end);
   const inserted = `[${sel}](${url})`;
   const urlStart = before.length + 1 + sel.length + 2; // "[" + sel + "](" 之后

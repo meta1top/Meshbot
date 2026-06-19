@@ -68,4 +68,11 @@ describe("applyLink", () => {
       end: 7,
     });
   });
+  it("空选区用传入 label 作占位并选中 url", () => {
+    expect(applyLink({ text: "", start: 0, end: 0 }, "url", "text")).toEqual({
+      text: "[text](url)",
+      start: 7, // "[text](" = 7 chars
+      end: 10,
+    });
+  });
 });

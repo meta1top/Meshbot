@@ -106,9 +106,11 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         focus: (withText?: string) => {
           const el = editorRef.current;
           if (!el) return;
-          el.focus();
-          const pos = (withText ?? value).length;
-          el.setSelectionRange(pos, pos);
+          requestAnimationFrame(() => {
+            el.focus();
+            const pos = (withText ?? value).length;
+            el.setSelectionRange(pos, pos);
+          });
         },
       }),
       [value],
@@ -162,7 +164,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           }
           if (k === "k") {
             e.preventDefault();
-            applyFormat((s) => applyLink(s, "url"));
+            applyFormat((s) => applyLink(s, "url", tChat("format.linkText")));
             return;
           }
         }
@@ -171,7 +173,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           handleSend();
         }
       },
-      [handleSend, applyFormat],
+      [handleSend, applyFormat, tChat],
     );
 
     const handleInterrupt = useCallback(() => {
@@ -217,7 +219,10 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               {
                 key: "link",
                 Icon: Link,
-                run: () => applyFormat((s) => applyLink(s, "url")),
+                run: () =>
+                  applyFormat((s) =>
+                    applyLink(s, "url", tChat("format.linkText")),
+                  ),
               },
               {
                 key: "bulletList",
