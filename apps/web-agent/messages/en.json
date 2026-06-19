@@ -323,7 +323,10 @@
     "agentNoCandidate": "No candidate reply to send yet",
     "agentInputPlaceholder": "Keep chatting with the agent to refine…",
     "agentEmptyHint": "When a peer message arrives, the agent's suggestion appears here",
-    "agentDisabledHint": "Agent suggestions are off for this conversation"
+    "agentDisabledHint": "Agent suggestions are off for this conversation",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "copy": "Copy"
   },
   "home": {
     "title": "What's up next?",
@@ -594,5 +597,8 @@
   "history": "",
   "newChat": "",
   "close": "",
-  "saved": ""
+  "saved": "",
+  "today": "",
+  "yesterday": "",
+  "copy": ""
 }

@@ -323,7 +323,10 @@
     "agentNoCandidate": "暂无可发送的候选回复",
     "agentInputPlaceholder": "和 Agent 继续沟通，精修回复…",
     "agentEmptyHint": "对端消息到达后，Agent 会在这里给出处理建议",
-    "agentDisabledHint": "已关闭本会话的 Agent 建议"
+    "agentDisabledHint": "已关闭本会话的 Agent 建议",
+    "today": "今天",
+    "yesterday": "昨天",
+    "copy": "复制"
   },
   "home": {
     "title": "接下来做什么？",
@@ -594,5 +597,8 @@
   "history": "",
   "newChat": "",
   "close": "",
-  "saved": ""
+  "saved": "",
+  "today": "",
+  "yesterday": "",
+  "copy": ""
 }
