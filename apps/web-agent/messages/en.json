@@ -93,6 +93,17 @@
       "contextWindowPositive": "Context window must be a positive integer"
     }
   },
+  "assistantDock": {
+    "title": "Quick Ask",
+    "subtitle": "Global assistant · not tied to this conversation",
+    "history": "History",
+    "newChat": "New chat",
+    "close": "Close",
+    "save": "Save to Assistant",
+    "saved": "Saved to Assistant",
+    "placeholder": "Ask anything…",
+    "emptyHint": "Ask the assistant anything — not tied to this conversation."
+  },
   "appShell": {
     "newSession": "New session",
     "scheduled": "Scheduled",
@@ -103,6 +114,7 @@
     "promptPlaceholder": "Describe a task or ask a question",
     "local": "Local",
     "modelBadge": "Flash · Medium",
+    "assistant": "Assistant",
     "sessionMenu": {
       "rename": "Rename",
       "pin": "Pin",
@@ -578,5 +590,9 @@
   "createChannel": "",
   "groupMembers": "",
   "groupAssistant": "",
-  "bodyPlaceholder": ""
+  "bodyPlaceholder": "",
+  "history": "",
+  "newChat": "",
+  "close": "",
+  "saved": ""
 }

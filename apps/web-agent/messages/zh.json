@@ -93,6 +93,17 @@
       "contextWindowPositive": "上下文窗口必须是正整数"
     }
   },
+  "assistantDock": {
+    "title": "随手问",
+    "subtitle": "全局助手 · 不绑定当前对话",
+    "history": "历史",
+    "newChat": "新对话",
+    "close": "关闭",
+    "save": "保存到助手",
+    "saved": "已保存到助手",
+    "placeholder": "继续问，或问点别的…",
+    "emptyHint": "随手问点什么——不绑定当前对话。"
+  },
   "appShell": {
     "newSession": "新会话",
     "scheduled": "计划任务",
@@ -103,6 +114,7 @@
     "promptPlaceholder": "描述一个任务或提出一个问题",
     "local": "本地",
     "modelBadge": "Flash · Medium",
+    "assistant": "随手问",
     "sessionMenu": {
       "rename": "修改标题",
       "pin": "固定",
@@ -578,5 +590,9 @@
   "createChannel": "",
   "groupMembers": "",
   "groupAssistant": "",
-  "bodyPlaceholder": ""
+  "bodyPlaceholder": "",
+  "history": "",
+  "newChat": "",
+  "close": "",
+  "saved": ""
 }
