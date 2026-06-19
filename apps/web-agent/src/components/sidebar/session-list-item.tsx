@@ -110,7 +110,7 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
     <>
       <div
         className={cn(
-          "group flex items-center gap-2 rounded-md px-2 py-1.5 text-[14px]",
+          "group flex h-7 w-full items-center gap-2 rounded-md px-2 text-[13px] transition-colors",
           active
             ? "bg-(--shell-accent) text-white"
             : "text-white/85 hover:bg-white/12 hover:text-white",

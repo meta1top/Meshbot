@@ -5,7 +5,7 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { Clock, Hash, Lock, SquarePen } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import {
   conversationsAtom,
   currentConversationIdAtom,
@@ -40,12 +40,11 @@ export function MessagesSidebar() {
   const sessionsStatus = useAtomValue(sessionsStatusAtom);
 
   const loadSidebar = useSetAtom(loadSidebarAtom);
-  const [loading, setLoading] = useState(true);
 
-  // 单请求聚合加载（/api/sidebar）：三段一起出现，加载期间显示骨架。
+  // 单请求聚合加载（/api/sidebar）：loadSidebar 自带 guard——已加载则直接复用全局
+  // atom 数据，跨路由切换侧栏重挂时不重复请求、不再闪骨架；骨架只首屏出现一次。
   useEffect(() => {
-    setLoading(true);
-    void loadSidebar().finally(() => setLoading(false));
+    void loadSidebar();
   }, [loadSidebar]);
 
   const channels = conversations.filter((c) => c.type === "channel");
@@ -72,7 +71,7 @@ export function MessagesSidebar() {
 
       {/* Body */}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 py-2">
-        {loading ? (
+        {sessionsStatus === "idle" || sessionsStatus === "loading" ? (
           <SidebarSkeleton />
         ) : (
           <>

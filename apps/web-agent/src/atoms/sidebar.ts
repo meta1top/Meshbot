@@ -15,7 +15,11 @@ import { fetchSidebar } from "@/rest/im";
  * 替代两个独立请求先后到达导致的分段跳出。频道/私信若云端故障由后端降级为空；
  * 总失败（server-agent 不可达）也降级为空并标记 loaded，避免一直卡在骨架。
  */
-export const loadSidebarAtom = atom(null, async (_get, set) => {
+export const loadSidebarAtom = atom(null, async (get, set) => {
+  // guard：已加载/加载中则直接复用全局 atom 数据，不重复请求——跨路由切换导致
+  // 侧栏组件重挂时不再重新拉取、不闪骨架（新增/改/删由各 patch atom 局部更新）。
+  if (get(sessionsStatusAtom) !== "idle") return;
+  set(sessionsStatusAtom, "loading");
   try {
     const { conversations, sessions } = await fetchSidebar();
     set(conversationsAtom, sortConversations(conversations));
