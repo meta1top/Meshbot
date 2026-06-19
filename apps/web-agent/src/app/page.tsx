@@ -1,15 +1,6 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { AppShellLayout } from "@/components/layouts/app-shell-layout";
-import { AreaPlaceholder } from "@/components/shell/area-placeholder";
-
+/** 首页即消息：重定向到消息中心。 */
 export default function HomePage() {
-  return (
-    <AppShellLayout>
-      <AreaPlaceholder
-        titleKey="placeholder.homeTitle"
-        bodyKey="placeholder.homeBody"
-      />
-    </AppShellLayout>
-  );
+  redirect("/messages");
 }

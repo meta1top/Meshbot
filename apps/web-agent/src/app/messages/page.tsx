@@ -31,7 +31,6 @@ import {
   ChatInput,
   type ChatInputHandle,
 } from "@/components/common/chat-input";
-import { ImCompanionPanel } from "@/components/im/im-companion-panel";
 import { ImConversationHeader } from "@/components/im/im-conversation-header";
 import { ImMessageList } from "@/components/im/im-message-list";
 import { AppShellLayout } from "@/components/layouts/app-shell-layout";
@@ -223,12 +222,6 @@ function MessagesView() {
     return () => io.disconnect();
   }, [loadMoreHistory, hasMoreHistory]);
 
-  // 候选回填：侧栏「发送到会话」填入左侧 IM 输入框，不自动发送
-  const useCandidate = useCallback((text: string) => {
-    setDraft(text);
-    chatInputRef.current?.focus(text);
-  }, []);
-
   // 6. Send: emit via WS, no optimistic insert
   const handleSend = useCallback(
     (text: string) => {
@@ -272,11 +265,6 @@ function MessagesView() {
     <AppShellLayout
       scrollContainerRef={scrollContainerRef}
       header={id ? <ImConversationHeader /> : undefined}
-      rightPanel={
-        id ? (
-          <ImCompanionPanel conversationId={id} onUseCandidate={useCandidate} />
-        ) : undefined
-      }
     >
       {!id ? (
         <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
