@@ -22,11 +22,14 @@ import {
   Post,
   Query,
 } from "@nestjs/common";
+import { ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import {
   AppendMessageDto,
   CreateSessionDto,
   MessageFeedbackDto,
+  SessionListResponseDto,
   SessionPatchDto,
+  SessionSummaryDto,
 } from "../dto/session.dto";
 import { LlmCallService } from "../services/llm-call.service";
 import { RunnerService } from "../services/runner.service";
@@ -35,6 +38,7 @@ import { SessionTitleService } from "../services/session-title.service";
 import { SessionService } from "../services/session.service";
 
 /** 会话 REST 端点。瘦 Controller —— 业务在 SessionService / RunnerService。 */
+@ApiTags("sessions")
 @Controller("api/sessions")
 export class SessionController {
   constructor(
@@ -48,7 +52,10 @@ export class SessionController {
   /** 创建会话：写库后异步发起 run，立即返回 sessionId + session 完整对象。 */
   @Post()
   async create(@Body() dto: CreateSessionDto): Promise<CreateSessionResponse> {
-    const result = await this.sessions.createSession(dto);
+    const result = await this.sessions.createSession({
+      content: dto.content,
+      kind: dto.kind,
+    });
     this.runner.kick(result.sessionId);
     this.titleService.schedule(result.sessionId, dto.content);
     return result;
@@ -248,6 +255,22 @@ export class SessionController {
   async list(): Promise<SessionListResponse> {
     const sessions = await this.sessions.listAllSorted();
     return { sessions };
+  }
+
+  /** GET /api/sessions/quick —— 随手问临时会话历史列表。 */
+  @Get("quick")
+  @ApiOperation({ summary: "列出随手问临时会话（历史）" })
+  @ApiOkResponse({ type: SessionListResponseDto })
+  async listQuick(): Promise<SessionListResponse> {
+    return { sessions: await this.sessions.listQuickSessions() };
+  }
+
+  /** POST /api/sessions/:id/promote —— 把随手问会话沉淀为侧栏会话。 */
+  @Post(":id/promote")
+  @ApiOperation({ summary: "把随手问会话沉淀为侧栏会话" })
+  @ApiOkResponse({ type: SessionSummaryDto })
+  async promote(@Param("id") id: string): Promise<SessionSummary> {
+    return this.sessions.promoteToSidebar(id);
   }
 
   /** PATCH /api/sessions/:id —— title / pinned 至少传一项。 */

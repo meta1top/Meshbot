@@ -3,7 +3,9 @@ import {
   AppendMessageSchema,
   CreateSessionSchema,
   MessageFeedbackSchema,
+  SessionListResponseSchema,
   SessionPatchSchema,
+  SessionSummarySchema,
 } from "@meshbot/types-agent";
 
 /** POST /api/sessions 入参 DTO。 */
@@ -17,3 +19,11 @@ export class SessionPatchDto extends createZodDto(SessionPatchSchema) {}
 
 /** POST /api/sessions/:id/messages/:messageId/feedback 入参 DTO。 */
 export class MessageFeedbackDto extends createZodDto(MessageFeedbackSchema) {}
+
+/** 单会话概要响应 DTO（Swagger 类型声明用）。 */
+export class SessionSummaryDto extends createZodDto(SessionSummarySchema) {}
+
+/** 会话列表响应 DTO（Swagger 类型声明用）。 */
+export class SessionListResponseDto extends createZodDto(
+  SessionListResponseSchema,
+) {}
