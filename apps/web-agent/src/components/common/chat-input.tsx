@@ -48,8 +48,8 @@ export interface ChatInputHandle {
    * 聚焦输入框，光标置于内容末尾。
    *
    * 可选传入 `withText`：调用方刚 setDraft(text) 时，React state 提交是异步的，
-   * 若不传值则 focus 时 DOM innerText 还是旧值，光标会停在旧内容末尾。
-   * 传入 withText 让组件先把 DOM innerText 同步到该值，再 focus 到末尾。
+   * 若不传值则 focus 时光标会停在旧内容末尾。
+   * 传入 withText 让组件用该值计算末尾位置，再 focus 并将光标移到末尾。
    */
   focus: (withText?: string) => void;
 }
@@ -70,15 +70,15 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
   ) {
     const tChat = useTranslations("chatInput");
     const tSession = useTranslations("session");
-    const editorRef = useRef<HTMLDivElement>(null);
+    const editorRef = useRef<HTMLTextAreaElement>(null);
 
-    // 当外部 value 与 DOM innerText 不一致时同步（外部灌 draft 时触发）
+    // 自适应高度：每次 value 变化，先复位再撑到 scrollHeight（CSS max-h 封顶后内部滚动）
+    // biome-ignore lint/correctness/useExhaustiveDependencies: value 是触发条件，effect 读 DOM scrollHeight（而非 value 本身）
     useEffect(() => {
       const el = editorRef.current;
       if (!el) return;
-      if (el.innerText !== value) {
-        el.innerText = value;
-      }
+      el.style.height = "auto";
+      el.style.height = `${el.scrollHeight}px`;
     }, [value]);
 
     useImperativeHandle(
@@ -87,45 +87,23 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         focus: (withText?: string) => {
           const el = editorRef.current;
           if (!el) return;
-          // 主动同步 DOM 内容：withText 优先（调用方明确知道要落的内容），
-          // 否则用 props.value（闭包值）。两者都能避免 React effect 排程的滞后。
-          const target = withText ?? value;
-          if (el.innerText !== target) {
-            el.innerText = target;
-          }
           el.focus();
-          // 光标移到内容末尾。contentEditable 没有 setSelectionRange，
-          // 必须用 Range/Selection API：折叠到末尾节点。
-          const range = document.createRange();
-          range.selectNodeContents(el);
-          range.collapse(false);
-          const sel = window.getSelection();
-          sel?.removeAllRanges();
-          sel?.addRange(range);
+          const pos = (withText ?? value).length;
+          el.setSelectionRange(pos, pos);
         },
       }),
       [value],
     );
-
-    const handleInput = useCallback(() => {
-      const el = editorRef.current;
-      if (!el) return;
-      onChange(el.innerText);
-    }, [onChange]);
 
     const handleSend = useCallback(() => {
       const trimmed = value.trim();
       if (!trimmed) return;
       onSend?.(trimmed);
       onChange("");
-      const el = editorRef.current;
-      if (el) {
-        el.innerText = "";
-      }
     }, [value, onSend, onChange]);
 
     const handleKeyDown = useCallback(
-      (e: React.KeyboardEvent<HTMLDivElement>) => {
+      (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
         // IME 组合期间（中文/日文/韩文输入法未确认）不拦截 Enter——让 IME
         // 自己用回车 confirm 候选词。nativeEvent.isComposing / keyCode===229
         // 任一为 true 都视为组合中。
@@ -160,26 +138,16 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         </div>
 
         <div className="flex items-center gap-2 px-3 py-2">
-          <div className="relative w-full">
-            {!hasContent && (
-              <div className="pointer-events-none absolute left-0 top-0 py-1.5 text-sm text-muted-foreground">
-                {placeholder ?? tChat("placeholder")}
-              </div>
-            )}
-            <div
-              ref={editorRef}
-              role="textbox"
-              aria-multiline="true"
-              tabIndex={0}
-              contentEditable
-              onInput={handleInput}
-              onKeyDown={handleKeyDown}
-              className={cn(
-                "min-h-[24px] max-h-[200px] w-full overflow-y-auto bg-transparent py-1.5 text-sm text-foreground outline-none empty:before:text-muted-foreground",
-              )}
-              style={{ wordBreak: "break-word" }}
-            />
-          </div>
+          <textarea
+            ref={editorRef}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            rows={1}
+            placeholder={placeholder ?? tChat("placeholder")}
+            className="max-h-[200px] min-h-[24px] w-full resize-none overflow-y-auto bg-transparent py-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            style={{ wordBreak: "break-word" }}
+          />
 
           {isLoading && (
             <button
