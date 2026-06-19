@@ -241,6 +241,17 @@
       "toastError": "Compaction failed: {message}"
     }
   },
+  "messagesSidebar": {
+    "title": "Messages",
+    "newMessage": "New message",
+    "channels": "Channels",
+    "directMessages": "Direct messages",
+    "assistant": "Assistant",
+    "scheduled": "Scheduled",
+    "assistantEmpty": "No conversations",
+    "loadFailed": "Failed to load",
+    "retry": "Retry"
+  },
   "messages": {
     "title": "Messages",
     "channels": "Channels",
@@ -523,5 +534,8 @@
   "agentNoCandidate": "",
   "agentInputPlaceholder": "",
   "agentEmptyHint": "",
-  "agentDisabledHint": ""
+  "agentDisabledHint": "",
+  "newMessage": "",
+  "assistant": "",
+  "assistantEmpty": ""
 }

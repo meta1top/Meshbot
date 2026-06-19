@@ -241,6 +241,17 @@
       "toastError": "压缩失败：{message}"
     }
   },
+  "messagesSidebar": {
+    "title": "消息",
+    "newMessage": "新消息",
+    "channels": "频道",
+    "directMessages": "私信",
+    "assistant": "助手",
+    "scheduled": "定时任务",
+    "assistantEmpty": "暂无会话",
+    "loadFailed": "加载失败",
+    "retry": "重试"
+  },
   "messages": {
     "title": "消息",
     "channels": "频道",
@@ -523,5 +534,8 @@
   "agentNoCandidate": "",
   "agentInputPlaceholder": "",
   "agentEmptyHint": "",
-  "agentDisabledHint": ""
+  "agentDisabledHint": "",
+  "newMessage": "",
+  "assistant": "",
+  "assistantEmpty": ""
 }
