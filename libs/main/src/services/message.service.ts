@@ -1,7 +1,7 @@
 import type { ImMessage, MessagePage } from "@meshbot/types";
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { MoreThan, type Repository } from "typeorm";
+import { type FindOptionsWhere, MoreThan, Not, type Repository } from "typeorm";
 
 import { Message } from "../entities/message.entity";
 
@@ -65,18 +65,18 @@ export class MessageService {
 
   /**
    * 统计未读消息数。
-   * lastReadAt=null → 返回全部消息数；lastReadAt=Date → 统计该时刻之后的消息数。
+   * lastReadAt=null → 全部消息数；lastReadAt=Date → 该时刻之后的消息数。
+   * excludeSenderId → 排除该用户自己发的消息（自己发的不计入未读）。
    */
   async unreadCount(
     conversationId: string,
     lastReadAt: Date | null,
+    excludeSenderId?: string,
   ): Promise<number> {
-    if (lastReadAt === null) {
-      return this.msgRepo.count({ where: { conversationId } });
-    }
-    return this.msgRepo.count({
-      where: { conversationId, createdAt: MoreThan(lastReadAt) },
-    });
+    const where: FindOptionsWhere<Message> = { conversationId };
+    if (lastReadAt !== null) where.createdAt = MoreThan(lastReadAt);
+    if (excludeSenderId) where.senderId = Not(excludeSenderId);
+    return this.msgRepo.count({ where });
   }
 
   /** 返回该会话最新一条消息；会话为空时返回 null。 */

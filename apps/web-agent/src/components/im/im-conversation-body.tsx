@@ -1,10 +1,5 @@
 "use client";
 
-import type {
-  ConversationSummary,
-  ImMessage,
-  PresenceState,
-} from "@meshbot/types";
 import { IM_WS_EVENTS } from "@meshbot/types";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useTranslations } from "next-intl";
@@ -18,13 +13,9 @@ import {
 } from "react";
 import { currentUserAtom } from "@/atoms/auth";
 import {
-  applyIncomingMessageAtom,
   currentConversationIdAtom,
   markConversationReadAtom,
   messagesAtom,
-  removeConversationAtom,
-  setPresenceAtom,
-  upsertConversationAtom,
 } from "@/atoms/im";
 import {
   ChatInput,
@@ -47,10 +38,6 @@ export function ImConversationBody({ id, scrollRef }: ImConversationBodyProps) {
   const t = useTranslations("messages");
 
   const setCurrentConversationId = useSetAtom(currentConversationIdAtom);
-  const applyIncomingMessage = useSetAtom(applyIncomingMessageAtom);
-  const setPresence = useSetAtom(setPresenceAtom);
-  const upsertConversation = useSetAtom(upsertConversationAtom);
-  const removeConversation = useSetAtom(removeConversationAtom);
   const setMessages = useSetAtom(messagesAtom);
   const markConversationRead = useSetAtom(markConversationReadAtom);
   const messages = useAtomValue(messagesAtom);
@@ -97,43 +84,10 @@ export function ImConversationBody({ id, scrollRef }: ImConversationBodyProps) {
     setCurrentConversationId(id);
   }, [id, setCurrentConversationId]);
 
-  // 2. conversations 由侧栏 MessagesSidebar 的 loadSidebarAtom（/api/sidebar 聚合）
-  //    填充 conversationsAtom——侧栏在 messages 区必定挂载，这里不再重复请求。
-
-  // 3. Socket subscription (once on mount, not per-id)
-  useEffect(() => {
-    const socket = getImSocket();
-
-    const onMessage = (payload: ImMessage) => {
-      applyIncomingMessage(payload);
-    };
-    const onPresence = (payload: PresenceState) => {
-      setPresence(payload);
-    };
-    const onConversationCreated = (payload: ConversationSummary) => {
-      upsertConversation(payload);
-    };
-    const onConversationRemoved = (payload: { conversationId: string }) => {
-      removeConversation(payload.conversationId);
-    };
-
-    socket.on(IM_WS_EVENTS.message, onMessage);
-    socket.on(IM_WS_EVENTS.presence, onPresence);
-    socket.on(IM_WS_EVENTS.conversationCreated, onConversationCreated);
-    socket.on(IM_WS_EVENTS.conversationRemoved, onConversationRemoved);
-
-    return () => {
-      socket.off(IM_WS_EVENTS.message, onMessage);
-      socket.off(IM_WS_EVENTS.presence, onPresence);
-      socket.off(IM_WS_EVENTS.conversationCreated, onConversationCreated);
-      socket.off(IM_WS_EVENTS.conversationRemoved, onConversationRemoved);
-    };
-  }, [
-    applyIncomingMessage,
-    setPresence,
-    upsertConversation,
-    removeConversation,
-  ]);
+  // conversations 由侧栏 MessagesSidebar 的 loadSidebarAtom（/api/sidebar 聚合）填充；
+  // 实时订阅（message/presence/会话增删）已上移到 shell 级 useImRealtime（AppShellLayout），
+  // 任何页面常驻。当前会话的消息追加由 applyIncomingMessage 内部按 currentId 统一处理，
+  // 本组件不再单独订阅。
 
   // 4. Load history when conversation id changes
   useEffect(() => {

@@ -15,6 +15,7 @@ import { MessagesSidebar } from "@/components/shell/messages-sidebar";
 import { PlaceholderSidebar } from "@/components/shell/placeholder-sidebar";
 import { ShellTopBar } from "@/components/shell/shell-top-bar";
 import { WorkspaceRail } from "@/components/shell/workspace-rail";
+import { useImRealtime } from "@/hooks/use-im-realtime";
 import { areaFromPath } from "@/lib/area-from-path";
 
 interface AppShellLayoutProps {
@@ -48,6 +49,8 @@ export function AppShellLayout({
   const t = useTranslations("appShell");
   const area = areaFromPath(pathname);
   const panelOpen = useAtomValue(assistantPanelOpenAtom);
+  // Shell 级 IM 实时订阅：常驻于壳，任何页面都能实时更新未读/会话/在线。
+  useImRealtime();
   const [panelWidth, setPanelWidth] = useAtom(assistantPanelWidthAtom);
 
   // 随手问面板左缘拖拽改宽：面板在右侧，鼠标左移→变宽；clamp 300–640；持久化在 atom。

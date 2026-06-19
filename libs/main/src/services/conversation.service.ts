@@ -355,7 +355,11 @@ export class ConversationService {
     });
 
     const [unreadCount, lastMsg] = await Promise.all([
-      this.messageService.unreadCount(conv.id, member?.lastReadAt ?? null),
+      this.messageService.unreadCount(
+        conv.id,
+        member?.lastReadAt ?? null,
+        requestorId,
+      ),
       this.messageService.lastMessage(conv.id),
     ]);
 

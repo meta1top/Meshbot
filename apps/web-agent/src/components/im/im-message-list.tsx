@@ -13,11 +13,12 @@ interface ImMessageListProps {
   currentUserId: string;
 }
 
-/** ISO → HH:MM（本地）。 */
+/** ISO → HH:MM（24h，显式 locale + hour12，避免 web/desktop 因环境 locale 不一致）。 */
 function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString(undefined, {
+  return new Date(iso).toLocaleTimeString("zh-CN", {
     hour: "2-digit",
     minute: "2-digit",
+    hour12: false,
   });
 }
 
@@ -38,7 +39,10 @@ function dayLabel(iso: string, today: string, yesterday: string): string {
   const y = new Date(now);
   y.setDate(now.getDate() - 1);
   if (isSameDay(d, y)) return yesterday;
-  return d.toLocaleDateString();
+  // 固定 YYYY-MM-DD（不依赖环境 locale），web/desktop 一致。
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
 }
 
 /**

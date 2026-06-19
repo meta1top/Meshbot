@@ -9,7 +9,9 @@ export interface MessageRowMeta {
 /** 本地日历日 key（按本地年-月-日，符合 IM 用户直觉的「同一天」）。 */
 function dayKey(iso: string): string {
   const d = new Date(iso);
-  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
 }
 
 /**

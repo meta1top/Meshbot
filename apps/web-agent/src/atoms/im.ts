@@ -6,6 +6,7 @@ import type {
   PresenceState,
 } from "@meshbot/types";
 import { atom } from "jotai";
+import { currentUserAtom } from "@/atoms/auth";
 
 /** 全部会话列表（最近消息时间 desc 排序）。 */
 export const conversationsAtom = atom<ConversationSummary[]>([]);
@@ -90,6 +91,7 @@ export const applyIncomingMessageAtom = atom(
     if (idx >= 0) {
       const conv = conversations[idx];
       const isCurrentConv = message.conversationId === currentId;
+      const isOwn = message.senderId === get(currentUserAtom)?.id;
       const updated: ConversationSummary = {
         ...conv,
         lastMessage: {
@@ -97,8 +99,9 @@ export const applyIncomingMessageAtom = atom(
           senderId: message.senderId,
           createdAt: message.createdAt,
         },
-        // 当前打开的会话不增加未读
-        unreadCount: isCurrentConv ? conv.unreadCount : conv.unreadCount + 1,
+        // 当前打开的会话、或自己发的消息，都不增加未读
+        unreadCount:
+          isCurrentConv || isOwn ? conv.unreadCount : conv.unreadCount + 1,
       };
       const next = conversations.map((c) =>
         c.id === message.conversationId ? updated : c,

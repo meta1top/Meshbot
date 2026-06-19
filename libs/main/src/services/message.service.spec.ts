@@ -1,5 +1,5 @@
 import type { ImMessage, MessagePage } from "@meshbot/types";
-import { MoreThan } from "typeorm";
+import { MoreThan, Not } from "typeorm";
 import { MessageService } from "./message.service";
 
 /**
@@ -179,6 +179,27 @@ describe("MessageService", () => {
       expect(n).toBe(3);
       expect(repo.count).toHaveBeenCalledWith({
         where: { conversationId: "conv-1", createdAt: MoreThan(ts) },
+      });
+    });
+
+    it("excludeSenderId → 排除自己发的消息（自己发的不计未读）", async () => {
+      const ts = new Date("2024-01-01T10:00:00Z");
+      const repo = {
+        create: jest.fn(),
+        save: jest.fn(),
+        createQueryBuilder: jest.fn(),
+        findOne: jest.fn(),
+        count: jest.fn().mockResolvedValue(2),
+      };
+      const svc = new MessageService(repo as never);
+      const n = await svc.unreadCount("conv-1", ts, "user-self");
+      expect(n).toBe(2);
+      expect(repo.count).toHaveBeenCalledWith({
+        where: {
+          conversationId: "conv-1",
+          createdAt: MoreThan(ts),
+          senderId: Not("user-self"),
+        },
       });
     });
   });
