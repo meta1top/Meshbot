@@ -144,17 +144,22 @@ export function AppShellLayout({
             )}
           </section>
           {panelOpen && (
-            <aside
-              style={{ width: panelWidth }}
-              className="relative ml-1.5 hidden shrink-0 overflow-hidden rounded-(--shell-radius) bg-(--shell-content) xl:flex"
-            >
+            <>
+              {/* 拖拽手柄：占内容区与随手问之间那条缝（平时透明露深色壳，hover 显橙色竖条）。 */}
               <div
                 aria-hidden
                 onMouseDown={startPanelResize}
-                className="absolute top-0 left-0 z-20 h-full w-1.5 cursor-col-resize hover:bg-(--shell-accent)/40"
-              />
-              <AssistantDock />
-            </aside>
+                className="group hidden w-1.5 shrink-0 cursor-col-resize xl:flex"
+              >
+                <div className="mx-auto h-full w-0.5 rounded-full transition-colors group-hover:bg-(--shell-accent)/60" />
+              </div>
+              <aside
+                style={{ width: panelWidth }}
+                className="hidden shrink-0 overflow-hidden rounded-(--shell-radius) bg-(--shell-content) xl:flex"
+              >
+                <AssistantDock />
+              </aside>
+            </>
           )}
         </div>
       </div>
