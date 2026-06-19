@@ -20,13 +20,36 @@ interface AppendMessagePayload {
 /**
  * 创建会话。返回完整 session 对象，前端用其 unshift 进 sessionsAtom，
  * 避免再发一次 list。
+ * - kind: 会话类型，默认 "user"；"quick" 表示随手问会话
  */
 export async function createSession(
   content: string,
+  kind?: "user" | "quick",
 ): Promise<CreateSessionResponse> {
   const { data } = await apiClient.post<CreateSessionResponse>(
     "/api/sessions",
-    { content },
+    { content, kind },
+  );
+  return data;
+}
+
+/**
+ * 获取随手问会话列表。
+ */
+export async function fetchQuickSessions(): Promise<SessionSummary[]> {
+  const { data } = await apiClient.get<{ sessions: SessionSummary[] }>(
+    "/api/sessions/quick",
+  );
+  return data.sessions;
+}
+
+/**
+ * 将随手问会话晋升为常规会话。
+ */
+export async function promoteSession(id: string): Promise<SessionSummary> {
+  const { data } = await apiClient.post<SessionSummary>(
+    `/api/sessions/${id}/promote`,
+    {},
   );
   return data;
 }
