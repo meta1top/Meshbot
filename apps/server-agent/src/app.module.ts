@@ -78,7 +78,7 @@ const meshbotDir = resolveMeshbotDir();
     }),
     TypeOrmModule.forRoot({
       type: "better-sqlite3",
-      database: path.join(meshbotDir, "agent.db"),
+      database: path.join(meshbotDir, "main.db"),
       entities: [
         LlmCall,
         ModelConfig,

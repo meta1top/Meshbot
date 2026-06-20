@@ -68,14 +68,29 @@ describe("SessionService", () => {
       scopedFactory,
       ctx,
     );
-    const checkpointer = new CheckpointerCleanupService(ds);
-    // 假 GraphService：cutMessagesAfter 只记调用，验证 regenerateAfter 触达 graph
+    // 假 GraphService：cutMessagesAfter 记调用验证 regenerateAfter；clearThread 同步删
+    // checkpoints/writes —— 生产里走该账号 checkpointer 的 better-sqlite3 连接，此处复用
+    // ds 底层连接同步删，保持「deleteSession 级联删 checkpointer」断言成立。
     const fakeGraph = {
       __cuts: [] as Array<{ threadId: string; cutoff: string }>,
       async cutMessagesAfter(threadId: string, cutoffMessageId: string) {
         this.__cuts.push({ threadId, cutoff: cutoffMessageId });
       },
+      clearThread(threadId: string) {
+        const db = (
+          ds.driver as unknown as {
+            databaseConnection: {
+              prepare(sql: string): { run(value: string): void };
+            };
+          }
+        ).databaseConnection;
+        db.prepare("DELETE FROM checkpoints WHERE thread_id = ?").run(threadId);
+        db.prepare("DELETE FROM writes WHERE thread_id = ?").run(threadId);
+      },
     };
+    const checkpointer = new CheckpointerCleanupService(
+      fakeGraph as unknown as GraphService,
+    );
     // 假 ScheduleService：deleteBySession 只记调用，验证 deleteSession 触达 schedules
     const fakeSchedules = {
       __deletions: [] as string[],

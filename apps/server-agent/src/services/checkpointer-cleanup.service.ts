@@ -1,26 +1,22 @@
+import { GraphService } from "@meshbot/agent";
 import { Injectable } from "@nestjs/common";
-import { InjectDataSource } from "@nestjs/typeorm";
-import { DataSource } from "typeorm";
 
 /**
- * 清 LangGraph SqliteSaver 的 checkpoints / writes 表 —— SqliteSaver 没暴露
- * deleteThread，故走 DataSource raw query。
+ * 清当前账号 LangGraph checkpoint 库的 checkpoints / writes —— 委托 GraphService，
+ * 复用该账号 checkpointer 的同一连接。
  *
- * 表名与 @langchain/langgraph-checkpoint-sqlite 0.1.x 强耦合；若升级集成包
- * 后表名变了，在此 service 内集中改一处即可。
+ * checkpoint 已按账号拆到 `accounts/<id>/agent.db`，与 TypeORM 根库 main.db 物理
+ * 分离（避免 SqliteSaver 与 TypeORM 争锁），故不能再走 DataSource raw query。
  */
 @Injectable()
 export class CheckpointerCleanupService {
-  constructor(
-    @InjectDataSource()
-    private readonly ds: DataSource,
-  ) {}
+  constructor(private readonly graph: GraphService) {}
 
-  /** 删某 thread_id 的全部 checkpoints + writes。幂等：不存在不报错。 */
+  /**
+   * 删某 thread_id（=sessionId）的全部 checkpoints + writes。幂等：不存在不报错。
+   * 须在账号上下文内调用（GraphService 按当前账号解析 checkpoint 库）。
+   */
   async deleteThread(threadId: string): Promise<void> {
-    await this.ds.query(`DELETE FROM checkpoints WHERE thread_id = ?`, [
-      threadId,
-    ]);
-    await this.ds.query(`DELETE FROM writes WHERE thread_id = ?`, [threadId]);
+    this.graph.clearThread(threadId);
   }
 }

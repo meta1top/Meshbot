@@ -59,7 +59,9 @@ describe("GraphService compaction hooks", () => {
 
   it("getMessagesSnapshot 空 thread 返空数组", async () => {
     const threadId = await graphService.startSession({ model: "fake" });
-    const msgs = await graphService.getMessagesSnapshot(threadId);
+    const msgs = await ctx.run(TEST_ACCOUNT, () =>
+      graphService.getMessagesSnapshot(threadId),
+    );
     expect(msgs).toEqual([]);
   });
 
@@ -72,7 +74,9 @@ describe("GraphService compaction hooks", () => {
         // drain
       }
     });
-    const msgs = await graphService.getMessagesSnapshot(threadId);
+    const msgs = await ctx.run(TEST_ACCOUNT, () =>
+      graphService.getMessagesSnapshot(threadId),
+    );
     expect(msgs.length).toBeGreaterThan(0);
   });
 
@@ -103,7 +107,9 @@ describe("GraphService compaction hooks", () => {
         // drain
       }
     });
-    const before = await graphService.getMessagesSnapshot(threadId);
+    const before = await ctx.run(TEST_ACCOUNT, () =>
+      graphService.getMessagesSnapshot(threadId),
+    );
     // 假设保留最后 2 条，前面的都压缩
     const splitIdx = before.length - 2;
     const toSummarize = before.slice(0, splitIdx);
@@ -112,13 +118,17 @@ describe("GraphService compaction hooks", () => {
       .map((m) => m.id)
       .filter((id): id is string => typeof id === "string");
 
-    await graphService.applyCompaction(threadId, {
-      removeIds,
-      summaryText: "COMPRESSED_SUMMARY",
-      keep,
-    });
+    await ctx.run(TEST_ACCOUNT, () =>
+      graphService.applyCompaction(threadId, {
+        removeIds,
+        summaryText: "COMPRESSED_SUMMARY",
+        keep,
+      }),
+    );
 
-    const after = await graphService.getMessagesSnapshot(threadId);
+    const after = await ctx.run(TEST_ACCOUNT, () =>
+      graphService.getMessagesSnapshot(threadId),
+    );
     // 恰好一条摘要 SystemMessage
     const summaryIdx = after.findIndex(
       (m) =>

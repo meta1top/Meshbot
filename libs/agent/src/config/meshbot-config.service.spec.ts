@@ -47,7 +47,7 @@ describe("MeshbotConfigService 账号化文件 getter", () => {
     const a = ctx.run("u1", () => config.getDatabasePath());
     const b = ctx.run("u2", () => config.getDatabasePath());
     expect(a).toBe(b);
-    expect(a.endsWith("/agent.db")).toBe(true);
+    expect(a.endsWith("/main.db")).toBe(true);
   });
 
   it("getMeshbotDir 不需要账号上下文", () => {

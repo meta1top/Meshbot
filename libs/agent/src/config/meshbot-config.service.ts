@@ -91,12 +91,21 @@ export class MeshbotConfigService {
   }
 
   /**
-   * 本地 SQLite 数据库路径：<meshbotDir>/agent.db。
+   * 本地 SQLite 数据库路径（根库）：<meshbotDir>/main.db。
    * 固定共享——所有账号同库（行级 cloudUserId 隔离），不随账号变；
    * 模块初始化期（无账号上下文）也会被调用，故不能账号化。
    */
   getDatabasePath(): string {
-    return path.join(this.meshbotDir, "agent.db");
+    return path.join(this.meshbotDir, "main.db");
+  }
+
+  /**
+   * 当前账号的 LangGraph checkpoint 库：<meshbotDir>/accounts/<account>/agent.db。
+   * 与 TypeORM 根库（main.db）物理分离，避免 SqliteSaver 与 TypeORM 争锁；按账号隔离。
+   * 必须在账号上下文内调用（accountDir 用 getOrThrow）。
+   */
+  getAccountCheckpointDbPath(): string {
+    return path.join(this.accountDir(), "agent.db");
   }
 
   /**

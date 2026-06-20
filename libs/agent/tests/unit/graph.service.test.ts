@@ -154,7 +154,9 @@ describe("GraphService", () => {
         // 仅消费流以驱动 checkpointer 落盘
       }
     });
-    const history = await graphService.getHistory(threadId);
+    const history = await ctx.run(TEST_ACCOUNT, () =>
+      graphService.getHistory(threadId),
+    );
     expect(Array.isArray(history)).toBe(true);
     expect(history.length).toBeGreaterThan(0);
   });
@@ -168,7 +170,9 @@ describe("GraphService", () => {
         // 消费完
       }
     });
-    const history = await graphService.getHistory(threadId);
+    const history = await ctx.run(TEST_ACCOUNT, () =>
+      graphService.getHistory(threadId),
+    );
     const userMsg = history.find((m) => m.role === "user");
     expect(userMsg?.id).toBe("pm-1");
   });
@@ -182,7 +186,9 @@ describe("GraphService", () => {
         // 先跑一轮建立历史
       }
     });
-    const before = await graphService.getHistory(threadId);
+    const before = await ctx.run(TEST_ACCOUNT, () =>
+      graphService.getHistory(threadId),
+    );
     const userCountBefore = before.filter((m) => m.role === "user").length;
     const chunks: unknown[] = [];
     await ctx.run(TEST_ACCOUNT, async () => {
@@ -190,7 +196,9 @@ describe("GraphService", () => {
         chunks.push(ev);
       }
     });
-    const after = await graphService.getHistory(threadId);
+    const after = await ctx.run(TEST_ACCOUNT, () =>
+      graphService.getHistory(threadId),
+    );
     const userCountAfter = after.filter((m) => m.role === "user").length;
     expect(userCountAfter).toBe(userCountBefore);
     expect(chunks.length).toBeGreaterThan(0);

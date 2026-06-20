@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync } from "node:fs";
 import path from "node:path";
 import {
   ErrorsFilter,
@@ -21,6 +21,24 @@ async function bootstrap() {
 
   const meshbotDir = resolveMeshbotDir();
   mkdirSync(meshbotDir, { recursive: true });
+
+  // 一次性迁移：根库 agent.db → main.db（仅当 main.db 不存在且 agent.db 存在）。
+  // LangGraph checkpoint 已拆到各账号 accounts/<id>/agent.db；根库仅存 TypeORM 表。
+  // 旧 agent.db 残留的 checkpoints/writes 表随改名留在 main.db（孤立无害）。
+  // 必须在任何 DB 连接（TypeORM）之前执行。
+  const legacyDb = path.join(meshbotDir, "agent.db");
+  const mainDb = path.join(meshbotDir, "main.db");
+  if (existsSync(legacyDb) && !existsSync(mainDb)) {
+    // 先搬 WAL/SHM 边车、最后搬主库 —— 主库 rename 作「提交点」：即便在边车与主库
+    // 之间崩溃，下次启动 main.db 仍不存在会重跑，已搬的边车也不会被覆盖（其源已不存在）。
+    for (const ext of ["-wal", "-shm"]) {
+      if (existsSync(legacyDb + ext)) {
+        renameSync(legacyDb + ext, mainDb + ext);
+      }
+    }
+    renameSync(legacyDb, mainDb);
+  }
+
   mkdirSync(path.join(meshbotDir, "logs"), { recursive: true });
 
   const port = Number(process.env.MESHBOT_PORT ?? 3100);

@@ -17,7 +17,7 @@ describe("MeshbotConfigService", () => {
   it("returns database path（共享，不依赖账号上下文）", () => {
     const dbPath = makeService().getDatabasePath();
     expect(dbPath).toContain(".meshbot");
-    expect(dbPath).toContain("agent.db");
+    expect(dbPath).toContain("main.db");
   });
 
   it("prompt 目录需账号上下文，无上下文抛错", () => {
@@ -54,7 +54,7 @@ describe("MeshbotConfigService MESHBOT_HOME 覆盖", () => {
     const service = new MeshbotConfigService(ctx);
 
     expect(service.getMeshbotDir()).toBe(root);
-    expect(service.getDatabasePath()).toBe(path.join(root, "agent.db"));
+    expect(service.getDatabasePath()).toBe(path.join(root, "main.db"));
 
     ctx.run("acc-1", () => {
       const accRoot = path.join(root, "accounts", "acc-1");
@@ -62,5 +62,24 @@ describe("MeshbotConfigService MESHBOT_HOME 覆盖", () => {
       expect(service.getSkillsDir()).toBe(path.join(accRoot, "skills"));
       expect(service.getPromptDir()).toBe(path.join(accRoot, "prompt"));
     });
+  });
+
+  it("getAccountCheckpointDbPath 在账号上下文内返 accounts/<id>/agent.db", () => {
+    const root = "/tmp/meshbot-checkpoint-db-test-home";
+    process.env.MESHBOT_HOME = root;
+
+    const ctx = new AccountContextService();
+    const service = new MeshbotConfigService(ctx);
+
+    ctx.run("acc-1", () => {
+      const p = service.getAccountCheckpointDbPath();
+      expect(p).toBe(path.join(root, "accounts", "acc-1", "agent.db"));
+    });
+  });
+
+  it("getAccountCheckpointDbPath 无账号上下文抛错", () => {
+    const ctx = new AccountContextService();
+    const service = new MeshbotConfigService(ctx);
+    expect(() => service.getAccountCheckpointDbPath()).toThrow();
   });
 });
