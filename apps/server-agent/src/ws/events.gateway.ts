@@ -6,9 +6,11 @@ import {
   WsExceptionFilter,
 } from "@meshbot/common";
 import {
+  EVENTS_WS_NAMESPACE,
   IM_WS_EVENTS,
-  IM_WS_NAMESPACE,
   type ConversationSummary,
+  type GlobalEventEnvelope,
+  type ImConversationReadEvent,
   type ImMessage,
   type ImReadInput,
   type ImSendInput,
@@ -29,19 +31,19 @@ import { AccountContextService } from "@meshbot/agent";
 import { ImRelayClientService } from "../cloud/im-relay-client.service";
 
 /**
- * 本地 IM WebSocket Gateway。端点：ws://<host>/ws/im
+ * 本地事件总线 WebSocket Gateway。端点：ws://<host>/ws/events
  *
  * - 复用 BaseWebSocketGateway 的握手鉴权 + 未鉴权宽限回收
- * - 下行（云端 → 本地浏览器）：监听 ImRelayClientService 经 EventEmitter2
- *   转发的 im.* 事件，按账号路由到 acct:<cloudUserId> 房间——多账号同时在线时
- *   每个事件只投递给所属账号的浏览器，避免重复投递与跨账号泄漏
+ * - 下行（云端 → 本地浏览器）：统一信封 `{type, payload, ts}` 以单一 `event` 名
+ *   按账号路由到 `acct:<cloudUserId>` 房间——多账号同时在线时每个事件只投递给
+ *   所属账号的浏览器，避免重复投递与跨账号泄漏
  * - 上行（本地浏览器 → 云端）：im.send / im.read 由浏览器触发，
  *   转交 ImRelayClientService 经云端 socket 上行；未连接时 send 抛
  *   IM_NOT_CONNECTED，由 WsExceptionFilter 统一处理
  */
-@WebSocketGateway({ namespace: IM_WS_NAMESPACE, cors: true })
+@WebSocketGateway({ namespace: EVENTS_WS_NAMESPACE, cors: true })
 @UseFilters(WsExceptionFilter)
-export class ImGateway extends BaseWebSocketGateway {
+export class EventsGateway extends BaseWebSocketGateway {
   constructor(
     private readonly jwt: JwtService,
     private readonly imRelay: ImRelayClientService,
@@ -68,59 +70,71 @@ export class ImGateway extends BaseWebSocketGateway {
   }
 
   /**
-   * 云端下行：新 IM 消息 → namespace 广播给所有本地浏览器 socket。
+   * 云端下行：新 IM 消息 → 信封投递给所属账号浏览器。
    *
    * ImRelayClientService 收到云端 `im.message` 后经 EventEmitter2 触发此方法。
    */
   @OnEvent(IM_WS_EVENTS.message)
   onMessage(payload: ImMessage): void {
-    this.emitToAccount(IM_WS_EVENTS.message, payload);
+    this.emitEnvelope(IM_WS_EVENTS.message, payload);
   }
 
   /**
-   * 云端下行：用户在线状态变更 → namespace 广播。
+   * 云端下行：用户在线状态变更 → 信封投递。
    *
    * ImRelayClientService 收到云端 `im.presence` 后经 EventEmitter2 触发此方法。
    */
   @OnEvent(IM_WS_EVENTS.presence)
   onPresence(payload: PresenceState): void {
-    this.emitToAccount(IM_WS_EVENTS.presence, payload);
+    this.emitEnvelope(IM_WS_EVENTS.presence, payload);
   }
 
   /**
-   * 云端下行：新会话创建通知 → namespace 广播。
+   * 云端下行：新会话创建通知 → 信封投递。
    *
    * ImRelayClientService 收到云端 `im.conversation_created` 后经 EventEmitter2
    * 触发此方法，浏览器刷新会话列表。
    */
   @OnEvent(IM_WS_EVENTS.conversationCreated)
   onConversationCreated(payload: ConversationSummary): void {
-    this.emitToAccount(IM_WS_EVENTS.conversationCreated, payload);
+    this.emitEnvelope(IM_WS_EVENTS.conversationCreated, payload);
   }
 
   /**
-   * 云端下行：频道被移除通知 → namespace 广播。
+   * 云端下行：频道被移除通知 → 信封投递。
    *
    * ImRelayClientService 收到云端 `im.conversation_removed` 后经 EventEmitter2
    * 触发此方法，浏览器刷新会话列表。
    */
   @OnEvent(IM_WS_EVENTS.conversationRemoved)
   onConversationRemoved(payload: { conversationId: string }): void {
-    this.emitToAccount(IM_WS_EVENTS.conversationRemoved, payload);
+    this.emitEnvelope(IM_WS_EVENTS.conversationRemoved, payload);
   }
 
   /**
-   * 下行投递：只发给「当前下行事件所属账号」的浏览器 socket。
-   * relay 用 `account.run(cloudUserId, () => emit)` 包裹，EventEmitter2 同步触发，
-   * 故此处 `account.get()` 即该账号。无上下文（理论不应发生）时降级全量广播，保证不丢。
+   * 云端下行：会话已读通知 → 信封投递。
+   *
+   * ImRelayClientService 收到云端 `im.conversation_read` 后经 EventEmitter2
+   * 触发此方法，浏览器更新会话已读状态。
    */
-  private emitToAccount(event: string, payload: unknown): void {
+  @OnEvent(IM_WS_EVENTS.conversationRead)
+  onConversationRead(payload: ImConversationReadEvent): void {
+    this.emitEnvelope(IM_WS_EVENTS.conversationRead, payload);
+  }
+
+  /**
+   * 下行投递：把任意事件包成全局信封 `{type,payload,ts}`，以单一 `event` 名只发给
+   * 当前下行事件所属账号的 acct 房间（relay 经 account.run 同步触发，故能取到账号）。
+   * 无账号上下文（理论不应发生）→ 降级全量广播，保证不丢。
+   */
+  private emitEnvelope(type: string, payload: unknown): void {
+    const env: GlobalEventEnvelope = { type, payload, ts: Date.now() };
     const cloudUserId = this.account.get();
     if (!cloudUserId) {
-      this.server.emit(event, payload);
+      this.server.emit("event", env);
       return;
     }
-    this.server.to(`acct:${cloudUserId}`).emit(event, payload);
+    this.server.to(`acct:${cloudUserId}`).emit("event", env);
   }
 
   /**

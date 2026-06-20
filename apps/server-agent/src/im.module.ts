@@ -8,7 +8,7 @@ import { SessionModule } from "./session.module";
 import { CloudImService } from "./services/cloud-im.service";
 import { ImAgentService } from "./services/im-agent.service";
 import { SidebarService } from "./services/sidebar.service";
-import { ImGateway } from "./ws/im.gateway";
+import { EventsGateway } from "./ws/events.gateway";
 
 /**
  * IM 模块：注册 ImGateway（本地 WS 网关）、CloudImService（REST 代理编排）
@@ -24,6 +24,6 @@ import { ImGateway } from "./ws/im.gateway";
 @Module({
   imports: [AuthModule, SessionModule],
   controllers: [CloudImController, ImAgentController, SidebarController],
-  providers: [CloudImService, ImGateway, ImAgentService, SidebarService],
+  providers: [CloudImService, EventsGateway, ImAgentService, SidebarService],
 })
 export class ImModule {}

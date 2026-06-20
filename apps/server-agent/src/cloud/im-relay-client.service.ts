@@ -95,6 +95,7 @@ export class ImRelayClientService implements OnModuleDestroy {
         IM_WS_EVENTS.presence,
         IM_WS_EVENTS.conversationCreated,
         IM_WS_EVENTS.conversationRemoved,
+        IM_WS_EVENTS.conversationRead,
       ] as const) {
         socket.on(event, (payload: unknown) => {
           this.account.run(cloudUserId, () => {
