@@ -147,23 +147,24 @@ export function AppShellLayout({
             )}
           </section>
           {panelOpen && (
-            <>
-              {/* 拖拽手柄：占内容区与随手问之间那条缝（平时透明露深色壳，hover 显橙色竖条）。 */}
-              <div
-                aria-hidden
-                onMouseDown={startPanelResize}
-                className="group hidden w-1.5 shrink-0 cursor-col-resize xl:flex"
-              >
-                <div className="mx-auto h-full w-0.5 rounded-full transition-colors group-hover:bg-(--shell-accent)/60" />
-              </div>
-              <aside
-                style={{ width: panelWidth }}
-                className="hidden shrink-0 overflow-hidden rounded-(--shell-radius) bg-(--shell-content) xl:flex"
-              >
-                <AssistantDock />
-              </aside>
-            </>
+            <div
+              aria-hidden
+              onMouseDown={startPanelResize}
+              className="group hidden w-1.5 shrink-0 cursor-col-resize xl:flex"
+            >
+              <div className="mx-auto h-full w-0.5 rounded-full transition-colors group-hover:bg-(--shell-accent)/60" />
+            </div>
           )}
+          {/* 随手问 dock 常驻挂载：关闭时 CSS 隐藏而非卸载，使后台流不退订、重开即时 */}
+          <aside
+            style={{ width: panelWidth }}
+            className={cn(
+              "ml-1.5 shrink-0 overflow-hidden rounded-(--shell-radius) bg-(--shell-content)",
+              panelOpen ? "hidden xl:flex" : "hidden",
+            )}
+          >
+            <AssistantDock />
+          </aside>
         </div>
       </div>
     </main>
