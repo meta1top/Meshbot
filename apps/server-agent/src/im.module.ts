@@ -11,7 +11,7 @@ import { SidebarService } from "./services/sidebar.service";
 import { EventsGateway } from "./ws/events.gateway";
 
 /**
- * IM 模块：注册 ImGateway（本地 WS 网关）、CloudImService（REST 代理编排）
+ * IM 模块：注册 EventsGateway（本地事件总线 WS 网关）、CloudImService（REST 代理编排）
  * 与 CloudImController（薄控制器）。
  *
  * ImRelayClientService 由 AuthModule 提供并导出（OnModuleInit 启动即连，

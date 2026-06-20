@@ -49,11 +49,12 @@ describe("ImGateway.handleRead 广播 im.conversation_read", () => {
 
   it("无 orgId → 不广播", async () => {
     const sock = { data: { user: { userId: "u1" } }, emit: jest.fn() };
-    const { gw } = makeGateway({ sockets: [sock] });
+    const { gw, conversation } = makeGateway({ sockets: [sock] });
     await gw.handleRead(
       { conversationId: "c1" } as never,
       { data: {} } as never,
     );
     expect(sock.emit).not.toHaveBeenCalled();
+    expect(conversation.markRead).not.toHaveBeenCalled();
   });
 });

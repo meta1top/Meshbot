@@ -3,7 +3,10 @@ jest.mock("@/atoms/im", () => ({}));
 jest.mock("@/atoms/schedule-activity", () => ({}));
 jest.mock("@/lib/events-socket", () => ({}));
 jest.mock("jotai", () => ({ useSetAtom: jest.fn() }));
-jest.mock("react", () => ({ useEffect: jest.fn() }));
+jest.mock("react", () => ({
+  ...jest.requireActual("react"),
+  useEffect: jest.fn(),
+}));
 
 import { IM_WS_EVENTS } from "@meshbot/types";
 import { SCHEDULE_EVENTS } from "@meshbot/types-agent";

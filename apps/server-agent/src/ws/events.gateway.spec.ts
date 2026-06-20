@@ -56,6 +56,14 @@ describe("EventsGateway 下行信封 + 账号路由", () => {
     expect(env.type).toBe(IM_WS_EVENTS.message);
   });
 
+  it("handleConnection：未鉴权 socket 不入房间", () => {
+    const account = new AccountContextService();
+    const { gw } = makeGateway(account);
+    const join = jest.fn();
+    gw.handleConnection({ data: {}, join, once: jest.fn() } as never);
+    expect(join).not.toHaveBeenCalled();
+  });
+
   it("handleConnection：已鉴权 socket 加入 acct:<sub>", () => {
     const account = new AccountContextService();
     const { gw } = makeGateway(account);

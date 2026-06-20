@@ -150,7 +150,7 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
             {session.title}
           </button>
         )}
-        {hasActivity && !active && (
+        {hasActivity && !active && !editing && (
           <span
             className="mr-1 h-1.5 w-1.5 shrink-0 rounded-full bg-(--shell-accent)"
             aria-hidden
