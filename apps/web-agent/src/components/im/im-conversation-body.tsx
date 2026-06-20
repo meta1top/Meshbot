@@ -237,11 +237,6 @@ export function ImConversationBody({ id, scrollRef }: ImConversationBodyProps) {
                 className="flex justify-center py-2 text-xs text-muted-foreground/60"
               />
             )}
-            {!hasMoreHistory && messages.length > 0 && (
-              <div className="py-2 text-center text-xs text-muted-foreground/40">
-                {t("historyStart")}
-              </div>
-            )}
             <ImMessageList
               messages={messages}
               members={members}

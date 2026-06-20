@@ -151,11 +151,6 @@ export function AssistantConversationBody({
                 className="flex justify-center py-2 text-xs text-muted-foreground/60"
               />
             )}
-            {!stream.hasMoreHistory && timelineMessages.length > 0 && (
-              <div className="py-2 text-center text-xs text-muted-foreground/40">
-                会话开头
-              </div>
-            )}
             <CompactionBanner
               visible={!!stream.compacting}
               reason={stream.compacting ?? undefined}
