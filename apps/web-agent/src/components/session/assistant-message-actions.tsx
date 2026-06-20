@@ -69,7 +69,7 @@ export function AssistantMessageActions({
   );
 
   return (
-    <div className="inline-flex items-center gap-0.5 rounded-md border border-border bg-background p-0.5 opacity-0 shadow-xs transition-opacity group-hover:opacity-100">
+    <div className="absolute -top-2.5 right-2 z-10 hidden items-center gap-0.5 rounded-md border border-border bg-background p-0.5 shadow-xs group-hover:flex">
       <button
         type="button"
         onClick={handleCopy}

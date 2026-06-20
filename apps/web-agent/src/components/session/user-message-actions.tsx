@@ -67,8 +67,8 @@ export function UserMessageActions({
   return (
     <div
       className={cn(
-        "inline-flex items-center gap-0.5 rounded-md border border-border bg-background p-0.5 shadow-xs transition-opacity",
-        failed ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+        "absolute -top-2.5 right-2 z-10 items-center gap-0.5 rounded-md border border-border bg-background p-0.5 shadow-xs",
+        failed ? "flex" : "hidden group-hover:flex",
       )}
     >
       <button
