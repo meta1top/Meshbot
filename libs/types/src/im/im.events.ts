@@ -12,6 +12,7 @@ export const IM_WS_EVENTS = {
   presence: "im.presence",
   conversationCreated: "im.conversation_created",
   conversationRemoved: "im.conversation_removed",
+  conversationRead: "im.conversation_read",
   // client → server（上行）
   send: "im.send",
   read: "im.read",
@@ -22,6 +23,11 @@ export const IM_WS_EVENTS = {
 export type ImMessageEvent = ImMessage;
 export type ImPresenceEvent = PresenceState;
 export type ImConversationCreatedEvent = ConversationSummary;
+/** 某用户某会话已读（广播给该用户全部连接，用于多端清未读）。 */
+export interface ImConversationReadEvent {
+  conversationId: string;
+  lastReadAt: string;
+}
 
 // 历史分页响应
 export interface MessagePage {

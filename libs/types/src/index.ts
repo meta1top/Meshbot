@@ -5,9 +5,15 @@ export {
   PageRequestSchema,
 } from "./common/page.schema";
 export {
+  EVENTS_WS_NAMESPACE,
+  type GlobalEventEnvelope,
+  GlobalEventEnvelopeSchema,
+} from "./events/global-event";
+export {
   IM_WS_EVENTS,
   IM_WS_NAMESPACE,
   type ImConversationCreatedEvent,
+  type ImConversationReadEvent,
   type ImMessageEvent,
   type ImPresenceEvent,
   type MessagePage,

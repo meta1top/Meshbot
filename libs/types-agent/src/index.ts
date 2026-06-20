@@ -19,6 +19,7 @@ export {
   type UserInfo,
 } from "./auth";
 export * from "./schedule";
+export * from "./schedule.events";
 export * from "./session";
 export * from "./sidebar";
 export * from "./stats";
