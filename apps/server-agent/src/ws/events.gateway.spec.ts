@@ -4,13 +4,17 @@ import { SCHEDULE_EVENTS } from "@meshbot/types-agent";
 
 import { EventsGateway } from "./events.gateway";
 
-function makeGateway(account: AccountContextService) {
-  const gw = new EventsGateway({} as never, {} as never, account);
+function makeGateway(
+  account: AccountContextService,
+  onlinePeers: string[] = [],
+) {
+  const imRelay = { getOnlinePeers: jest.fn().mockReturnValue(onlinePeers) };
+  const gw = new EventsGateway({} as never, imRelay as never, account);
   const broadcastEmit = jest.fn();
   const roomEmit = jest.fn();
   const to = jest.fn().mockReturnValue({ emit: roomEmit });
   (gw as unknown as { server: unknown }).server = { emit: broadcastEmit, to };
-  return { gw, broadcastEmit, roomEmit, to };
+  return { gw, broadcastEmit, roomEmit, to, imRelay };
 }
 
 describe("EventsGateway 下行信封 + 账号路由", () => {
@@ -74,6 +78,24 @@ describe("EventsGateway 下行信封 + 账号路由", () => {
       once: jest.fn(),
     } as never);
     expect(join).toHaveBeenCalledWith("acct:U1");
+  });
+
+  it("handleConnection：回放在线快照给新浏览器 socket", () => {
+    const account = new AccountContextService();
+    const { gw, imRelay } = makeGateway(account, ["peerA", "peerB"]);
+    const emit = jest.fn();
+    gw.handleConnection({
+      data: { user: { sub: "U1" } },
+      join: jest.fn(),
+      once: jest.fn(),
+      emit,
+    } as never);
+    expect(imRelay.getOnlinePeers).toHaveBeenCalledWith("U1");
+    expect(emit).toHaveBeenCalledTimes(2);
+    const [eventName, env] = emit.mock.calls[0];
+    expect(eventName).toBe("event");
+    expect(env.type).toBe(IM_WS_EVENTS.presence);
+    expect(env.payload).toEqual({ userId: "peerA", online: true });
   });
 
   it("schedule.fired 本地事件包信封下发", () => {

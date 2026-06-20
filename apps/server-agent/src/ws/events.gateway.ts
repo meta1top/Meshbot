@@ -67,6 +67,16 @@ export class EventsGateway extends BaseWebSocketGateway {
     const sub = (client.data?.user as { sub?: unknown } | undefined)?.sub;
     if (typeof sub === "string") {
       client.join(`acct:${sub}`);
+      // 回放当前已知在线快照给这个新浏览器——修「浏览器晚于 relay 连接、错过 server-main
+      // 初始在线快照」导致早已在线的对端一直显示离线（presenceAtom 初值为空=灰）。
+      for (const userId of this.imRelay.getOnlinePeers(sub)) {
+        const env: GlobalEventEnvelope = {
+          type: IM_WS_EVENTS.presence,
+          payload: { userId, online: true } satisfies PresenceState,
+          ts: Date.now(),
+        };
+        client.emit("event", env);
+      }
     }
   }
 

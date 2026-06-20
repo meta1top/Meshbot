@@ -447,4 +447,55 @@ describe("ImRelayClientService", () => {
       expect(() => svc.onModuleDestroy()).not.toThrow();
     });
   });
+
+  describe("getOnlinePeers()（在线快照缓存）", () => {
+    it("下行 im.presence 维护缓存：online 入、offline 出", async () => {
+      const s1 = new FakeSocket();
+      const { svc } = makeService(
+        { u1: { cloudToken: "tok-u1", orgId: "org1" } },
+        { u1: s1 },
+      );
+      await svc.connect("u1");
+
+      s1.simulateServerEvent(IM_WS_EVENTS.presence, {
+        userId: "peerA",
+        online: true,
+      });
+      s1.simulateServerEvent(IM_WS_EVENTS.presence, {
+        userId: "peerB",
+        online: true,
+      });
+      expect(svc.getOnlinePeers("u1").sort()).toEqual(["peerA", "peerB"]);
+
+      s1.simulateServerEvent(IM_WS_EVENTS.presence, {
+        userId: "peerA",
+        online: false,
+      });
+      expect(svc.getOnlinePeers("u1")).toEqual(["peerB"]);
+
+      svc.disconnect("u1");
+    });
+
+    it("disconnect 清空该账号缓存", async () => {
+      const s1 = new FakeSocket();
+      const { svc } = makeService(
+        { u1: { cloudToken: "tok-u1", orgId: "org1" } },
+        { u1: s1 },
+      );
+      await svc.connect("u1");
+      s1.simulateServerEvent(IM_WS_EVENTS.presence, {
+        userId: "peerA",
+        online: true,
+      });
+      expect(svc.getOnlinePeers("u1")).toEqual(["peerA"]);
+
+      svc.disconnect("u1");
+      expect(svc.getOnlinePeers("u1")).toEqual([]);
+    });
+
+    it("未知账号 → 空数组", () => {
+      const { svc } = makeService({}, {});
+      expect(svc.getOnlinePeers("nope")).toEqual([]);
+    });
+  });
 });

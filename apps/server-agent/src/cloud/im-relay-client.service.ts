@@ -1,7 +1,7 @@
 import { AccountContextService } from "@meshbot/agent";
 import { AppError } from "@meshbot/common";
 import { IM_WS_EVENTS, IM_WS_NAMESPACE } from "@meshbot/types";
-import type { ImReadInput, ImSendInput } from "@meshbot/types";
+import type { ImReadInput, ImSendInput, PresenceState } from "@meshbot/types";
 import { Injectable, type OnModuleDestroy } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { EventEmitter2 } from "@nestjs/event-emitter";
@@ -42,6 +42,12 @@ export class ImRelayClientService implements OnModuleDestroy {
   private readonly conns = new Map<string, Conn>();
   /** 正在建连的账号（防并发重复建连）。 */
   private readonly connecting = new Set<string>();
+  /**
+   * 每账号当前已知的对端在线状态（cloudUserId → peerUserId → online）。
+   * 由下行 im.presence 维护（含 server-main 在 relay 连接时下发的初始在线快照）；
+   * 供浏览器晚于 relay 连上 ws/events 时回放在线快照（修「对端一直显示离线」）。
+   */
+  private readonly presence = new Map<string, Map<string, boolean>>();
 
   constructor(
     private readonly cloudIdentityService: CloudIdentityService,
@@ -98,6 +104,9 @@ export class ImRelayClientService implements OnModuleDestroy {
         IM_WS_EVENTS.conversationRead,
       ] as const) {
         socket.on(event, (payload: unknown) => {
+          if (event === IM_WS_EVENTS.presence) {
+            this.cachePresence(cloudUserId, payload as PresenceState);
+          }
           this.account.run(cloudUserId, () => {
             this.emitter.emit(event, payload);
           });
@@ -146,6 +155,28 @@ export class ImRelayClientService implements OnModuleDestroy {
     }
     conn.socket.disconnect();
     this.conns.delete(cloudUserId);
+    this.presence.delete(cloudUserId);
+  }
+
+  /** 记录某账号视角下对端的在线状态（下行 im.presence 维护本地快照缓存）。 */
+  private cachePresence(cloudUserId: string, state: PresenceState): void {
+    let m = this.presence.get(cloudUserId);
+    if (!m) {
+      m = new Map<string, boolean>();
+      this.presence.set(cloudUserId, m);
+    }
+    m.set(state.userId, state.online);
+  }
+
+  /** 该账号当前已知在线的对端 userId 列表（供浏览器连上 ws/events 时回放在线快照）。 */
+  getOnlinePeers(cloudUserId: string): string[] {
+    const m = this.presence.get(cloudUserId);
+    if (!m) return [];
+    const out: string[] = [];
+    for (const [userId, online] of m) {
+      if (online) out.push(userId);
+    }
+    return out;
   }
 
   /**
