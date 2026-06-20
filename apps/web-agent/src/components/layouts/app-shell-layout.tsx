@@ -150,16 +150,16 @@ export function AppShellLayout({
             <div
               aria-hidden
               onMouseDown={startPanelResize}
-              className="group hidden w-1.5 shrink-0 cursor-col-resize xl:flex"
+              className="group hidden w-2 shrink-0 cursor-col-resize xl:flex"
             >
-              <div className="mx-auto h-full w-0.5 rounded-full transition-colors group-hover:bg-(--shell-accent)/60" />
+              <div className="mx-auto h-full w-1 rounded-full bg-white/15 transition-colors group-hover:bg-(--shell-accent)" />
             </div>
           )}
           {/* 随手问 dock 常驻挂载：关闭时 CSS 隐藏而非卸载，使后台流不退订、重开即时 */}
           <aside
             style={{ width: panelWidth }}
             className={cn(
-              "ml-1.5 shrink-0 overflow-hidden rounded-(--shell-radius) bg-(--shell-content)",
+              "shrink-0 overflow-hidden rounded-(--shell-radius) bg-(--shell-content)",
               panelOpen ? "hidden xl:flex" : "hidden",
             )}
           >
