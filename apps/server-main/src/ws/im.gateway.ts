@@ -15,6 +15,7 @@ import {
   IM_WS_EVENTS,
   IM_WS_NAMESPACE,
   type ConversationSummary,
+  type ImConversationReadEvent,
   type ImReadInput,
   type ImSendInput,
   type PresenceState,
@@ -185,7 +186,8 @@ export class ImGateway extends BaseWebSocketGateway {
   }
 
   /**
-   * 标记已读：单表 upsert，无需返回值。
+   * 标记已读：find + save 更新 lastReadAt，返回写入时间戳。
+   * 写完后向「该 userId 的全部在线连接」广播 im.conversation_read（多窗口/多端清未读）。
    */
   @UseGuards(WsAuthGuard)
   @SubscribeMessage(IM_WS_EVENTS.read)
@@ -204,7 +206,21 @@ export class ImGateway extends BaseWebSocketGateway {
       orgId,
     );
 
-    await this.conversation.markRead(body.conversationId, userId);
+    const lastReadAt = await this.conversation.markRead(
+      body.conversationId,
+      userId,
+    );
+
+    // 广播给「该用户」的全部在线连接（多窗口/多端清未读）；按 org 房间取连接后按 userId 过滤
+    const sockets = await this.server.in(`org:${orgId}`).fetchSockets();
+    for (const s of sockets) {
+      if (s.data.user?.userId === userId) {
+        s.emit(IM_WS_EVENTS.conversationRead, {
+          conversationId: body.conversationId,
+          lastReadAt: lastReadAt.toISOString(),
+        } satisfies ImConversationReadEvent);
+      }
+    }
   }
 
   /**

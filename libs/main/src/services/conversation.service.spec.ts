@@ -703,13 +703,19 @@ describe("ConversationService", () => {
         makeMessageSvc(),
         makeUserSvc(),
       );
-      await svc.markRead("conv-1", "user-1");
+      const ret = await svc.markRead("conv-1", "user-1");
       expect(save).toHaveBeenCalledTimes(1);
       expect(member.lastReadAt).toBeInstanceOf(Date);
+      expect(ret).toBeInstanceOf(Date);
+      expect(ret).toBe(member.lastReadAt); // 返回的就是写入成员行的同一个 Date
     });
 
     it("无成员行（公开频道首读）→ create+save 新建（雪花 id 经 @BeforeInsert）", async () => {
-      const create = jest.fn().mockImplementation((d: object) => ({ ...d }));
+      const created: { lastReadAt?: Date } = {};
+      const create = jest.fn().mockImplementation((d: { lastReadAt: Date }) => {
+        created.lastReadAt = d.lastReadAt;
+        return d;
+      });
       const save = jest.fn().mockResolvedValue(undefined);
       const memberRepo = makeMemberRepo({
         findOne: jest.fn().mockResolvedValue(null),
@@ -722,11 +728,13 @@ describe("ConversationService", () => {
         makeMessageSvc(),
         makeUserSvc(),
       );
-      await svc.markRead("conv-1", "user-1");
+      const ret = await svc.markRead("conv-1", "user-1");
       expect(create).toHaveBeenCalledWith(
         expect.objectContaining({ conversationId: "conv-1", userId: "user-1" }),
       );
       expect(save).toHaveBeenCalledTimes(1);
+      expect(ret).toBeInstanceOf(Date);
+      expect(ret).toBe(created.lastReadAt);
     });
   });
 

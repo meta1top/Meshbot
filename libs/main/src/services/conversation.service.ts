@@ -269,6 +269,7 @@ export class ConversationService {
 
   /**
    * 标记已读：conversation_member(conversationId, userId).lastReadAt = now()。
+   * 返回写入的 lastReadAt（Date），供 Gateway 广播多端同步。
    *
    * 必须用 find + save（不能用 upsert/insert）：id 是雪花 PK，靠 @BeforeInsert 生成，
    * 而 upsert/insert 走 plain-object 不触发该 hook → id 为 NULL 违反 NOT NULL，整条
@@ -276,22 +277,24 @@ export class ConversationService {
    * 才会触发 @BeforeInsert（与 persistDmInTx 同）。单表写，无需 @Transactional。
    * 公开频道首次已读时该成员行可能不存在，故走 insert 分支创建。
    */
-  async markRead(conversationId: string, userId: string): Promise<void> {
+  async markRead(conversationId: string, userId: string): Promise<Date> {
+    const now = new Date();
     const member = await this.memberRepo.findOne({
       where: { conversationId, userId },
     });
     if (member) {
-      member.lastReadAt = new Date();
+      member.lastReadAt = now;
       await this.memberRepo.save(member);
-      return;
+      return now;
     }
     await this.memberRepo.save(
       this.memberRepo.create({
         conversationId,
         userId,
-        lastReadAt: new Date(),
+        lastReadAt: now,
       }),
     );
+    return now;
   }
 
   /** 拉人：actor 必须是该私有频道成员；target 必须是本组织成员；幂等。返回对 target 的 summary。 */
