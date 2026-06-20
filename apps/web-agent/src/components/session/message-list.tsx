@@ -115,7 +115,10 @@ export function MessageList({
             );
           }
           return (
-            <div key={m.id} className="group relative flex gap-3">
+            <div
+              key={m.id}
+              className="group relative -mx-2 flex gap-3 rounded px-2 hover:bg-muted/40"
+            >
               {m.role === "user" ? (
                 <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] bg-[#16a34a] text-[12px] font-semibold text-white">
                   {userInitial}
@@ -182,18 +185,15 @@ export function MessageList({
                       ))}
                     </div>
                   )}
-                {m.role === "assistant" &&
-                  m.content &&
-                  !m.streaming &&
-                  !(m.toolCalls && m.toolCalls.length > 0) && (
-                    <AssistantMessageActions
-                      sessionId={sessionId}
-                      messageId={m.id}
-                      content={m.content}
-                      usage={usageByMessage?.[m.id]}
-                      feedback={m.feedback}
-                    />
-                  )}
+                {m.role === "assistant" && m.content && !m.streaming && (
+                  <AssistantMessageActions
+                    sessionId={sessionId}
+                    messageId={m.id}
+                    content={m.content}
+                    usage={usageByMessage?.[m.id]}
+                    feedback={m.feedback}
+                  />
+                )}
                 {m.role === "user" && (
                   <UserMessageActions
                     sessionId={sessionId}
