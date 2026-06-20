@@ -180,7 +180,10 @@ pre code.hljs {
   }
 }
 
-/* 暗色模式：橙色骨架保留，仅内嵌内容卡翻深色 */
+/* 暗色模式：壳改冷中性深色（去暖棕），保留橙色品牌强调色；明度层级沿用亮色版
+   （chrome 最暗的外框 < sidebar < 内容卡为最深的阅读区），仅把暖色相换成中性偏冷。 */
 html.dark {
+  --shell-chrome: oklch(0.2 0.008 256);
+  --shell-sidebar: oklch(0.26 0.008 256);
   --shell-content: oklch(0.145 0 0);
 }
