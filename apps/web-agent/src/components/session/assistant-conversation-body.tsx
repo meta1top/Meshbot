@@ -10,6 +10,7 @@ import {
   type ChatInputHandle,
 } from "@/components/common/chat-input";
 import { CompactionBanner } from "@/components/common/compaction-banner";
+import { MessageSkeleton } from "@/components/im/message-skeleton";
 import { MessageList } from "@/components/session/message-list";
 import { PendingList } from "@/components/session/pending-list";
 import { useChatScroll } from "@/hooks/use-chat-scroll";
@@ -140,42 +141,50 @@ export function AssistantConversationBody({
   return (
     <>
       <div className="flex w-full flex-1 flex-col">
-        {stream.hasMoreHistory && (
-          <div
-            ref={topSentinelRef}
-            className="flex justify-center py-2 text-xs text-muted-foreground/60"
-          />
+        {stream.historyLoading ? (
+          <MessageSkeleton />
+        ) : (
+          <>
+            {stream.hasMoreHistory && (
+              <div
+                ref={topSentinelRef}
+                className="flex justify-center py-2 text-xs text-muted-foreground/60"
+              />
+            )}
+            {!stream.hasMoreHistory && timelineMessages.length > 0 && (
+              <div className="py-2 text-center text-xs text-muted-foreground/40">
+                会话开头
+              </div>
+            )}
+            <CompactionBanner
+              visible={!!stream.compacting}
+              reason={stream.compacting ?? undefined}
+            />
+            <MessageList
+              messages={timelineMessages}
+              sessionId={id}
+              running={stream.running}
+              onRegenerateOptimisticCut={(messageId) => {
+                // 截断到该消息（含），并清掉它的 failed 标记：
+                // 重生成就是「这条 user 即将重跑」，旧的 failed 已陈旧；
+                // 若新一轮再失败，onError 会重新打 failed。
+                stream.apply((prev) => {
+                  const idx = prev.findIndex((m) => m.id === messageId);
+                  if (idx < 0) return prev;
+                  return prev
+                    .slice(0, idx + 1)
+                    .map((m) =>
+                      m.id === messageId && m.failed
+                        ? { ...m, failed: false }
+                        : m,
+                    );
+                });
+              }}
+              usageByMessage={usageByMessage}
+            />
+            <div ref={bottomRef} />
+          </>
         )}
-        {!stream.hasMoreHistory && timelineMessages.length > 0 && (
-          <div className="py-2 text-center text-xs text-muted-foreground/40">
-            会话开头
-          </div>
-        )}
-        <CompactionBanner
-          visible={!!stream.compacting}
-          reason={stream.compacting ?? undefined}
-        />
-        <MessageList
-          messages={timelineMessages}
-          sessionId={id}
-          running={stream.running}
-          onRegenerateOptimisticCut={(messageId) => {
-            // 截断到该消息（含），并清掉它的 failed 标记：
-            // 重生成就是「这条 user 即将重跑」，旧的 failed 已陈旧；
-            // 若新一轮再失败，onError 会重新打 failed。
-            stream.apply((prev) => {
-              const idx = prev.findIndex((m) => m.id === messageId);
-              if (idx < 0) return prev;
-              return prev
-                .slice(0, idx + 1)
-                .map((m) =>
-                  m.id === messageId && m.failed ? { ...m, failed: false } : m,
-                );
-            });
-          }}
-          usageByMessage={usageByMessage}
-        />
-        <div ref={bottomRef} />
       </div>
       {/*
         sticky 输入区：bottom-4 距底 16px；上方放绝对定位的渐变遮罩做软淡出。

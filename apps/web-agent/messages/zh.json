@@ -311,6 +311,8 @@
     "emptyHint": "选择一个会话开始聊天",
     "inputPlaceholder": "发消息…",
     "historyStart": "会话开头",
+    "channelStartHint": "这是 #{name} 频道的开始。",
+    "dmStartHint": "这是你和 {name} 私信对话的开始。",
     "privateChannelMembers": "成员",
     "privateChannelAddMember": "添加成员",
     "privateChannelNoMoreMembers": "没有更多可添加的成员",
@@ -600,5 +602,7 @@
   "saved": "",
   "today": "",
   "yesterday": "",
-  "copy": ""
+  "copy": "",
+  "channelStartHint": "",
+  "dmStartHint": ""
 }

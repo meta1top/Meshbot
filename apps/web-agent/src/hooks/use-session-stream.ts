@@ -35,6 +35,8 @@ export interface SessionStream {
   compacting: null | "threshold" | "ctx-exceeded";
   /** 还有更早历史可上拉。 */
   hasMoreHistory: boolean;
+  /** 首屏历史加载中（用于显示骨架）。 */
+  historyLoading: boolean;
   /** 单一消息写入口（同步 ref+state），供视图做局部变更（pending 删/改、重生成截断）。 */
   apply: (next: (prev: TimelineMessage[]) => TimelineMessage[]) => void;
   /** 发送一条消息：乐观插 pending user 气泡 + append 到后端。 */
@@ -61,6 +63,7 @@ export function useSessionStream(
   const hasMoreHistoryRef = useRef(true);
   const loadingMoreRef = useRef(false);
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
+  const [historyLoading, setHistoryLoading] = useState(false);
   /** 压缩进行中标记。null = 未压缩；string = 压缩原因（用于 banner 文案）。 */
   const [compacting, setCompacting] = useState<
     null | "threshold" | "ctx-exceeded"
@@ -160,9 +163,10 @@ export function useSessionStream(
     setHasMoreHistory(true);
     resetUsage();
     let cancelled = false;
+    setHistoryLoading(true);
 
-    void Promise.all([fetchHistory(sessionId), fetchPending(sessionId)]).then(
-      ([history, pending]) => {
+    void Promise.all([fetchHistory(sessionId), fetchPending(sessionId)])
+      .then(([history, pending]) => {
         if (cancelled) return;
         const initial: TimelineMessage[] = history.messages.map((m) => ({
           id: m.id,
@@ -279,8 +283,10 @@ export function useSessionStream(
         oldestMessageIdRef.current = initial[0]?.id ?? null;
         hasMoreHistoryRef.current = history.hasMore;
         setHasMoreHistory(history.hasMore);
-      },
-    );
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false);
+      });
 
     const socket = getSessionSocket();
     const subscribe = () =>
@@ -662,6 +668,7 @@ export function useSessionStream(
     running,
     compacting,
     hasMoreHistory,
+    historyLoading,
     apply,
     send,
     interrupt,

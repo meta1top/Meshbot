@@ -311,6 +311,8 @@
     "emptyHint": "Select a conversation to start chatting",
     "inputPlaceholder": "Send a message…",
     "historyStart": "Beginning of conversation",
+    "channelStartHint": "This is the beginning of #{name}.",
+    "dmStartHint": "This is the start of your conversation with {name}.",
     "privateChannelMembers": "Members",
     "privateChannelAddMember": "Add member",
     "privateChannelNoMoreMembers": "No more members to add",
@@ -600,5 +602,7 @@
   "saved": "",
   "today": "",
   "yesterday": "",
-  "copy": ""
+  "copy": "",
+  "channelStartHint": "",
+  "dmStartHint": ""
 }

@@ -13,6 +13,7 @@ import {
 } from "react";
 import { currentUserAtom } from "@/atoms/auth";
 import {
+  currentConversationAtom,
   currentConversationIdAtom,
   markConversationReadAtom,
   messagesAtom,
@@ -21,7 +22,9 @@ import {
   ChatInput,
   type ChatInputHandle,
 } from "@/components/common/chat-input";
+import { ConversationEmptyState } from "@/components/im/conversation-empty-state";
 import { ImMessageList } from "@/components/im/im-message-list";
+import { MessageSkeleton } from "@/components/im/message-skeleton";
 import { getEventsSocket } from "@/lib/events-socket";
 import { fetchMessages } from "@/rest/im";
 import { useMembers } from "@/rest/org";
@@ -67,7 +70,10 @@ export function ImConversationBody({ id, scrollRef }: ImConversationBodyProps) {
     return map;
   }, [currentUser, membersData]);
 
+  const currentConversation = useAtomValue(currentConversationAtom);
+
   const [draft, setDraft] = useState("");
+  const [historyLoading, setHistoryLoading] = useState(true);
   const chatInputRef = useRef<ChatInputHandle>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const topSentinelRef = useRef<HTMLDivElement>(null);
@@ -93,6 +99,7 @@ export function ImConversationBody({ id, scrollRef }: ImConversationBodyProps) {
   useEffect(() => {
     // Reset state on conversation switch
     setMessages([]);
+    setHistoryLoading(true);
     oldestMessageIdRef.current = null;
     hasMoreHistoryRef.current = true;
     setHasMoreHistory(true);
@@ -100,13 +107,17 @@ export function ImConversationBody({ id, scrollRef }: ImConversationBodyProps) {
 
     let cancelled = false;
 
-    void fetchMessages(id).then((page) => {
-      if (cancelled) return;
-      setMessages(page.messages);
-      oldestMessageIdRef.current = page.messages[0]?.id ?? null;
-      hasMoreHistoryRef.current = page.hasMore;
-      setHasMoreHistory(page.hasMore);
-    });
+    void fetchMessages(id)
+      .then((page) => {
+        if (cancelled) return;
+        setMessages(page.messages);
+        oldestMessageIdRef.current = page.messages[0]?.id ?? null;
+        hasMoreHistoryRef.current = page.hasMore;
+        setHasMoreHistory(page.hasMore);
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false);
+      });
 
     // 标记已读：通知后端更新 lastReadAt + 本地乐观清零该会话未读 badge
     const socket = getEventsSocket();
@@ -212,23 +223,33 @@ export function ImConversationBody({ id, scrollRef }: ImConversationBodyProps) {
   return (
     <>
       <div className="flex w-full flex-1 flex-col">
-        {hasMoreHistory && (
-          <div
-            ref={topSentinelRef}
-            className="flex justify-center py-2 text-xs text-muted-foreground/60"
-          />
+        {historyLoading ? (
+          <MessageSkeleton />
+        ) : messages.length === 0 ? (
+          currentConversation ? (
+            <ConversationEmptyState conversation={currentConversation} />
+          ) : null
+        ) : (
+          <>
+            {hasMoreHistory && (
+              <div
+                ref={topSentinelRef}
+                className="flex justify-center py-2 text-xs text-muted-foreground/60"
+              />
+            )}
+            {!hasMoreHistory && messages.length > 0 && (
+              <div className="py-2 text-center text-xs text-muted-foreground/40">
+                {t("historyStart")}
+              </div>
+            )}
+            <ImMessageList
+              messages={messages}
+              members={members}
+              currentUserId={currentUserId}
+            />
+            <div ref={bottomRef} />
+          </>
         )}
-        {!hasMoreHistory && messages.length > 0 && (
-          <div className="py-2 text-center text-xs text-muted-foreground/40">
-            {t("historyStart")}
-          </div>
-        )}
-        <ImMessageList
-          messages={messages}
-          members={members}
-          currentUserId={currentUserId}
-        />
-        <div ref={bottomRef} />
       </div>
 
       <div className="sticky bottom-4 mt-auto w-full bg-background">
