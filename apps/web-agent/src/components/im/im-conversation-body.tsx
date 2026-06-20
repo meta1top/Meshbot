@@ -50,8 +50,10 @@ export function ImConversationBody({ id, scrollRef }: ImConversationBodyProps) {
   const currentUserId = currentUser?.id ?? "";
   const { data: membersData } = useMembers(orgId);
 
+  const currentConversation = useAtomValue(currentConversationAtom);
+
   // Build members map: Record<userId, {displayName, email}>
-  // Include current user + all org members
+  // Include current user + all org members + 当前 DM 对端
   const members = useMemo<
     Record<string, { displayName: string; email: string }>
   >(() => {
@@ -67,10 +69,14 @@ export function ImConversationBody({ id, scrollRef }: ImConversationBodyProps) {
         map[m.userId] = { displayName: m.displayName, email: m.email };
       }
     }
+    // DM 对端：org 成员列表可能不含（跨 org / membersData 未加载 / 个人账号 orgId 为空），
+    // 会话自带的 peer 是对端名字的权威来源，兜底纳入，避免发送者名回退成原始 id。
+    if (currentConversation?.peer) {
+      const p = currentConversation.peer;
+      map[p.userId] = { displayName: p.displayName, email: p.email };
+    }
     return map;
-  }, [currentUser, membersData]);
-
-  const currentConversation = useAtomValue(currentConversationAtom);
+  }, [currentUser, membersData, currentConversation]);
 
   const [draft, setDraft] = useState("");
   const [historyLoading, setHistoryLoading] = useState(true);
