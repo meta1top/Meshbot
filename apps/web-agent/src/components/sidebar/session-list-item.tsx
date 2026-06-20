@@ -8,7 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@meshbot/design";
 import type { SessionSummary } from "@meshbot/types-agent";
-import { useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import {
   MoreHorizontal,
   Pencil,
@@ -20,6 +20,10 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { type KeyboardEvent, useCallback, useRef, useState } from "react";
+import {
+  clearScheduleActivityAtom,
+  scheduleActivityAtom,
+} from "@/atoms/schedule-activity";
 import {
   deleteSessionAtom,
   renameSessionAtom,
@@ -40,6 +44,9 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const t = useTranslations("appShell.sessionMenu");
+  const scheduleActivity = useAtomValue(scheduleActivityAtom);
+  const clearScheduleActivity = useSetAtom(clearScheduleActivityAtom);
+  const hasActivity = scheduleActivity.has(session.id);
   const rename = useSetAtom(renameSessionAtom);
   const togglePin = useSetAtom(togglePinAtom);
   const removeSession = useSetAtom(deleteSessionAtom);
@@ -133,14 +140,21 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
         ) : (
           <button
             type="button"
-            onClick={() =>
-              router.push(`/messages?kind=assistant&id=${session.id}`)
-            }
+            onClick={() => {
+              clearScheduleActivity(session.id);
+              router.push(`/messages?kind=assistant&id=${session.id}`);
+            }}
             className="min-w-0 flex-1 truncate text-left"
             title={session.title}
           >
             {session.title}
           </button>
+        )}
+        {hasActivity && !active && (
+          <span
+            className="mr-1 h-1.5 w-1.5 shrink-0 rounded-full bg-(--shell-accent)"
+            aria-hidden
+          />
         )}
         {!editing && (
           <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
