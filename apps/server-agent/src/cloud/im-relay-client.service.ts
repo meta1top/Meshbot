@@ -1,7 +1,12 @@
 import { AccountContextService } from "@meshbot/agent";
 import { AppError } from "@meshbot/common";
 import { IM_WS_EVENTS, IM_WS_NAMESPACE } from "@meshbot/types";
-import type { ImReadInput, ImSendInput, PresenceState } from "@meshbot/types";
+import type {
+  ImPresenceSetInput,
+  ImReadInput,
+  ImSendInput,
+  PresenceState,
+} from "@meshbot/types";
 import { Injectable, type OnModuleDestroy } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { EventEmitter2 } from "@nestjs/event-emitter";
@@ -48,6 +53,13 @@ export class ImRelayClientService implements OnModuleDestroy {
    * 供浏览器晚于 relay 连上 ws/events 时回放在线快照（修「对端一直显示离线」）。
    */
   private readonly presence = new Map<string, Map<string, boolean>>();
+
+  /**
+   * 「有浏览器连着」的账号集合（cloudUserId）。由 EventsGateway 按浏览器连接数
+   * 在 0↔1 跳变时调 setUiPresence 维护。决定：① 是否 ping（无浏览器不续期 TTL）
+   * ② relay 重连后是否重新上报在线。
+   */
+  private readonly uiOnline = new Set<string>();
 
   constructor(
     private readonly cloudIdentityService: CloudIdentityService,
@@ -122,9 +134,19 @@ export class ImRelayClientService implements OnModuleDestroy {
         }
       });
 
-      // keepalive ping（unref 防止阻塞进程退出）
+      // relay（重）连成功后：若该账号仍有浏览器连着，重新上报在线
+      //（覆盖初次建连竞态 + 网络抖动重连——presence 由浏览器驱动，需重连后重断言）。
+      socket.on("connect", () => {
+        if (this.uiOnline.has(cloudUserId)) {
+          socket.emit(IM_WS_EVENTS.presenceSet, {
+            online: true,
+          } satisfies ImPresenceSetInput);
+        }
+      });
+
+      // keepalive ping（无浏览器时不续期 TTL；unref 防止阻塞进程退出）
       const timer = setInterval(() => {
-        if (socket.connected) {
+        if (socket.connected && this.uiOnline.has(cloudUserId)) {
           socket.emit(IM_WS_EVENTS.ping);
         }
       }, PING_INTERVAL_MS);
@@ -156,6 +178,7 @@ export class ImRelayClientService implements OnModuleDestroy {
     conn.socket.disconnect();
     this.conns.delete(cloudUserId);
     this.presence.delete(cloudUserId);
+    this.uiOnline.delete(cloudUserId);
   }
 
   /** 记录某账号视角下对端的在线状态（下行 im.presence 维护本地快照缓存）。 */
@@ -177,6 +200,24 @@ export class ImRelayClientService implements OnModuleDestroy {
       if (online) out.push(userId);
     }
     return out;
+  }
+
+  /**
+   * 浏览器在线态变更（EventsGateway 在某账号浏览器连接数 0↔1 跳变时调）。
+   * 记录 uiOnline（门控 ping + relay 重连重断言），并立即上报 server-main。
+   * 未连接时静默（relay 连上后 connect 监听会重断言 online）。
+   */
+  setUiPresence(cloudUserId: string, online: boolean): void {
+    if (online) {
+      this.uiOnline.add(cloudUserId);
+    } else {
+      this.uiOnline.delete(cloudUserId);
+    }
+    const conn = this.conns.get(cloudUserId);
+    if (!conn?.socket.connected) return;
+    conn.socket.emit(IM_WS_EVENTS.presenceSet, {
+      online,
+    } satisfies ImPresenceSetInput);
   }
 
   /**

@@ -498,4 +498,181 @@ describe("ImRelayClientService", () => {
       expect(svc.getOnlinePeers("nope")).toEqual([]);
     });
   });
+
+  describe("setUiPresence()", () => {
+    it("setUiPresence(id, true)：connected → emit im.presence_set {online:true}", async () => {
+      const s1 = new FakeSocket();
+      const { svc } = makeService(
+        { u1: { cloudToken: "tok-u1", orgId: "org1" } },
+        { u1: s1 },
+      );
+      await svc.connect("u1");
+
+      svc.setUiPresence("u1", true);
+
+      const found = s1.emitted.find(
+        ([ev, payload]) =>
+          ev === IM_WS_EVENTS.presenceSet &&
+          (payload as { online: boolean }).online === true,
+      );
+      expect(found).toBeDefined();
+      // getOnlinePeers 不受影响（不修改对端快照）
+      expect(svc.getOnlinePeers("u1")).toEqual([]);
+
+      svc.disconnect("u1");
+    });
+
+    it("setUiPresence(id, false)：connected → emit im.presence_set {online:false}", async () => {
+      const s1 = new FakeSocket();
+      const { svc } = makeService(
+        { u1: { cloudToken: "tok-u1", orgId: "org1" } },
+        { u1: s1 },
+      );
+      await svc.connect("u1");
+
+      svc.setUiPresence("u1", false);
+
+      const found = s1.emitted.find(
+        ([ev, payload]) =>
+          ev === IM_WS_EVENTS.presenceSet &&
+          (payload as { online: boolean }).online === false,
+      );
+      expect(found).toBeDefined();
+
+      svc.disconnect("u1");
+    });
+
+    it("未连接时 setUiPresence → 静默（不抛）", () => {
+      const { svc } = makeService({}, {});
+      expect(() => svc.setUiPresence("u1", true)).not.toThrow();
+    });
+  });
+
+  describe("ping 门控（仅有浏览器时 ping）", () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    it("无浏览器（未调 setUiPresence(true)）→ 推进 PING_INTERVAL_MS 不 emit ping", async () => {
+      const s1 = new FakeSocket();
+      const { svc } = makeService(
+        { u1: { cloudToken: "tok-u1", orgId: "org1" } },
+        { u1: s1 },
+      );
+      await svc.connect("u1");
+      s1.emitted.length = 0; // 清除 connect 之前的任何 emit
+
+      jest.advanceTimersByTime(20_000);
+
+      expect(
+        s1.emitted.find(([ev]) => ev === IM_WS_EVENTS.ping),
+      ).toBeUndefined();
+
+      svc.disconnect("u1");
+    });
+
+    it("有浏览器（setUiPresence(true) 后）→ 推进 PING_INTERVAL_MS 会 emit ping", async () => {
+      const s1 = new FakeSocket();
+      const { svc } = makeService(
+        { u1: { cloudToken: "tok-u1", orgId: "org1" } },
+        { u1: s1 },
+      );
+      await svc.connect("u1");
+      svc.setUiPresence("u1", true);
+      s1.emitted.length = 0;
+
+      jest.advanceTimersByTime(20_000);
+
+      expect(s1.emitted.find(([ev]) => ev === IM_WS_EVENTS.ping)).toBeDefined();
+
+      svc.disconnect("u1");
+    });
+  });
+
+  describe("重连重断言 online", () => {
+    it("setUiPresence(true) 后 simulateServerEvent connect → 重发 im.presence_set {online:true}", async () => {
+      const s1 = new FakeSocket();
+      const { svc } = makeService(
+        { u1: { cloudToken: "tok-u1", orgId: "org1" } },
+        { u1: s1 },
+      );
+      await svc.connect("u1");
+      svc.setUiPresence("u1", true);
+      s1.emitted.length = 0; // 清掉 setUiPresence 本身的 emit
+
+      s1.simulateServerEvent("connect", undefined);
+
+      const found = s1.emitted.find(
+        ([ev, payload]) =>
+          ev === IM_WS_EVENTS.presenceSet &&
+          (payload as { online: boolean }).online === true,
+      );
+      expect(found).toBeDefined();
+
+      svc.disconnect("u1");
+    });
+
+    it("无浏览器（未调 setUiPresence(true)）→ 重连不重发 presence_set", async () => {
+      const s1 = new FakeSocket();
+      const { svc } = makeService(
+        { u1: { cloudToken: "tok-u1", orgId: "org1" } },
+        { u1: s1 },
+      );
+      await svc.connect("u1");
+      s1.emitted.length = 0;
+
+      s1.simulateServerEvent("connect", undefined);
+
+      expect(
+        s1.emitted.find(([ev]) => ev === IM_WS_EVENTS.presenceSet),
+      ).toBeUndefined();
+
+      svc.disconnect("u1");
+    });
+  });
+
+  describe("disconnect 清 uiOnline（ping 门控间接验证）", () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    it("setUiPresence(true) → disconnect → 重连后 ping 不发（uiOnline 已清）", async () => {
+      const s2 = new FakeSocket();
+      // 重新 connect 需要新的 socket 实例
+      let callCount = 0;
+      const sockets: FakeSocket[] = [new FakeSocket(), s2];
+      const cloudIdentityService = {
+        get: jest
+          .fn()
+          .mockResolvedValue({ cloudToken: "tok-u1", orgId: "org1" }),
+        setLoggedOut: jest.fn(),
+      };
+      const ioFactory = jest.fn((): FakeSocket => {
+        const s = sockets[callCount++];
+        s.connected = true;
+        return s;
+      });
+      const svc = new ImRelayClientService(
+        cloudIdentityService as never,
+        new EventEmitter2(),
+        "http://cloud.test",
+        new AccountContextService(),
+        ioFactory as never,
+      );
+
+      await svc.connect("u1");
+      svc.setUiPresence("u1", true);
+      svc.disconnect("u1");
+
+      // 重新连接
+      await svc.connect("u1");
+      s2.emitted.length = 0;
+      jest.advanceTimersByTime(20_000);
+
+      // uiOnline 已清，ping 不应发
+      expect(
+        s2.emitted.find(([ev]) => ev === IM_WS_EVENTS.ping),
+      ).toBeUndefined();
+
+      svc.disconnect("u1");
+    });
+  });
 });

@@ -45,6 +45,9 @@ import { ImRelayClientService } from "../cloud/im-relay-client.service";
 @WebSocketGateway({ namespace: EVENTS_WS_NAMESPACE, cors: true })
 @UseFilters(WsExceptionFilter)
 export class EventsGateway extends BaseWebSocketGateway {
+  /** 每账号当前浏览器（ws/events）连接数；0↔1 跳变时驱动 relay 上报在线/离线。 */
+  private readonly browserCounts = new Map<string, number>();
+
   constructor(
     private readonly jwt: JwtService,
     private readonly imRelay: ImRelayClientService,
@@ -77,6 +80,28 @@ export class EventsGateway extends BaseWebSocketGateway {
         };
         client.emit("event", env);
       }
+      // 在线状态：浏览器连接数 0→1 → 该账号上线
+      const n = (this.browserCounts.get(sub) ?? 0) + 1;
+      this.browserCounts.set(sub, n);
+      if (n === 1) {
+        this.imRelay.setUiPresence(sub, true);
+      }
+    }
+  }
+
+  /**
+   * 浏览器断开：连接数 1→0 → 该账号离线（关最后一个窗口即离线）。
+   * 多窗口时仅减计数、保持在线。
+   */
+  handleDisconnect(client: Socket): void {
+    const sub = (client.data?.user as { sub?: unknown } | undefined)?.sub;
+    if (typeof sub !== "string") return;
+    const n = (this.browserCounts.get(sub) ?? 0) - 1;
+    if (n <= 0) {
+      this.browserCounts.delete(sub);
+      this.imRelay.setUiPresence(sub, false);
+    } else {
+      this.browserCounts.set(sub, n);
     }
   }
 

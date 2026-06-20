@@ -16,6 +16,7 @@ export {
   type ImConversationReadEvent,
   type ImMessageEvent,
   type ImPresenceEvent,
+  type ImPresenceSetInput,
   type MessagePage,
 } from "./im/im.events";
 export {

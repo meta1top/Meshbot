@@ -17,6 +17,7 @@ export const IM_WS_EVENTS = {
   send: "im.send",
   read: "im.read",
   ping: "im.ping",
+  presenceSet: "im.presence_set",
 } as const;
 
 // 下行事件 payload
@@ -33,4 +34,9 @@ export interface ImConversationReadEvent {
 export interface MessagePage {
   messages: ImMessage[];
   hasMore: boolean;
+}
+
+/** 上行：浏览器在线状态变更（server-agent 按浏览器连接数聚合后上报）。 */
+export interface ImPresenceSetInput {
+  online: boolean;
 }

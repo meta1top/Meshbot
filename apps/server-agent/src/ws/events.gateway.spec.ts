@@ -8,7 +8,10 @@ function makeGateway(
   account: AccountContextService,
   onlinePeers: string[] = [],
 ) {
-  const imRelay = { getOnlinePeers: jest.fn().mockReturnValue(onlinePeers) };
+  const imRelay = {
+    getOnlinePeers: jest.fn().mockReturnValue(onlinePeers),
+    setUiPresence: jest.fn(),
+  };
   const gw = new EventsGateway({} as never, imRelay as never, account);
   const broadcastEmit = jest.fn();
   const roomEmit = jest.fn();
@@ -107,5 +110,72 @@ describe("EventsGateway 下行信封 + 账号路由", () => {
     expect(eventName).toBe("event");
     expect(env.type).toBe(SCHEDULE_EVENTS.fired);
     expect(env.payload).toEqual(payload);
+  });
+});
+
+describe("EventsGateway 浏览器连接数驱动在线状态", () => {
+  function makeClient(sub: string | undefined) {
+    return {
+      data: sub ? { user: { sub } } : {},
+      join: jest.fn(),
+      once: jest.fn(),
+      emit: jest.fn(),
+    };
+  }
+
+  it("首个浏览器 handleConnection → setUiPresence(sub, true) 调一次", () => {
+    const account = new AccountContextService();
+    const { gw, imRelay } = makeGateway(account);
+    gw.handleConnection(makeClient("U1") as never);
+    expect(imRelay.setUiPresence).toHaveBeenCalledTimes(1);
+    expect(imRelay.setUiPresence).toHaveBeenCalledWith("U1", true);
+  });
+
+  it("同账号第二个 handleConnection → setUiPresence(true) 不再调", () => {
+    const account = new AccountContextService();
+    const { gw, imRelay } = makeGateway(account);
+    gw.handleConnection(makeClient("U1") as never);
+    gw.handleConnection(makeClient("U1") as never);
+    // setUiPresence(true) 只在 0→1 时触发，第二次不触发
+    const trueCalls = (imRelay.setUiPresence as jest.Mock).mock.calls.filter(
+      ([, online]) => online === true,
+    );
+    expect(trueCalls).toHaveLength(1);
+  });
+
+  it("未鉴权 handleConnection → 不调 setUiPresence", () => {
+    const account = new AccountContextService();
+    const { gw, imRelay } = makeGateway(account);
+    gw.handleConnection(makeClient(undefined) as never);
+    expect(imRelay.setUiPresence).not.toHaveBeenCalled();
+  });
+
+  it("最后一个浏览器 handleDisconnect → setUiPresence(sub, false)", () => {
+    const account = new AccountContextService();
+    const { gw, imRelay } = makeGateway(account);
+    const c1 = makeClient("U1");
+    gw.handleConnection(c1 as never);
+    (imRelay.setUiPresence as jest.Mock).mockClear();
+
+    gw.handleDisconnect(c1 as never);
+    expect(imRelay.setUiPresence).toHaveBeenCalledWith("U1", false);
+  });
+
+  it("多窗口：先 connect 两次再 disconnect 一次 → 不调 setUiPresence(false)", () => {
+    const account = new AccountContextService();
+    const { gw, imRelay } = makeGateway(account);
+    gw.handleConnection(makeClient("U1") as never);
+    gw.handleConnection(makeClient("U1") as never);
+    (imRelay.setUiPresence as jest.Mock).mockClear();
+
+    gw.handleDisconnect(makeClient("U1") as never);
+    expect(imRelay.setUiPresence).not.toHaveBeenCalledWith("U1", false);
+  });
+
+  it("未鉴权 handleDisconnect → 不调 setUiPresence", () => {
+    const account = new AccountContextService();
+    const { gw, imRelay } = makeGateway(account);
+    gw.handleDisconnect(makeClient(undefined) as never);
+    expect(imRelay.setUiPresence).not.toHaveBeenCalled();
   });
 });

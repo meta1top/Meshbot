@@ -16,6 +16,7 @@ import {
   IM_WS_NAMESPACE,
   type ConversationSummary,
   type ImConversationReadEvent,
+  type ImPresenceSetInput,
   type ImReadInput,
   type ImSendInput,
   type PresenceState,
@@ -91,10 +92,11 @@ export class ImGateway extends BaseWebSocketGateway {
   /**
    * 已鉴权连接后置逻辑：
    * 1. 查 activeOrgId → 无 org 直接返回
-   * 2. 写 presence 在线
-   * 3. 入 org 房间 + 全部可见 conv 房间
-   * 4. 广播本用户上线给同 org
-   * 5. 向本连接下发当前在线快照
+   * 2. 入 org 房间 + 全部可见 conv 房间
+   * 3. 向本连接下发当前在线快照
+   *
+   * 注意：relay 连接不再自动上线（presence 由 im.presence_set 事件驱动，
+   * 由 server-agent EventsGateway 按浏览器连接数聚合后上报）。
    */
   private async onAuthedConnect(client: Socket): Promise<void> {
     try {
@@ -105,20 +107,12 @@ export class ImGateway extends BaseWebSocketGateway {
 
       client.data.orgId = orgId;
 
-      await this.presence.setOnline(orgId, userId);
-
       client.join(`org:${orgId}`);
 
       const convs = await this.conversation.listConversations(userId, orgId);
       for (const conv of convs) {
         client.join(`conv:${conv.id}`);
       }
-
-      // 广播本用户上线到同 org 所有连接（含自身）
-      this.server.to(`org:${orgId}`).emit(IM_WS_EVENTS.presence, {
-        userId,
-        online: true,
-      } satisfies PresenceState);
 
       // 向本连接下发当前在线用户快照
       const onlineUserIds = await this.presence.listOnline(orgId);
@@ -221,6 +215,30 @@ export class ImGateway extends BaseWebSocketGateway {
         } satisfies ImConversationReadEvent);
       }
     }
+  }
+
+  /**
+   * 浏览器在线态上报（server-agent 按浏览器连接数聚合后发）。
+   * online → setOnline + 广播；offline → setOffline + 广播。
+   */
+  @UseGuards(WsAuthGuard)
+  @SubscribeMessage(IM_WS_EVENTS.presenceSet)
+  async handlePresenceSet(
+    @MessageBody() body: ImPresenceSetInput,
+    @ConnectedSocket() client: Socket,
+  ): Promise<void> {
+    const orgId: string | undefined = client.data?.orgId;
+    if (!orgId) return;
+    const userId: string = client.data.user.userId;
+    if (body.online) {
+      await this.presence.setOnline(orgId, userId);
+    } else {
+      await this.presence.setOffline(orgId, userId);
+    }
+    this.server.to(`org:${orgId}`).emit(IM_WS_EVENTS.presence, {
+      userId,
+      online: body.online,
+    } satisfies PresenceState);
   }
 
   /**
