@@ -220,6 +220,10 @@ export class ImGateway extends BaseWebSocketGateway {
   /**
    * 浏览器在线态上报（server-agent 按浏览器连接数聚合后发）。
    * online → setOnline + 广播；offline → setOffline + 广播。
+   *
+   * 竞态修复：relay 一连上就立即 emit presence_set，而 onAuthedConnect 是异步的，
+   * orgId 可能尚未落到 client.data。若缺失则就地从 userService 解析并回写，
+   * 避免登录初次竞态导致上线事件被静默丢弃。
    */
   @UseGuards(WsAuthGuard)
   @SubscribeMessage(IM_WS_EVENTS.presenceSet)
@@ -227,9 +231,15 @@ export class ImGateway extends BaseWebSocketGateway {
     @MessageBody() body: ImPresenceSetInput,
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
-    const orgId: string | undefined = client.data?.orgId;
-    if (!orgId) return;
     const userId: string = client.data.user.userId;
+    let orgId: string | undefined = client.data?.orgId;
+    if (!orgId) {
+      // presence_set 可能早于 onAuthedConnect 落定 orgId（relay 一连上就上报）；就地解析。
+      const user = await this.userService.findById(userId);
+      orgId = user?.activeOrgId ?? undefined;
+      if (orgId) client.data.orgId = orgId;
+    }
+    if (!orgId) return;
     if (body.online) {
       await this.presence.setOnline(orgId, userId);
     } else {

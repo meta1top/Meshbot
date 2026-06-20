@@ -10,6 +10,9 @@ function makeGateway(overrides: {
     heartbeat?: jest.Mock;
     listOnline?: jest.Mock;
   };
+  userService?: {
+    findById?: jest.Mock;
+  };
 }) {
   const conversation = {
     getVisibleOrThrow: jest.fn().mockResolvedValue({ id: "c1" }),
@@ -29,12 +32,16 @@ function makeGateway(overrides: {
     listOnline:
       overrides.presence?.listOnline ?? jest.fn().mockResolvedValue([]),
   };
+  const userService = {
+    findById:
+      overrides.userService?.findById ?? jest.fn().mockResolvedValue(undefined),
+  };
   const gw = new ImGateway(
     {} as never, // jwt
     conversation as never,
     {} as never, // message
     presence as never, // presence
-    {} as never, // userService
+    userService as never, // userService
   );
   const fetchSockets = jest.fn().mockResolvedValue(overrides.sockets ?? []);
   const roomEmitSpy = jest.fn();
@@ -43,7 +50,7 @@ function makeGateway(overrides: {
     in: jest.fn().mockReturnValue({ fetchSockets }),
     to: toSpy,
   };
-  return { gw, conversation, presence, toSpy, roomEmitSpy };
+  return { gw, conversation, presence, userService, toSpy, roomEmitSpy };
 }
 
 describe("ImGateway.handleRead 广播 im.conversation_read", () => {
@@ -109,11 +116,33 @@ describe("ImGateway.handlePresenceSet（浏览器在线态上报）", () => {
 
   it("无 orgId → 不调 setOnline/setOffline，不广播", async () => {
     const { gw, presence, toSpy } = makeGateway({});
-    const client = { data: { user: { userId: "u1" } } }; // 无 orgId
+    const client = { data: { user: { userId: "u1" } } }; // 无 orgId，userService 返回 undefined
 
     await gw.handlePresenceSet({ online: true } as never, client as never);
 
     expect(presence.setOnline).not.toHaveBeenCalled();
     expect(toSpy).not.toHaveBeenCalled();
+  });
+
+  it("竞态：无 orgId 但 userService.findById 返回 activeOrgId → 仍 setOnline + 广播", async () => {
+    const findById = jest.fn().mockResolvedValue({ activeOrgId: "org1" });
+    const { gw, presence, toSpy, roomEmitSpy } = makeGateway({
+      userService: { findById },
+    });
+    const clientData: { user: { userId: string }; orgId?: string } = {
+      user: { userId: "u1" },
+    }; // 初始无 orgId，模拟竞态
+    const client = { data: clientData };
+
+    await gw.handlePresenceSet({ online: true } as never, client as never);
+
+    expect(findById).toHaveBeenCalledWith("u1");
+    expect(clientData.orgId).toBe("org1"); // 回写 orgId
+    expect(presence.setOnline).toHaveBeenCalledWith("org1", "u1");
+    expect(toSpy).toHaveBeenCalledWith("org:org1");
+    expect(roomEmitSpy).toHaveBeenCalledWith(IM_WS_EVENTS.presence, {
+      userId: "u1",
+      online: true,
+    });
   });
 });
