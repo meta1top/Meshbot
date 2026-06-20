@@ -19,7 +19,7 @@ interface Props {
 }
 
 const BTN =
-  "rounded p-1 text-muted-foreground hover:bg-foreground/5 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40";
+  "flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40";
 
 /**
  * assistant 气泡下方操作行：复制 / 用量 tooltip / 点赞 / 不喜欢。
@@ -69,25 +69,21 @@ export function AssistantMessageActions({
   );
 
   return (
-    <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+    <div className="inline-flex items-center gap-0.5 rounded-md border border-border bg-background p-0.5 opacity-0 shadow-xs transition-opacity group-hover:opacity-100">
       <button
         type="button"
         onClick={handleCopy}
         title={copied ? t("actions.copied") : t("actions.copy")}
         className={BTN}
       >
-        {copied ? (
-          <Check className="h-3.5 w-3.5" />
-        ) : (
-          <Copy className="h-3.5 w-3.5" />
-        )}
+        {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
       </button>
 
       {usage && (
         <Tooltip>
           <TooltipTrigger asChild>
             <button type="button" title={t("actions.usage")} className={BTN}>
-              <Info className="h-3.5 w-3.5" />
+              <Info className="h-3 w-3" />
             </button>
           </TooltipTrigger>
           <TooltipContent>
@@ -118,7 +114,7 @@ export function AssistantMessageActions({
         title={t("actions.like")}
         className={cn(BTN, current === "up" && "text-accent hover:text-accent")}
       >
-        <ThumbsUp className="h-3.5 w-3.5" />
+        <ThumbsUp className="h-3 w-3" />
       </button>
       <button
         type="button"
@@ -130,7 +126,7 @@ export function AssistantMessageActions({
           current === "down" && "text-accent hover:text-accent",
         )}
       >
-        <ThumbsDown className="h-3.5 w-3.5" />
+        <ThumbsDown className="h-3 w-3" />
       </button>
     </div>
   );

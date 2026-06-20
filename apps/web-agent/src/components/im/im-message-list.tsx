@@ -83,7 +83,7 @@ export function ImMessageList({
             <div
               className={cn(
                 "group relative -mx-2 flex gap-3 rounded px-2 hover:bg-muted/40",
-                meta.showHeader ? "mt-2" : "mt-0.5",
+                meta.showHeader ? "mt-3" : "mt-1",
               )}
             >
               {/* 左 gutter：头行=头像；分组行=hover 时间 */}
@@ -119,15 +119,15 @@ export function ImMessageList({
               </div>
 
               {/* hover 操作条：复制（功能性）。表情/回复/收藏待后端，后续计划。 */}
-              <div className="absolute -top-3 right-2 hidden gap-0.5 rounded-md border border-border bg-background p-0.5 shadow-sm group-hover:flex">
+              <div className="absolute -top-2.5 right-2 hidden gap-0.5 rounded-md border border-border bg-background p-0.5 shadow-xs group-hover:flex">
                 <button
                   type="button"
                   onClick={() => void navigator.clipboard?.writeText(m.content)}
                   title={t("copy")}
                   aria-label={t("copy")}
-                  className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 >
-                  <Copy className="h-3.5 w-3.5" />
+                  <Copy className="h-3 w-3" />
                 </button>
               </div>
             </div>

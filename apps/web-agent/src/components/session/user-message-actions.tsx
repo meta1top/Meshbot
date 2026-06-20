@@ -67,7 +67,7 @@ export function UserMessageActions({
   return (
     <div
       className={cn(
-        "mt-1 flex gap-1 transition-opacity",
+        "inline-flex items-center gap-0.5 rounded-md border border-border bg-background p-0.5 shadow-xs transition-opacity",
         failed ? "opacity-100" : "opacity-0 group-hover:opacity-100",
       )}
     >
@@ -75,25 +75,21 @@ export function UserMessageActions({
         type="button"
         onClick={handleCopy}
         title="复制"
-        className="rounded p-1 text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+        className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       >
-        {copied ? (
-          <Check className="h-3.5 w-3.5" />
-        ) : (
-          <Copy className="h-3.5 w-3.5" />
-        )}
+        {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
       </button>
       <button
         type="button"
         onClick={handleRegenerate}
         disabled={busy || running}
         title={failed ? "重试" : "重新生成"}
-        className="rounded p-1 text-muted-foreground hover:bg-foreground/5 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+        className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
       >
         {busy ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          <Loader2 className="h-3 w-3 animate-spin" />
         ) : (
-          <RotateCcw className="h-3.5 w-3.5" />
+          <RotateCcw className="h-3 w-3" />
         )}
       </button>
     </div>

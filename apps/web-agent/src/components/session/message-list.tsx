@@ -98,7 +98,7 @@ export function MessageList({
   const userInitial = userName.charAt(0).toUpperCase();
   const assistantName = t("assistantName");
   return (
-    <div className="flex flex-col gap-5 pb-6">
+    <div className="flex flex-col gap-4 pb-6">
       {messages
         .filter(
           (m) => !(m.role === "system" && m.metadata?.kind !== "compaction"),
@@ -125,8 +125,8 @@ export function MessageList({
                   <Sparkles className="h-4 w-4" />
                 </div>
               )}
-              <div className="min-w-0 flex-1">
-                <div className="mb-1 text-[13px] font-bold text-foreground">
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <div className="text-[13px] font-bold text-foreground">
                   {m.role === "user" ? userName : assistantName}
                 </div>
                 {m.role === "assistant" && m.reasoning ? (
