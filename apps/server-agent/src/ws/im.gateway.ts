@@ -25,6 +25,7 @@ import {
   WsException,
 } from "@nestjs/websockets";
 import type { Socket } from "socket.io";
+import { AccountContextService } from "@meshbot/agent";
 import { ImRelayClientService } from "../cloud/im-relay-client.service";
 
 /**
@@ -32,8 +33,8 @@ import { ImRelayClientService } from "../cloud/im-relay-client.service";
  *
  * - 复用 BaseWebSocketGateway 的握手鉴权 + 未鉴权宽限回收
  * - 下行（云端 → 本地浏览器）：监听 ImRelayClientService 经 EventEmitter2
- *   转发的 im.* 事件，向本 namespace 所有已连接客户端广播（本地单用户，
- *   无需 room 路由；浏览器按 conversationId 自行过滤）
+ *   转发的 im.* 事件，按账号路由到 acct:<cloudUserId> 房间——多账号同时在线时
+ *   每个事件只投递给所属账号的浏览器，避免重复投递与跨账号泄漏
  * - 上行（本地浏览器 → 云端）：im.send / im.read 由浏览器触发，
  *   转交 ImRelayClientService 经云端 socket 上行；未连接时 send 抛
  *   IM_NOT_CONNECTED，由 WsExceptionFilter 统一处理
@@ -44,6 +45,7 @@ export class ImGateway extends BaseWebSocketGateway {
   constructor(
     private readonly jwt: JwtService,
     private readonly imRelay: ImRelayClientService,
+    private readonly account: AccountContextService,
   ) {
     super();
   }
@@ -53,13 +55,26 @@ export class ImGateway extends BaseWebSocketGateway {
   }
 
   /**
+   * 浏览器连接：保留基类未鉴权回收，并把已鉴权 socket 按账号加入 `acct:<sub>` 房间。
+   * 下行事件据此只投递给所属账号的浏览器——多账号同时在线时（如本地登录多账号、
+   * 或开发期多窗口）避免同一事件经各账号 relay 重复广播、以及跨账号泄漏。
+   */
+  handleConnection(client: Socket): void {
+    super.handleConnection(client);
+    const sub = (client.data?.user as { sub?: unknown } | undefined)?.sub;
+    if (typeof sub === "string") {
+      client.join(`acct:${sub}`);
+    }
+  }
+
+  /**
    * 云端下行：新 IM 消息 → namespace 广播给所有本地浏览器 socket。
    *
    * ImRelayClientService 收到云端 `im.message` 后经 EventEmitter2 触发此方法。
    */
   @OnEvent(IM_WS_EVENTS.message)
   onMessage(payload: ImMessage): void {
-    this.server.emit(IM_WS_EVENTS.message, payload);
+    this.emitToAccount(IM_WS_EVENTS.message, payload);
   }
 
   /**
@@ -69,7 +84,7 @@ export class ImGateway extends BaseWebSocketGateway {
    */
   @OnEvent(IM_WS_EVENTS.presence)
   onPresence(payload: PresenceState): void {
-    this.server.emit(IM_WS_EVENTS.presence, payload);
+    this.emitToAccount(IM_WS_EVENTS.presence, payload);
   }
 
   /**
@@ -80,7 +95,7 @@ export class ImGateway extends BaseWebSocketGateway {
    */
   @OnEvent(IM_WS_EVENTS.conversationCreated)
   onConversationCreated(payload: ConversationSummary): void {
-    this.server.emit(IM_WS_EVENTS.conversationCreated, payload);
+    this.emitToAccount(IM_WS_EVENTS.conversationCreated, payload);
   }
 
   /**
@@ -91,7 +106,21 @@ export class ImGateway extends BaseWebSocketGateway {
    */
   @OnEvent(IM_WS_EVENTS.conversationRemoved)
   onConversationRemoved(payload: { conversationId: string }): void {
-    this.server.emit(IM_WS_EVENTS.conversationRemoved, payload);
+    this.emitToAccount(IM_WS_EVENTS.conversationRemoved, payload);
+  }
+
+  /**
+   * 下行投递：只发给「当前下行事件所属账号」的浏览器 socket。
+   * relay 用 `account.run(cloudUserId, () => emit)` 包裹，EventEmitter2 同步触发，
+   * 故此处 `account.get()` 即该账号。无上下文（理论不应发生）时降级全量广播，保证不丢。
+   */
+  private emitToAccount(event: string, payload: unknown): void {
+    const cloudUserId = this.account.get();
+    if (!cloudUserId) {
+      this.server.emit(event, payload);
+      return;
+    }
+    this.server.to(`acct:${cloudUserId}`).emit(event, payload);
   }
 
   /**
