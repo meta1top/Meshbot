@@ -24,8 +24,8 @@ import { UserService } from "./user.service";
  * - 默认频道保障（ensureDefaultChannel）：@WithLock（按 orgId）包单表写
  * - 可见性校验（getVisibleOrThrow）：只读，无需事务
  * - 会话列表（listConversations）：公开频道 ∪ 成员所在私有频道/DM
- * - 已读标记（markRead）：单表 upsert，无需事务
- * - 添加成员（addMember）：单表 upsert，无需事务
+ * - 已读标记（markRead）：find + save（雪花 id 靠 @BeforeInsert，不能用 upsert/insert），无需事务
+ * - 添加成员（addMember）：find + create+save（幂等，同雪花 id 原因），无需事务
  * - 退出频道（leave）：单表 delete，无需事务
  * - 成员列表（listMembers）：只读，无需事务
  *
@@ -268,13 +268,29 @@ export class ConversationService {
   }
 
   /**
-   * 单表 upsert：conversation_member(conversationId, userId).lastReadAt = now()。
-   * 无需 @Transactional（单表写）。
+   * 标记已读：conversation_member(conversationId, userId).lastReadAt = now()。
+   *
+   * 必须用 find + save（不能用 upsert/insert）：id 是雪花 PK，靠 @BeforeInsert 生成，
+   * 而 upsert/insert 走 plain-object 不触发该 hook → id 为 NULL 违反 NOT NULL，整条
+   * markRead 静默失败、lastReadAt 永远写不进（曾导致未读永不清零）。create()+save()
+   * 才会触发 @BeforeInsert（与 persistDmInTx 同）。单表写，无需 @Transactional。
+   * 公开频道首次已读时该成员行可能不存在，故走 insert 分支创建。
    */
   async markRead(conversationId: string, userId: string): Promise<void> {
-    await this.memberRepo.upsert(
-      { conversationId, userId, lastReadAt: new Date() },
-      { conflictPaths: ["conversationId", "userId"] },
+    const member = await this.memberRepo.findOne({
+      where: { conversationId, userId },
+    });
+    if (member) {
+      member.lastReadAt = new Date();
+      await this.memberRepo.save(member);
+      return;
+    }
+    await this.memberRepo.save(
+      this.memberRepo.create({
+        conversationId,
+        userId,
+        lastReadAt: new Date(),
+      }),
     );
   }
 
@@ -299,10 +315,20 @@ export class ConversationService {
     );
     if (!targetIsOrgMember)
       throw new AppError(MainErrorCode.CHANNEL_MEMBER_INVALID);
-    await this.memberRepo.upsert(
-      { conversationId, userId: targetUserId, lastReadAt: null },
-      { conflictPaths: ["conversationId", "userId"] },
-    );
+    const existing = await this.memberRepo.findOne({
+      where: { conversationId, userId: targetUserId },
+    });
+    if (!existing) {
+      // create()+save() 触发 @BeforeInsert 生成雪花 id（upsert/insert 不触发 → id NULL）；
+      // 已是成员则不动（幂等，且不覆盖其已有 lastReadAt）。
+      await this.memberRepo.save(
+        this.memberRepo.create({
+          conversationId,
+          userId: targetUserId,
+          lastReadAt: null,
+        }),
+      );
+    }
     const summary = await this.toSummary(conv, targetUserId);
     return { summary, orgId: conv.orgId };
   }

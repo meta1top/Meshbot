@@ -690,9 +690,12 @@ describe("ConversationService", () => {
 
   // ── markRead ──────────────────────────────────────────────────────
   describe("markRead", () => {
-    it("upsert conversation_member.lastReadAt", async () => {
+    it("已有成员行 → save 更新 lastReadAt", async () => {
+      const member = makeMember({ conversationId: "conv-1", userId: "user-1" });
+      const save = jest.fn().mockResolvedValue(undefined);
       const memberRepo = makeMemberRepo({
-        upsert: jest.fn().mockResolvedValue(undefined),
+        findOne: jest.fn().mockResolvedValue(member),
+        save,
       });
       const svc = buildSvc(
         makeConvRepo(),
@@ -701,7 +704,29 @@ describe("ConversationService", () => {
         makeUserSvc(),
       );
       await svc.markRead("conv-1", "user-1");
-      expect(memberRepo.upsert).toHaveBeenCalledTimes(1);
+      expect(save).toHaveBeenCalledTimes(1);
+      expect(member.lastReadAt).toBeInstanceOf(Date);
+    });
+
+    it("无成员行（公开频道首读）→ create+save 新建（雪花 id 经 @BeforeInsert）", async () => {
+      const create = jest.fn().mockImplementation((d: object) => ({ ...d }));
+      const save = jest.fn().mockResolvedValue(undefined);
+      const memberRepo = makeMemberRepo({
+        findOne: jest.fn().mockResolvedValue(null),
+        create,
+        save,
+      });
+      const svc = buildSvc(
+        makeConvRepo(),
+        memberRepo,
+        makeMessageSvc(),
+        makeUserSvc(),
+      );
+      await svc.markRead("conv-1", "user-1");
+      expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({ conversationId: "conv-1", userId: "user-1" }),
+      );
+      expect(save).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -938,7 +963,7 @@ describe("ConversationService", () => {
         });
       });
 
-      it("happy path：成功添加成员，调用 upsert", async () => {
+      it("happy path：target 尚非成员 → create+save 新建成员行", async () => {
         const conv = makeConv({
           id: "ch-priv",
           orgId: "org-1",
@@ -952,10 +977,14 @@ describe("ConversationService", () => {
         const convRepo = makeConvRepo({
           findOne: jest.fn().mockResolvedValue(conv),
         });
-        const upsert = jest.fn().mockResolvedValue(undefined);
+        const save = jest.fn().mockResolvedValue(undefined);
         const memberRepo = makeMemberRepo({
-          findOne: jest.fn().mockResolvedValue(actorMember),
-          upsert,
+          // 先 actor 成员检查 → 命中；再 target 是否已存在 → 无；toSummary 再查 → 无
+          findOne: jest
+            .fn()
+            .mockResolvedValueOnce(actorMember)
+            .mockResolvedValueOnce(null),
+          save,
         });
         const membershipSvc = makeMembershipSvc({
           isMember: jest.fn().mockResolvedValue(true),
@@ -968,11 +997,11 @@ describe("ConversationService", () => {
           membershipSvc,
         );
         const result = await svc.addMember("ch-priv", "actor", "new-member");
-        expect(upsert).toHaveBeenCalledTimes(1);
+        expect(save).toHaveBeenCalledTimes(1);
         expect(result.orgId).toBe("org-1");
       });
 
-      it("幂等：重复 addMember 不抛错，再次调用 upsert", async () => {
+      it("幂等：target 已是成员 → 不重复 save、不抛错、不覆盖其 lastReadAt", async () => {
         const conv = makeConv({
           id: "ch-priv",
           orgId: "org-1",
@@ -983,13 +1012,21 @@ describe("ConversationService", () => {
           conversationId: "ch-priv",
           userId: "actor",
         });
+        const targetMember = makeMember({
+          conversationId: "ch-priv",
+          userId: "new-member",
+        });
         const convRepo = makeConvRepo({
           findOne: jest.fn().mockResolvedValue(conv),
         });
-        const upsert = jest.fn().mockResolvedValue(undefined);
+        const save = jest.fn().mockResolvedValue(undefined);
         const memberRepo = makeMemberRepo({
-          findOne: jest.fn().mockResolvedValue(actorMember),
-          upsert,
+          // actor 检查 → 命中；target 是否已存在 → 已是成员
+          findOne: jest
+            .fn()
+            .mockResolvedValueOnce(actorMember)
+            .mockResolvedValueOnce(targetMember),
+          save,
         });
         const membershipSvc = makeMembershipSvc({
           isMember: jest.fn().mockResolvedValue(true),
@@ -1001,9 +1038,9 @@ describe("ConversationService", () => {
           makeUserSvc(),
           membershipSvc,
         );
-        await svc.addMember("ch-priv", "actor", "new-member");
-        await svc.addMember("ch-priv", "actor", "new-member");
-        expect(upsert).toHaveBeenCalledTimes(2);
+        const result = await svc.addMember("ch-priv", "actor", "new-member");
+        expect(save).not.toHaveBeenCalled();
+        expect(result.orgId).toBe("org-1");
       });
     });
 
