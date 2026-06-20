@@ -22,6 +22,10 @@ const config: Config = {
     "^@meshbot/types$": "<rootDir>/libs/types/src",
     "^@meshbot/types-agent$": "<rootDir>/libs/types-agent/src",
     "^@meshbot/types-main$": "<rootDir>/libs/types-main/src",
+    "^@meshbot/web-common$": "<rootDir>/packages/web-common/src",
+    "^@meshbot/web-common/(.*)$": "<rootDir>/packages/web-common/src/$1",
+    // web-agent tsconfig path alias（供 apps/web-agent 下的单测使用）
+    "^@/(.*)$": "<rootDir>/apps/web-agent/src/$1",
     // 强制 framework 包从单一物理路径解析，避免多份实例（同 token 不同
     // identity → Nest DI 解析失败）。hoisted 模式下 @nestjs/typeorm 提升到根
     // node_modules，直接指向根路径即可。typeorm 同理。

@@ -11,7 +11,7 @@ import { conversationsAtom, upsertConversationAtom } from "@/atoms/im";
 import { addSessionAtom } from "@/atoms/sessions";
 import { ChatInput } from "@/components/common/chat-input";
 import { ChannelPicker } from "@/components/im/channel-picker";
-import { getImSocket } from "@/lib/im-socket";
+import { getEventsSocket } from "@/lib/events-socket";
 import { filterRecipients } from "@/lib/recipient-filter";
 import { createDm } from "@/rest/im";
 import { useMembers } from "@/rest/org";
@@ -59,7 +59,7 @@ export function NewMessageView() {
       return;
     }
     if (recipient.kind === "channel") {
-      getImSocket().emit(IM_WS_EVENTS.send, {
+      getEventsSocket().emit(IM_WS_EVENTS.send, {
         conversationId: recipient.id,
         content: body,
       });
@@ -68,7 +68,7 @@ export function NewMessageView() {
     }
     const conv = await createDm(recipient.userId);
     upsertConversation(conv);
-    getImSocket().emit(IM_WS_EVENTS.send, {
+    getEventsSocket().emit(IM_WS_EVENTS.send, {
       conversationId: conv.id,
       content: body,
     });

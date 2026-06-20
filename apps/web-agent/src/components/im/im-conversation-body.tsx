@@ -22,7 +22,7 @@ import {
   type ChatInputHandle,
 } from "@/components/common/chat-input";
 import { ImMessageList } from "@/components/im/im-message-list";
-import { getImSocket } from "@/lib/im-socket";
+import { getEventsSocket } from "@/lib/events-socket";
 import { fetchMessages } from "@/rest/im";
 import { useMembers } from "@/rest/org";
 
@@ -85,7 +85,7 @@ export function ImConversationBody({ id, scrollRef }: ImConversationBodyProps) {
   }, [id, setCurrentConversationId]);
 
   // conversations 由侧栏 MessagesSidebar 的 loadSidebarAtom（/api/sidebar 聚合）填充；
-  // 实时订阅（message/presence/会话增删）已上移到 shell 级 useImRealtime（AppShellLayout），
+  // 实时订阅（message/presence/会话增删）已上移到 shell 级 useGlobalEvents（AppShellLayout），
   // 任何页面常驻。当前会话的消息追加由 applyIncomingMessage 内部按 currentId 统一处理，
   // 本组件不再单独订阅。
 
@@ -109,7 +109,7 @@ export function ImConversationBody({ id, scrollRef }: ImConversationBodyProps) {
     });
 
     // 标记已读：通知后端更新 lastReadAt + 本地乐观清零该会话未读 badge
-    const socket = getImSocket();
+    const socket = getEventsSocket();
     socket.emit(IM_WS_EVENTS.read, { conversationId: id });
     markConversationRead(id);
 
@@ -174,7 +174,7 @@ export function ImConversationBody({ id, scrollRef }: ImConversationBodyProps) {
   // 6. Send: emit via WS, no optimistic insert
   const handleSend = useCallback(
     (text: string) => {
-      const socket = getImSocket();
+      const socket = getEventsSocket();
       socket.emit(IM_WS_EVENTS.send, { conversationId: id, content: text });
       setDraft("");
     },
