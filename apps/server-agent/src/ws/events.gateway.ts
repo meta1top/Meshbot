@@ -16,6 +16,7 @@ import {
   type ImSendInput,
   type PresenceState,
 } from "@meshbot/types";
+import { SCHEDULE_EVENTS, type ScheduleFiredEvent } from "@meshbot/types-agent";
 import { UseFilters, UseGuards } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
 import { JwtService } from "@nestjs/jwt";
@@ -120,6 +121,17 @@ export class EventsGateway extends BaseWebSocketGateway {
   @OnEvent(IM_WS_EVENTS.conversationRead)
   onConversationRead(payload: ImConversationReadEvent): void {
     this.emitEnvelope(IM_WS_EVENTS.conversationRead, payload);
+  }
+
+  /**
+   * 本地定时任务触发 → 信封投递给所属账号浏览器。
+   *
+   * ScheduleExecutor.fire 触发后经 EventEmitter2 触发此方法，
+   * 浏览器可据此刷新任务状态或显示触发通知。
+   */
+  @OnEvent(SCHEDULE_EVENTS.fired)
+  onScheduleFired(payload: ScheduleFiredEvent): void {
+    this.emitEnvelope(SCHEDULE_EVENTS.fired, payload);
   }
 
   /**

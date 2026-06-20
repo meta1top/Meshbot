@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { AccountContextService } from "@meshbot/agent";
+import { SCHEDULE_EVENTS } from "@meshbot/types-agent";
 import { SchedulerRegistry } from "@nestjs/schedule";
 import { DataSource } from "typeorm";
 import type { AccountRuntimeRegistry } from "../account/account-runtime.registry";
@@ -82,6 +83,7 @@ describe("ScheduleExecutor.fire", () => {
       runner as never,
       ctx,
       fakeRuntime().registry,
+      { emit: jest.fn() } as never,
     );
     const job = await createInAccount(ctx, schedule, {
       sessionId: "s1",
@@ -111,6 +113,7 @@ describe("ScheduleExecutor.fire", () => {
       runner as never,
       ctx,
       fakeRuntime().registry,
+      { emit: jest.fn() } as never,
     );
     const job = await createInAccount(ctx, schedule, {
       sessionId: "s1",
@@ -140,6 +143,7 @@ describe("ScheduleExecutor.fire", () => {
       runner as never,
       ctx,
       fakeRuntime().registry,
+      { emit: jest.fn() } as never,
     );
     const job = await createInAccount(ctx, schedule, {
       sessionId: "ghost",
@@ -166,6 +170,7 @@ describe("ScheduleExecutor.fire", () => {
       runner as never,
       ctx,
       fakeRuntime().registry,
+      { emit: jest.fn() } as never,
     );
     const job = await createInAccount(ctx, schedule, {
       sessionId: "s1",
@@ -192,6 +197,7 @@ describe("ScheduleExecutor.fire", () => {
       runner as never,
       ctx,
       runtime.registry,
+      { emit: jest.fn() } as never,
     );
     const job = await createInAccount(ctx, schedule, {
       sessionId: "s1",
@@ -264,6 +270,7 @@ describe("ScheduleExecutor.onApplicationBootstrap", () => {
       fakeRunner() as never,
       ctx,
       fakeRuntime().registry,
+      { emit: jest.fn() } as never,
     );
   });
 
@@ -311,6 +318,57 @@ describe("ScheduleExecutor.onApplicationBootstrap", () => {
     });
     await executor.onApplicationBootstrap();
     expect(registry.getCronJobs().has(disabled.id)).toBe(false);
+  });
+});
+
+describe("ScheduleExecutor.fire emit schedule.fired（stub 版）", () => {
+  function build(emit: jest.Mock) {
+    const job = {
+      id: "job1",
+      sessionId: "s1",
+      cloudUserId: "U1",
+      prompt: "do it",
+      kind: "cron" as const,
+      cronExpr: "* * * * *",
+      timezone: null,
+      enabled: true,
+    };
+    const schedule = {
+      findByIdUnscoped: jest.fn().mockResolvedValue(job),
+      markFired: jest.fn().mockResolvedValue(undefined),
+      setEnabled: jest.fn(),
+    };
+    const sessions = {
+      findOrNull: jest.fn().mockResolvedValue({ id: "s1", title: "我的任务" }),
+      appendMessage: jest.fn().mockResolvedValue(undefined),
+    };
+    const runner = { kick: jest.fn() };
+    const runtime = { has: jest.fn().mockReturnValue(true) };
+    const account = new AccountContextService();
+    const emitter = { emit } as never;
+    const exec = new ScheduleExecutor(
+      schedule as never,
+      {} as never, // SchedulerRegistry
+      sessions as never,
+      runner as never,
+      account,
+      runtime as never,
+      emitter,
+    );
+    return { exec, runner, sessions };
+  }
+
+  it("投递消息 + kick 后 emit schedule.fired（带 session title）", async () => {
+    const emit = jest.fn();
+    const { exec, runner, sessions } = build(emit);
+    await exec.fire("job1");
+    expect(sessions.appendMessage).toHaveBeenCalled();
+    expect(runner.kick).toHaveBeenCalledWith("s1");
+    expect(emit).toHaveBeenCalledWith(SCHEDULE_EVENTS.fired, {
+      sessionId: "s1",
+      jobId: "job1",
+      title: "我的任务",
+    });
   });
 });
 
@@ -365,6 +423,7 @@ describe("ScheduleExecutor 账号运行时生命周期事件（登录注册 / �
       ctx,
       // 把 u1 / u2 都视为在线，避免无关分支干扰
       fakeRuntime(["u1", "u2"]).registry,
+      { emit: jest.fn() } as never,
     );
   });
 

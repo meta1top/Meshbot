@@ -5,7 +5,8 @@ import {
   Logger,
   type OnApplicationBootstrap,
 } from "@nestjs/common";
-import { OnEvent } from "@nestjs/event-emitter";
+import { EventEmitter2, OnEvent } from "@nestjs/event-emitter";
+import { SCHEDULE_EVENTS, type ScheduleFiredEvent } from "@meshbot/types-agent";
 import { SchedulerRegistry } from "@nestjs/schedule";
 import { CronExpressionParser } from "cron-parser";
 import { CronJob as CronJobLib } from "cron";
@@ -35,6 +36,7 @@ export class ScheduleExecutor implements OnApplicationBootstrap {
     private readonly runner: RunnerService,
     private readonly account: AccountContextService,
     private readonly runtime: AccountRuntimeRegistry,
+    private readonly emitter: EventEmitter2,
   ) {}
 
   /**
@@ -199,6 +201,11 @@ export class ScheduleExecutor implements OnApplicationBootstrap {
         content: job.prompt,
       });
       this.runner.kick(job.sessionId);
+      this.emitter.emit(SCHEDULE_EVENTS.fired, {
+        sessionId: job.sessionId,
+        jobId: job.id,
+        title: session.title,
+      } satisfies ScheduleFiredEvent);
 
       if (job.kind === "once") {
         await this.schedule.markFired(jobId, {

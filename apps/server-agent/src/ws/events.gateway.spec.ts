@@ -1,5 +1,6 @@
 import { AccountContextService } from "@meshbot/agent";
 import { IM_WS_EVENTS } from "@meshbot/types";
+import { SCHEDULE_EVENTS } from "@meshbot/types-agent";
 
 import { EventsGateway } from "./events.gateway";
 
@@ -65,5 +66,16 @@ describe("EventsGateway 下行信封 + 账号路由", () => {
       once: jest.fn(),
     } as never);
     expect(join).toHaveBeenCalledWith("acct:U1");
+  });
+
+  it("schedule.fired 本地事件包信封下发", () => {
+    const account = new AccountContextService();
+    const { gw, roomEmit } = makeGateway(account);
+    const payload = { sessionId: "s1", jobId: "j1", title: "t" };
+    account.run("U1", () => gw.onScheduleFired(payload as never));
+    const [eventName, env] = roomEmit.mock.calls[0];
+    expect(eventName).toBe("event");
+    expect(env.type).toBe(SCHEDULE_EVENTS.fired);
+    expect(env.payload).toEqual(payload);
   });
 });
