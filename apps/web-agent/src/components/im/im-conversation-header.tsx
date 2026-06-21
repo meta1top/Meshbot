@@ -407,8 +407,8 @@ export function ImConversationHeader() {
     : (conv.peer?.displayName ?? conv.name ?? "");
 
   return (
-    <div className="shrink-0 border-b border-border bg-(--shell-content)">
-      <div className="flex h-11 w-full items-center gap-2 px-4 lg:px-6">
+    <div className="shrink-0 bg-(--shell-content)">
+      <div className="flex h-11 w-full items-center gap-2 border-b border-border px-4 lg:px-6">
         {isChannel ? (
           isPrivateChannel ? (
             <Lock className="h-4 w-4 shrink-0 text-muted-foreground" />

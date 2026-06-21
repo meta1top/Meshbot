@@ -10,8 +10,8 @@ export function SessionHeader({ sessionId }: { sessionId: string }) {
   const session = sessions.find((s) => s.id === sessionId);
   if (!session) return null;
   return (
-    <div className="shrink-0 border-b border-border bg-(--shell-content)">
-      <div className="flex h-11 w-full items-center gap-2 px-4 lg:px-6">
+    <div className="shrink-0 bg-(--shell-content)">
+      <div className="flex h-11 w-full items-center gap-2 border-b border-border px-4 lg:px-6">
         <button
           type="button"
           onClick={() =>
