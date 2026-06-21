@@ -159,20 +159,11 @@ export function MessageList({
                   >
                     {m.loading ? (
                       <TypingDots />
-                    ) : m.role === "assistant" ? (
+                    ) : (
                       <MarkdownContent
                         text={m.content}
-                        streaming={m.streaming}
+                        streaming={m.role === "assistant" && m.streaming}
                       />
-                    ) : (
-                      <span className="whitespace-pre-wrap">
-                        {m.content}
-                        {m.streaming && (
-                          <span className="ml-0.5 inline-block w-[2px] animate-pulse bg-muted-foreground/60 align-middle">
-                            &nbsp;
-                          </span>
-                        )}
-                      </span>
                     )}
                   </div>
                 )}

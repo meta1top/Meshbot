@@ -1,6 +1,9 @@
 "use client";
 
 import { cn, Tooltip, TooltipContent, TooltipTrigger } from "@meshbot/design";
+import Placeholder from "@tiptap/extension-placeholder";
+import { EditorContent, useEditor } from "@tiptap/react";
+import { StarterKit } from "@tiptap/starter-kit";
 import {
   Bold,
   Code,
@@ -22,14 +25,18 @@ import {
   useImperativeHandle,
   useRef,
 } from "react";
+import { Markdown } from "tiptap-markdown";
 import { formatTokens } from "@/lib/format-tokens";
-import {
-  applyCodeBlock,
-  applyLinePrefix,
-  applyLink,
-  type EditState,
-  wrapInline,
-} from "@/lib/markdown-format";
+
+/** editor.storage 在挂载 tiptap-markdown 后的实际形态（类型断言辅助） */
+interface MarkdownEditorStorage {
+  markdown: { getMarkdown(): string };
+}
+
+/** 从 editor.storage 中安全取出 markdown 字符串 */
+function getMarkdown(storage: unknown): string {
+  return (storage as MarkdownEditorStorage).markdown.getMarkdown();
+}
 
 interface ChatInputProps {
   /** 受控值。父组件维护 draft state。 */
@@ -89,98 +96,85 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
   ) {
     const tChat = useTranslations("chatInput");
     const tSession = useTranslations("session");
-    const editorRef = useRef<HTMLTextAreaElement>(null);
 
-    // 自适应高度：每次 value 变化，先复位再撑到 scrollHeight（CSS max-h 封顶后内部滚动）
-    // biome-ignore lint/correctness/useExhaustiveDependencies: value 是触发条件，effect 读 DOM scrollHeight（而非 value 本身）
+    // sendFnRef 让 handleKeyDown（在 useEditor 配置对象中捕获）
+    // 始终能调用到最新的 handleSend，绕开闭包陈旧问题。
+    const sendFnRef = useRef<() => void>(() => {});
+
+    const editor = useEditor({
+      immediatelyRender: false,
+      extensions: [
+        StarterKit,
+        Placeholder.configure({
+          placeholder: placeholder ?? tChat("placeholder"),
+        }),
+        Markdown.configure({
+          transformPastedText: true,
+          transformCopiedText: true,
+        }),
+      ],
+      content: value,
+      editorProps: {
+        attributes: {
+          class:
+            "prose-none w-full text-sm text-foreground outline-none [&_p]:my-0 [&_ul]:my-1 [&_ul]:ml-4 [&_ul]:list-disc [&_ol]:my-1 [&_ol]:ml-4 [&_ol]:list-decimal [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_pre]:rounded [&_pre]:bg-muted [&_pre]:p-2 [&_a]:text-accent [&_a]:underline",
+        },
+        handleKeyDown: (_view, event) => {
+          // IME 组合期间不拦截 Enter
+          if (event.isComposing || event.keyCode === 229) return false;
+          if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            sendFnRef.current();
+            return true;
+          }
+          return false;
+        },
+      },
+      onUpdate: ({ editor: e }) => {
+        onChange(getMarkdown(e.storage));
+      },
+    });
+
+    const handleSend = useCallback(() => {
+      if (!editor) return;
+      const md = getMarkdown(editor.storage).trim();
+      if (!md) return;
+      onSend?.(md);
+      editor.commands.clearContent();
+      onChange("");
+    }, [editor, onSend, onChange]);
+
+    // 每次 handleSend 更新时同步到 ref，让 handleKeyDown 读到最新版本
     useEffect(() => {
-      const el = editorRef.current;
-      if (!el) return;
-      el.style.height = "auto";
-      el.style.height = `${el.scrollHeight}px`;
-    }, [value]);
+      sendFnRef.current = handleSend;
+    }, [handleSend]);
+
+    // 受控 value 同步守卫：防自身 onChange 回环 + 光标跳
+    useEffect(() => {
+      if (!editor) return;
+      const current = getMarkdown(editor.storage);
+      if (value !== current) {
+        editor.commands.setContent(value, { emitUpdate: false });
+      }
+    }, [value, editor]);
 
     useImperativeHandle(
       ref,
       () => ({
-        focus: (withText?: string) => {
-          const el = editorRef.current;
-          if (!el) return;
+        focus: (_withText?: string) => {
           requestAnimationFrame(() => {
-            el.focus();
-            const pos = (withText ?? value).length;
-            el.setSelectionRange(pos, pos);
+            editor?.commands.focus("end");
           });
         },
       }),
-      [value],
-    );
-
-    // 对 textarea 当前选区应用一个 EditState 变换，更新值并恢复选区
-    const applyFormat = useCallback(
-      (fn: (s: EditState) => EditState) => {
-        const el = editorRef.current;
-        if (!el) return;
-        const next = fn({
-          text: value,
-          start: el.selectionStart,
-          end: el.selectionEnd,
-        });
-        onChange(next.text);
-        // 值受控更新是异步的；下一帧恢复选区
-        requestAnimationFrame(() => {
-          el.focus();
-          el.setSelectionRange(next.start, next.end);
-        });
-      },
-      [value, onChange],
-    );
-
-    const handleSend = useCallback(() => {
-      const trimmed = value.trim();
-      if (!trimmed) return;
-      onSend?.(trimmed);
-      onChange("");
-    }, [value, onSend, onChange]);
-
-    const handleKeyDown = useCallback(
-      (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        // IME 组合期间（中文/日文/韩文输入法未确认）不拦截 Enter——让 IME
-        // 自己用回车 confirm 候选词。nativeEvent.isComposing / keyCode===229
-        // 任一为 true 都视为组合中。
-        if (e.nativeEvent.isComposing || e.keyCode === 229) return;
-        const mod = e.metaKey || e.ctrlKey;
-        if (mod && !e.shiftKey) {
-          const k = e.key.toLowerCase();
-          if (k === "b") {
-            e.preventDefault();
-            applyFormat((s) => wrapInline(s, "**"));
-            return;
-          }
-          if (k === "i") {
-            e.preventDefault();
-            applyFormat((s) => wrapInline(s, "*"));
-            return;
-          }
-          if (k === "k") {
-            e.preventDefault();
-            applyFormat((s) => applyLink(s, "url", tChat("format.linkText")));
-            return;
-          }
-        }
-        if (e.key === "Enter" && !e.shiftKey) {
-          e.preventDefault();
-          handleSend();
-        }
-      },
-      [handleSend, applyFormat, tChat],
+      [editor],
     );
 
     const handleInterrupt = useCallback(() => {
       onInterrupt?.();
     }, [onInterrupt]);
 
-    const hasContent = value.trim().length > 0;
+    const hasContent = !!editor && !editor.isEmpty;
 
     const tokenPercent = tokenUsage
       ? Math.min((tokenUsage.current / tokenUsage.max) * 100, 100)
@@ -188,54 +182,65 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
 
     return (
       <div className="overflow-hidden rounded-[10px] border border-border bg-card">
+        {/* 工具栏 */}
         <div className="flex items-center gap-1 border-b border-border px-2 py-1 text-muted-foreground">
           {(
             [
               {
                 key: "bold",
                 Icon: Bold,
-                run: () => applyFormat((s) => wrapInline(s, "**")),
+                run: () => editor?.chain().focus().toggleBold().run(),
+                active: () => !!editor?.isActive("bold"),
               },
               {
                 key: "italic",
                 Icon: Italic,
-                run: () => applyFormat((s) => wrapInline(s, "*")),
+                run: () => editor?.chain().focus().toggleItalic().run(),
+                active: () => !!editor?.isActive("italic"),
               },
               {
                 key: "strikethrough",
                 Icon: Strikethrough,
-                run: () => applyFormat((s) => wrapInline(s, "~~")),
+                run: () => editor?.chain().focus().toggleStrike().run(),
+                active: () => !!editor?.isActive("strike"),
               },
               {
                 key: "code",
                 Icon: Code,
-                run: () => applyFormat((s) => wrapInline(s, "`")),
+                run: () => editor?.chain().focus().toggleCode().run(),
+                active: () => !!editor?.isActive("code"),
               },
               {
                 key: "codeBlock",
                 Icon: SquareCode,
-                run: () => applyFormat(applyCodeBlock),
+                run: () => editor?.chain().focus().toggleCodeBlock().run(),
+                active: () => !!editor?.isActive("codeBlock"),
               },
               {
                 key: "link",
                 Icon: Link,
                 run: () =>
-                  applyFormat((s) =>
-                    applyLink(s, "url", tChat("format.linkText")),
-                  ),
+                  editor
+                    ?.chain()
+                    .focus()
+                    .toggleLink({ href: "https://" })
+                    .run(),
+                active: () => !!editor?.isActive("link"),
               },
               {
                 key: "bulletList",
                 Icon: List,
-                run: () => applyFormat((s) => applyLinePrefix(s, "- ")),
+                run: () => editor?.chain().focus().toggleBulletList().run(),
+                active: () => !!editor?.isActive("bulletList"),
               },
               {
                 key: "numberedList",
                 Icon: ListOrdered,
-                run: () => applyFormat((s) => applyLinePrefix(s, "1. ")),
+                run: () => editor?.chain().focus().toggleOrderedList().run(),
+                active: () => !!editor?.isActive("orderedList"),
               },
             ] as const
-          ).map(({ key, Icon, run }) => (
+          ).map(({ key, Icon, run, active }) => (
             <button
               key={key}
               type="button"
@@ -243,51 +248,53 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               onClick={run}
               title={tChat(`format.${key}`)}
               aria-label={tChat(`format.${key}`)}
-              className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-muted hover:text-foreground"
+              className={cn(
+                "flex h-6 w-6 items-center justify-center rounded transition-colors",
+                active()
+                  ? "bg-muted text-foreground"
+                  : "hover:bg-muted hover:text-foreground",
+              )}
             >
               <Icon className="h-3.5 w-3.5" />
             </button>
           ))}
         </div>
 
-        <div className="flex items-center gap-2 px-3 py-2">
-          <textarea
-            ref={editorRef}
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            onKeyDown={handleKeyDown}
-            rows={1}
-            placeholder={placeholder ?? tChat("placeholder")}
-            className="max-h-[200px] min-h-[24px] w-full resize-none overflow-y-auto bg-transparent py-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground"
-            style={{ wordBreak: "break-word" }}
-          />
+        {/* 编辑区 */}
+        <div className="flex items-start gap-2 px-3 py-2">
+          <div className="max-h-[200px] w-full overflow-y-auto py-1.5">
+            <EditorContent editor={editor} />
+          </div>
 
-          {isLoading && (
+          <div className="flex shrink-0 items-center gap-0">
+            {isLoading && (
+              <button
+                type="button"
+                onClick={handleInterrupt}
+                className="flex h-8 w-8 shrink-0 items-center justify-center text-destructive transition-colors hover:text-destructive/80"
+                title={tChat("interrupt")}
+              >
+                <Square className="h-4 w-4 fill-current" />
+              </button>
+            )}
             <button
               type="button"
-              onClick={handleInterrupt}
-              className="flex h-8 w-8 shrink-0 items-center justify-center text-destructive transition-colors hover:text-destructive/80"
-              title={tChat("interrupt")}
+              onClick={handleSend}
+              disabled={!hasContent}
+              className={cn(
+                "flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors",
+                hasContent
+                  ? "bg-(--shell-accent) text-white"
+                  : "text-muted-foreground",
+              )}
+              title={tChat("send")}
             >
-              <Square className="h-4 w-4 fill-current" />
+              <Send className="h-4 w-4" />
             </button>
-          )}
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={!hasContent}
-            className={cn(
-              "flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors",
-              hasContent
-                ? "bg-(--shell-accent) text-white"
-                : "text-muted-foreground",
-            )}
-            title={tChat("send")}
-          >
-            <Send className="h-4 w-4" />
-          </button>
+          </div>
         </div>
 
+        {/* 底部栏 */}
         <div className="flex items-center justify-between border-t border-border px-3 py-1.5">
           <button
             type="button"

@@ -3,6 +3,7 @@ import type { ImMessage } from "@meshbot/types";
 import { Copy } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Fragment } from "react";
+import { MarkdownContent } from "@/components/session/markdown-content";
 import { annotateRows } from "@/lib/message-rows";
 
 interface ImMessageListProps {
@@ -113,8 +114,8 @@ export function ImMessageList({
                     </span>
                   </div>
                 )}
-                <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                  {m.content}
+                <div className="text-sm leading-relaxed text-foreground">
+                  <MarkdownContent text={m.content} />
                 </div>
               </div>
 
