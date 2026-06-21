@@ -394,7 +394,18 @@ export function ImConversationHeader() {
   const conv = useAtomValue(currentConversationAtom);
   const presence = useAtomValue(presenceAtom);
 
-  if (!conv) return null;
+  // 会话元数据未就绪时渲染头部骨架（而非 null）：标题栏始终先在位，
+  // 标题随侧栏聚合到达后填入，避免「正文先出现、标题后补」。
+  if (!conv) {
+    return (
+      <div className="shrink-0 bg-(--shell-content)">
+        <div className="flex h-11 w-full items-center gap-2 border-b border-border px-4 lg:px-6">
+          <div className="h-4 w-4 shrink-0 animate-pulse rounded bg-muted" />
+          <div className="h-3.5 w-32 animate-pulse rounded bg-muted" />
+        </div>
+      </div>
+    );
+  }
 
   const isChannel = conv.type === "channel";
   const isPrivateChannel = isChannel && conv.visibility === "private";
