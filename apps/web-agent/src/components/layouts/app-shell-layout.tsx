@@ -1,13 +1,14 @@
 "use client";
 
 import { cn } from "@meshbot/design";
-import { useAtom, useAtomValue } from "jotai";
-import { usePathname } from "next/navigation";
+import { useAtom } from "jotai";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { type ReactNode, Suspense, useCallback, useEffect } from "react";
 import {
   assistantPanelOpenAtom,
   assistantPanelWidthAtom,
+  sidebarDrawerOpenAtom,
 } from "@/atoms/assistant-panel";
 import { DragRegion } from "@/components/drag-region";
 import { AssistantDock } from "@/components/im/assistant-dock";
@@ -30,30 +31,36 @@ interface AppShellLayoutProps {
    * 整条横贯内容卡宽度，不随消息滚动、不受滚动条影响。
    */
   header?: ReactNode;
-  /**
-   * 右侧并列面板（如 IM 伴生 Agent 侧栏）。提供时内容卡分两列：
-   * 左=居中滚动主区，右=固定宽面板（xl 以上显示）；不提供时布局不变。
-   */
-  rightPanel?: ReactNode;
 }
 
+/**
+ * 应用外壳布局（响应式）：
+ * - rail 常驻；内容区始终全宽。
+ * - 消息侧栏：md+ 内联；< md 收为左侧滑出抽屉（顶栏汉堡控制）。
+ * - 随手问 dock：xl+ 内联并列（可拖宽）；< xl 收为右侧滑出抽屉（顶栏 ✦ 控制）。
+ * 抽屉单实例常驻挂载，靠 translate 滑入/滑出（关闭时移出屏外，由外层 overflow-hidden 裁剪），
+ * 故 dock 后台流不因开关而退订。遮罩点击 / Esc 关闭；点会话/切路由自动收侧栏抽屉。
+ */
 export function AppShellLayout({
   children,
   className,
   scrollContainerRef,
   sidebar,
   header,
-  rightPanel,
 }: AppShellLayoutProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const t = useTranslations("appShell");
   const area = areaFromPath(pathname);
-  const panelOpen = useAtomValue(assistantPanelOpenAtom);
+  const [panelOpen, setPanelOpen] = useAtom(assistantPanelOpenAtom);
+  const [sidebarDrawerOpen, setSidebarDrawerOpen] = useAtom(
+    sidebarDrawerOpenAtom,
+  );
   // Shell 级全局事件总线订阅：常驻于壳，任何页面都能实时更新未读/会话/在线/定时任务。
   useGlobalEvents();
   const [panelWidth, setPanelWidth] = useAtom(assistantPanelWidthAtom);
 
-  // 随手问面板左缘拖拽改宽：面板在右侧，鼠标左移→变宽；clamp 300–640；持久化在 atom。
+  // 随手问面板左缘拖拽改宽（仅 xl+ 内联态）：鼠标左移→变宽；clamp 300–640；持久化在 atom。
   const startPanelResize = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
@@ -83,6 +90,24 @@ export function AppShellLayout({
     return () => document.body.classList.remove("app-shell-mode");
   }, []);
 
+  // 切路由 / 切会话（query 变化）后自动收起侧栏抽屉（窄屏点会话即跳转）。
+  const sp = searchParams.toString();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 仅在 pathname / query 变化时收起
+  useEffect(() => {
+    setSidebarDrawerOpen(false);
+  }, [pathname, sp, setSidebarDrawerOpen]);
+
+  // Esc 关闭已打开的抽屉。
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setSidebarDrawerOpen(false);
+      setPanelOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [setSidebarDrawerOpen, setPanelOpen]);
+
   const autoSidebar =
     area === "messages" ? (
       <Suspense fallback={null}>
@@ -100,52 +125,56 @@ export function AppShellLayout({
       <ShellTopBar />
       <div className="flex min-h-0 flex-1">
         <WorkspaceRail />
-        <div className="flex min-h-0 flex-1 pr-1.5 pb-1.5">
+        {/* 内容区容器：relative + overflow-hidden 承载抽屉（绝对定位、关闭时滑出屏外被裁剪） */}
+        <div className="relative flex min-h-0 flex-1 overflow-hidden pr-1.5 pb-1.5">
+          {/* 侧栏遮罩：仅 < md 抽屉打开时 */}
+          {resolvedSidebar && sidebarDrawerOpen && (
+            <button
+              type="button"
+              aria-label={t("rail.messages")}
+              onClick={() => setSidebarDrawerOpen(false)}
+              className="absolute inset-0 z-30 bg-black/50 md:hidden"
+            />
+          )}
+
+          {/* 消息侧栏：md+ 内联；< md 左侧滑出抽屉。单实例常驻，translate 滑动。 */}
           {resolvedSidebar && (
-            <aside className="hidden w-[240px] shrink-0 overflow-hidden rounded-l-(--shell-radius) lg:block">
+            <aside
+              className={cn(
+                "z-40 flex w-[260px] shrink-0 overflow-hidden bg-(--shell-sidebar) transition-transform duration-200",
+                "absolute inset-y-0 left-0 shadow-2xl",
+                sidebarDrawerOpen ? "translate-x-0" : "-translate-x-full",
+                "md:static md:z-auto md:w-[240px] md:translate-x-0 md:rounded-l-(--shell-radius) md:shadow-none md:transition-none",
+              )}
+            >
               {resolvedSidebar}
             </aside>
           )}
+
+          {/* 内容卡 */}
           <section
             className={cn(
               "relative flex min-w-0 flex-1 flex-col overflow-hidden bg-(--shell-content)",
               resolvedSidebar
-                ? "rounded-r-(--shell-radius)"
+                ? "rounded-(--shell-radius) md:rounded-l-none"
                 : "rounded-(--shell-radius)",
             )}
           >
             {header}
-            {rightPanel ? (
-              <div className="flex min-h-0 flex-1 flex-row">
-                <div
-                  ref={scrollContainerRef}
-                  className={cn(
-                    "flex min-h-0 flex-1 flex-col overflow-y-auto",
-                    className,
-                  )}
-                >
-                  <div className="flex w-full flex-1 flex-col p-4 lg:px-6">
-                    {children}
-                  </div>
-                </div>
-                <aside className="hidden w-[420px] shrink-0 flex-col border-l border-border xl:flex">
-                  {rightPanel}
-                </aside>
+            <div
+              ref={scrollContainerRef}
+              className={cn(
+                "flex min-h-0 flex-1 flex-col overflow-y-auto",
+                className,
+              )}
+            >
+              <div className="flex w-full flex-1 flex-col p-4 lg:px-6">
+                {children}
               </div>
-            ) : (
-              <div
-                ref={scrollContainerRef}
-                className={cn(
-                  "flex min-h-0 flex-1 flex-col overflow-y-auto",
-                  className,
-                )}
-              >
-                <div className="flex w-full flex-1 flex-col p-4 lg:px-6">
-                  {children}
-                </div>
-              </div>
-            )}
+            </div>
           </section>
+
+          {/* 随手问 resize 手柄：仅 xl+ 内联态、面板打开时 */}
           {panelOpen && (
             <div
               aria-hidden
@@ -155,12 +184,26 @@ export function AppShellLayout({
               <div className="mx-auto h-full w-1 rounded-full bg-white/15 transition-colors group-hover:bg-(--shell-accent)" />
             </div>
           )}
-          {/* 随手问 dock 常驻挂载：关闭时 CSS 隐藏而非卸载，使后台流不退订、重开即时 */}
+
+          {/* 随手问面板遮罩：仅 < xl 抽屉打开时 */}
+          {panelOpen && (
+            <button
+              type="button"
+              aria-label={t("assistant")}
+              onClick={() => setPanelOpen(false)}
+              className="absolute inset-0 z-30 bg-black/50 xl:hidden"
+            />
+          )}
+
+          {/* 随手问 dock：常驻挂载（关闭不卸载，后台流不退订）。xl+ 内联；< xl 右侧滑出抽屉。 */}
           <aside
             style={{ width: panelWidth }}
             className={cn(
-              "shrink-0 overflow-hidden rounded-(--shell-radius) bg-(--shell-content)",
-              panelOpen ? "hidden xl:flex" : "hidden",
+              "z-40 flex shrink-0 overflow-hidden bg-(--shell-content)",
+              "absolute inset-y-0 right-0 max-w-[88vw] shadow-2xl transition-transform duration-200",
+              panelOpen ? "translate-x-0" : "translate-x-full",
+              "xl:static xl:z-auto xl:max-w-none xl:translate-x-0 xl:rounded-(--shell-radius) xl:shadow-none xl:transition-none",
+              !panelOpen && "xl:hidden",
             )}
           >
             <AssistantDock />

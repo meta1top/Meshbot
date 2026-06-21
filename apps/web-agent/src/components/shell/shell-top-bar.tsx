@@ -1,29 +1,44 @@
 "use client";
 
 import { cn } from "@meshbot/design";
-import { useAtom } from "jotai";
+import { useAtom, useSetAtom } from "jotai";
 import {
   ChevronLeft,
   ChevronRight,
   HelpCircle,
+  PanelLeft,
   Search,
   Sparkles,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { assistantPanelOpenAtom } from "@/atoms/assistant-panel";
+import {
+  assistantPanelOpenAtom,
+  sidebarDrawerOpenAtom,
+} from "@/atoms/assistant-panel";
 
 /**
- * 顶部全宽搜索栏（位于橙色 chrome 上）。左：前进/后退；中：全局搜索（本期 UI 占位）；右：✦随手问 + 帮助。
+ * 顶部全宽搜索栏（位于橙色 chrome 上）。左：（窄屏汉堡）+前进/后退；中：全局搜索（本期 UI 占位）；右：✦随手问 + 帮助。
  * 整条作为 Electron 拖拽区（.drag-handle），按钮 [data-no-drag]。
  */
 export function ShellTopBar() {
   const router = useRouter();
   const t = useTranslations("appShell");
   const [panelOpen, setPanelOpen] = useAtom(assistantPanelOpenAtom);
+  const setSidebarDrawerOpen = useSetAtom(sidebarDrawerOpenAtom);
   return (
     <div className="drag-handle flex h-[42px] shrink-0 items-center gap-2 bg-(--shell-chrome) px-3">
       <div className="app-mac-controls-safe-left flex items-center gap-0.5">
+        {/* 窄屏（< md）汉堡：打开消息侧栏抽屉 */}
+        <button
+          type="button"
+          data-no-drag
+          onClick={() => setSidebarDrawerOpen((v) => !v)}
+          aria-label={t("rail.messages")}
+          className="flex h-7 w-7 items-center justify-center rounded-md text-white/65 hover:bg-white/10 hover:text-white md:hidden"
+        >
+          <PanelLeft className="h-4 w-4" />
+        </button>
         <button
           type="button"
           data-no-drag
