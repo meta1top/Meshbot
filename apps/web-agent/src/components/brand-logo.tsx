@@ -23,6 +23,8 @@ interface BrandLogoProps {
   size?: BrandLogoSize;
   /** 是否显示 MeshBot 文字（rail 仅需 mark）。 */
   withWordmark?: boolean;
+  /** 加载态：白盒静止、里面的橙色 mark 自旋（用作品牌化 loading 指示器）。 */
+  spinning?: boolean;
   className?: string;
 }
 
@@ -30,10 +32,12 @@ interface BrandLogoProps {
  * 统一品牌标识：白底圆角盒 + 橙色 logo mark（+ 可选 MeshBot 文字）。
  * 白底保证 mark 在橙色品牌面板 / 深色 rail / 启动页等各种背景上对比一致；
  * 文字色继承父级（橙色面板上为白、启动页上为前景色）。
+ * spinning=true 时白盒不动、仅 mark 旋转，可直接当作加载指示器。
  */
 export function BrandLogo({
   size = "md",
   withWordmark = false,
+  spinning = false,
   className,
 }: BrandLogoProps) {
   const s = SIZE[size];
@@ -51,6 +55,7 @@ export function BrandLogo({
           width={s.img}
           height={s.img}
           unoptimized
+          className={cn(spinning && "animate-[spin_1.4s_linear_infinite]")}
         />
       </span>
       {withWordmark && <span className={s.text}>MeshBot</span>}

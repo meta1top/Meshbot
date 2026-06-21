@@ -4,7 +4,6 @@ import type { AuthStatus } from "@meshbot/types-agent";
 import { getAccessToken, getBrowserApiBaseUrl } from "@meshbot/web-common";
 import { useQuery } from "@tanstack/react-query";
 import { useAtomValue } from "jotai";
-import { Loader2 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { profileQueryAtom } from "@/atoms/auth";
@@ -139,12 +138,11 @@ function SplashScreen() {
       <div className="drag-handle fixed top-0 right-0 left-0 h-[42px]" />
 
       <div className="flex flex-col items-center gap-6">
-        <BrandLogo size="lg" withWordmark />
+        <BrandLogo size="lg" withWordmark spinning />
 
-        <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          <span>正在准备工作区…</span>
-        </div>
+        <span className="text-[13px] text-muted-foreground">
+          正在准备工作区…
+        </span>
       </div>
     </div>
   );
