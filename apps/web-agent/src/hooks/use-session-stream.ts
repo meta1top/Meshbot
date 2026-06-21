@@ -13,6 +13,7 @@ import {
   type RunToolCallStartEvent,
   type RunUsageEvent,
   SESSION_WS_EVENTS,
+  type SessionTitleUpdatedEvent,
 } from "@meshbot/types-agent";
 import { useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -22,6 +23,7 @@ import {
   resetUsageAtom,
   setInitialUsageAtom,
 } from "@/atoms/session-usage";
+import { updateSessionTitleAtom } from "@/atoms/sessions";
 import type { TimelineMessage } from "@/components/session/message-list";
 import { getSessionSocket } from "@/lib/socket";
 import { appendMessage, fetchHistory, fetchPending } from "@/rest/session";
@@ -73,6 +75,7 @@ export function useSessionStream(
   const appendUsage = useSetAtom(appendUsageAtom);
   const appendUsageByMessage = useSetAtom(appendUsageByMessageAtom);
   const resetUsage = useSetAtom(resetUsageAtom);
+  const updateSessionTitle = useSetAtom(updateSessionTitleAtom);
 
   /** 单一写入口：同步更新 ref 与 state。 */
   const apply = useCallback(
@@ -436,6 +439,11 @@ export function useSessionStream(
       if (e.sessionId !== sessionId) return;
       appendUsage(e);
     };
+    // 标题事件全局广播（不限当前 session）：按事件 sessionId patch 列表 + 标题栏
+    //（两处都读 sessionsAtom）。后台 LLM 生成标题完成后实时刷新。
+    const onTitleUpdated = (e: SessionTitleUpdatedEvent) => {
+      updateSessionTitle({ id: e.sessionId, title: e.title });
+    };
     const onToolStart = (e: RunToolCallStartEvent) => {
       if (e.sessionId !== sessionId) return;
       apply((prev) =>
@@ -519,6 +527,7 @@ export function useSessionStream(
     socket.on(SESSION_WS_EVENTS.runInterrupted, onInterrupted);
     socket.on(SESSION_WS_EVENTS.runError, onError);
     socket.on(SESSION_WS_EVENTS.runUsage, onUsage);
+    socket.on(SESSION_WS_EVENTS.titleUpdated, onTitleUpdated);
     socket.on(SESSION_WS_EVENTS.runToolCallStart, onToolStart);
     socket.on(SESSION_WS_EVENTS.runToolCallProgress, onToolProgress);
     socket.on(SESSION_WS_EVENTS.runToolCallEnd, onToolEnd);
@@ -565,6 +574,7 @@ export function useSessionStream(
       socket.off(SESSION_WS_EVENTS.runInterrupted, onInterrupted);
       socket.off(SESSION_WS_EVENTS.runError, onError);
       socket.off(SESSION_WS_EVENTS.runUsage, onUsage);
+      socket.off(SESSION_WS_EVENTS.titleUpdated, onTitleUpdated);
       socket.off(SESSION_WS_EVENTS.runToolCallStart, onToolStart);
       socket.off(SESSION_WS_EVENTS.runToolCallProgress, onToolProgress);
       socket.off(SESSION_WS_EVENTS.runToolCallEnd, onToolEnd);
@@ -581,6 +591,7 @@ export function useSessionStream(
     setInitialUsage,
     appendUsage,
     appendUsageByMessage,
+    updateSessionTitle,
   ]);
 
   /**

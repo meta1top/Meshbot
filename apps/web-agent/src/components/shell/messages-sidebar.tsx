@@ -11,11 +11,7 @@ import {
   currentConversationIdAtom,
   presenceAtom,
 } from "@/atoms/im";
-import {
-  pinnedSessionsAtom,
-  recentSessionsAtom,
-  sessionsStatusAtom,
-} from "@/atoms/sessions";
+import { sessionsAtom, sessionsStatusAtom } from "@/atoms/sessions";
 import { loadSidebarAtom } from "@/atoms/sidebar";
 import { SidebarSection } from "@/components/shell/sidebar-section";
 import { SidebarSkeleton } from "@/components/shell/sidebar-skeleton";
@@ -35,8 +31,7 @@ export function MessagesSidebar() {
   const currentConvId = useAtomValue(currentConversationIdAtom);
   const presence = useAtomValue(presenceAtom);
 
-  const pinned = useAtomValue(pinnedSessionsAtom);
-  const recent = useAtomValue(recentSessionsAtom);
+  const assistantSessions = useAtomValue(sessionsAtom);
   const sessionsStatus = useAtomValue(sessionsStatusAtom);
 
   const loadSidebar = useSetAtom(loadSidebarAtom);
@@ -49,7 +44,6 @@ export function MessagesSidebar() {
 
   const channels = conversations.filter((c) => c.type === "channel");
   const dms = conversations.filter((c) => c.type === "dm");
-  const assistantSessions = [...pinned, ...recent];
 
   const rowBase =
     "flex h-7 w-full items-center gap-2 rounded-md px-2 text-[13px] transition-colors";

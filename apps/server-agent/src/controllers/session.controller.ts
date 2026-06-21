@@ -88,12 +88,21 @@ export class SessionController {
     const { before, limit } = HistoryQuerySchema.parse(rawQuery);
     const page = await this.sessionMessages.listPage(id, { before, limit });
 
+    // llm_calls.message_id 存的是 langgraphId（UUID，= runner 的 run.messageId），
+    // 而消息对外 id 是雪花（session_messages.id）。故按 langgraphId 查 llm_calls，
+    // 再把 byMessage 的键回填成消息对外的雪花 id —— 前端按 message.id 查 usage 才命中。
     const byMessage: Record<string, MessageUsage> = {};
-    const calls = await this.llmCalls.listByMessageIds(
-      page.messages.map((m) => m.id),
-    );
+    const idByLanggraph = new Map<string, string>();
+    for (const m of page.messages) {
+      if (m.langgraphId) idByLanggraph.set(m.langgraphId, m.id);
+    }
+    const calls = await this.llmCalls.listByMessageIds([
+      ...idByLanggraph.keys(),
+    ]);
     for (const c of calls) {
-      byMessage[c.messageId] = {
+      const msgId = idByLanggraph.get(c.messageId);
+      if (!msgId) continue;
+      byMessage[msgId] = {
         providerType: c.providerType,
         model: c.model,
         inputTokens: c.inputTokens,

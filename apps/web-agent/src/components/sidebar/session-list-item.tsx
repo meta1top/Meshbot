@@ -9,14 +9,7 @@ import {
 } from "@meshbot/design";
 import type { SessionSummary } from "@meshbot/types-agent";
 import { useAtomValue, useSetAtom } from "jotai";
-import {
-  MoreHorizontal,
-  Pencil,
-  Pin,
-  PinOff,
-  Sparkles,
-  Trash2,
-} from "lucide-react";
+import { MoreHorizontal, Pencil, Sparkles, Trash2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { type KeyboardEvent, useCallback, useRef, useState } from "react";
@@ -24,11 +17,7 @@ import {
   clearScheduleActivityAtom,
   scheduleActivityAtom,
 } from "@/atoms/schedule-activity";
-import {
-  deleteSessionAtom,
-  renameSessionAtom,
-  togglePinAtom,
-} from "@/atoms/sessions";
+import { deleteSessionAtom, renameSessionAtom } from "@/atoms/sessions";
 import { SessionDeleteDialog } from "./session-delete-dialog";
 
 /**
@@ -48,7 +37,6 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
   const clearScheduleActivity = useSetAtom(clearScheduleActivityAtom);
   const hasActivity = scheduleActivity.has(session.id);
   const rename = useSetAtom(renameSessionAtom);
-  const togglePin = useSetAtom(togglePinAtom);
   const removeSession = useSetAtom(deleteSessionAtom);
   const [editing, setEditing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -179,25 +167,6 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
               <DropdownMenuItem onSelect={() => startEditing()}>
                 <Pencil className="h-3.5 w-3.5" />
                 {t("rename")}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={async () => {
-                  try {
-                    await togglePin({
-                      id: session.id,
-                      pinned: !session.pinned,
-                    });
-                  } catch {
-                    // 已回滚
-                  }
-                }}
-              >
-                {session.pinned ? (
-                  <PinOff className="h-3.5 w-3.5" />
-                ) : (
-                  <Pin className="h-3.5 w-3.5" />
-                )}
-                {session.pinned ? t("unpin") : t("pin")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 destructive
