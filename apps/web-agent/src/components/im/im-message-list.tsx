@@ -82,8 +82,8 @@ export function ImMessageList({
 
             <div
               className={cn(
-                "group relative -mx-2 flex gap-3 rounded px-2 hover:bg-muted/40",
-                meta.showHeader ? "mt-3" : "mt-1",
+                "group relative -mx-2 flex gap-3 rounded px-2 py-1.5 hover:bg-muted/40",
+                meta.showHeader ? "mt-1.5" : "mt-0",
               )}
             >
               {/* 左 gutter：头行=头像；分组行=hover 时间 */}

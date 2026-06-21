@@ -98,7 +98,7 @@ export function MessageList({
   const userInitial = userName.charAt(0).toUpperCase();
   const assistantName = t("assistantName");
   return (
-    <div className="flex flex-col gap-4 pb-6">
+    <div className="flex flex-col gap-1 pb-6">
       {messages
         .filter(
           (m) => !(m.role === "system" && m.metadata?.kind !== "compaction"),
@@ -117,7 +117,7 @@ export function MessageList({
           return (
             <div
               key={m.id}
-              className="group relative -mx-2 flex gap-3 rounded px-2 hover:bg-muted/40"
+              className="group relative -mx-2 flex gap-3 rounded px-2 py-1.5 hover:bg-muted/40"
             >
               {m.role === "user" ? (
                 <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] bg-[#16a34a] text-[12px] font-semibold text-white">
