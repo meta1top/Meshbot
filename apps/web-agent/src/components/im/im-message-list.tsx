@@ -119,7 +119,7 @@ export function ImMessageList({
               </div>
 
               {/* hover 操作条：复制（功能性）。表情/回复/收藏待后端，后续计划。 */}
-              <div className="absolute -top-2.5 right-2 hidden gap-0.5 rounded-md border border-border bg-background p-0.5 shadow-xs group-hover:flex">
+              <div className="absolute top-1 right-2 z-10 hidden gap-0.5 rounded-md border border-border bg-background p-0.5 shadow-xs group-hover:flex">
                 <button
                   type="button"
                   onClick={() => void navigator.clipboard?.writeText(m.content)}

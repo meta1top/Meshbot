@@ -67,7 +67,7 @@ export function UserMessageActions({
   return (
     <div
       className={cn(
-        "absolute -top-2.5 right-2 z-10 items-center gap-0.5 rounded-md border border-border bg-background p-0.5 shadow-xs",
+        "absolute top-1 right-2 z-10 items-center gap-0.5 rounded-md border border-border bg-background p-0.5 shadow-xs",
         failed ? "flex" : "hidden group-hover:flex",
       )}
     >
