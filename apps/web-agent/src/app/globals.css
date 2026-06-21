@@ -180,10 +180,10 @@ pre code.hljs {
   }
 }
 
-/* 暗色模式「中性石墨·有层次」：纯中性(chroma 0)、保留橙色品牌强调。
-   明度层次 chrome 0.135(最暗外框/rail/顶栏) < content 0.16(=--background) < sidebar 0.195。 */
+/* 暗色模式「暖炭·配橙」：近黑炭底注入极低饱和暖色相(hue 55, chroma~0.01)，与橙同族、和谐去死灰。
+   明度层次 chrome 0.135(最暗外框/rail/顶栏) < content 0.155(=--background) < sidebar 0.195。 */
 html.dark {
-  --shell-chrome: oklch(0.135 0 0);
-  --shell-sidebar: oklch(0.195 0 0);
-  --shell-content: oklch(0.16 0 0);
+  --shell-chrome: oklch(0.135 0.008 55);
+  --shell-sidebar: oklch(0.195 0.01 55);
+  --shell-content: oklch(0.155 0.009 55);
 }
