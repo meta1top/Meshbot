@@ -1,0 +1,20 @@
+{
+  "name": "@meshbot/assets",
+  "version": "0.0.1",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "test": "jest --config ../../jest.config.ts --roots libs/assets"
+  },
+  "dependencies": {
+    "minio": "^8"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^11",
+    "reflect-metadata": "*"
+  }
+}

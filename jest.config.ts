@@ -22,6 +22,8 @@ const config: Config = {
     "^@meshbot/types$": "<rootDir>/libs/types/src",
     "^@meshbot/types-agent$": "<rootDir>/libs/types-agent/src",
     "^@meshbot/types-main$": "<rootDir>/libs/types-main/src",
+    "^@meshbot/assets$": "<rootDir>/libs/assets/src",
+    "^@meshbot/assets/(.*)$": "<rootDir>/libs/assets/src/$1",
     "^@meshbot/web-common$": "<rootDir>/packages/web-common/src",
     "^@meshbot/web-common/(.*)$": "<rootDir>/packages/web-common/src/$1",
     // web-agent tsconfig path alias（供 apps/web-agent 下的单测使用）
