@@ -331,6 +331,69 @@ describe("RunnerService", () => {
     expect(runner.getInflight("s1")).toBeNull();
   });
 
+  it("getInflight：assistant_done 落库后、工具执行中 → messageId 为 null 但仍 streaming", async () => {
+    const sess = fakeSessionService();
+    const emitter = new EventEmitter2();
+    const llmCalls = fakeLlmCallService();
+    sess.enqueue("s1", "hi");
+    // reached：assistant_done 已 yield 并被 runner 处理（partialPersisted=true）后触发；
+    // pausePromise：模拟长工具执行，卡住 stream 让我们在「已落库、未结束」时采样。
+    let reachedResolve: () => void = () => {};
+    const reached = new Promise<void>((r) => {
+      reachedResolve = r;
+    });
+    let pauseResolve: () => void = () => {};
+    const pausePromise = new Promise<void>((r) => {
+      pauseResolve = r;
+    });
+    const graph = {
+      async *streamMessage() {
+        yield { kind: "reasoning", messageId: "msg-1", delta: "想一下" };
+        yield {
+          kind: "assistant_done",
+          messageId: "msg-1",
+          content: "答",
+          reasoning: "想一下",
+          toolCalls: [{ id: "tc-1", name: "echo", args: {} }],
+        };
+        // yield 之后控制权回 runner 处理 assistant_done；runner 再 next() 才执行到这里，
+        // 此刻 partialPersisted 已置 true。通知测试可采样，然后卡住模拟慢 tool。
+        reachedResolve();
+        await pausePromise;
+        yield {
+          kind: "usage",
+          messageId: "msg-1",
+          providerType: "deepseek",
+          model: "deepseek-chat",
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2,
+          cacheReadTokens: 0,
+          cacheCreationTokens: 0,
+          reasoningTokens: 0,
+          durationMs: 10,
+        };
+      },
+    };
+    const runner = new RunnerService(
+      sess as never,
+      graph as never,
+      emitter,
+      llmCalls as never,
+      fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
+      new AccountContextService(),
+    );
+    const runPromise = runner.kickAndWait("s1");
+    await reached;
+    const snap = runner.getInflight("s1");
+    pauseResolve();
+    await runPromise;
+    expect(snap?.status).toBe("streaming");
+    expect(snap?.messageId).toBeNull();
+  });
+
   it("interrupt：中断 run 发 run.interrupted", async () => {
     const sess = fakeSessionService();
     const emitter = new EventEmitter2();
