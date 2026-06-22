@@ -448,6 +448,140 @@ describe("GraphService", () => {
   });
 });
 
+// ─── system:ctx 刷新不累积 ─────────────────────────────────────────────────
+
+describe("GraphService system:ctx 刷新不累积", () => {
+  let testDir: string;
+
+  beforeEach(() => {
+    testDir = mkdtempSync(path.join(tmpdir(), "meshbot-ctx-refresh-test-"));
+    mkdirSync(path.join(testDir, "prompt"), { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(testDir, { recursive: true, force: true });
+  });
+
+  it("连续两次 streamMessage 后 state 里 id===system:ctx 的消息恰好 1 条", async () => {
+    const ctx = new AccountContextService();
+    const configService = new MeshbotConfigService(ctx);
+    (configService as unknown as Record<string, string>).meshbotDir = testDir;
+    const promptService = new PromptService(configService, ctx);
+    const toolRegistry = new ToolRegistry(
+      { getProviders: () => [] } as never,
+      new AccountContextService(),
+    );
+
+    // 使用能正确驱动 messages 流的 BaseChatModel 子类
+    class SimpleModel extends (
+      await import("@langchain/core/language_models/chat_models")
+    ).BaseChatModel {
+      private callCount = 0;
+      _llmType() {
+        return "simple-fake";
+      }
+      async _generate() {
+        throw new Error("不应走 _generate");
+      }
+      async *_streamResponseChunks(
+        _msgs: unknown,
+        _opts: unknown,
+        runManager:
+          | {
+              handleLLMNewToken: (
+                t: string,
+                i: unknown,
+                id: unknown,
+                p: unknown,
+                tags: unknown,
+                fields: unknown,
+              ) => Promise<void>;
+            }
+          | undefined,
+      ): AsyncGenerator<ChatGenerationChunk> {
+        this.callCount += 1;
+        const msgId = `msg-simple-${this.callCount}`;
+        const chunk = new ChatGenerationChunk({
+          message: new AIMessageChunk({
+            id: msgId,
+            content: "ok",
+            usage_metadata: {
+              input_tokens: 1,
+              output_tokens: 1,
+              total_tokens: 2,
+              input_token_details: { cache_read: 0, cache_creation: 0 },
+              output_token_details: { reasoning: 0 },
+            },
+          }),
+          text: "ok",
+        });
+        yield chunk;
+        await runManager?.handleLLMNewToken(
+          "ok",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          { chunk },
+        );
+      }
+    }
+
+    const fakePort: RuntimeContextPort = {
+      resolve: async () => ({
+        displayName: "Grant",
+        language: "zh",
+        timezone: "Asia/Shanghai",
+      }),
+    };
+
+    const gs = new GraphService(
+      configService,
+      promptService,
+      toolRegistry,
+      new EventEmitter2(),
+      ctx,
+      () => Promise.resolve(new SimpleModel({}) as never),
+      { providerType: "fake", model: "fake-model" },
+      fakePort,
+    );
+
+    const threadId = await gs.startSession({ model: "fake" });
+
+    // 第一次 streamMessage
+    await ctx.run(TEST_ACCOUNT, async () => {
+      for await (const _ of gs.streamMessage(threadId, [
+        { id: "pm-1", content: "hi" },
+      ])) {
+        // 消费完
+      }
+    });
+
+    // 第二次 streamMessage
+    await ctx.run(TEST_ACCOUNT, async () => {
+      for await (const _ of gs.streamMessage(threadId, [
+        { id: "pm-2", content: "hello" },
+      ])) {
+        // 消费完
+      }
+    });
+
+    // 直接从 graph state 取消息快照
+    const snapshot = await ctx.run(TEST_ACCOUNT, () =>
+      gs.getMessagesSnapshot(threadId),
+    );
+
+    const ctxMsgs = snapshot.filter((m) => m.id === "system:ctx");
+    expect(ctxMsgs.length).toBe(1);
+
+    // 验证内容为最新（含 cloudUserId/sessionId）
+    const ctxContent =
+      typeof ctxMsgs[0].content === "string" ? ctxMsgs[0].content : "";
+    expect(ctxContent).toContain("sessionId:");
+    expect(ctxContent).toContain("cloudUserId:");
+  });
+});
+
 // ─── buildContextMessage ───────────────────────────────────────────────────
 
 describe("GraphService.buildContextMessage", () => {

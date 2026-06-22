@@ -329,6 +329,8 @@ export class GraphService {
     if (systemPrompt && !hasHistory) {
       inputMessages.push(new SystemMessage(systemPrompt));
     }
+    inputMessages.push(new RemoveMessage({ id: "system:ctx" })); // 删旧（首 run 无则 no-op）
+    inputMessages.push(await this.buildContextMessage(threadId)); // 加新
     for (const input of inputs) {
       inputMessages.push(
         new HumanMessage({ content: input.content, id: input.id }),
@@ -518,7 +520,16 @@ export class GraphService {
     signal?: AbortSignal,
   ): AsyncGenerator<StreamChunk> {
     await this.sanitizeOrphanToolCalls(threadId);
-    yield* this.runGraphStream(threadId, { messages: [] }, signal);
+    yield* this.runGraphStream(
+      threadId,
+      {
+        messages: [
+          new RemoveMessage({ id: "system:ctx" }),
+          await this.buildContextMessage(threadId),
+        ],
+      },
+      signal,
+    );
   }
 
   /**
