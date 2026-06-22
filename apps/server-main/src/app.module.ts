@@ -9,6 +9,7 @@ import {
   RedisHealthIndicator,
   RedisLockProvider,
 } from "@meshbot/common";
+import { AssetsModule } from "@meshbot/assets";
 import { MainModule, REDIS_CLIENT as MAIN_REDIS_CLIENT } from "@meshbot/main";
 import {
   type DynamicModule,
@@ -47,6 +48,7 @@ import { HealthController } from "./health.controller";
 import { AuthController } from "./rest/auth.controller";
 import { ImController } from "./rest/im.controller";
 import { OrgController } from "./rest/org.controller";
+import { SkillController } from "./rest/skill.controller";
 import { HealthGateway } from "./ws/health.gateway";
 import { ImGateway } from "./ws/im.gateway";
 
@@ -188,12 +190,14 @@ export class AppModule {
         EmailModule,
         MainModule.forRoot(config.invitation),
         EventEmitterModule.forRoot(),
+        AssetsModule.forRoot({ provider: "minio", minio: config.assets.minio }),
       ],
       controllers: [
         HealthController,
         AuthController,
         OrgController,
         ImController,
+        SkillController,
       ],
       providers: [
         { provide: REDIS_CLIENT, useValue: redis },

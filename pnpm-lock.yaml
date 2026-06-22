@@ -272,6 +272,9 @@ importers:
       '@alicloud/tea-util':
         specifier: ^1.4.11
         version: 1.4.11
+      '@meshbot/assets':
+        specifier: workspace:*
+        version: link:../../libs/assets
       '@meshbot/common':
         specifier: workspace:*
         version: link:../../libs/common

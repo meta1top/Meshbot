@@ -1,4 +1,9 @@
-import { type DynamicModule, Module, type OnModuleInit } from "@nestjs/common";
+import {
+  type DynamicModule,
+  Logger,
+  Module,
+  type OnModuleInit,
+} from "@nestjs/common";
 import { AssetService } from "./asset.service";
 import type { AssetsConfig } from "./asset.types";
 import { MinioAssetService } from "./providers/minio-asset.service";
@@ -25,7 +30,21 @@ export class AssetsModule implements OnModuleInit {
     };
   }
 
+  private readonly logger = new Logger(AssetsModule.name);
+
+  /**
+   * 启动时确保 bucket 存在；minio 不可达时仅告警不崩（符合「缺 minio 不影响启动，
+   * 发布/下载运行期再报错」），避免对象存储抖动拖垮整个服务启动。
+   */
   async onModuleInit(): Promise<void> {
-    await this.asset.ensureBucket();
+    try {
+      await this.asset.ensureBucket();
+    } catch (err) {
+      this.logger.warn(
+        `ensureBucket 失败（对象存储不可达？发布/下载将在运行期报错）：${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
 }

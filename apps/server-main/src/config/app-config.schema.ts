@@ -63,6 +63,21 @@ export const InvitationConfigSchema = z.object({
   expiresDays: z.coerce.number().int().min(1).max(30).default(7),
 });
 
+/** Minio 对象存储配置。缺省值指向本地 minio（dev 模式下无需显式配置即可启动）。 */
+export const MinioConfigSchema = z.object({
+  endPoint: z.string().default("localhost"),
+  port: z.coerce.number().int().min(1).max(65535).default(9000),
+  useSSL: z.coerce.boolean().default(false),
+  accessKey: z.string().default("minioadmin"),
+  secretKey: z.string().default("minioadmin"),
+  bucket: z.string().default("meshbot-skills"),
+});
+
+/** 资产存储配置切片（对象存储）。 */
+export const AssetsConfigSchema = z.object({
+  minio: MinioConfigSchema.default({}),
+});
+
 export const AppConfigSchema = z.object({
   port: z.coerce.number().int().min(1).max(65535).default(3200),
   database: DatabaseConfigSchema,
@@ -70,6 +85,7 @@ export const AppConfigSchema = z.object({
   redis: RedisConfigSchema.optional(),
   email: EmailConfigSchema.optional(),
   invitation: InvitationConfigSchema.default({ expiresDays: 7 }),
+  assets: AssetsConfigSchema.default({}),
 });
 
 export type AppConfig = z.infer<typeof AppConfigSchema>;
@@ -78,6 +94,8 @@ export type JwtConfig = z.infer<typeof JwtConfigSchema>;
 export type RedisConfig = z.infer<typeof RedisConfigSchema>;
 export type EmailConfig = z.infer<typeof EmailConfigSchema>;
 export type InvitationConfig = z.infer<typeof InvitationConfigSchema>;
+export type MinioConfig = z.infer<typeof MinioConfigSchema>;
+export type AssetsConfig = z.infer<typeof AssetsConfigSchema>;
 
 /** 全局 DI token —— 持有强类型嵌套 AppConfig。 */
 export const APP_CONFIG = Symbol("APP_CONFIG");

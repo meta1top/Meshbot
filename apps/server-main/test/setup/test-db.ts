@@ -23,6 +23,8 @@ import { Invitation } from "../../../../libs/main/src/entities/invitation.entity
 import { Membership } from "../../../../libs/main/src/entities/membership.entity";
 import { Message } from "../../../../libs/main/src/entities/message.entity";
 import { Organization } from "../../../../libs/main/src/entities/organization.entity";
+import { SkillPackage } from "../../../../libs/main/src/entities/skill-package.entity";
+import { SkillVersion } from "../../../../libs/main/src/entities/skill-version.entity";
 
 /** 云端 schema 的真相源：apps/server-main/migrations/*.sql（DDL 由 DBA 手动执行）。 */
 const MIGRATIONS_DIR = path.join(__dirname, "..", "..", "migrations");
@@ -93,6 +95,8 @@ export async function createTestDb(): Promise<TestDbContext> {
       Conversation,
       ConversationMember,
       Message,
+      SkillPackage,
+      SkillVersion,
     ],
     namingStrategy: new SnakeNamingStrategy(),
     synchronize: false,
