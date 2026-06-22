@@ -10,19 +10,19 @@ import type {
   SkillInstallSource,
 } from "@meshbot/types-agent";
 import { Injectable } from "@nestjs/common";
-import type {
+import {
   AccountContextService,
   MeshbotConfigService,
   SkillService,
 } from "@meshbot/agent";
 import { AgentErrorCode } from "../errors/agent.error-codes";
-import type { CloudClientService } from "../cloud/cloud-client.service";
-import type { CloudIdentityService } from "../services/cloud-identity.service";
+import { CloudClientService } from "../cloud/cloud-client.service";
+import { CloudIdentityService } from "../services/cloud-identity.service";
 import { extractToDir, findSkillRoot, packDir } from "./skill-archive";
 import type { SkillSourceAdapter } from "./sources/skill-source";
-import type { GithubSource } from "./sources/github.source";
-import type { ClawhubSource } from "./sources/clawhub.source";
-import type { OurMarketSource } from "./sources/our-market.source";
+import { GithubSource } from "./sources/github.source";
+import { ClawhubSource } from "./sources/clawhub.source";
+import { OurMarketSource } from "./sources/our-market.source";
 
 /** 写入 `<skillDir>/.meshbot-install.json` 的清单结构。 */
 interface InstallManifest {
