@@ -331,14 +331,117 @@ describe("GraphService", () => {
         });
       }
     });
-    const adA = events.find(
-      (e) => e.kind === "assistant_done" && e.messageId === "msg-A",
-    );
+    // 首个 assistant_done = 轮 A（tool_calls 轮，supervisor 退出即 flush，早于轮 B）。
+    // id 已收口为雪花，不再是模型原始 "msg-A"。
+    const adA = events.find((e) => e.kind === "assistant_done");
     expect(adA).toBeTruthy();
+    expect(adA?.messageId).not.toBe("msg-A");
+    expect(adA?.messageId).toMatch(/^\d{15,}$/);
     expect(toolFinishedAt).toBeGreaterThan(0);
     // 关键断言：assistant_done(A) 必须在 tool 完成之前 yield
     // 修复前（仅 ToolMessage 触发）：flush 等 ToolMessage 进 stream（tool resolve 之后）→ adA.t ≥ toolFinishedAt
     // 修复后（supervisor update 触发）：assistant_done 立即 yield，远早于 tool 完成 → adA.t < toolFinishedAt
     expect(adA?.t).toBeLessThan(toolFinishedAt);
+  });
+
+  it("runGraphStream：同一轮所有事件 messageId 收口为雪花（非模型UUID）", async () => {
+    // 单轮：reasoning + content，模型 id 固定 "model-uuid-1"。
+    // 断言所有 assistant 轮事件（reasoning/chunk/reasoning_done/assistant_done/usage）
+    // 的 messageId 收口为同一雪花，且不等于模型原始 UUID。
+    class ReasoningModel extends (
+      await import("@langchain/core/language_models/chat_models")
+    ).BaseChatModel {
+      _llmType() {
+        return "reasoning-fake";
+      }
+      async _generate() {
+        throw new Error("不应走 _generate");
+      }
+      async *_streamResponseChunks(
+        _msgs: unknown,
+        _opts: unknown,
+        runManager:
+          | {
+              handleLLMNewToken: (
+                t: string,
+                i: unknown,
+                id: unknown,
+                p: unknown,
+                tags: unknown,
+                fields: unknown,
+              ) => Promise<void>;
+            }
+          | undefined,
+      ): AsyncGenerator<ChatGenerationChunk> {
+        const c1 = new ChatGenerationChunk({
+          message: new AIMessageChunk({
+            id: "model-uuid-1",
+            content: "",
+            additional_kwargs: { reasoning_content: "想一下" },
+          }),
+          text: "",
+        });
+        yield c1;
+        await runManager?.handleLLMNewToken(
+          "",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          { chunk: c1 },
+        );
+        const c2 = new ChatGenerationChunk({
+          message: new AIMessageChunk({ id: "model-uuid-1", content: "好" }),
+          text: "好",
+        });
+        yield c2;
+        await runManager?.handleLLMNewToken(
+          "好",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          { chunk: c2 },
+        );
+      }
+    }
+    const {
+      ctx: ctx3,
+      configService: cfg3,
+      promptService: ps3,
+    } = makeTestServices(testDir);
+    const toolRegistry3 = new ToolRegistry(
+      { getProviders: () => [] } as never,
+      new AccountContextService(),
+    );
+    const gs = new GraphService(
+      cfg3,
+      ps3,
+      toolRegistry3,
+      new EventEmitter2(),
+      ctx3,
+      () => Promise.resolve(new ReasoningModel({}) as BaseChatModel),
+      { providerType: "fake", model: "fake-model" },
+    );
+    const threadId = await gs.startSession({ model: "fake" });
+    // biome-ignore lint/suspicious/noExplicitAny: 测试装载事件
+    const events: any[] = [];
+    await ctx3.run(TEST_ACCOUNT, async () => {
+      for await (const ev of gs.streamMessage(threadId, [
+        { id: "pm-1", content: "hi" },
+      ])) {
+        events.push(ev);
+      }
+    });
+    // 取 assistant 轮事件（排除 human）的 messageId 去重
+    const roundIds = new Set<string>(
+      events
+        .filter((e) => e.kind !== "human" && typeof e.messageId === "string")
+        .map((e) => e.messageId as string),
+    );
+    expect(roundIds.size).toBe(1);
+    const [sid] = [...roundIds];
+    expect(sid).not.toBe("model-uuid-1");
+    expect(sid).toMatch(/^\d{15,}$/);
   });
 });

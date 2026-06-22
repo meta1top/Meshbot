@@ -28,9 +28,12 @@ export function buildSupervisorGraph(
   modelProvider: ModelProvider,
   registry: ToolRegistry,
   emitter: EventEmitter2,
+  resolveMessageId: (modelId: string) => string,
 ) {
-  const supervisor = createSupervisorNode(modelProvider, () =>
-    registry.asLangChainBindable(),
+  const supervisor = createSupervisorNode(
+    modelProvider,
+    () => registry.asLangChainBindable(),
+    resolveMessageId,
   );
   const tools = createToolsNode(registry, emitter);
   return new StateGraph<GraphState>({
