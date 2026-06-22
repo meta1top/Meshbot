@@ -13,20 +13,13 @@ interface Props {
   skill: MarketSkillSummary;
   source: SkillInstallSource;
   onInstalled: () => void;
-  /** clawhub 暂不支持安装，传 true 禁用安装按钮 */
-  disabled?: boolean;
 }
 
 /**
  * 市场技能卡片：展示 displayName/description/author/latestVersion/downloads；
  * 「安装」按钮调 installSkill，安装中 loading，成功回调 onInstalled + 内联提示。
  */
-export function MarketSkillCard({
-  skill,
-  source,
-  onInstalled,
-  disabled,
-}: Props) {
+export function MarketSkillCard({ skill, source, onInstalled }: Props) {
   const t = useTranslations("skills");
   const [busy, setBusy] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -82,32 +75,18 @@ export function MarketSkillCard({
         </div>
 
         <div className="shrink-0">
-          {disabled ? (
-            <span
-              className="cursor-default rounded px-2 py-1 text-[11px] text-muted-foreground opacity-50"
-              title={t("clawhubInstallUnsupported")}
-            >
-              {t("install")}
-            </span>
-          ) : (
-            <button
-              type="button"
-              onClick={handleInstall}
-              disabled={busy}
-              className="flex items-center gap-1 rounded bg-primary/10 px-2 py-1 text-[11px] text-primary hover:bg-primary/20 disabled:opacity-50"
-            >
-              {busy ? t("installing") : t("install")}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={handleInstall}
+            disabled={busy}
+            className="flex items-center gap-1 rounded bg-primary/10 px-2 py-1 text-[11px] text-primary hover:bg-primary/20 disabled:opacity-50"
+          >
+            {busy ? t("installing") : t("install")}
+          </button>
         </div>
       </div>
 
       {/* 内联反馈 */}
-      {disabled && (
-        <p className="mt-1.5 text-[11px] text-amber-500">
-          {t("clawhubInstallUnsupported")}
-        </p>
-      )}
       {successMsg && (
         <p className="mt-1.5 text-[11px] text-green-600 dark:text-green-400">
           {successMsg}

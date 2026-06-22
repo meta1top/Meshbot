@@ -146,13 +146,6 @@ export default function SkillsPage() {
                 : t("sourceClawhub")}
             </h1>
 
-            {/* clawhub 提示横幅 */}
-            {activeView === "clawhub" && (
-              <div className="mb-3 rounded-md border border-amber-300/40 bg-amber-50/60 px-3 py-2 text-[12px] text-amber-700 dark:bg-amber-900/20 dark:text-amber-400">
-                {t("clawhubInstallUnsupported")}
-              </div>
-            )}
-
             {/* 搜索框 */}
             <input
               type="text"
@@ -178,7 +171,6 @@ export default function SkillsPage() {
                     skill={skill}
                     source={activeView}
                     onInstalled={handleInstalled}
-                    disabled={activeView === "clawhub"}
                   />
                 ))}
               </div>
