@@ -8,6 +8,7 @@ import {
   type RunInterruptedEvent,
   type RunReasoningChunkEvent,
   type RunReasoningDoneEvent,
+  type RunSnapshotEvent,
   type RunToolCallEndEvent,
   type RunToolCallProgressEvent,
   type RunToolCallStartEvent,
@@ -15,6 +16,7 @@ import {
   SESSION_WS_EVENTS,
   type SessionTitleUpdatedEvent,
 } from "@meshbot/types-agent";
+import { clientSnowflakeId } from "@meshbot/web-common";
 import { useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -392,6 +394,46 @@ export function useSessionStream(
       });
       upsertChunk(e.messageId, e.delta, true);
     };
+    /**
+     * subscribe 回放：按 messageId **SET**（覆盖，非累加）本轮全量 reasoning/content，
+     * 与 HTTP inflight push 互为幂等，根治回放叠加 / 断线重连的文本翻倍。
+     * 缺失则按快照建气泡；后续真正的增量仍走 onReasoning / onChunk（append）。
+     */
+    const onSnapshot = (e: RunSnapshotEvent) => {
+      if (e.sessionId !== sessionId) return;
+      setRunning(true);
+      apply((prev) => {
+        const withoutLoading = prev.filter((m) => !m.loading);
+        const idx = withoutLoading.findIndex((m) => m.id === e.messageId);
+        if (idx === -1) {
+          return [
+            ...withoutLoading,
+            {
+              id: e.messageId,
+              role: "assistant" as const,
+              content: e.content,
+              streaming: true,
+              ...(e.reasoning ? { reasoning: e.reasoning } : {}),
+              ...(e.reasoningStartedAt !== null
+                ? { reasoningStartedAt: e.reasoningStartedAt }
+                : {}),
+            },
+          ];
+        }
+        const copy = [...withoutLoading];
+        const existing = copy[idx];
+        copy[idx] = {
+          ...existing,
+          content: e.content, // SET 覆盖，不累加
+          streaming: true,
+          // reasoning 仅在快照非空时覆盖，避免空快照抹掉已有 reasoning
+          reasoning: e.reasoning || existing.reasoning,
+          reasoningStartedAt:
+            e.reasoningStartedAt ?? existing.reasoningStartedAt,
+        };
+        return copy;
+      });
+    };
     const onDone = (e: RunDoneEvent) => {
       if (e.sessionId !== sessionId) return;
       setRunning(false);
@@ -523,6 +565,7 @@ export function useSessionStream(
     socket.on(SESSION_WS_EVENTS.runReasoning, onReasoning);
     socket.on(SESSION_WS_EVENTS.runReasoningDone, onReasoningDone);
     socket.on(SESSION_WS_EVENTS.runChunk, onChunk);
+    socket.on(SESSION_WS_EVENTS.runSnapshot, onSnapshot);
     socket.on(SESSION_WS_EVENTS.runDone, onDone);
     socket.on(SESSION_WS_EVENTS.runInterrupted, onInterrupted);
     socket.on(SESSION_WS_EVENTS.runError, onError);
@@ -570,6 +613,7 @@ export function useSessionStream(
       socket.off(SESSION_WS_EVENTS.runReasoning, onReasoning);
       socket.off(SESSION_WS_EVENTS.runReasoningDone, onReasoningDone);
       socket.off(SESSION_WS_EVENTS.runChunk, onChunk);
+      socket.off(SESSION_WS_EVENTS.runSnapshot, onSnapshot);
       socket.off(SESSION_WS_EVENTS.runDone, onDone);
       socket.off(SESSION_WS_EVENTS.runInterrupted, onInterrupted);
       socket.off(SESSION_WS_EVENTS.runError, onError);
@@ -595,7 +639,9 @@ export function useSessionStream(
   ]);
 
   /**
-   * 会话页发送：前端生成最终 messageId（UUID），乐观插入 user 气泡到 pending 区，
+   * 会话页发送：前端生成最终 messageId（雪花），乐观插入 user 气泡到 pending 区，
+   * 用雪花（非 UUID）使 human id 与服务端 assistant 雪花 / checkpointer / 事件流 /
+   * session_messages.id 三处收口一致，历史与 inflight 去重才能命中。
    * append 传同一 id 给后端。这样 run.human 到达时能直接按 id 找到目标气泡迁移，
    * 不需要 tempId 替换 / pendingHumanIdsRef 缓存。
    *
@@ -604,7 +650,7 @@ export function useSessionStream(
   const send = useCallback(
     async (msg: string) => {
       if (!sessionId) return;
-      const messageId = crypto.randomUUID();
+      const messageId = clientSnowflakeId();
       apply((prev) => [
         ...prev,
         { id: messageId, role: "user", content: msg, pending: true },

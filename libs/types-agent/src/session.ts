@@ -237,6 +237,23 @@ export const RunChunkEventSchema = z.object({
 export type RunChunkEvent = z.infer<typeof RunChunkEventSchema>;
 
 /**
+ * socket: run.snapshot 事件载荷（subscribe 回放专用，SET 语义）。
+ *
+ * 订阅时若有活 inflight，gateway 一次性发本轮全量 reasoning/content/startedAt；
+ * 前端按 messageId **覆盖**（非累加）该气泡，与 HTTP inflight push 互为幂等，
+ * 根治「push + run.reasoning/run.chunk 回放叠加 / 断线重连」的文本翻倍。
+ * 后续真正的增量仍走 run.reasoning / run.chunk（append）。
+ */
+export const RunSnapshotEventSchema = z.object({
+  sessionId: z.string(),
+  messageId: z.string(),
+  reasoning: z.string(),
+  content: z.string(),
+  reasoningStartedAt: z.number().nullable(),
+});
+export type RunSnapshotEvent = z.infer<typeof RunSnapshotEventSchema>;
+
+/**
  * socket: run.reasoning 事件载荷。
  *
  * 推理模型（DeepSeek v4-pro 等）在吐 content 前先逐 token 推送 reasoning_content。
@@ -431,6 +448,7 @@ export const SESSION_WS_EVENTS = {
   runReasoning: "run.reasoning",
   runReasoningDone: "run.reasoning_done",
   runChunk: "run.chunk",
+  runSnapshot: "run.snapshot",
   runDone: "run.done",
   runInterrupted: "run.interrupted",
   runError: "run.error",

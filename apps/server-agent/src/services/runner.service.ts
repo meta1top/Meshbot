@@ -32,6 +32,12 @@ interface InflightRun {
   abort: AbortController;
   /** ctx-exceeded 兜底重试标记；防止同一 run 重复触发兜底。 */
   retried?: boolean;
+  /**
+   * 当前轮 assistant 是否已 recordAssistant 落库。落库后该轮不再作为活 partial
+   * 吐出（getInflight 返 messageId:null），避免「已落库轮」被刷新当成 inflight
+   * 重复推成「思考中」并误计时。轮切换（新轮 reasoning/chunk）时重置为 false。
+   */
+  partialPersisted: boolean;
 }
 
 /** getInflight 对外快照（subscribe replay 用）。 */
@@ -109,6 +115,18 @@ export class RunnerService implements OnModuleInit {
   getInflight(sessionId: string): InflightView | null {
     const run = this.inflight.get(sessionId);
     if (!run || run.status !== "streaming") return null;
+    // 本轮 assistant 已落库：history 已含整条（reasoning + tool_calls），不再吐
+    // 活 partial，避免重复气泡 + 「思考中」误计时；但 status 仍 streaming，让前端
+    // 知道 run 在跑（停止按钮 / 输入态不变）。messageId:null → 不推气泡、不回放。
+    if (run.partialPersisted) {
+      return {
+        messageId: null,
+        content: "",
+        reasoning: "",
+        reasoningStartedAt: null,
+        status: run.status,
+      };
+    }
     return {
       messageId: run.messageId,
       content: run.content,
@@ -256,6 +274,7 @@ export class RunnerService implements OnModuleInit {
       reasoningStartedAt: null,
       status: "streaming",
       abort: new AbortController(),
+      partialPersisted: false,
     };
     this.inflight.set(sessionId, run);
     const runStartedAt = Date.now();
@@ -467,6 +486,8 @@ export class RunnerService implements OnModuleInit {
           run.content = "";
           run.reasoning = "";
           run.reasoningStartedAt = null;
+          // 进入新轮：上一轮的「已落库」标志失效，新轮重新作为活 partial 吐出。
+          run.partialPersisted = false;
         }
         // 本轮首个 reasoning delta：记下 startedAt，刷新时前端能拿到真实开始时间
         if (run.reasoning === "" && event.delta) {
@@ -511,6 +532,8 @@ export class RunnerService implements OnModuleInit {
           run.content = "";
           run.reasoning = "";
           run.reasoningStartedAt = null;
+          // 进入新轮：上一轮的「已落库」标志失效，新轮重新作为活 partial 吐出。
+          run.partialPersisted = false;
         }
         run.content += event.delta;
         this.emitter.emit(SESSION_WS_EVENTS.runChunk, {
@@ -544,6 +567,9 @@ export class RunnerService implements OnModuleInit {
             err,
           );
         }
+        // 本轮 assistant 已落库：history 已含整条（reasoning + tool_calls），
+        // getInflight 不再吐活 partial，避免刷新重复推「思考中」+ 误计时。
+        run.partialPersisted = true;
         continue;
       }
       // event.kind === "usage"

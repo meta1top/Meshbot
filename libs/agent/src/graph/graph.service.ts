@@ -7,6 +7,7 @@ import {
   RemoveMessage,
   SystemMessage,
 } from "@langchain/core/messages";
+import { generateSnowflakeId } from "@meshbot/common";
 import { Injectable, Optional } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { AccountContextService } from "../account/account-context.service";
@@ -115,6 +116,22 @@ export class GraphService {
    * summarize 等非 graph 路径通过此字段调 invoke，避免重复走 DB 读取。
    */
   private readonly modelProvider: ModelProvider;
+
+  /** 模型生成的 AIMessage UUID -> 我方雪花。node 与 runGraphStream 共享，保证一致。 */
+  private readonly msgIdMap = new Map<string, string>();
+
+  /** 取/建某条 AIMessage 的雪花 id（get-or-create，幂等）。
+   *  supervisor 节点（写 checkpointer）与 runGraphStream（发事件）解析同一雪花，
+   *  使 checkpointer / session_messages / WS 事件三处 id 收口一致。 */
+  private readonly resolveMessageId = (modelId: string): string => {
+    let s = this.msgIdMap.get(modelId);
+    if (!s) {
+      s = generateSnowflakeId();
+      this.msgIdMap.set(modelId, s);
+    }
+    return s;
+  };
+
   constructor(
     private configService: MeshbotConfigService,
     private promptService: PromptService,
@@ -150,6 +167,7 @@ export class GraphService {
         this.modelProvider,
         this.toolRegistry,
         this.eventEmitter,
+        this.resolveMessageId,
       );
       entry = { graph, checkpointer };
       this.graphsByAccount.set(acct, entry);
@@ -505,6 +523,11 @@ export class GraphService {
     // 这样 ReAct 多轮里每轮独立 emit assistant_done + usage，runner 按轮写
     // session_messages，避免不同轮 reasoning 被合并到同一条 assistant。
     let currentId: string | null = null;
+    // 本轮事件对外用的雪花 id（= resolveMessageId(currentId)）。currentId 仅用于
+    // 判轮切换；所有 yield 的 messageId 用 currentSid，与 checkpointer 写入的 id 收口一致。
+    let currentSid: string | null = null;
+    // 本 run 见过的模型 UUID，run 结束时从 msgIdMap 清理，避免长进程累积。
+    const seenModelIds = new Set<string>();
     let currentAcc: AIMessageChunk | undefined;
     let currentRoundStartedAt = startedAt;
     let firstChunkAt = 0;
@@ -516,7 +539,8 @@ export class GraphService {
     // 然后置 true 避免后续 chunk 重复发；轮切换/flush 时重置回 false。
     let reasoningDoneYielded = false;
     const flushRound = function* (this: GraphService): Generator<StreamChunk> {
-      if (currentId === null || currentAcc === undefined) return;
+      if (currentId === null || currentSid === null || currentAcc === undefined)
+        return;
       const content =
         typeof currentAcc.content === "string" ? currentAcc.content : "";
       const reasoning =
@@ -527,13 +551,13 @@ export class GraphService {
       if (toolCalls.length > 0) {
         yield {
           kind: "tool_calls",
-          messageId: currentId,
+          messageId: currentSid,
           toolCalls,
         };
       }
       yield {
         kind: "assistant_done",
-        messageId: currentId,
+        messageId: currentSid,
         content,
         reasoning,
         toolCalls: toolCalls.length > 0 ? toolCalls : null,
@@ -542,7 +566,7 @@ export class GraphService {
       if (extracted) {
         yield {
           kind: "usage",
-          messageId: currentId,
+          messageId: currentSid,
           providerType: this.modelMeta.providerType,
           model: this.modelMeta.model,
           inputTokens: extracted.inputTokens,
@@ -600,6 +624,7 @@ export class GraphService {
           yield* flushRound();
           currentAcc = undefined;
           currentId = null;
+          currentSid = null;
           currentRoundStartedAt = Date.now();
           reasoningDoneYielded = false;
         }
@@ -615,6 +640,11 @@ export class GraphService {
         reasoningDoneYielded = false;
       }
       currentId = messageId;
+      // 模型 UUID 解析为我方雪花：本轮所有事件 messageId 用 sid，与 supervisor 节点
+      // 写入 checkpointer 的 id 同源（get-or-create 命中缓存）。
+      seenModelIds.add(messageId);
+      const sid = this.resolveMessageId(messageId);
+      currentSid = sid;
       // 本轮首次见到非空 tool_calls：yield reasoning_done。比较 concat 前后的
       // 长度——若之前为 0、之后 > 0，说明这条 chunk 是 reasoning→tool_calls 的
       // 切换点。运行频率：每轮最多 1 次。
@@ -627,7 +657,7 @@ export class GraphService {
         nextToolCallsLen > 0
       ) {
         reasoningDoneYielded = true;
-        yield { kind: "reasoning_done", messageId };
+        yield { kind: "reasoning_done", messageId: sid };
       }
       const reasoningDelta =
         typeof msg.additional_kwargs?.reasoning_content === "string"
@@ -643,7 +673,7 @@ export class GraphService {
           }
         }
         reasoningCount += 1;
-        yield { kind: "reasoning", messageId, delta: reasoningDelta };
+        yield { kind: "reasoning", messageId: sid, delta: reasoningDelta };
       }
       const delta = typeof msg.content === "string" ? msg.content : "";
       if (!delta) continue;
@@ -657,10 +687,12 @@ export class GraphService {
       }
       lastChunkAt = Date.now();
       chunkCount += 1;
-      yield { kind: "chunk", messageId, delta };
+      yield { kind: "chunk", messageId: sid, delta };
     }
     // 流结束：flush 最后一轮
     yield* flushRound();
+    // 清理本 run 见过的模型 UUID 映射，避免长进程累积。
+    for (const id of seenModelIds) this.msgIdMap.delete(id);
     const streamClosedAt = Date.now();
     if (timing) {
       const lastChunkOffset = lastChunkAt ? lastChunkAt - startedAt : -1;

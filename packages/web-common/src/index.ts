@@ -21,3 +21,4 @@ export { PROVIDERS } from "./providers";
 export type { ModelConfigInput } from "./providers/schema";
 export { modelConfigSchema } from "./providers/schema";
 export { THEME_STORAGE_KEY, type Theme, themeScript } from "./theme";
+export { clientSnowflakeId } from "./utils/snowflake";
