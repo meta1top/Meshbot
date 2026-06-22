@@ -33,6 +33,6 @@ export const PublishSkillSchema = z.object({
   version: z.string().min(1).max(32),
   changelog: z.string().optional(),
   readme: z.string().min(1), // SKILL.md 文本(详情展示用，免每次下载解包)
-  tarballBase64: z.string().min(1), // 技能目录 tar.gz 的 base64
+  archiveBase64: z.string().min(1), // 技能目录 zip 的 base64
 });
 export type PublishSkillInput = z.infer<typeof PublishSkillSchema>;

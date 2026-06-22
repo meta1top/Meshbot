@@ -87,7 +87,7 @@ function makePublishInput(
     version: "1.0.0",
     changelog: "Initial release",
     readme: "# My Skill\nDoes stuff.",
-    tarballBase64: "dGFyYmFsbA==",
+    archiveBase64: "dGFyYmFsbA==",
     ...overrides,
   };
 }
@@ -113,7 +113,7 @@ function makeVersion(overrides: Partial<SkillVersion> = {}): SkillVersion {
     id: "ver-1",
     packageId: "pkg-1",
     version: "1.0.0",
-    assetKey: "skills/my-skill/1.0.0.tar.gz",
+    assetKey: "skills/my-skill/1.0.0.zip",
     checksum: "abc123",
     sizeBytes: 1024,
     readme: "# My Skill",
@@ -261,7 +261,7 @@ describe("SkillPackageService", () => {
       await svc.persistPublish(
         "user-1",
         makePublishInput(),
-        "skills/my-skill/1.0.0.tar.gz",
+        "skills/my-skill/1.0.0.zip",
         "sha256abc",
         2048,
       );
@@ -295,7 +295,7 @@ describe("SkillPackageService", () => {
       await svc.persistPublish(
         "user-1",
         makePublishInput({ version: "2.0.0" }),
-        "skills/my-skill/2.0.0.tar.gz",
+        "skills/my-skill/2.0.0.zip",
         "sha256def",
         3000,
       );
@@ -324,7 +324,7 @@ describe("SkillPackageService", () => {
       await svc.persistPublish(
         "user-1",
         makePublishInput({ changelog: undefined }),
-        "skills/my-skill/1.0.0.tar.gz",
+        "skills/my-skill/1.0.0.zip",
         "sha256",
         1000,
       );

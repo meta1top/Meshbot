@@ -21,7 +21,7 @@ function makePublishInput(
     version: "1.0.0",
     changelog: "Initial release",
     readme: "# My Skill\nDoes stuff.",
-    tarballBase64: Buffer.from("fake-tarball-content").toString("base64"),
+    archiveBase64: Buffer.from("fake-tarball-content").toString("base64"),
     ...overrides,
   };
 }
@@ -47,7 +47,7 @@ function makeVersion(overrides: Partial<SkillVersion> = {}): SkillVersion {
     id: "ver-1",
     packageId: "pkg-1",
     version: "1.0.0",
-    assetKey: "skills/my-skill/1.0.0.tar.gz",
+    assetKey: "skills/my-skill/1.0.0.zip",
     checksum: "sha256abc",
     sizeBytes: 1024,
     readme: "# My Skill\nDoes stuff.",
@@ -193,7 +193,7 @@ describe("SkillMarketService", () => {
       const svc = buildSvc(pkgSvc, assetSvc);
       const result = await svc.download("my-skill", "1.0.0");
       expect(result).not.toBeNull();
-      expect(result?.filename).toBe("my-skill-1.0.0.tar.gz");
+      expect(result?.filename).toBe("my-skill-1.0.0.zip");
       expect(result?.stream).toBe(fakeStream);
       expect(incrementDownloads).toHaveBeenCalledWith("pkg-1");
     });
@@ -226,14 +226,14 @@ describe("SkillMarketService", () => {
       await svc.publish("user-1", makePublishInput());
 
       expect(put).toHaveBeenCalledWith(
-        "skills/my-skill/1.0.0.tar.gz",
+        "skills/my-skill/1.0.0.zip",
         expect.any(Buffer),
-        "application/gzip",
+        "application/zip",
       );
       expect(persistPublish).toHaveBeenCalledWith(
         "user-1",
         expect.objectContaining({ slug: "my-skill", version: "1.0.0" }),
-        "skills/my-skill/1.0.0.tar.gz",
+        "skills/my-skill/1.0.0.zip",
         expect.any(String), // sha256
         expect.any(Number), // sizeBytes
       );
@@ -266,7 +266,7 @@ describe("SkillMarketService", () => {
       expect(persistPublish).toHaveBeenCalled();
     });
 
-    it("assetKey 格式为 skills/<slug>/<version>.tar.gz", async () => {
+    it("assetKey 格式为 skills/<slug>/<version>.zip", async () => {
       const put = jest.fn().mockResolvedValue(undefined);
       const persistPublish = jest.fn().mockResolvedValue(undefined);
       const pkgSvc = makePackageSvc({
@@ -280,9 +280,9 @@ describe("SkillMarketService", () => {
         makePublishInput({ slug: "cool-skill", version: "3.2.1" }),
       );
       expect(put).toHaveBeenCalledWith(
-        "skills/cool-skill/3.2.1.tar.gz",
+        "skills/cool-skill/3.2.1.zip",
         expect.any(Buffer),
-        "application/gzip",
+        "application/zip",
       );
     });
 

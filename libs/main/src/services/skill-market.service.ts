@@ -80,13 +80,13 @@ export class SkillMarketService {
 
     return {
       stream,
-      filename: `${slug}-${targetVersion}.tar.gz`,
+      filename: `${slug}-${targetVersion}.zip`,
     };
   }
 
   /**
    * 发布技能。
-   * 流程：base64 解码 tarball → 计算 sha256 → 上传 minio → 持久化元数据。
+   * 流程：base64 解码 zip → 计算 sha256 → 上传 minio → 持久化元数据。
    * 同 slug 非作者抛 SKILL_FORBIDDEN。
    */
   async publish(authorUserId: string, input: PublishSkillInput): Promise<void> {
@@ -96,17 +96,17 @@ export class SkillMarketService {
       throw new AppError(MainErrorCode.SKILL_FORBIDDEN);
     }
 
-    const tarball = Buffer.from(input.tarballBase64, "base64");
-    const checksum = createHash("sha256").update(tarball).digest("hex");
-    const assetKey = `skills/${input.slug}/${input.version}.tar.gz`;
+    const archive = Buffer.from(input.archiveBase64, "base64");
+    const checksum = createHash("sha256").update(archive).digest("hex");
+    const assetKey = `skills/${input.slug}/${input.version}.zip`;
 
-    await this.assets.put(assetKey, tarball, "application/gzip");
+    await this.assets.put(assetKey, archive, "application/zip");
     await this.packageService.persistPublish(
       authorUserId,
       input,
       assetKey,
       checksum,
-      tarball.length,
+      archive.length,
     );
   }
 }

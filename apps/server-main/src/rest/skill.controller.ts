@@ -44,7 +44,7 @@ export class SkillController {
     return d;
   }
 
-  /** 下载某版本技能包（tar.gz 流）。公开。 */
+  /** 下载某版本技能包（zip 流）。公开。 */
   @Public()
   @Get(":slug/:version/download")
   async download(
@@ -55,7 +55,7 @@ export class SkillController {
     const r = await this.market.download(slug, version);
     if (!r) throw new NotFoundException();
     res.set({
-      "Content-Type": "application/gzip",
+      "Content-Type": "application/zip",
       "Content-Disposition": `attachment; filename="${r.filename}"`,
     });
     // AssetService.getStream 运行期返 Node Readable（minio getObject / Readable.from），
@@ -63,7 +63,7 @@ export class SkillController {
     return new StreamableFile(r.stream as Readable);
   }
 
-  /** 发布技能（上传 tar.gz 的 base64）。需登录。 */
+  /** 发布技能（上传 zip 的 base64）。需登录。 */
   @Post()
   publish(
     @CurrentUser() user: JwtMainPayload,

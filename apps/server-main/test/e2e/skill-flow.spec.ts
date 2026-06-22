@@ -1,7 +1,6 @@
 import "reflect-metadata";
 import path from "node:path";
 import { Readable } from "node:stream";
-import { gzipSync } from "node:zlib";
 import {
   CommonModule,
   ErrorsFilter,
@@ -164,7 +163,8 @@ describe("server-main skill marketplace e2e", () => {
       version,
       changelog: "init",
       readme: `# ${slug}\n\ninstructions`,
-      tarballBase64: gzipSync(Buffer.from(`skill:${slug}`)).toString("base64"),
+      // server-main 不解包，仅按字节存/发；测试用任意 base64 即可
+      archiveBase64: Buffer.from(`zip:${slug}`).toString("base64"),
     };
   }
 
@@ -196,11 +196,11 @@ describe("server-main skill marketplace e2e", () => {
     expect(detail.body.data.readme).toContain("# weather");
     expect(detail.body.data.versions).toHaveLength(1);
 
-    // 下载返 200 + gzip
+    // 下载返 200 + zip
     const dl = await request(app.getHttpServer())
       .get("/api/skills/weather/1.0.0/download")
       .expect(200);
-    expect(dl.headers["content-type"]).toContain("gzip");
+    expect(dl.headers["content-type"]).toContain("zip");
 
     // 另一用户发同 slug → 403
     const token2 = await registerAndToken("other@example.com");
