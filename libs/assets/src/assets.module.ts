@@ -14,6 +14,7 @@ export class AssetsModule implements OnModuleInit {
   static forRoot(config: AssetsConfig): DynamicModule {
     return {
       module: AssetsModule,
+      global: true,
       providers: [
         {
           provide: AssetService,

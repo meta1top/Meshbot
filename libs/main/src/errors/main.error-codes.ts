@@ -65,4 +65,9 @@ export const MainErrorCode = defineErrorCode({
     code: 2011,
     message: "im.channelMemberInvalid",
   },
+  SKILL_FORBIDDEN: {
+    code: 2012,
+    message: "skill.forbidden",
+    httpStatus: 403,
+  },
 });

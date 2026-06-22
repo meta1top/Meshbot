@@ -12,6 +12,7 @@
     "test": "jest --config ../../jest.config.ts --roots libs/main"
   },
   "dependencies": {
+    "@meshbot/assets": "workspace:*",
     "@meshbot/common": "workspace:*",
     "@meshbot/types": "workspace:*",
     "@meshbot/types-main": "workspace:*",

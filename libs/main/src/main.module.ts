@@ -8,6 +8,8 @@ import { Invitation } from "./entities/invitation.entity";
 import { Membership } from "./entities/membership.entity";
 import { Message } from "./entities/message.entity";
 import { Organization } from "./entities/organization.entity";
+import { SkillPackage } from "./entities/skill-package.entity";
+import { SkillVersion } from "./entities/skill-version.entity";
 import {
   type AppConfigInvitation,
   INVITATION_CONFIG,
@@ -18,13 +20,16 @@ import { MembershipService } from "./services/membership.service";
 import { MessageService } from "./services/message.service";
 import { OrgService } from "./services/org.service";
 import { PresenceService } from "./services/presence.service";
+import { SkillMarketService } from "./services/skill-market.service";
+import { SkillPackageService } from "./services/skill-package.service";
 import { UserService } from "./services/user.service";
 
 /**
  * server-main 业务模块。Entity → Service 一对一归属（check:repo）：
  * AppUser→UserService / Organization→OrgService /
  * Membership→MembershipService / Invitation→InvitationService /
- * Conversation+ConversationMember→ConversationService / Message→MessageService。
+ * Conversation+ConversationMember→ConversationService / Message→MessageService /
+ * SkillPackage+SkillVersion→SkillPackageService（SkillMarketService 编排）。
  *
  * `forRoot(invitation)` 注入邀请配置切片（过期天数），由 server-main 的
  * AppConfig.invitation 提供。
@@ -56,6 +61,8 @@ export class MainModule {
           Conversation,
           ConversationMember,
           Message,
+          SkillPackage,
+          SkillVersion,
         ]),
       ],
       providers: [
@@ -66,6 +73,8 @@ export class MainModule {
         MessageService,
         ConversationService,
         PresenceService,
+        SkillPackageService,
+        SkillMarketService,
         { provide: INVITATION_CONFIG, useValue: invitation },
       ],
       exports: [
@@ -76,6 +85,8 @@ export class MainModule {
         MessageService,
         ConversationService,
         PresenceService,
+        SkillPackageService,
+        SkillMarketService,
       ],
     };
   }

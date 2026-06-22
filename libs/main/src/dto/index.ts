@@ -68,3 +68,5 @@ export class AddChannelMemberDto extends createI18nZodDto(
   AddChannelMemberSchema,
 ) {}
 export interface AddChannelMemberDto extends AddChannelMemberInput {}
+
+export { PublishSkillDto } from "./skill.dto";
