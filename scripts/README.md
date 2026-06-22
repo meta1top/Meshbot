@@ -18,6 +18,7 @@
 | `check-repo-access.ts` | `pnpm check:repo` | 校验 Entity 唯一归属 + 跨 libs 注入 Repository 限制 |
 | `check-dead-exports.ts` | `pnpm check:dead` | 校验 named export 无人引用的死导出 |
 | `check-error-code.ts` | `pnpm check:error-code` | 校验错误码重复 / 越界 / 断号 |
+| `check-dev-script.ts` | `pnpm check:dev-script` | 校验以 dist 产物被消费且被依赖的包都声明 `dev`（turbo run dev 不会跳过） |
 | `sync-locales.ts` | `pnpm sync:locales` | 扫描前后端 t() 调用对齐 locale JSON（missing/orphan/asymmetric）|
 
 一键全跑：`pnpm check`
