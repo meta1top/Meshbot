@@ -18,6 +18,11 @@
       "outputs": ["dist/**", "tsconfig.tsbuildinfo"]
     },
     "dev": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true
+    },
+    "@meshbot/desktop#dev": {
       "cache": false,
       "persistent": true
     },
