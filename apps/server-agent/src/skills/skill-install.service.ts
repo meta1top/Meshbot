@@ -79,7 +79,7 @@ export class SkillInstallService {
     const pkg = await adapter.fetchPackage(input.ref, input.version);
 
     // 确定技能名称：findSkillRoot 返回含 SKILL.md 的子目录名
-    const skillRoot = await findSkillRoot(pkg.tarGz);
+    const skillRoot = await findSkillRoot(pkg.archive);
     // skillRoot === "." → tarball 根即技能根，name 取 suggestedName
     // skillRoot === "<dir>" → 子目录即技能根，name 取该目录名
     const skillName =
@@ -89,7 +89,7 @@ export class SkillInstallService {
     const destDir = path.join(skillsDir, skillName);
 
     // 安全解包（extractToDir 内部做路径穿越校验）
-    await extractToDir(pkg.tarGz, destDir);
+    await extractToDir(pkg.archive, destDir);
 
     // 如果技能根是子目录，需要把子目录内容提升到 destDir
     // extractToDir 已解包到 destDir，对于 GitHub tar 而言顶层会有 <repo>-<ref>/ 子目录
@@ -192,9 +192,9 @@ export class SkillInstallService {
     const skillsDir = this.config.getSkillsDir();
     const skillDir = path.join(skillsDir, input.name);
 
-    // 打包技能目录
-    const tarGz = await packDir(skillDir);
-    const tarballBase64 = tarGz.toString("base64");
+    // 打包技能目录（zip）
+    const archive = await packDir(skillDir);
+    const archiveBase64 = archive.toString("base64");
 
     // 读 SKILL.md 作 readme
     const skillMdPath = path.join(skillDir, "SKILL.md");
@@ -214,7 +214,7 @@ export class SkillInstallService {
       displayName: input.displayName,
       version: input.version,
       readme,
-      tarballBase64,
+      archiveBase64,
     };
     if (input.changelog !== undefined) {
       body.changelog = input.changelog;

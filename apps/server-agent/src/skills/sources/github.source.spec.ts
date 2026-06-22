@@ -1,9 +1,8 @@
-import { promisify } from "node:util";
-import { gzip } from "node:zlib";
+import { zipSync } from "fflate";
 import { GithubSource } from "./github.source";
 
-const makeEmptyTarGz = (): Promise<Buffer> =>
-  promisify(gzip)(Buffer.alloc(1024, 0));
+/** 合法的空 zip（无 SKILL.md）。 */
+const makeEmptyZip = (): Buffer => Buffer.from(zipSync({}));
 
 describe("GithubSource", () => {
   let source: GithubSource;
@@ -39,7 +38,7 @@ describe("GithubSource", () => {
       mockFetchOk();
       await source.fetchPackage("myowner/myrepo").catch(() => {});
       expect(fetch).toHaveBeenCalledWith(
-        "https://codeload.github.com/myowner/myrepo/tar.gz/HEAD",
+        "https://codeload.github.com/myowner/myrepo/zip/HEAD",
       );
     });
 
@@ -47,7 +46,7 @@ describe("GithubSource", () => {
       mockFetchOk();
       await source.fetchPackage("myowner/myrepo@main").catch(() => {});
       expect(fetch).toHaveBeenCalledWith(
-        "https://codeload.github.com/myowner/myrepo/tar.gz/main",
+        "https://codeload.github.com/myowner/myrepo/zip/main",
       );
     });
 
@@ -55,7 +54,7 @@ describe("GithubSource", () => {
       mockFetchOk();
       await source.fetchPackage("myowner/myrepo@v1.0.0").catch(() => {});
       expect(fetch).toHaveBeenCalledWith(
-        "https://codeload.github.com/myowner/myrepo/tar.gz/v1.0.0",
+        "https://codeload.github.com/myowner/myrepo/zip/v1.0.0",
       );
     });
 
@@ -69,15 +68,15 @@ describe("GithubSource", () => {
     });
 
     it("suggestedName 取 repo 名（无 SKILL.md 时）", async () => {
-      // 两个 512-byte 零块 = 合法的空 tar，不含 SKILL.md
-      const emptyTar = await makeEmptyTarGz();
+      // 合法的空 zip，不含 SKILL.md
+      const emptyZip = makeEmptyZip();
 
       jest.spyOn(global, "fetch").mockResolvedValue({
         ok: true,
         arrayBuffer: async () =>
-          emptyTar.buffer.slice(
-            emptyTar.byteOffset,
-            emptyTar.byteOffset + emptyTar.byteLength,
+          emptyZip.buffer.slice(
+            emptyZip.byteOffset,
+            emptyZip.byteOffset + emptyZip.byteLength,
           ),
       } as unknown as Response);
 

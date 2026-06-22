@@ -134,7 +134,7 @@ describe("OurMarketSource", () => {
         }),
       );
       expect(pkg.suggestedName).toBe("my-skill");
-      expect(pkg.tarGz).toEqual(fakeBuffer);
+      expect(pkg.archive).toEqual(fakeBuffer);
     });
 
     it("未指定 version 时，先 GET 详情取 latestVersion", async () => {
@@ -163,7 +163,7 @@ describe("OurMarketSource", () => {
         "https://cloud.meshbot.test/api/skills/my-skill/3.0.0/download",
         expect.anything(),
       );
-      expect(pkg.tarGz).toEqual(fakeBuffer);
+      expect(pkg.archive).toEqual(fakeBuffer);
     });
 
     it("404 → 抛 SKILL_NOT_FOUND", async () => {

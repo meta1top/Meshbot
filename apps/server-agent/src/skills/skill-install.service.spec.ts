@@ -9,7 +9,7 @@ import { SkillInstallService } from "./skill-install.service";
 
 // ─── 工具：创建含 SKILL.md 的临时目录并打包 ─────────────────────────────────
 
-async function buildSkillTarGz(opts: {
+async function buildSkillZip(opts: {
   name: string;
   description?: string;
   extra?: Array<{ path: string; content: string }>;
@@ -34,23 +34,23 @@ async function buildSkillTarGz(opts: {
     await writeFile(full, f.content, "utf8");
   }
 
-  const tarGz = await packDir(tmpSrc);
+  const archive = await packDir(tmpSrc);
   await rm(tmpSrc, { recursive: true, force: true });
-  return tarGz;
+  return archive;
 }
 
 // ─── Mock 依赖 ────────────────────────────────────────────────────────────────
 
 function makeGithubSource(
   overrides: Partial<{
-    tarGz: Buffer;
+    archive: Buffer;
     suggestedName: string;
   }> = {},
 ) {
   return {
     list: jest.fn().mockResolvedValue([] as MarketSkillSummary[]),
     fetchPackage: jest.fn().mockImplementation(async () => ({
-      tarGz: overrides.tarGz ?? Buffer.alloc(0),
+      archive: overrides.archive ?? Buffer.alloc(0),
       suggestedName: overrides.suggestedName ?? "my-skill",
     })),
   };
@@ -67,12 +67,12 @@ function makeClawhubSource(items: MarketSkillSummary[] = []) {
 
 function makeOurMarketSource(
   items: MarketSkillSummary[] = [],
-  overrides: Partial<{ tarGz: Buffer; suggestedName: string }> = {},
+  overrides: Partial<{ archive: Buffer; suggestedName: string }> = {},
 ) {
   return {
     list: jest.fn().mockResolvedValue(items),
     fetchPackage: jest.fn().mockImplementation(async () => ({
-      tarGz: overrides.tarGz ?? Buffer.alloc(0),
+      archive: overrides.archive ?? Buffer.alloc(0),
       suggestedName: overrides.suggestedName ?? "market-skill",
     })),
   };
@@ -198,11 +198,11 @@ describe("SkillInstallService", () => {
 
   describe("install()", () => {
     it("github: 下载 → 解包 → 写 manifest → 返 InstalledSkill", async () => {
-      const tarGz = await buildSkillTarGz({
+      const archive = await buildSkillZip({
         name: "my-skill",
         description: "A test skill",
       });
-      githubSource = makeGithubSource({ tarGz, suggestedName: "my-skill" });
+      githubSource = makeGithubSource({ archive, suggestedName: "my-skill" });
       const configSvc = { getSkillsDir: () => skillsDir };
       svc = new SkillInstallService(
         githubSource as any,
@@ -244,9 +244,9 @@ describe("SkillInstallService", () => {
     });
 
     it("ourMarket: 传 version 写入 manifest", async () => {
-      const tarGz = await buildSkillTarGz({ name: "market-skill" });
+      const archive = await buildSkillZip({ name: "market-skill" });
       ourMarketSource = makeOurMarketSource([], {
-        tarGz,
+        archive,
         suggestedName: "market-skill",
       });
       const configSvc = { getSkillsDir: () => skillsDir };
@@ -283,10 +283,10 @@ describe("SkillInstallService", () => {
       const tmpSrc = path.join(os.tmpdir(), `meshbot-bad-${id}`);
       await mkdir(tmpSrc, { recursive: true });
       await writeFile(path.join(tmpSrc, "README.md"), "no skill here", "utf8");
-      const tarGz = await packDir(tmpSrc);
+      const archive = await packDir(tmpSrc);
       await rm(tmpSrc, { recursive: true, force: true });
 
-      githubSource = makeGithubSource({ tarGz, suggestedName: "bad-skill" });
+      githubSource = makeGithubSource({ archive, suggestedName: "bad-skill" });
       const configSvc = { getSkillsDir: () => skillsDir };
       svc = new SkillInstallService(
         githubSource as any,
@@ -341,11 +341,11 @@ describe("SkillInstallService", () => {
   describe("listInstalled()", () => {
     it("合并 SkillService.list 结果与 .meshbot-install.json manifest", async () => {
       // 先安装一个技能
-      const tarGz = await buildSkillTarGz({
+      const archive = await buildSkillZip({
         name: "list-skill",
         description: "描述",
       });
-      githubSource = makeGithubSource({ tarGz, suggestedName: "list-skill" });
+      githubSource = makeGithubSource({ archive, suggestedName: "list-skill" });
       skillService = makeSkillService([
         { name: "list-skill", description: "描述" },
       ]);
@@ -455,16 +455,16 @@ describe("SkillInstallService", () => {
           version: "1.2.3",
           changelog: "初始版本",
           readme: expect.stringContaining("pub-skill") as string,
-          tarballBase64: expect.any(String) as string,
+          archiveBase64: expect.any(String) as string,
         }),
         "tok-test",
       );
 
-      // tarballBase64 是 base64 字符串
+      // archiveBase64 是 base64 字符串
       const body = (cloud.post as jest.Mock).mock.calls[0][1] as {
-        tarballBase64: string;
+        archiveBase64: string;
       };
-      expect(() => Buffer.from(body.tarballBase64, "base64")).not.toThrow();
+      expect(() => Buffer.from(body.archiveBase64, "base64")).not.toThrow();
     });
 
     it("description 可选字段正确传递", async () => {

@@ -53,7 +53,7 @@ describe("ClawhubSource", () => {
       await source.list("file tools");
 
       expect(fetch).toHaveBeenCalledWith(
-        "https://clawhub.ai/api/v1/skills?q=file%20tools",
+        "https://clawhub.ai/api/v1/search?q=file%20tools",
       );
     });
 
@@ -93,10 +93,37 @@ describe("ClawhubSource", () => {
   });
 
   // ── fetchPackage ──────────────────────────────────────────────────────────
-  describe("fetchPackage - 不支持安装", () => {
-    it("抛出 SKILL_SOURCE_UNSUPPORTED", async () => {
-      await expect(source.fetchPackage("some-skill")).rejects.toMatchObject({
-        errorCode: { code: AgentErrorCode.SKILL_SOURCE_UNSUPPORTED.code },
+  describe("fetchPackage - 下载 zip", () => {
+    it("GET /api/v1/download?slug= 返回 zip → archive Buffer + suggestedName", async () => {
+      const zipBytes = Buffer.from("PKfake-zip");
+      jest.spyOn(global, "fetch").mockResolvedValue({
+        ok: true,
+        arrayBuffer: async () =>
+          zipBytes.buffer.slice(
+            zipBytes.byteOffset,
+            zipBytes.byteOffset + zipBytes.byteLength,
+          ),
+      } as unknown as Response);
+
+      const pkg = await source.fetchPackage("my-skill", "1.0.0");
+
+      expect(fetch).toHaveBeenCalledWith(
+        new URL(
+          "https://clawhub.ai/api/v1/download?slug=my-skill&version=1.0.0",
+        ),
+      );
+      expect(pkg.suggestedName).toBe("my-skill");
+      expect(Buffer.isBuffer(pkg.archive)).toBe(true);
+    });
+
+    it("非 200 → 抛 SKILL_INSTALL_FAILED", async () => {
+      jest.spyOn(global, "fetch").mockResolvedValue({
+        ok: false,
+        status: 404,
+      } as unknown as Response);
+
+      await expect(source.fetchPackage("missing")).rejects.toMatchObject({
+        errorCode: { code: AgentErrorCode.SKILL_INSTALL_FAILED.code },
       });
     });
   });

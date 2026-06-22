@@ -98,7 +98,7 @@ export class OurMarketSource implements SkillSourceAdapter {
 
     const arrayBuf = await res.arrayBuffer();
     return {
-      tarGz: Buffer.from(arrayBuf),
+      archive: Buffer.from(arrayBuf),
       suggestedName: slug,
     };
   }

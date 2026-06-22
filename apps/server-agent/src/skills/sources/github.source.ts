@@ -29,7 +29,7 @@ function parseGithubRef(raw: string): {
 
 /**
  * GitHub 来源适配器。
- * - fetchPackage：通过 codeload.github.com 下载 tar.gz，findSkillRoot 定位技能根。
+ * - fetchPackage：通过 codeload.github.com 下载 zip，findSkillRoot 定位技能根。
  * - list：GitHub 无预检索端点，返回 []。
  */
 @Injectable()
@@ -42,13 +42,13 @@ export class GithubSource implements SkillSourceAdapter {
   /**
    * 下载 GitHub 仓库 tar.gz 并推断技能目录名。
    *
-   * GitHub 的 codeload tar 顶层目录格式为 `<repo>-<ref>/`，技能内容通常在
+   * GitHub 的 codeload zip 顶层目录格式为 `<repo>-<ref>/`，技能内容通常在
    * 该子目录下（GitHub Actions / template 仓库）。findSkillRoot 负责定位含
    * SKILL.md 的子目录，suggestedName 优先取 findSkillRoot 结果，退而取 repo 名。
    */
   async fetchPackage(rawRef: string, _version?: string): Promise<SkillPackage> {
     const { owner, repo, ref } = parseGithubRef(rawRef);
-    const url = `https://codeload.github.com/${owner}/${repo}/tar.gz/${ref}`;
+    const url = `https://codeload.github.com/${owner}/${repo}/zip/${ref}`;
 
     const res = await fetch(url);
     if (!res.ok) {
@@ -58,12 +58,12 @@ export class GithubSource implements SkillSourceAdapter {
     }
 
     const arrayBuf = await res.arrayBuffer();
-    const tarGz = Buffer.from(arrayBuf);
+    const archive = Buffer.from(arrayBuf);
 
     // 找含 SKILL.md 的目录名（可能是 "." 或 "<repo>-<ref>" 或子目录）
-    const skillRoot = await findSkillRoot(tarGz);
+    const skillRoot = await findSkillRoot(archive);
     const suggestedName = skillRoot && skillRoot !== "." ? skillRoot : repo;
 
-    return { tarGz, suggestedName };
+    return { archive, suggestedName };
   }
 }
