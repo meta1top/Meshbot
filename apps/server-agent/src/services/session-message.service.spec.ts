@@ -134,6 +134,19 @@ describe("SessionMessageService", () => {
     });
   });
 
+  it("recordAssistant：session_messages.id 等于传入的 langgraphId（不再另铸雪花）", async () => {
+    await service.recordAssistant({
+      id: "900000000000000123",
+      sessionId: "s1",
+      content: "hi",
+      reasoning: null,
+    });
+    const row = await ds
+      .getRepository(SessionMessage)
+      .findOneBy({ langgraphId: "900000000000000123" });
+    expect(row?.id).toBe("900000000000000123");
+  });
+
   it("recordUser 按调用顺序分配会话内递增 seq（1,2,3）", async () => {
     await service.recordUser({ id: "u1", sessionId: "s1", content: "a" });
     await service.recordUser({ id: "u2", sessionId: "s1", content: "b" });

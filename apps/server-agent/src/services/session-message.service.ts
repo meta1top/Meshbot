@@ -103,7 +103,11 @@ export class SessionMessageService {
       .into(SessionMessage)
       .values({
         ...row,
-        id: generateSnowflakeId(),
+        // id 收口到 langgraphId（= 贯穿 checkpointer / 事件流的雪花），使
+        // session_messages.id == langgraph_id == 事件 messageId，历史与 inflight
+        // 去重才能命中。排序仍由 seq 负责，与 id 取值无关。langgraphId 缺失时
+        // 兜底铸雪花（防御，正常路径恒由调用方传入）。
+        id: row.langgraphId ?? generateSnowflakeId(),
         cloudUserId: acct,
         createdAt: () => "datetime('now')",
         seq: () =>
