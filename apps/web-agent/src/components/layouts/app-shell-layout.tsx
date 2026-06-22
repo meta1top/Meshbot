@@ -13,7 +13,7 @@ import {
 import { DragRegion } from "@/components/drag-region";
 import { AssistantDock } from "@/components/im/assistant-dock";
 import { MessagesSidebar } from "@/components/shell/messages-sidebar";
-import { PlaceholderSidebar } from "@/components/shell/placeholder-sidebar";
+import { MoreSidebar } from "@/components/shell/more-sidebar";
 import { ShellTopBar } from "@/components/shell/shell-top-bar";
 import { WorkspaceRail } from "@/components/shell/workspace-rail";
 import { useGlobalEvents } from "@/hooks/use-global-events";
@@ -114,7 +114,7 @@ export function AppShellLayout({
         <MessagesSidebar />
       </Suspense>
     ) : area === "more" ? (
-      <PlaceholderSidebar title={t("rail.more")} />
+      <MoreSidebar />
     ) : null;
   const resolvedSidebar = sidebar === undefined ? autoSidebar : sidebar;
 

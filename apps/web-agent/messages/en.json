@@ -288,6 +288,11 @@
     "loadFailed": "Failed to load",
     "retry": "Retry"
   },
+  "moreSidebar": {
+    "title": "More",
+    "usage": "Usage",
+    "scheduled": "Scheduled"
+  },
   "messages": {
     "title": "Messages",
     "channels": "Channels",

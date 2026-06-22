@@ -63,7 +63,7 @@ export default function MorePage() {
 
   return (
     <AppShellLayout>
-      <div className="mx-auto w-full max-w-[620px] flex-1 py-6">
+      <div className="w-full max-w-[620px] flex-1 px-6 py-6">
         <Card className="overflow-hidden border-border bg-muted px-1 py-1 shadow-none">
           <CardHeader className="space-y-2 px-3 pt-2 pb-1">
             <div className="flex items-center justify-end text-[11px] text-foreground/60">

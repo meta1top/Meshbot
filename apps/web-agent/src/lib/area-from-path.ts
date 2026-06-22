@@ -1,4 +1,4 @@
-/** Shell rail 当前区域。首页即消息；助手会话并入消息区。 */
+/** Shell rail 当前区域。首页即消息；助手会话并入消息区；定时任务并入「更多」。 */
 export type ShellArea = "messages" | "skills" | "more" | "other";
 
 /** 由 pathname 推断当前 rail 区域。 */
@@ -7,11 +7,11 @@ export function areaFromPath(pathname: string): ShellArea {
     pathname === "/" ||
     pathname.startsWith("/messages") ||
     pathname.startsWith("/session") ||
-    pathname.startsWith("/assistant") ||
-    pathname.startsWith("/schedule")
+    pathname.startsWith("/assistant")
   )
     return "messages";
   if (pathname.startsWith("/skills")) return "skills";
-  if (pathname.startsWith("/more")) return "more";
+  if (pathname.startsWith("/more") || pathname.startsWith("/schedule"))
+    return "more";
   return "other";
 }

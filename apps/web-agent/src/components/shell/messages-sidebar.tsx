@@ -2,7 +2,7 @@
 
 import { cn } from "@meshbot/design";
 import { useAtomValue, useSetAtom } from "jotai";
-import { Clock, Hash, Lock, SquarePen } from "lucide-react";
+import { Hash, Lock, SquarePen } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect } from "react";
@@ -166,21 +166,6 @@ export function MessagesSidebar() {
           </>
         )}
       </div>
-
-      {/* 助手区底部：定时任务入口 */}
-      <button
-        type="button"
-        onClick={() => router.push("/schedule")}
-        className={cn(
-          "mx-2 mt-1 mb-2.5 flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] transition-colors",
-          pathname.startsWith("/schedule")
-            ? "bg-(--shell-accent) text-white"
-            : "text-white/75 hover:bg-white/12",
-        )}
-      >
-        <Clock className="h-4 w-4" />
-        {t("scheduled")}
-      </button>
     </div>
   );
 }
