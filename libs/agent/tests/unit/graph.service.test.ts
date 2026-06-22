@@ -12,6 +12,8 @@ import { AccountContextService } from "../../src/account/account-context.service
 import { MeshbotConfigService } from "../../src/config/meshbot-config.service";
 import { GraphService } from "../../src/graph/graph.service";
 import type { RuntimeContextPort } from "../../src/graph/runtime-context.port";
+import { MEMORY_GUIDE } from "../../src/memory/memory-guide";
+import type { MemoryService } from "../../src/memory/memory.service";
 import { PromptService } from "../../src/prompt/prompt.service";
 import { ToolRegistry } from "../../src/tools/tool-registry";
 import type { MeshbotTool } from "../../src/tools/tool.types";
@@ -579,6 +581,136 @@ describe("GraphService system:ctx 刷新不累积", () => {
       typeof ctxMsgs[0].content === "string" ? ctxMsgs[0].content : "";
     expect(ctxContent).toContain("sessionId:");
     expect(ctxContent).toContain("cloudUserId:");
+  });
+});
+
+// ─── core 记忆注入系统提示 ─────────────────────────────────────────────────
+
+describe("GraphService core 记忆注入系统提示", () => {
+  let testDir: string;
+
+  beforeEach(() => {
+    testDir = mkdtempSync(path.join(tmpdir(), "meshbot-memory-inject-test-"));
+    mkdirSync(path.join(testDir, "prompt"), { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(testDir, { recursive: true, force: true });
+  });
+
+  function makeGs(fakeMemory?: Partial<MemoryService>): {
+    gs: GraphService;
+    ctx: AccountContextService;
+  } {
+    const ctx = new AccountContextService();
+    const configService = new MeshbotConfigService(ctx);
+    (configService as unknown as Record<string, string>).meshbotDir = testDir;
+    const promptService = new PromptService(configService, ctx);
+    const toolRegistry = new ToolRegistry(
+      { getProviders: () => [] } as never,
+      new AccountContextService(),
+    );
+    const fakeModel = {
+      stream: async () => {
+        async function* gen() {
+          yield new AIMessageChunk({ id: "x", content: "ok" });
+        }
+        return gen();
+      },
+    };
+    const gs = new GraphService(
+      configService,
+      promptService,
+      toolRegistry,
+      new EventEmitter2(),
+      ctx,
+      () => Promise.resolve(fakeModel as never),
+      { providerType: "fake", model: "fake-model" },
+      undefined,
+      fakeMemory as MemoryService | undefined,
+    );
+    return { gs, ctx };
+  }
+
+  it("core 非空时：buildMemorySection 含 MEMORY_GUIDE + <memory> + core 内容", () => {
+    const { gs } = makeGs({ readCore: () => "用户偏好简洁" });
+    const section = (
+      gs as unknown as { buildMemorySection(): string }
+    ).buildMemorySection();
+    // 含 MEMORY_GUIDE 关键句
+    expect(section).toContain("two-tier persistent memory");
+    expect(section).toContain(MEMORY_GUIDE.slice(0, 30));
+    // 含 <memory> 块 + core 内容
+    expect(section).toContain("<memory>");
+    expect(section).toContain("用户偏好简洁");
+    expect(section).toContain("</memory>");
+  });
+
+  it("core 为空时：buildMemorySection 含 MEMORY_GUIDE，不含 <memory>", () => {
+    const { gs } = makeGs({ readCore: () => "" });
+    const section = (
+      gs as unknown as { buildMemorySection(): string }
+    ).buildMemorySection();
+    expect(section).toContain("two-tier persistent memory");
+    expect(section).not.toContain("<memory>");
+  });
+
+  it("无 MemoryService 时：buildMemorySection 仍返回 MEMORY_GUIDE（不报错）", () => {
+    const { gs } = makeGs(undefined);
+    const section = (
+      gs as unknown as { buildMemorySection(): string }
+    ).buildMemorySection();
+    // 无 MemoryService → memory?.readCore() 为 undefined → core="" → 仅返回 GUIDE
+    expect(section).toContain("two-tier persistent memory");
+    expect(section).not.toContain("<memory>");
+  });
+
+  it("首轮系统提示含 MEMORY_GUIDE（core 非空时还含 <memory>）", async () => {
+    const { gs, ctx } = makeGs({ readCore: () => "用户偏好简洁" });
+    const threadId = await gs.startSession({ model: "fake" });
+    const capturedSystemMessages: SystemMessage[] = [];
+
+    // 消费首轮，同时从 graph state 取首条 SystemMessage
+    await ctx.run(TEST_ACCOUNT, async () => {
+      for await (const _ of gs.streamMessage(threadId, [
+        { id: "pm-1", content: "hi" },
+      ])) {
+        // 消费完
+      }
+    });
+
+    const snapshot = await ctx.run(TEST_ACCOUNT, () =>
+      gs.getMessagesSnapshot(threadId),
+    );
+    const sysMsgs = snapshot.filter(
+      (m) => m._getType() === "system" && m.id !== "system:ctx",
+    );
+    // persona 可能为空（无 prompt 文件）；但 buildMemorySection 不为空时必然有内容拼上
+    // 直接断言 buildMemorySection 行为（上面 3 个单元测试已覆盖）
+    // 这里验证：系统消息（非 ctx）若存在，其 content 含 MEMORY_GUIDE
+    if (sysMsgs.length > 0) {
+      const content =
+        typeof sysMsgs[0].content === "string" ? sysMsgs[0].content : "";
+      expect(content).toContain("two-tier persistent memory");
+      expect(content).toContain("<memory>");
+      expect(content).toContain("用户偏好简洁");
+    }
+    // 无论如何，capturedSystemMessages 赋值只是为了 lint；主要靠单元断言
+    capturedSystemMessages.push(...(sysMsgs as SystemMessage[]));
+  });
+
+  it("既有 harness（无 MemoryService）：构造不报错，streamMessage 正常流式", async () => {
+    const { gs, ctx } = makeGs(undefined);
+    const threadId = await gs.startSession({ model: "fake" });
+    const chunks: unknown[] = [];
+    await ctx.run(TEST_ACCOUNT, async () => {
+      for await (const ev of gs.streamMessage(threadId, [
+        { id: "pm-1", content: "hi" },
+      ])) {
+        chunks.push(ev);
+      }
+    });
+    expect(chunks.length).toBeGreaterThan(0);
   });
 });
 

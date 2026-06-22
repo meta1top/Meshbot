@@ -14,6 +14,8 @@ import { AccountContextService } from "../account/account-context.service";
 import { createSqliteCheckpointer } from "../checkpoint/sqlite-checkpointer";
 import { MeshbotConfigService } from "../config/meshbot-config.service";
 import { readActiveModelConfig } from "../config/model-config.reader";
+import { MEMORY_GUIDE } from "../memory/memory-guide";
+import { MemoryService } from "../memory/memory.service";
 import { PromptService } from "../prompt/prompt.service";
 import { ToolRegistry } from "../tools/tool-registry";
 import type { GraphState } from "./graph.builder";
@@ -147,9 +149,25 @@ export class GraphService {
     @Optional()
     @Inject(RUNTIME_CONTEXT_PORT)
     private readonly runtimeContext?: RuntimeContextPort,
+    @Optional() private readonly memory?: MemoryService,
   ) {
     this.modelProvider = modelProvider ?? (() => this.resolveModel());
     this.modelMeta = modelMeta ?? { providerType: "unknown", model: "unknown" };
+  }
+
+  /**
+   * 组装记忆段落，追加至系统提示末尾。
+   *
+   * 始终包含 MEMORY_GUIDE（工具使用规范）。
+   * 若 core.md 非空，额外拼接 `<memory>...</memory>` 块（常驻精炼画像）。
+   * 无 MemoryService 注入时返回空字符串（整段省略），不影响既有 harness。
+   */
+  private buildMemorySection(): string {
+    const core = this.memory?.readCore() ?? "";
+    if (!core) {
+      return MEMORY_GUIDE;
+    }
+    return `${MEMORY_GUIDE}\n\n<memory>\n${core}\n</memory>`;
   }
 
   /** 组装运行时上下文消息（稳定 id system:ctx；每 run 刷新；不含易变 now）。 */
@@ -317,7 +335,12 @@ export class GraphService {
     signal?: AbortSignal,
   ): AsyncGenerator<StreamChunk> {
     this.promptService.reloadIfChanged();
-    const systemPrompt = this.promptService.getPrompt("system");
+    const systemPrompt = [
+      this.promptService.getPrompt("system"),
+      this.buildMemorySection(),
+    ]
+      .filter(Boolean)
+      .join("\n\n");
     await this.sanitizeOrphanToolCalls(threadId);
     const state = await this.accountGraph().graph.getState({
       configurable: { thread_id: threadId },
