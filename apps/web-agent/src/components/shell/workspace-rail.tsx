@@ -10,6 +10,7 @@ import {
 import { useTheme } from "@meshbot/web-common/react";
 import { useAtomValue } from "jotai";
 import {
+  Blocks,
   Building2,
   MessageSquare,
   Moon,
@@ -56,6 +57,12 @@ export function WorkspaceRail() {
           label={t("rail.messages")}
           active={area === "messages"}
           onClick={() => router.push("/messages")}
+        />
+        <RailNavItem
+          icon={<Blocks className="h-5 w-5" />}
+          label={t("rail.skills")}
+          active={area === "skills"}
+          onClick={() => router.push("/skills")}
         />
         <RailNavItem
           icon={<MoreHorizontal className="h-5 w-5" />}

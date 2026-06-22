@@ -24,4 +24,9 @@ describe("areaFromPath", () => {
     expect(areaFromPath("/settings/org")).toBe("other");
     expect(areaFromPath("/login")).toBe("other");
   });
+
+  it("把 /skills 及子路径归入 skills", () => {
+    expect(areaFromPath("/skills")).toBe("skills");
+    expect(areaFromPath("/skills/foo")).toBe("skills");
+  });
 });

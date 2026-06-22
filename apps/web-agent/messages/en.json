@@ -135,6 +135,7 @@
       "home": "Home",
       "messages": "Messages",
       "assistant": "Assistant",
+      "skills": "Skills",
       "more": "More"
     },
     "search": {
@@ -522,7 +523,8 @@
     "home": "",
     "messages": "",
     "assistant": "",
-    "more": ""
+    "more": "",
+    "skills": ""
   },
   "userMenu": {
     "settings": "",
@@ -604,5 +606,11 @@
   "yesterday": "",
   "copy": "",
   "channelStartHint": "",
-  "dmStartHint": ""
+  "dmStartHint": "",
+  "skills": {
+    "title": "Skills",
+    "loading": "Loading…",
+    "installedEmpty": "No skills installed yet"
+  },
+  "installedEmpty": ""
 }
