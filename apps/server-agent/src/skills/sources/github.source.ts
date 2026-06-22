@@ -1,4 +1,5 @@
 import type { MarketSkillSummary } from "@meshbot/types-agent";
+import { Injectable } from "@nestjs/common";
 import { findSkillRoot } from "../skill-archive";
 import type { SkillPackage, SkillSourceAdapter } from "./skill-source";
 
@@ -31,6 +32,7 @@ function parseGithubRef(raw: string): {
  * - fetchPackage：通过 codeload.github.com 下载 tar.gz，findSkillRoot 定位技能根。
  * - list：GitHub 无预检索端点，返回 []。
  */
+@Injectable()
 export class GithubSource implements SkillSourceAdapter {
   /** GitHub 不支持列表检索，始终返回空数组。 */
   async list(_q?: string): Promise<MarketSkillSummary[]> {

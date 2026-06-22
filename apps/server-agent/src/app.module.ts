@@ -30,6 +30,7 @@ import { AccountRuntimeModule } from "./account/account-runtime.module";
 import { AuthModule } from "./auth.module";
 import { CronJobModule } from "./cron-job.module";
 import { ImModule } from "./im.module";
+import { SkillModule } from "./skill.module";
 import { HealthController } from "./controllers/health.controller";
 import { ModelConfigController } from "./controllers/model-config.controller";
 import { SettingController } from "./controllers/setting.controller";
@@ -120,6 +121,7 @@ const meshbotDir = resolveMeshbotDir();
     SessionModule,
     AuthModule,
     ImModule,
+    SkillModule,
     StaticModule.forRoot(),
   ],
   controllers: [

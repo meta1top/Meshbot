@@ -1,5 +1,6 @@
 import type { MarketSkillSummary } from "@meshbot/types-agent";
 import { AppError } from "@meshbot/common";
+import { Injectable } from "@nestjs/common";
 import { AgentErrorCode } from "../../errors/agent.error-codes";
 import type { SkillPackage, SkillSourceAdapter } from "./skill-source";
 
@@ -19,6 +20,7 @@ interface ClawhubSkillItem {
  * - list：从 clawhub.ai 拉取技能列表并映射为 MarketSkillSummary。
  * - fetchPackage：下载端点待 docs.openclaw.ai 确认，本期不支持，抛 SKILL_SOURCE_UNSUPPORTED。
  */
+@Injectable()
 export class ClawhubSource implements SkillSourceAdapter {
   /**
    * 从 clawhub.ai 获取技能列表并映射为 MarketSkillSummary。

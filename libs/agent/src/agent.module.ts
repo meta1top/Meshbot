@@ -47,6 +47,7 @@ import { SkillLoadTool } from "./tools/builtins/skill-load.tool";
     ToolRegistry,
     SkillService,
     McpService,
+    MeshbotConfigModule,
   ],
 })
 export class AgentModule {}
