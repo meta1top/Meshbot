@@ -36,4 +36,21 @@ export const AgentErrorCode = defineErrorCode({
     message: "account.crossWrite",
     httpStatus: 403,
   },
+  SKILL_INSTALL_FAILED: {
+    code: 3007,
+    message: "skill.installFailed",
+  },
+  SKILL_NOT_FOUND: {
+    code: 3008,
+    message: "skill.notFound",
+    httpStatus: 404,
+  },
+  SKILL_UNSAFE_ARCHIVE: {
+    code: 3009,
+    message: "skill.unsafeArchive",
+  },
+  SKILL_SOURCE_UNSUPPORTED: {
+    code: 3010,
+    message: "skill.sourceUnsupported",
+  },
 });
