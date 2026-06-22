@@ -61,9 +61,14 @@ export class SessionGateway extends BaseWebSocketGateway {
   /**
    * 订阅会话：join 房间 + 回推 inflight 快照（若有）。
    *
-   * 快照通过 run.chunk 事件回推，其 delta 字段为「全量已累加内容」而非增量
-   * —— 复用前端的 chunk 累加逻辑。客户端在订阅后应以此初始化 buffer，
-   * 再接收后续真正的增量 chunk。
+   * 快照走 run.snapshot（SET 语义）：一次性发本轮全量 reasoning/content/startedAt,
+   * 前端按 messageId **覆盖**（非累加）。与 HTTP inflight push 互为幂等，根治
+   * 「push + run.reasoning/run.chunk 回放叠加 / 断线重连」的文本翻倍（旧实现回放
+   * 走 append handler，回放晚于 history 合并即翻倍）。后续增量仍走 run.reasoning /
+   * run.chunk（append）。
+   *
+   * 仅在已分配 messageId 时才发：messageId=null（已落库轮 / 无消息）不发——已落库
+   * 轮由 history 渲染整条，无需回放；空 id 会让前端建卡死气泡。
    */
   @UseGuards(WsAuthGuard)
   @SubscribeMessage(SESSION_WS_EVENTS.subscribe)
@@ -73,25 +78,14 @@ export class SessionGateway extends BaseWebSocketGateway {
   ): void {
     client.join(body.sessionId);
     const inflight = this.runner.getInflight(body.sessionId);
-    // 仅在已分配 messageId 时才 replay，否则会发一条 messageId="" 的空 chunk，
-    // 前端按 id 索引 upsert 会创建一条永远卡住的空气泡（其后真实 chunk 用真实
-    // id，无法替换）。先 reasoning 后 chunk，与流式顺序一致 —— 前端的 reasoning
-    // / chunk handler 都是「按 messageId 累加全量」，replay 一次即拼回。
     if (inflight?.messageId) {
-      if (inflight.reasoning) {
-        client.emit(SESSION_WS_EVENTS.runReasoning, {
-          sessionId: body.sessionId,
-          messageId: inflight.messageId,
-          delta: inflight.reasoning,
-        });
-      }
-      if (inflight.content) {
-        client.emit(SESSION_WS_EVENTS.runChunk, {
-          sessionId: body.sessionId,
-          messageId: inflight.messageId,
-          delta: inflight.content,
-        });
-      }
+      client.emit(SESSION_WS_EVENTS.runSnapshot, {
+        sessionId: body.sessionId,
+        messageId: inflight.messageId,
+        reasoning: inflight.reasoning,
+        content: inflight.content,
+        reasoningStartedAt: inflight.reasoningStartedAt,
+      });
     }
   }
 

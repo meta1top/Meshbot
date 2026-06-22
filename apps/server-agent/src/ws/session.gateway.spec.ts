@@ -15,11 +15,13 @@ function fakeSocket(): Socket & { joined: string[]; emitted: unknown[] } {
 }
 
 describe("SessionGateway", () => {
-  it("subscribe：join 房间，有 inflight 则回推快照", () => {
+  it("subscribe：join 房间，非落库轮发一次全量 run.snapshot（SET 语义）", () => {
     const runner = {
       getInflight: () => ({
         messageId: "m1",
         content: "部分",
+        reasoning: "想",
+        reasoningStartedAt: 1234,
         status: "streaming" as const,
       }),
       interrupt: jest.fn(),
@@ -30,12 +32,18 @@ describe("SessionGateway", () => {
     expect(sock.joined).toEqual(["s1"]);
     expect(sock.emitted).toHaveLength(1);
     expect(sock.emitted[0]).toEqual([
-      SESSION_WS_EVENTS.runChunk,
-      { sessionId: "s1", messageId: "m1", delta: "部分" },
+      SESSION_WS_EVENTS.runSnapshot,
+      {
+        sessionId: "s1",
+        messageId: "m1",
+        reasoning: "想",
+        content: "部分",
+        reasoningStartedAt: 1234,
+      },
     ]);
   });
 
-  it("subscribe：inflight messageId 为 null 时不回推（避免前端创建空 id 卡住气泡）", () => {
+  it("subscribe：已落库轮（inflight messageId 为 null）不发 snapshot", () => {
     const runner = {
       getInflight: () => ({
         messageId: null,
