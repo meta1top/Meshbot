@@ -98,6 +98,16 @@ timezone: <IANA 时区，如 Asia/Shanghai>
 - `getMemoryDir()` = `accounts/<cloudUserId>/memory/`，`getOrThrow()` 强制账号上下文；工具在 run 内执行（账号 ALS 可用），与 skills 同机制。
 - `system:ctx.cloudUserId` 来自 `AccountContextService` → 切账号即不同身份。
 
+### 工具账号作用域不变量（贯穿原则，本次明文化 + 顺带修正）
+
+**系统已知当前是哪个账号的 agent（AccountContextService / ALS）→ 所有工具一律按当前账号自动解析账号化路径，agent（LLM）永不传 cloudUserId / account。**
+
+- 工具 schema **禁止**出现 `cloudUserId` / `accountId` 等账号入参；路径一律经 `MeshbotConfigService` 的账号化 getter（`getSkillsDir` / `getWorkspaceDir` / `getMemoryDir`）解析。
+- `system:ctx` 暴露 `cloudUserId` 仅供 agent **知晓**自身身份，**不作为工具注入参数**。
+- **现状核实（已满足）**：`skill_list` / 安装走 `getSkillsDir()`（accounts/<id>/skills）；`bash` 的 cwd 已 = `getWorkspaceDir()`（accounts/<id>/workspace）并同步 `PWD`；无工具 schema 含 cloudUserId。
+- **顺带修正**：`bash` 工具的 LLM 描述仍陈旧写「cwd is locked to ~/.meshbot/workspace」，与实际（账号化 workspace）不符 → 改为「当前账号的 workspace」准确措辞（不泄露绝对路径亦可）。
+- 本次新增的 4 个 memory 工具同样遵守（`getMemoryDir()`，无 cloudUserId 入参）。
+
 ## 边界 / 非目标（v1）
 
 - 不存 `now`（实时时间走 `date` 工具）；`system:ctx` 不放任何易变时间快照。
