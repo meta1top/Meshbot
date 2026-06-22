@@ -46,7 +46,6 @@ export function AssistantConversationBody({
     }
   }, [placeholders.length]);
   const inputPlaceholder = placeholders[phIdx];
-  const bottomRef = useRef<HTMLDivElement>(null);
   const topSentinelRef = useRef<HTMLDivElement>(null);
 
   const usageByMessage = useAtomValue(usageByMessageAtom);
@@ -69,7 +68,6 @@ export function AssistantConversationBody({
 
   const { stickToBottom, scrollToBottom } = useChatScroll({
     scrollContainerRef: scrollRef,
-    bottomRef,
     topSentinelRef,
     messages: timelineMessages,
     hasMore: stream.hasMoreHistory,
@@ -177,7 +175,6 @@ export function AssistantConversationBody({
               }}
               usageByMessage={usageByMessage}
             />
-            <div ref={bottomRef} />
           </>
         )}
       </div>
