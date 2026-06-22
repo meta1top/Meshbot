@@ -1,11 +1,11 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@meshbot/design";
+import { Card, CardContent, CardTitle } from "@meshbot/design";
 import type { StatsRange, StatsResponse } from "@meshbot/types-agent";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { ActivityHeatmap } from "@/components/common/activity-heatmap";
-import { AppShellLayout } from "@/components/layouts/app-shell-layout";
+import { ToolPage } from "@/components/layouts/tool-page";
 import { formatPeakHour, formatStreak } from "@/lib/format-stats";
 import { formatTokens } from "@/lib/format-tokens";
 import { fetchStats } from "@/rest/stats";
@@ -15,6 +15,8 @@ const RANGES: StatsRange[] = ["all", "30d", "7d"];
 /** 「更多」→ 使用情况：会话/消息/Token/活跃度统计（原助手仪表盘迁来）。 */
 export default function MorePage() {
   const t = useTranslations("home");
+  // 页头标题复用「更多」子导航的「使用情况」文案，点选与页头一致。
+  const tNav = useTranslations("moreSidebar");
   const [range, setRange] = useState<StatsRange>("all");
   const [stats, setStats] = useState<StatsResponse | null>(null);
 
@@ -62,46 +64,44 @@ export default function MorePage() {
   ];
 
   return (
-    <AppShellLayout>
-      <div className="w-full max-w-[620px] flex-1 px-6 py-6">
-        <Card className="overflow-hidden border-border bg-muted px-1 py-1 shadow-none">
-          <CardHeader className="space-y-2 px-3 pt-2 pb-1">
-            <div className="flex items-center justify-end text-[11px] text-foreground/60">
-              <div className="flex items-center gap-2">
-                {RANGES.map((r) => (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => setRange(r)}
-                    className={
-                      r === range
-                        ? "rounded-md bg-foreground/8 px-1.5 py-0.5 font-medium text-foreground"
-                        : "px-1 py-0.5 text-foreground/60 hover:text-foreground"
-                    }
-                  >
-                    {r === "all" ? t("all") : r}
-                  </button>
-                ))}
+    <ToolPage
+      title={tNav("usage")}
+      actions={
+        <div className="flex items-center gap-2 text-[11px] text-foreground/60">
+          {RANGES.map((r) => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => setRange(r)}
+              className={
+                r === range
+                  ? "rounded-md bg-foreground/8 px-1.5 py-0.5 font-medium text-foreground"
+                  : "px-1 py-0.5 text-foreground/60 hover:text-foreground"
+              }
+            >
+              {r === "all" ? t("all") : r}
+            </button>
+          ))}
+        </div>
+      }
+    >
+      <Card className="overflow-hidden border-border bg-muted px-1 py-1 shadow-none">
+        <CardContent className="space-y-3 px-3 pt-3 pb-3">
+          <CardTitle className="sr-only">{t("overviewMetrics")}</CardTitle>
+          <div className="grid grid-cols-4 gap-x-3 gap-y-2">
+            {metrics.map((item) => (
+              <div key={item.label} className="min-w-0">
+                <p className="text-[11px] text-foreground/55">{item.label}</p>
+                <p className="text-[18px] leading-tight font-semibold tracking-tight wrap-break-word text-foreground">
+                  {item.value}
+                </p>
               </div>
-            </div>
-            <CardTitle className="sr-only">{t("overviewMetrics")}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 px-3 pt-1 pb-3">
-            <div className="grid grid-cols-4 gap-x-3 gap-y-2">
-              {metrics.map((item) => (
-                <div key={item.label} className="min-w-0">
-                  <p className="text-[11px] text-foreground/55">{item.label}</p>
-                  <p className="text-[18px] leading-tight font-semibold tracking-tight wrap-break-word text-foreground">
-                    {item.value}
-                  </p>
-                </div>
-              ))}
-            </div>
+            ))}
+          </div>
 
-            <ActivityHeatmap cells={stats?.heatmap ?? []} weeks={26} />
-          </CardContent>
-        </Card>
-      </div>
-    </AppShellLayout>
+          <ActivityHeatmap cells={stats?.heatmap ?? []} weeks={26} />
+        </CardContent>
+      </Card>
+    </ToolPage>
   );
 }

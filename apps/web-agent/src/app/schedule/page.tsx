@@ -5,7 +5,7 @@ import { useAtomValue } from "jotai";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { sessionsAtom } from "@/atoms/sessions";
-import { AppShellLayout } from "@/components/layouts/app-shell-layout";
+import { ToolPage } from "@/components/layouts/tool-page";
 import { CronJobCard } from "@/components/schedule/cron-job-card";
 import { CronJobForm } from "@/components/schedule/cron-job-form";
 import {
@@ -65,51 +65,49 @@ export default function SchedulePage() {
   );
 
   return (
-    <AppShellLayout>
-      <div className="mx-auto w-full max-w-2xl p-4">
-        <div className="mb-4 flex items-center justify-between">
-          <h1 className="text-lg font-medium">{t("title")}</h1>
-          <button
-            type="button"
-            onClick={() => setFormOpen((v) => !v)}
-            className="rounded-md bg-foreground/8 px-3 py-1.5 text-sm font-medium hover:bg-foreground/12"
-          >
-            {formOpen ? t("cancel") : t("newJob")}
-          </button>
+    <ToolPage
+      title={t("title")}
+      actions={
+        <button
+          type="button"
+          onClick={() => setFormOpen((v) => !v)}
+          className="rounded-md bg-foreground/8 px-3 py-1.5 text-sm font-medium hover:bg-foreground/12"
+        >
+          {formOpen ? t("cancel") : t("newJob")}
+        </button>
+      }
+    >
+      {formOpen && (
+        <div className="mb-4">
+          <CronJobForm
+            sessions={sessions}
+            onCancel={() => setFormOpen(false)}
+            onSubmit={async (input) => {
+              await createCronJob(input);
+              setFormOpen(false);
+              await reload();
+            }}
+          />
         </div>
+      )}
 
-        {formOpen && (
-          <div className="mb-4">
-            <CronJobForm
-              sessions={sessions}
-              onCancel={() => setFormOpen(false)}
-              onSubmit={async (input) => {
-                await createCronJob(input);
-                setFormOpen(false);
-                await reload();
-              }}
+      {loading ? (
+        <p className="text-sm text-muted-foreground">…</p>
+      ) : jobs.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{t("empty")}</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {jobs.map((j) => (
+            <CronJobCard
+              key={j.id}
+              job={j}
+              busy={busyId === j.id}
+              onToggle={(next) => handleToggle(j.id, next)}
+              onDelete={() => handleDelete(j.id, j.title)}
             />
-          </div>
-        )}
-
-        {loading ? (
-          <p className="text-sm text-muted-foreground">…</p>
-        ) : jobs.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t("empty")}</p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {jobs.map((j) => (
-              <CronJobCard
-                key={j.id}
-                job={j}
-                busy={busyId === j.id}
-                onToggle={(next) => handleToggle(j.id, next)}
-                onDelete={() => handleDelete(j.id, j.title)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    </AppShellLayout>
+          ))}
+        </div>
+      )}
+    </ToolPage>
   );
 }

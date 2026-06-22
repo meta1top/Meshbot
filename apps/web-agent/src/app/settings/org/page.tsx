@@ -20,7 +20,7 @@ import { useAtomValue } from "jotai";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { currentUserAtom } from "@/atoms/auth";
-import { AppShellLayout } from "@/components/layouts/app-shell-layout";
+import { ToolPage } from "@/components/layouts/tool-page";
 import { useInvitations, useInviteMember, useMembers } from "@/rest/org";
 
 export default function OrgSettingsPage() {
@@ -51,15 +51,15 @@ export default function OrgSettingsPage() {
 
   if (!org) {
     return (
-      <AppShellLayout sidebar={null}>
-        <div className="p-6 text-sm text-muted-foreground">{t("noOrg")}</div>
-      </AppShellLayout>
+      <ToolPage title={t("title")} sidebar={null}>
+        <div className="text-sm text-muted-foreground">{t("noOrg")}</div>
+      </ToolPage>
     );
   }
 
   return (
-    <AppShellLayout sidebar={null}>
-      <div className="mx-auto flex w-full max-w-[680px] flex-col gap-6 p-6">
+    <ToolPage title={t("title")} sidebar={null}>
+      <div className="flex flex-col gap-6">
         <Card>
           <CardHeader>
             <CardTitle>{t("membersTitle", { org: org.name })}</CardTitle>
@@ -149,6 +149,6 @@ export default function OrgSettingsPage() {
           </Card>
         ) : null}
       </div>
-    </AppShellLayout>
+    </ToolPage>
   );
 }

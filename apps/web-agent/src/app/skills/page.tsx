@@ -3,7 +3,7 @@
 import type { InstalledSkill, MarketSkillSummary } from "@meshbot/types-agent";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppShellLayout } from "@/components/layouts/app-shell-layout";
+import { ToolPage } from "@/components/layouts/tool-page";
 import { InstallFromGithub } from "@/components/skills/install-from-github";
 import { InstalledSkillCard } from "@/components/skills/installed-skill-card";
 import { MarketSkillCard } from "@/components/skills/market-skill-card";
@@ -100,8 +100,19 @@ export default function SkillsPage() {
 
   const isMarketView = activeView === "ourMarket" || activeView === "clawhub";
 
+  // 页头标题随当前视图（已安装 / MeshBot / ClawHub / GitHub）。
+  const pageTitle =
+    activeView === "installed"
+      ? t("installedTitle")
+      : activeView === "ourMarket"
+        ? t("sourceOurMarket")
+        : activeView === "clawhub"
+          ? t("sourceClawhub")
+          : t("sourceGithub");
+
   return (
-    <AppShellLayout
+    <ToolPage
+      title={pageTitle}
       sidebar={
         <SkillsSidebar
           installed={installed}
@@ -109,80 +120,62 @@ export default function SkillsPage() {
           onSelect={setActiveView}
         />
       }
+      tabs={
+        isMarketView ? (
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => handleQueryChange(e.target.value)}
+            placeholder={t("marketSearchPlaceholder")}
+            className="w-full max-w-sm rounded-md border border-border bg-background px-3 py-1.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+        ) : undefined
+      }
     >
-      <div className="mx-auto w-full max-w-2xl">
-        {/* ── 已安装视图 ── */}
-        {activeView === "installed" && (
-          <>
-            <h1 className="mb-4 text-lg font-medium">{t("installedTitle")}</h1>
+      {/* ── 已安装视图 ── */}
+      {activeView === "installed" &&
+        (loadingInstalled ? (
+          <p className="text-sm text-muted-foreground">{t("loading")}</p>
+        ) : installed.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{t("installedEmpty")}</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {installed.map((skill) => (
+              <InstalledSkillCard
+                key={skill.name}
+                skill={skill}
+                onUninstalled={handleUninstalled}
+                onPublish={handlePublish}
+              />
+            ))}
+          </div>
+        ))}
 
-            {loadingInstalled ? (
-              <p className="text-sm text-muted-foreground">{t("loading")}</p>
-            ) : installed.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                {t("installedEmpty")}
-              </p>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {installed.map((skill) => (
-                  <InstalledSkillCard
-                    key={skill.name}
-                    skill={skill}
-                    onUninstalled={handleUninstalled}
-                    onPublish={handlePublish}
-                  />
-                ))}
-              </div>
-            )}
-          </>
-        )}
+      {/* ── 市场视图（ourMarket / clawhub）── */}
+      {isMarketView &&
+        (loadingMarket ? (
+          <p className="text-sm text-muted-foreground">{t("loading")}</p>
+        ) : marketError ? (
+          <p className="text-sm text-destructive">{marketError}</p>
+        ) : marketItems.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{t("marketEmpty")}</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {marketItems.map((skill) => (
+              <MarketSkillCard
+                key={`${skill.source}:${skill.slug}`}
+                skill={skill}
+                source={activeView}
+                onInstalled={handleInstalled}
+              />
+            ))}
+          </div>
+        ))}
 
-        {/* ── 市场视图（ourMarket / clawhub）── */}
-        {isMarketView && (
-          <>
-            <h1 className="mb-3 text-lg font-medium">
-              {activeView === "ourMarket"
-                ? t("sourceOurMarket")
-                : t("sourceClawhub")}
-            </h1>
-
-            {/* 搜索框 */}
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => handleQueryChange(e.target.value)}
-              placeholder={t("marketSearchPlaceholder")}
-              className="mb-4 w-full rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-            />
-
-            {loadingMarket ? (
-              <p className="text-sm text-muted-foreground">{t("loading")}</p>
-            ) : marketError ? (
-              <p className="text-sm text-destructive">{marketError}</p>
-            ) : marketItems.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                {t("marketEmpty")}
-              </p>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {marketItems.map((skill) => (
-                  <MarketSkillCard
-                    key={`${skill.source}:${skill.slug}`}
-                    skill={skill}
-                    source={activeView}
-                    onInstalled={handleInstalled}
-                  />
-                ))}
-              </div>
-            )}
-          </>
-        )}
-
-        {/* ── GitHub 安装视图 ── */}
-        {activeView === "github" && (
-          <InstallFromGithub onInstalled={handleInstalled} />
-        )}
-      </div>
+      {/* ── GitHub 安装视图 ── */}
+      {activeView === "github" && (
+        <InstallFromGithub onInstalled={handleInstalled} />
+      )}
 
       {/* 上传到市场对话框 */}
       <PublishSkillDialog
@@ -191,6 +184,6 @@ export default function SkillsPage() {
         onOpenChange={setPublishOpen}
         onPublished={() => void reloadInstalled()}
       />
-    </AppShellLayout>
+    </ToolPage>
   );
 }
