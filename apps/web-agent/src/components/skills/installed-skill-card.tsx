@@ -36,7 +36,7 @@ export function InstalledSkillCard({ skill, onUninstalled, onPublish }: Props) {
   const sourceLabel: Record<string, string> = {
     ourMarket: t("sourceOurMarket"),
     github: "GitHub",
-    clawhub: "clawhub",
+    clawhub: t("sourceClawhub"),
   };
 
   return (
