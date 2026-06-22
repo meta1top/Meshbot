@@ -1,7 +1,12 @@
 import "reflect-metadata";
-import { AccountContextModule, AgentModule } from "@meshbot/agent";
+import {
+  AccountContextModule,
+  AgentModule,
+  SKILL_TOOLS_PORT,
+  type SkillToolsPort,
+} from "@meshbot/agent";
 import { TxTypeOrmModule } from "@meshbot/common";
-import { type INestApplication } from "@nestjs/common";
+import { Global, type INestApplication, Module } from "@nestjs/common";
 import { APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 import { EventEmitterModule } from "@nestjs/event-emitter";
 import { JwtModule, JwtService } from "@nestjs/jwt";
@@ -30,6 +35,27 @@ import { SessionTitleService } from "../../src/services/session-title.service";
 import { SessionService } from "../../src/services/session.service";
 import { JWT_SECRET, JwtStrategy } from "../../src/strategies/jwt.strategy";
 import { ModelConfig } from "../../src/entities/model-config.entity";
+
+/** 桩：本 e2e 不测技能，仅提供 @Global SKILL_TOOLS_PORT 让 AgentModule 的技能工具可解析。 */
+const STUB_SKILL_PORT: SkillToolsPort = {
+  install: async () => ({
+    name: "",
+    description: "",
+    source: null,
+    ref: null,
+    version: null,
+  }),
+  uninstall: async () => {},
+  searchMarket: async () => [],
+  publish: async () => {},
+};
+
+@Global()
+@Module({
+  providers: [{ provide: SKILL_TOOLS_PORT, useValue: STUB_SKILL_PORT }],
+  exports: [SKILL_TOOLS_PORT],
+})
+class StubSkillToolsModule {}
 
 describe("Session e2e", () => {
   let app: INestApplication;
@@ -72,6 +98,7 @@ describe("Session e2e", () => {
         AccountContextModule,
         AccountModule,
         CronJobModule,
+        StubSkillToolsModule,
         AgentModule,
       ],
       controllers: [SessionController],

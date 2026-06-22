@@ -28,3 +28,10 @@ export {
   type ScheduleToolsPort,
   type ScheduleJobView,
 } from "./tools/schedule-tools.port";
+export {
+  SKILL_TOOLS_PORT,
+  type SkillToolsPort,
+  type SkillToolSource,
+  type InstalledSkillView,
+  type MarketSkillView,
+} from "./tools/skill-tools.port";
