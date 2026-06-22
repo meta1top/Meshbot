@@ -13,8 +13,12 @@ import { DateTool } from "./tools/builtins/date.tool";
 import { ScheduleCreateTool } from "./tools/builtins/schedule-create.tool";
 import { ScheduleDeleteTool } from "./tools/builtins/schedule-delete.tool";
 import { ScheduleListTool } from "./tools/builtins/schedule-list.tool";
+import { SkillInstallTool } from "./tools/builtins/skill-install.tool";
 import { SkillListTool } from "./tools/builtins/skill-list.tool";
 import { SkillLoadTool } from "./tools/builtins/skill-load.tool";
+import { SkillPublishTool } from "./tools/builtins/skill-publish.tool";
+import { SkillSearchMarketTool } from "./tools/builtins/skill-search-market.tool";
+import { SkillUninstallTool } from "./tools/builtins/skill-uninstall.tool";
 
 @Module({
   // EventEmitterModule.forRoot() 在 app 层（apps/server-agent app.module）也调；
@@ -37,6 +41,10 @@ import { SkillLoadTool } from "./tools/builtins/skill-load.tool";
     SkillService,
     SkillListTool,
     SkillLoadTool,
+    SkillInstallTool,
+    SkillUninstallTool,
+    SkillSearchMarketTool,
+    SkillPublishTool,
     McpService,
     PromptService,
     GraphService,
