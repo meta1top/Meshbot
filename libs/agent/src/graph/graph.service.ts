@@ -8,7 +8,7 @@ import {
   SystemMessage,
 } from "@langchain/core/messages";
 import { generateSnowflakeId } from "@meshbot/common";
-import { Injectable, Optional } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { AccountContextService } from "../account/account-context.service";
 import { createSqliteCheckpointer } from "../checkpoint/sqlite-checkpointer";
@@ -18,6 +18,10 @@ import { PromptService } from "../prompt/prompt.service";
 import { ToolRegistry } from "../tools/tool-registry";
 import type { GraphState } from "./graph.builder";
 import { buildSupervisorGraph } from "./graph.builder";
+import {
+  RUNTIME_CONTEXT_PORT,
+  type RuntimeContextPort,
+} from "./runtime-context.port";
 import { createChatModel } from "./llm.factory";
 import type { ModelProvider } from "./nodes/supervisor.node";
 
@@ -140,9 +144,36 @@ export class GraphService {
     private readonly account: AccountContextService,
     @Optional() modelProvider?: ModelProvider,
     @Optional() modelMeta?: { providerType: string; model: string },
+    @Optional()
+    @Inject(RUNTIME_CONTEXT_PORT)
+    private readonly runtimeContext?: RuntimeContextPort,
   ) {
     this.modelProvider = modelProvider ?? (() => this.resolveModel());
     this.modelMeta = modelMeta ?? { providerType: "unknown", model: "unknown" };
+  }
+
+  /** 组装运行时上下文消息（稳定 id system:ctx；每 run 刷新；不含易变 now）。 */
+  private async buildContextMessage(
+    threadId: ThreadId,
+  ): Promise<SystemMessage> {
+    const cloudUserId = this.account.getOrThrow();
+    const ext = this.runtimeContext
+      ? await this.runtimeContext.resolve()
+      : null;
+    const tz =
+      ext?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const lines = [
+      `cloudUserId: ${cloudUserId}`,
+      `sessionId: ${threadId}`,
+      ...(ext?.displayName ? [`user: ${ext.displayName}`] : []),
+      `model: ${this.modelMeta.model}`,
+      ...(ext?.language ? [`language: ${ext.language}`] : []),
+      `timezone: ${tz}`,
+    ];
+    return new SystemMessage({
+      id: "system:ctx",
+      content: `<context>\n${lines.join("\n")}\n</context>`,
+    });
   }
 
   /**

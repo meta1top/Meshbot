@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { AIMessageChunk } from "@langchain/core/messages";
+import type { SystemMessage } from "@langchain/core/messages";
 import { ChatGenerationChunk } from "@langchain/core/outputs";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -10,6 +11,7 @@ import { z } from "zod";
 import { AccountContextService } from "../../src/account/account-context.service";
 import { MeshbotConfigService } from "../../src/config/meshbot-config.service";
 import { GraphService } from "../../src/graph/graph.service";
+import type { RuntimeContextPort } from "../../src/graph/runtime-context.port";
 import { PromptService } from "../../src/prompt/prompt.service";
 import { ToolRegistry } from "../../src/tools/tool-registry";
 import type { MeshbotTool } from "../../src/tools/tool.types";
@@ -443,5 +445,105 @@ describe("GraphService", () => {
     const [sid] = [...roundIds];
     expect(sid).not.toBe("model-uuid-1");
     expect(sid).toMatch(/^\d{15,}$/);
+  });
+});
+
+// ─── buildContextMessage ───────────────────────────────────────────────────
+
+describe("GraphService.buildContextMessage", () => {
+  let testDir: string;
+
+  beforeEach(() => {
+    testDir = mkdtempSync(path.join(tmpdir(), "meshbot-ctx-test-"));
+    mkdirSync(path.join(testDir, "prompt"), { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(testDir, { recursive: true, force: true });
+  });
+
+  /** 构造带可选 runtimeContext 的 GraphService。 */
+  function makeGs(runtimeContext?: RuntimeContextPort): {
+    gs: GraphService;
+    ctx: AccountContextService;
+  } {
+    const ctx = new AccountContextService();
+    const configService = new MeshbotConfigService(ctx);
+    (configService as unknown as Record<string, string>).meshbotDir = testDir;
+    const promptService = new PromptService(configService, ctx);
+    const toolRegistry = new ToolRegistry(
+      { getProviders: () => [] } as never,
+      new AccountContextService(),
+    );
+    const fakeModel = {
+      stream: async () => {
+        async function* gen() {
+          yield new AIMessageChunk({ id: "x", content: "ok" });
+        }
+        return gen();
+      },
+    };
+    const gs = new GraphService(
+      configService,
+      promptService,
+      toolRegistry,
+      new EventEmitter2(),
+      ctx,
+      () => Promise.resolve(fakeModel as never),
+      { providerType: "fake", model: "fake-model" },
+      runtimeContext,
+    );
+    return { gs, ctx };
+  }
+
+  it("有 port 时：id=system:ctx，content 含各字段，不含 now/日期", async () => {
+    const fakePort: RuntimeContextPort = {
+      resolve: async () => ({
+        displayName: "Grant",
+        language: "zh",
+        timezone: "Asia/Shanghai",
+      }),
+    };
+    const { gs, ctx } = makeGs(fakePort);
+
+    const msg = await ctx.run("acct-1", () =>
+      (
+        gs as unknown as {
+          buildContextMessage(t: string): Promise<SystemMessage>;
+        }
+      ).buildContextMessage("s1"),
+    );
+
+    expect(msg.id).toBe("system:ctx");
+    const content = typeof msg.content === "string" ? msg.content : "";
+    expect(content).toContain("cloudUserId:");
+    expect(content).toContain("sessionId: s1");
+    expect(content).toContain("user: Grant");
+    expect(content).toContain("model:");
+    expect(content).toContain("language: zh");
+    expect(content).toContain("timezone: Asia/Shanghai");
+    // 不含实时时间
+    expect(content).not.toMatch(/\bnow\b/i);
+    // 不含日期格式（YYYY-MM-DD / ISO 8601 前缀）
+    expect(content).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+  });
+
+  it("无 port 时：timezone 兜底为 Intl 本地时区", async () => {
+    const { gs, ctx } = makeGs(undefined);
+
+    const msg = await ctx.run("acct-2", () =>
+      (
+        gs as unknown as {
+          buildContextMessage(t: string): Promise<SystemMessage>;
+        }
+      ).buildContextMessage("s2"),
+    );
+
+    const content = typeof msg.content === "string" ? msg.content : "";
+    const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    expect(content).toContain(`timezone: ${localTz}`);
+    // 无 port → 无 user/language 行
+    expect(content).not.toContain("user:");
+    expect(content).not.toContain("language:");
   });
 });

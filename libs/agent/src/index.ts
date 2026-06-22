@@ -35,3 +35,7 @@ export {
   type InstalledSkillView,
   type MarketSkillView,
 } from "./tools/skill-tools.port";
+export {
+  RUNTIME_CONTEXT_PORT,
+  type RuntimeContextPort,
+} from "./graph/runtime-context.port";
