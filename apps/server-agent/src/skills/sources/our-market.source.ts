@@ -45,7 +45,7 @@ export class OurMarketSource implements SkillSourceAdapter {
     const token = await this.token();
     const items = await this.cloud.get<MarketSkillApiItem[]>(path, token);
     return items.map((item) => ({
-      source: "ourMarket" as const,
+      source: "system" as const,
       ref: item.slug,
       slug: item.slug,
       displayName: item.displayName,

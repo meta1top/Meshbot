@@ -5,12 +5,12 @@ import { Tool } from "../tool.decorator";
 import type { MeshbotTool, ToolContext } from "../tool.types";
 
 const ArgsSchema = z.object({
-  source: z.enum(["ourMarket", "github", "clawhub"]),
+  source: z.enum(["system", "github", "clawhub"]),
   ref: z
     .string()
     .min(1)
     .describe(
-      "ourMarket/clawhub use the skill slug; github uses owner/repo[@ref]",
+      "system/clawhub use the skill slug; github uses owner/repo[@ref]",
     ),
   version: z.string().optional(),
 });
@@ -21,9 +21,9 @@ type Args = z.input<typeof ArgsSchema>;
 export class SkillInstallTool implements MeshbotTool<Args, string> {
   readonly name = "skill_install";
   readonly description =
-    "Install a skill from ourMarket / GitHub / clawhub into the local skills directory. " +
+    "Install a skill from system / GitHub / clawhub into the local skills directory. " +
     "Hot-loaded — immediately usable via skill_list / skill_load afterward. " +
-    "ref: ourMarket/clawhub use the slug; github uses owner/repo[@ref]. " +
+    "ref: system/clawhub use the slug; github uses owner/repo[@ref]. " +
     "Returns the installed skill name + description.";
   readonly schema = ArgsSchema;
 

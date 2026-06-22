@@ -1,11 +1,11 @@
 import { z } from "zod";
 
 /** 技能来源枚举。 */
-export type SkillInstallSource = "ourMarket" | "github" | "clawhub";
+export type SkillInstallSource = "system" | "github" | "clawhub";
 
 /** 市场技能摘要（三源通用）。 */
 export const MarketSkillSummarySchema = z.object({
-  source: z.enum(["ourMarket", "github", "clawhub"]),
+  source: z.enum(["system", "github", "clawhub"]),
   ref: z.string(),
   slug: z.string(),
   displayName: z.string(),
@@ -20,7 +20,7 @@ export type MarketSkillSummary = z.infer<typeof MarketSkillSummarySchema>;
 export const InstalledSkillSchema = z.object({
   name: z.string(),
   description: z.string(),
-  source: z.enum(["ourMarket", "github", "clawhub"]).nullable(),
+  source: z.enum(["system", "github", "clawhub"]).nullable(),
   ref: z.string().nullable(),
   version: z.string().nullable(),
   installedAt: z.string().nullable(),
@@ -29,8 +29,8 @@ export type InstalledSkill = z.infer<typeof InstalledSkillSchema>;
 
 /** POST /api/skills/install 入参。 */
 export const InstallSkillSchema = z.object({
-  /** ourMarket=slug；github=owner/repo[@ref]；clawhub=slug */
-  source: z.enum(["ourMarket", "github", "clawhub"]),
+  /** system=slug；github=owner/repo[@ref]；clawhub=slug */
+  source: z.enum(["system", "github", "clawhub"]),
   ref: z.string().min(1),
   version: z.string().optional(),
 });

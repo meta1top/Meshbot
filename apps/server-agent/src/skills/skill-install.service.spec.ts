@@ -188,8 +188,8 @@ describe("SkillInstallService", () => {
       expect(result).toEqual(items);
     });
 
-    it("ourMarket source 转发调用", async () => {
-      await svc.market("ourMarket");
+    it("system source 转发调用", async () => {
+      await svc.market("system");
       expect(ourMarketSource.list).toHaveBeenCalledWith(undefined);
     });
   });
@@ -243,7 +243,7 @@ describe("SkillInstallService", () => {
       });
     });
 
-    it("ourMarket: 传 version 写入 manifest", async () => {
+    it("system: 传 version 写入 manifest", async () => {
       const archive = await buildSkillZip({ name: "market-skill" });
       ourMarketSource = makeOurMarketSource([], {
         archive,
@@ -262,7 +262,7 @@ describe("SkillInstallService", () => {
       );
 
       const result = await svc.install({
-        source: "ourMarket",
+        source: "system",
         ref: "market-skill",
         version: "2.3.1",
       });

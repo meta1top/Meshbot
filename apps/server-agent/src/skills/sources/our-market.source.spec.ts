@@ -55,7 +55,7 @@ describe("OurMarketSource", () => {
 
   // ── list ──────────────────────────────────────────────────────────────────
   describe("list", () => {
-    it("GET /api/skills 并映射为 MarketSkillSummary（source='ourMarket'）", async () => {
+    it("GET /api/skills 并映射为 MarketSkillSummary（source='system'）", async () => {
       const { source, cloudGet } = makeSource();
       cloudGet.mockResolvedValue([
         {
@@ -73,7 +73,7 @@ describe("OurMarketSource", () => {
       expect(cloudGet).toHaveBeenCalledWith("/api/skills", "test-token");
       expect(result).toHaveLength(1);
       expect(result[0]).toMatchObject({
-        source: "ourMarket",
+        source: "system",
         ref: "my-skill",
         slug: "my-skill",
         displayName: "My Skill",

@@ -20,7 +20,7 @@ const MARKET_SOURCES: {
   labelKey: string;
 }[] = [
   {
-    view: "ourMarket",
+    view: "system",
     icon: <Store className="h-3.5 w-3.5 shrink-0 opacity-70" />,
     labelKey: "sourceOurMarket",
   },

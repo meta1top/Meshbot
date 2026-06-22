@@ -49,7 +49,7 @@ export default function SkillsPage() {
 
   // 切换到市场视图时拉取列表
   const loadMarket = useCallback(
-    async (source: "ourMarket" | "clawhub", q: string) => {
+    async (source: "system" | "clawhub", q: string) => {
       setLoadingMarket(true);
       setMarketError(null);
       try {
@@ -70,7 +70,7 @@ export default function SkillsPage() {
     setQuery("");
     setMarketItems([]);
     setMarketError(null);
-    if (activeView === "ourMarket" || activeView === "clawhub") {
+    if (activeView === "system" || activeView === "clawhub") {
       void loadMarket(activeView, "");
     }
   }, [activeView, loadMarket]);
@@ -79,7 +79,7 @@ export default function SkillsPage() {
   function handleQueryChange(q: string) {
     setQuery(q);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (activeView !== "ourMarket" && activeView !== "clawhub") return;
+    if (activeView !== "system" && activeView !== "clawhub") return;
     debounceRef.current = setTimeout(() => {
       void loadMarket(activeView, q);
     }, 350);
@@ -98,13 +98,13 @@ export default function SkillsPage() {
     void reloadInstalled();
   }
 
-  const isMarketView = activeView === "ourMarket" || activeView === "clawhub";
+  const isMarketView = activeView === "system" || activeView === "clawhub";
 
   // 页头标题随当前视图（已安装 / MeshBot / ClawHub / GitHub）。
   const pageTitle =
     activeView === "installed"
       ? t("installedTitle")
-      : activeView === "ourMarket"
+      : activeView === "system"
         ? t("sourceOurMarket")
         : activeView === "clawhub"
           ? t("sourceClawhub")
@@ -151,7 +151,7 @@ export default function SkillsPage() {
           </div>
         ))}
 
-      {/* ── 市场视图（ourMarket / clawhub）── */}
+      {/* ── 市场视图（system / clawhub）── */}
       {isMarketView &&
         (loadingMarket ? (
           <p className="text-sm text-muted-foreground">{t("loading")}</p>

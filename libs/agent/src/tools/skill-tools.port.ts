@@ -25,7 +25,7 @@ export interface MarketSkillView {
 }
 
 /** 技能安装来源。 */
-export type SkillToolSource = "ourMarket" | "github" | "clawhub";
+export type SkillToolSource = "system" | "github" | "clawhub";
 
 /** 技能管理端口：tool 依赖此接口，server-agent 提供实现。 */
 export interface SkillToolsPort {

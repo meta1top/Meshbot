@@ -58,7 +58,7 @@ export class SkillInstallService {
   /**
    * 按 source 检索/浏览市场技能列表。
    *
-   * @param source 技能来源（ourMarket / github / clawhub）
+   * @param source 技能来源（system / github / clawhub）
    * @param q 搜索关键词（可选）
    */
   async market(
@@ -230,7 +230,7 @@ export class SkillInstallService {
         return this.github;
       case "clawhub":
         return this.clawhub;
-      case "ourMarket":
+      case "system":
         return this.ourMarket;
     }
   }

@@ -61,7 +61,7 @@ describe("skill tools", () => {
     const port = makePort({
       searchMarket: vi.fn().mockResolvedValue([
         {
-          source: "ourMarket",
+          source: "system",
           slug: "weather",
           displayName: "Weather",
           description: "",
@@ -72,10 +72,10 @@ describe("skill tools", () => {
     });
     const tool = new SkillSearchMarketTool(port);
     const out = await tool.execute(
-      { source: "ourMarket", query: "weather" },
+      { source: "system", query: "weather" },
       fakeCtx(),
     );
-    expect(port.searchMarket).toHaveBeenCalledWith("ourMarket", "weather");
+    expect(port.searchMarket).toHaveBeenCalledWith("system", "weather");
     expect(JSON.parse(out)).toHaveLength(1);
   });
 

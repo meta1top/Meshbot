@@ -5,7 +5,7 @@ import { Tool } from "../tool.decorator";
 import type { MeshbotTool, ToolContext } from "../tool.types";
 
 const ArgsSchema = z.object({
-  source: z.enum(["ourMarket", "github", "clawhub"]),
+  source: z.enum(["system", "github", "clawhub"]),
   query: z.string().optional().describe("Keyword to search; omit to browse"),
 });
 type Args = z.input<typeof ArgsSchema>;
@@ -15,7 +15,7 @@ type Args = z.input<typeof ArgsSchema>;
 export class SkillSearchMarketTool implements MeshbotTool<Args, string> {
   readonly name = "skill_search_market";
   readonly description =
-    "Search / browse installable skills in a marketplace (ourMarket or clawhub). " +
+    "Search / browse installable skills in a marketplace (system or clawhub). " +
     "github has no search endpoint and returns an empty list (install github skills " +
     "directly via skill_install with owner/repo). Returns a JSON array of skills " +
     "(slug, displayName, description, author, latestVersion).";
