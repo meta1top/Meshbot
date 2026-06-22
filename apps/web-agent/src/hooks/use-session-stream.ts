@@ -15,6 +15,7 @@ import {
   SESSION_WS_EVENTS,
   type SessionTitleUpdatedEvent,
 } from "@meshbot/types-agent";
+import { clientSnowflakeId } from "@meshbot/web-common";
 import { useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -595,7 +596,9 @@ export function useSessionStream(
   ]);
 
   /**
-   * 会话页发送：前端生成最终 messageId（UUID），乐观插入 user 气泡到 pending 区，
+   * 会话页发送：前端生成最终 messageId（雪花），乐观插入 user 气泡到 pending 区，
+   * 用雪花（非 UUID）使 human id 与服务端 assistant 雪花 / checkpointer / 事件流 /
+   * session_messages.id 三处收口一致，历史与 inflight 去重才能命中。
    * append 传同一 id 给后端。这样 run.human 到达时能直接按 id 找到目标气泡迁移，
    * 不需要 tempId 替换 / pendingHumanIdsRef 缓存。
    *
@@ -604,7 +607,7 @@ export function useSessionStream(
   const send = useCallback(
     async (msg: string) => {
       if (!sessionId) return;
-      const messageId = crypto.randomUUID();
+      const messageId = clientSnowflakeId();
       apply((prev) => [
         ...prev,
         { id: messageId, role: "user", content: msg, pending: true },
