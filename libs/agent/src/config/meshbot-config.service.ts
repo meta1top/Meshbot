@@ -108,6 +108,11 @@ export class MeshbotConfigService {
     return path.join(this.accountDir(), "agent.db");
   }
 
+  /** 记忆目录：<meshbotDir>/accounts/<account>/memory（按账号隔离）。 */
+  getMemoryDir(): string {
+    return path.join(this.accountDir(), "memory");
+  }
+
   /**
    * Bash tool 默认 cwd —— 按账号隔离 <meshbotDir>/accounts/<account>/workspace，自动 mkdir。
    * - prod：~/.meshbot/accounts/<account>/workspace
