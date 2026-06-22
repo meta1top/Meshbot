@@ -26,6 +26,7 @@ export type ToolsProvider = () => StructuredToolInterface[];
 export function createSupervisorNode(
   modelProvider: ModelProvider,
   toolsProvider: ToolsProvider,
+  resolveMessageId: (modelId: string) => string,
 ) {
   return async function supervisorNode(
     state: SupervisorState,
@@ -63,7 +64,9 @@ export function createSupervisorNode(
       tool_calls: accumulated.tool_calls,
       additional_kwargs: cleanKwargs,
       response_metadata: accumulated.response_metadata,
-      id: accumulated.id,
+      // 模型生成的 UUID 映射为我方雪花：checkpointer 直接存雪花，
+      // 与事件流 / session_messages 三处 id 收口一致。
+      id: resolveMessageId(accumulated.id ?? ""),
       name: accumulated.name,
       usage_metadata: accumulated.usage_metadata,
     });
