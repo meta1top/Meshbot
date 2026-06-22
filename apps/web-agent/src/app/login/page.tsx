@@ -40,9 +40,9 @@ export default function LoginPage() {
       const status = await fetchAuthStatus();
       // needs-org 必须走 /register 补完组织创建流程；
       // needs-model / ready 均进 /assistant，由 AuthGuard 布局层决定是否显示模型配置引导。
-      router.replace(status.step === "needs-org" ? "/register" : "/assistant");
+      router.replace(status.step === "needs-org" ? "/register" : "/");
     } catch {
-      router.replace("/assistant");
+      router.replace("/");
     }
   };
 

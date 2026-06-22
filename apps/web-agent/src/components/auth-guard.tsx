@@ -43,7 +43,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       // 注册后仍需停留配置模型，由向导自己控制离开
       if (pathname === "/login") {
         setResolved(false);
-        router.replace("/assistant");
+        router.replace("/");
         return;
       }
       setResolved(true);

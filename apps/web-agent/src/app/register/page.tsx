@@ -84,7 +84,7 @@ export default function SetupPage() {
     if (!authStatus) return;
     // 模型配置已移出向导：服务端判定 needs-model 时，交给登录后 shell 的模型引导处理
     if (authStatus.step === "needs-model") {
-      router.replace("/assistant");
+      router.replace("/");
       return;
     }
     // 注册成功 → 服务端转 needs-org，向导只向前推进到 org，绝不回拽用户已推进的步骤
@@ -238,7 +238,7 @@ export default function SetupPage() {
             <OrgStep
               onDone={() => {
                 queryClient.invalidateQueries({ queryKey: ["auth", "status"] });
-                router.push("/assistant");
+                router.push("/");
               }}
             />
           )}
