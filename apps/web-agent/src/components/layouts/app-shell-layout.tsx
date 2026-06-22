@@ -141,7 +141,7 @@ export function AppShellLayout({
           {resolvedSidebar && (
             <aside
               className={cn(
-                "z-40 flex w-[260px] shrink-0 overflow-hidden bg-(--shell-sidebar) transition-transform duration-200",
+                "z-40 flex flex-col w-[260px] shrink-0 overflow-hidden bg-(--shell-sidebar) transition-transform duration-200",
                 "absolute inset-y-0 left-0 shadow-2xl",
                 sidebarDrawerOpen ? "translate-x-0" : "-translate-x-full",
                 "md:static md:z-auto md:w-[240px] md:translate-x-0 md:rounded-l-(--shell-radius) md:shadow-none md:transition-none",
