@@ -6,10 +6,15 @@ import { MeshbotConfigModule } from "./config/meshbot-config.module";
 import { GraphService } from "./graph/graph.service";
 import { PromptService } from "./prompt/prompt.service";
 import { McpService } from "./mcp/mcp.service";
+import { MemoryService } from "./memory/memory.service";
 import { SkillService } from "./skills/skill.service";
 import { ToolRegistry } from "./tools/tool-registry";
 import { BashTool } from "./tools/builtins/bash.tool";
 import { DateTool } from "./tools/builtins/date.tool";
+import { MemoryAddTool } from "./tools/builtins/memory-add.tool";
+import { MemoryCoreWriteTool } from "./tools/builtins/memory-core-write.tool";
+import { MemoryDeleteTool } from "./tools/builtins/memory-delete.tool";
+import { MemorySearchTool } from "./tools/builtins/memory-search.tool";
 import { ScheduleCreateTool } from "./tools/builtins/schedule-create.tool";
 import { ScheduleDeleteTool } from "./tools/builtins/schedule-delete.tool";
 import { ScheduleListTool } from "./tools/builtins/schedule-list.tool";
@@ -45,6 +50,11 @@ import { SkillUninstallTool } from "./tools/builtins/skill-uninstall.tool";
     SkillUninstallTool,
     SkillSearchMarketTool,
     SkillPublishTool,
+    MemoryService,
+    MemoryCoreWriteTool,
+    MemoryAddTool,
+    MemorySearchTool,
+    MemoryDeleteTool,
     McpService,
     PromptService,
     GraphService,
