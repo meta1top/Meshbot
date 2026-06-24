@@ -96,11 +96,7 @@
   "assistantDock": {
     "title": "Quick Ask",
     "rename": "Rename",
-    "history": "History",
-    "newChat": "New chat",
     "close": "Close",
-    "save": "Save to Assistant",
-    "saved": "Saved to Assistant",
     "placeholder": "Ask anything…",
     "emptyHint": "Ask the assistant anything — not tied to this conversation."
   },

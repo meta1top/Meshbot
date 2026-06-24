@@ -44,17 +44,6 @@ export async function fetchQuickSessions(): Promise<SessionSummary[]> {
 }
 
 /**
- * 将随手问会话晋升为常规会话。
- */
-export async function promoteSession(id: string): Promise<SessionSummary> {
-  const { data } = await apiClient.post<SessionSummary>(
-    `/api/sessions/${id}/promote`,
-    {},
-  );
-  return data;
-}
-
-/**
  * 向会话追加一条消息。`messageId` 由调用方生成（UUID）—— 让前端乐观插入 user
  * 气泡时就用最终 id，run.human 到达时能直接按 id 找到目标气泡迁出。
  */

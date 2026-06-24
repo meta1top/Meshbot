@@ -96,11 +96,7 @@
   "assistantDock": {
     "title": "随手问",
     "rename": "重命名",
-    "history": "历史",
-    "newChat": "新对话",
     "close": "关闭",
-    "save": "保存到助手",
-    "saved": "已保存到助手",
     "placeholder": "继续问，或问点别的…",
     "emptyHint": "随手问点什么——不绑定当前对话。"
   },
