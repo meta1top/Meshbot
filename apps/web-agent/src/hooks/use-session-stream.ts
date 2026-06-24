@@ -9,6 +9,7 @@ import {
   type RunReasoningChunkEvent,
   type RunReasoningDoneEvent,
   type RunSnapshotEvent,
+  type RunToolCallArgsDeltaEvent,
   type RunToolCallEndEvent,
   type RunToolCallProgressEvent,
   type RunToolCallStartEvent,
@@ -486,6 +487,40 @@ export function useSessionStream(
     const onTitleUpdated = (e: SessionTitleUpdatedEvent) => {
       updateSessionTitle({ id: e.sessionId, title: e.title });
     };
+    const onToolArgsDelta = (e: RunToolCallArgsDeltaEvent) => {
+      if (e.sessionId !== sessionId) return;
+      apply((prev) => {
+        const append = (m: TimelineMessage): TimelineMessage => {
+          const list = m.streamingToolArgs ? [...m.streamingToolArgs] : [];
+          const i = list.findIndex((s) => s.index === e.index);
+          if (i === -1) {
+            list.push({ index: e.index, name: e.name, argsText: e.delta });
+          } else {
+            list[i] = {
+              ...list[i],
+              name: e.name ?? list[i].name,
+              argsText: list[i].argsText + e.delta,
+            };
+          }
+          return { ...m, streamingToolArgs: list };
+        };
+        const idx = prev.findIndex((m) => m.id === e.messageId);
+        if (idx === -1) {
+          return [
+            ...prev,
+            append({
+              id: e.messageId,
+              role: "assistant",
+              content: "",
+              streaming: true,
+            }),
+          ];
+        }
+        const copy = [...prev];
+        copy[idx] = append(copy[idx]);
+        return copy;
+      });
+    };
     const onToolStart = (e: RunToolCallStartEvent) => {
       if (e.sessionId !== sessionId) return;
       apply((prev) =>
@@ -504,6 +539,7 @@ export function useSessionStream(
             ...m,
             ...lockDuration,
             streaming: false,
+            streamingToolArgs: undefined,
             toolCalls: [
               ...(m.toolCalls ?? []),
               {
@@ -571,6 +607,7 @@ export function useSessionStream(
     socket.on(SESSION_WS_EVENTS.runError, onError);
     socket.on(SESSION_WS_EVENTS.runUsage, onUsage);
     socket.on(SESSION_WS_EVENTS.titleUpdated, onTitleUpdated);
+    socket.on(SESSION_WS_EVENTS.runToolCallArgsDelta, onToolArgsDelta);
     socket.on(SESSION_WS_EVENTS.runToolCallStart, onToolStart);
     socket.on(SESSION_WS_EVENTS.runToolCallProgress, onToolProgress);
     socket.on(SESSION_WS_EVENTS.runToolCallEnd, onToolEnd);
@@ -619,6 +656,7 @@ export function useSessionStream(
       socket.off(SESSION_WS_EVENTS.runError, onError);
       socket.off(SESSION_WS_EVENTS.runUsage, onUsage);
       socket.off(SESSION_WS_EVENTS.titleUpdated, onTitleUpdated);
+      socket.off(SESSION_WS_EVENTS.runToolCallArgsDelta, onToolArgsDelta);
       socket.off(SESSION_WS_EVENTS.runToolCallStart, onToolStart);
       socket.off(SESSION_WS_EVENTS.runToolCallProgress, onToolProgress);
       socket.off(SESSION_WS_EVENTS.runToolCallEnd, onToolEnd);
