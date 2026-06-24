@@ -8,9 +8,15 @@ import type {
   PresenceState,
 } from "@meshbot/types";
 import { IM_WS_EVENTS } from "@meshbot/types";
-import { SCHEDULE_EVENTS, type ScheduleFiredEvent } from "@meshbot/types-agent";
+import {
+  QUICK_ASSISTANT_EVENTS,
+  type QuickAssistantRenamedEvent,
+  SCHEDULE_EVENTS,
+  type ScheduleFiredEvent,
+} from "@meshbot/types-agent";
 import { useSetAtom } from "jotai";
 import { useEffect } from "react";
+import { quickAssistantNameAtom } from "@/atoms/assistant-panel";
 import {
   applyIncomingMessageAtom,
   markConversationReadAtom,
@@ -29,6 +35,7 @@ export interface GlobalEventHandlers {
   onConversationRemoved: (p: { conversationId: string }) => void;
   onConversationRead: (p: ImConversationReadEvent) => void;
   onScheduleFired: (p: ScheduleFiredEvent) => void;
+  onQuickAssistantRenamed: (p: QuickAssistantRenamedEvent) => void;
 }
 
 export function dispatchGlobalEvent(
@@ -54,6 +61,9 @@ export function dispatchGlobalEvent(
     case SCHEDULE_EVENTS.fired:
       h.onScheduleFired(env.payload as ScheduleFiredEvent);
       break;
+    case QUICK_ASSISTANT_EVENTS.renamed:
+      h.onQuickAssistantRenamed(env.payload as QuickAssistantRenamedEvent);
+      break;
     default:
       break;
   }
@@ -70,6 +80,7 @@ export function useGlobalEvents(): void {
   const removeConversation = useSetAtom(removeConversationAtom);
   const markConversationRead = useSetAtom(markConversationReadAtom);
   const addScheduleActivity = useSetAtom(addScheduleActivityAtom);
+  const setQuickAssistantName = useSetAtom(quickAssistantNameAtom);
 
   useEffect(() => {
     const socket = getEventsSocket();
@@ -80,6 +91,7 @@ export function useGlobalEvents(): void {
       onConversationRemoved: (p) => removeConversation(p.conversationId),
       onConversationRead: (p) => markConversationRead(p.conversationId),
       onScheduleFired: (p) => addScheduleActivity(p.sessionId),
+      onQuickAssistantRenamed: (p) => setQuickAssistantName(p.name),
     };
     const onEvent = (env: GlobalEventEnvelope) =>
       dispatchGlobalEvent(env, handlers);
@@ -94,5 +106,6 @@ export function useGlobalEvents(): void {
     removeConversation,
     markConversationRead,
     addScheduleActivity,
+    setQuickAssistantName,
   ]);
 }

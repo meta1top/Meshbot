@@ -95,6 +95,7 @@
   },
   "assistantDock": {
     "title": "Quick Ask",
+    "rename": "Rename",
     "history": "History",
     "newChat": "New chat",
     "close": "Close",

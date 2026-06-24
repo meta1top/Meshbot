@@ -1,18 +1,26 @@
 "use client";
 
-import type { SessionSummary } from "@meshbot/types-agent";
-import { useAtom, useSetAtom } from "jotai";
+import {
+  QUICK_ASSISTANT_NAME_MAX,
+  type SessionSummary,
+} from "@meshbot/types-agent";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { Clock, Plus, Sparkles, X } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   assistantPanelOpenAtom,
   currentQuickSessionIdAtom,
+  quickAssistantNameAtom,
 } from "@/atoms/assistant-panel";
 import { addSessionAtom } from "@/atoms/sessions";
 import { ChatInput } from "@/components/common/chat-input";
 import { MessageList } from "@/components/session/message-list";
 import { useSessionStream } from "@/hooks/use-session-stream";
+import {
+  fetchQuickAssistantName,
+  renameQuickAssistant,
+} from "@/rest/quick-assistant";
 import {
   createSession,
   fetchQuickSessions,
@@ -31,6 +39,38 @@ export function AssistantDock() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<SessionSummary[]>([]);
   const [saved, setSaved] = useState(false);
+
+  // 随手问名字：dock 标题，可内联改名；ws renamed 事件（agent / 多窗口改名）实时更新 atom
+  const name = useAtomValue(quickAssistantNameAtom);
+  const setName = useSetAtom(quickAssistantNameAtom);
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+
+  // 首次挂载拉取随手问名字（best-effort）
+  useEffect(() => {
+    void fetchQuickAssistantName()
+      .then(setName)
+      .catch(() => {});
+  }, [setName]);
+
+  const startEditName = useCallback(() => {
+    setNameDraft(name);
+    setEditingName(true);
+  }, [name]);
+
+  const commitName = useCallback(async () => {
+    const next = nameDraft.trim();
+    setEditingName(false);
+    if (!next || next === name) return;
+    setName(next); // 乐观更新（服务端 ws renamed 事件随后也会到）
+    try {
+      await renameQuickAssistant(next);
+    } catch {
+      void fetchQuickAssistantName()
+        .then(setName)
+        .catch(() => {});
+    }
+  }, [nameDraft, name, setName]);
 
   // 首条惰性创建 quick 会话；之后走 stream.send
   const handleSend = useCallback(
@@ -72,9 +112,31 @@ export function AssistantDock() {
         <span className="flex h-6 w-6 items-center justify-center rounded-md bg-(--shell-accent) text-white">
           <Sparkles className="h-3.5 w-3.5" />
         </span>
-        <div className="min-w-0 flex-1 truncate text-[14px] font-bold text-foreground">
-          {t("title")}
-        </div>
+        {editingName ? (
+          <input
+            // biome-ignore lint/a11y/noAutofocus: 点击标题进入编辑，聚焦即用户意图
+            autoFocus
+            value={nameDraft}
+            maxLength={QUICK_ASSISTANT_NAME_MAX}
+            onChange={(e) => setNameDraft(e.target.value)}
+            onBlur={() => void commitName()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void commitName();
+              else if (e.key === "Escape") setEditingName(false);
+            }}
+            aria-label={t("rename")}
+            className="min-w-0 flex-1 rounded bg-black/5 px-1.5 py-0.5 text-[14px] font-bold text-foreground outline-none focus:bg-black/10 dark:bg-white/10"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={startEditName}
+            title={t("rename")}
+            className="min-w-0 flex-1 truncate text-left text-[14px] font-bold text-foreground hover:opacity-80"
+          >
+            {name}
+          </button>
+        )}
         <button
           type="button"
           onClick={() => void handleHistory()}

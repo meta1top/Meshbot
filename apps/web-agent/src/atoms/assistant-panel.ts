@@ -1,8 +1,14 @@
+import { QUICK_ASSISTANT_DEFAULT_NAME } from "@meshbot/types-agent";
 import { atom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 
 /** 顶栏 ✦ 控制的随手问面板开关（全局）。 */
 export const assistantPanelOpenAtom = atom(false);
+
+/** 随手问当前名字（dock 标题）。默认回退默认名；dock 打开时从 REST 拉取，ws renamed 事件实时更新。 */
+export const quickAssistantNameAtom = atom<string>(
+  QUICK_ASSISTANT_DEFAULT_NAME,
+);
 
 /** 窄屏（< md）下消息侧栏抽屉开关；顶栏汉堡控制，点会话/切路由自动收起。 */
 export const sidebarDrawerOpenAtom = atom(false);

@@ -95,6 +95,7 @@
   },
   "assistantDock": {
     "title": "随手问",
+    "rename": "重命名",
     "history": "历史",
     "newChat": "新对话",
     "close": "关闭",

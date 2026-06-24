@@ -9,7 +9,7 @@ jest.mock("react", () => ({
 }));
 
 import { IM_WS_EVENTS } from "@meshbot/types";
-import { SCHEDULE_EVENTS } from "@meshbot/types-agent";
+import { QUICK_ASSISTANT_EVENTS, SCHEDULE_EVENTS } from "@meshbot/types-agent";
 import { dispatchGlobalEvent } from "./use-global-events";
 
 function makeHandlers() {
@@ -20,6 +20,7 @@ function makeHandlers() {
     onConversationRemoved: jest.fn(),
     onConversationRead: jest.fn(),
     onScheduleFired: jest.fn(),
+    onQuickAssistantRenamed: jest.fn(),
   };
 }
 
@@ -31,6 +32,7 @@ describe("dispatchGlobalEvent", () => {
     [IM_WS_EVENTS.conversationRemoved, "onConversationRemoved"],
     [IM_WS_EVENTS.conversationRead, "onConversationRead"],
     [SCHEDULE_EVENTS.fired, "onScheduleFired"],
+    [QUICK_ASSISTANT_EVENTS.renamed, "onQuickAssistantRenamed"],
   ])("%s → %s", (type, handlerKey) => {
     const h = makeHandlers();
     const payload = { x: 1 };
