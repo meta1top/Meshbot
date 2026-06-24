@@ -1,9 +1,11 @@
 import { RUNTIME_CONTEXT_PORT, AccountContextService } from "@meshbot/agent";
 import { TxTypeOrmModule } from "@meshbot/common";
+import { QUICK_ASSISTANT_DEFAULT_NAME } from "@meshbot/types-agent";
 import { Global, Module } from "@nestjs/common";
 import { AuthModule } from "./auth.module";
 import { Setting } from "./entities/setting.entity";
 import { CloudIdentityService } from "./services/cloud-identity.service";
+import { QUICK_ASSISTANT_NAME_KEY } from "./services/quick-assistant.service";
 import { SettingService } from "./services/setting.service";
 import type { RuntimeContextPort } from "@meshbot/agent";
 
@@ -32,15 +34,17 @@ import type { RuntimeContextPort } from "@meshbot/agent";
       ): RuntimeContextPort => ({
         async resolve() {
           const cloudUserId = account.getOrThrow();
-          const [identity, language, timezone] = await Promise.all([
+          const [identity, language, timezone, quickName] = await Promise.all([
             cloudIdentity.get(cloudUserId).catch(() => null),
             setting.get("language").catch(() => null),
             setting.get("timezone").catch(() => null),
+            setting.get(QUICK_ASSISTANT_NAME_KEY).catch(() => null),
           ]);
           return {
             displayName: identity?.displayName ?? null,
             language,
             timezone,
+            quickAssistantName: quickName ?? QUICK_ASSISTANT_DEFAULT_NAME,
           };
         },
       }),

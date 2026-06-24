@@ -18,6 +18,8 @@ export {
   type SetupStep,
   type UserInfo,
 } from "./auth";
+export * from "./quick-assistant";
+export * from "./quick-assistant.events";
 export * from "./schedule";
 export * from "./schedule.events";
 export * from "./session";

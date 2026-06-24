@@ -173,6 +173,7 @@ export class GraphService {
   /** 组装运行时上下文消息（稳定 id system:ctx；每 run 刷新；不含易变 now）。 */
   private async buildContextMessage(
     threadId: ThreadId,
+    kind?: string,
   ): Promise<SystemMessage> {
     const cloudUserId = this.account.getOrThrow();
     const ext = this.runtimeContext
@@ -180,10 +181,15 @@ export class GraphService {
       : null;
     const tz =
       ext?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+    // 随手问（quick）会话：注入助手身份（即“你”的名字），让回复贴合用户设定的名字
+    const isQuick = kind === "quick";
     const lines = [
       `cloudUserId: ${cloudUserId}`,
       `sessionId: ${threadId}`,
       ...(ext?.displayName ? [`user: ${ext.displayName}`] : []),
+      ...(isQuick && ext?.quickAssistantName
+        ? [`assistant: ${ext.quickAssistantName}（随手问助手的名字，即“你”）`]
+        : []),
       `model: ${this.modelMeta.model}`,
       ...(ext?.language ? [`language: ${ext.language}`] : []),
       `timezone: ${tz}`,
@@ -325,14 +331,16 @@ export class GraphService {
     threadId: ThreadId,
     inputs: { id: string; content: string }[],
     signal?: AbortSignal,
+    kind?: string,
   ): AsyncGenerator<StreamChunk> {
-    yield* this.streamMessageImpl(threadId, inputs, signal);
+    yield* this.streamMessageImpl(threadId, inputs, signal, kind);
   }
 
   private async *streamMessageImpl(
     threadId: ThreadId,
     inputs: { id: string; content: string }[],
     signal?: AbortSignal,
+    kind?: string,
   ): AsyncGenerator<StreamChunk> {
     this.promptService.reloadIfChanged();
     const systemPrompt = [
@@ -353,7 +361,7 @@ export class GraphService {
       inputMessages.push(new SystemMessage(systemPrompt));
     }
     inputMessages.push(new RemoveMessage({ id: "system:ctx" })); // 删旧（首 run 无则 no-op）
-    inputMessages.push(await this.buildContextMessage(threadId)); // 加新
+    inputMessages.push(await this.buildContextMessage(threadId, kind)); // 加新
     for (const input of inputs) {
       inputMessages.push(
         new HumanMessage({ content: input.content, id: input.id }),
@@ -541,6 +549,7 @@ export class GraphService {
   async *resumeStream(
     threadId: ThreadId,
     signal?: AbortSignal,
+    kind?: string,
   ): AsyncGenerator<StreamChunk> {
     await this.sanitizeOrphanToolCalls(threadId);
     yield* this.runGraphStream(
@@ -548,7 +557,7 @@ export class GraphService {
       {
         messages: [
           new RemoveMessage({ id: "system:ctx" }),
-          await this.buildContextMessage(threadId),
+          await this.buildContextMessage(threadId, kind),
         ],
       },
       signal,

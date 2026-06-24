@@ -16,7 +16,12 @@ import {
   type ImSendInput,
   type PresenceState,
 } from "@meshbot/types";
-import { SCHEDULE_EVENTS, type ScheduleFiredEvent } from "@meshbot/types-agent";
+import {
+  QUICK_ASSISTANT_EVENTS,
+  type QuickAssistantRenamedEvent,
+  SCHEDULE_EVENTS,
+  type ScheduleFiredEvent,
+} from "@meshbot/types-agent";
 import { UseFilters, UseGuards } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
 import { JwtService } from "@nestjs/jwt";
@@ -167,6 +172,17 @@ export class EventsGateway extends BaseWebSocketGateway {
   @OnEvent(SCHEDULE_EVENTS.fired)
   onScheduleFired(payload: ScheduleFiredEvent): void {
     this.emitEnvelope(SCHEDULE_EVENTS.fired, payload);
+  }
+
+  /**
+   * 本地随手问改名 → 信封投递给所属账号浏览器，dock 标题实时刷新。
+   *
+   * QuickAssistantService.setName（agent 改名 tool / UI 改名）经 EventEmitter2 触发，
+   * 在账号上下文内 emit，故 emitEnvelope 能取到账号路由到 acct 房间。
+   */
+  @OnEvent(QUICK_ASSISTANT_EVENTS.renamed)
+  onQuickAssistantRenamed(payload: QuickAssistantRenamedEvent): void {
+    this.emitEnvelope(QUICK_ASSISTANT_EVENTS.renamed, payload);
   }
 
   /**

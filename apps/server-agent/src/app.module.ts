@@ -30,6 +30,7 @@ import { AccountRuntimeModule } from "./account/account-runtime.module";
 import { AuthModule } from "./auth.module";
 import { CronJobModule } from "./cron-job.module";
 import { ImModule } from "./im.module";
+import { QuickAssistantModule } from "./quick-assistant.module";
 import { RuntimeContextModule } from "./runtime-context.module";
 import { SkillModule } from "./skill.module";
 import { HealthController } from "./controllers/health.controller";
@@ -124,6 +125,7 @@ const meshbotDir = resolveMeshbotDir();
     AuthModule,
     ImModule,
     SkillModule,
+    QuickAssistantModule,
     StaticModule.forRoot(),
   ],
   controllers: [

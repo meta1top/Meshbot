@@ -39,3 +39,7 @@ export {
   RUNTIME_CONTEXT_PORT,
   type RuntimeContextPort,
 } from "./graph/runtime-context.port";
+export {
+  QUICK_ASSISTANT_PORT,
+  type QuickAssistantPort,
+} from "./tools/quick-assistant.port";

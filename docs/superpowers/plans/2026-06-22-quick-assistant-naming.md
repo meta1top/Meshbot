@@ -39,14 +39,18 @@
 
 验收：libs/agent 单测绿（含上述两用例）。
 
-## Task 5 — 改名 tool + 端口（libs/agent + server-agent，item 5）
+## Task 5 — 改名 tool + 端口 + 实时事件（libs/agent + server-agent，item 5）
 
 - libs/agent：新增 `tools/quick-assistant.port.ts`（`QUICK_ASSISTANT_PORT` symbol + `{ rename(name: string): Promise<void> }`）与 `tools/builtins/rename-quick-assistant.tool.ts`（仿 skill-install.tool 范式，`@Inject(QUICK_ASSISTANT_PORT)`），参数 zod：新名字非空 + 长度上限。
-- server-agent：模块绑定端口（仿 `skill.module` 的 `SKILL_TOOLS_PORT` useFactory），`rename` → `SettingService.setQuickAssistantName`；写入后发事件/让前端重取，dock 标题刷新。
+- server-agent：模块绑定端口（仿 `skill.module` 的 `SKILL_TOOLS_PORT` useFactory），`rename` → `QuickAssistantService.setName`。
+- **实时事件链（socket，core 诉求）**：改名集中在 server-agent 的 `QuickAssistantService.setName(name)` = `SettingService.set(quick_assistant_name)` + `eventEmitter.emit(QUICK_ASSISTANT_EVENTS.renamed, { name })`（在账号上下文内 emit，路由到 acct 房间）。
+  - types-agent：新增 `quick-assistant.events.ts`：`QUICK_ASSISTANT_EVENTS = { renamed: "quick_assistant.renamed" }` + `QuickAssistantRenamedEventSchema { name }`（仿 schedule.events.ts）。
+  - server-agent `EventsGateway`：加 `@OnEvent(QUICK_ASSISTANT_EVENTS.renamed)` → `emitEnvelope(type, payload)`（仿 onScheduleFired）。
+  - REST PATCH（Task 2）也走 `QuickAssistantService.setName` → 同样 emit，使多窗口/本窗口一致实时更新。
 - 工具可见性：quick 会话可用（或全局，按 graph 工具装配约定）。
-- 单测：tool 调用 port.rename 透传名字（仿 skill-tools.spec）。
+- 单测：tool 调用 port.rename 透传名字（仿 skill-tools.spec）；QuickAssistantService.setName 写 Setting + emit。
 
-验收：libs/agent 单测绿；server-agent 端口实现 typecheck/单测通过。
+验收：libs/agent 单测绿；server-agent 端口实现 + emit typecheck/单测通过；agent 改名后浏览器经 ws 收到 renamed 事件。
 
 ## Task 6 — dock 显示名字 + 内联改名（web-agent，item 3）
 
