@@ -61,13 +61,16 @@ export class EditFileTool implements MeshbotTool<EditArgs, string> {
     if (count > 1 && !args.replace_all) {
       return `Error: old_string matches ${count} times in ${abs}; add more context to make it unique, or set replace_all=true`;
     }
+    const editLine = original
+      .slice(0, original.indexOf(args.old_string))
+      .split("\n").length;
     const updated = args.replace_all
       ? original.split(args.old_string).join(args.new_string)
       : original.replace(args.old_string, () => args.new_string);
     atomicWrite(abs, updated);
     this.fileState.recordWrite(ctx.sessionId, abs, statSync(abs));
     const n = args.replace_all ? count : 1;
-    return `Edited ${abs} (${n} replacement(s))\n\n${snippetAround(updated, args.new_string)}`;
+    return `Edited ${abs} (${n} replacement(s))\n\n${snippetAround(updated, editLine)}`;
   }
 }
 
@@ -83,13 +86,11 @@ function countOccurrences(haystack: string, needle: string): number {
   return n;
 }
 
-/** 定位 marker 首次出现所在行，输出其 ± CONTEXT_LINES 行的 cat -n 片段。 */
-function snippetAround(text: string, marker: string): string {
-  const idx = marker === "" ? -1 : text.indexOf(marker);
-  const markerLine = (idx < 0 ? text : text.slice(0, idx)).split("\n").length;
+/** 围绕给定 1-based 行号，输出其 ± CONTEXT_LINES 行的 cat -n 片段。 */
+function snippetAround(text: string, lineNumber: number): string {
   const lines = text.split("\n");
-  const start = Math.max(0, markerLine - 1 - CONTEXT_LINES);
-  const end = Math.min(lines.length, markerLine + CONTEXT_LINES);
+  const start = Math.max(0, lineNumber - 1 - CONTEXT_LINES);
+  const end = Math.min(lines.length, lineNumber + CONTEXT_LINES);
   const width = String(end).length;
   const out: string[] = [];
   for (let i = start; i < end; i++) {

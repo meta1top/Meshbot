@@ -83,6 +83,17 @@ describe("EditFileTool", () => {
     expect(readFileSync(f, "utf8")).toBe("$& and $1");
   });
 
+  it("删除（new_string 为空）→ 片段定位编辑处而非文件末尾", async () => {
+    const { tool, f } = setup("aaa\nDELME\nbbb\nccc\nddd\neee\nfff\nggg");
+    const out = await tool.execute(
+      { file_path: f, old_string: "DELME\n", new_string: "" },
+      makeCtx(),
+    );
+    expect(readFileSync(f, "utf8")).toBe("aaa\nbbb\nccc\nddd\neee\nfff\nggg");
+    expect(out).toContain("aaa");
+    expect(out).not.toContain("ggg");
+  });
+
   it("未 read 过 → 报错", async () => {
     const { tool, f, fileState } = setup("hello");
     fileState.clearSession("sess-1");
