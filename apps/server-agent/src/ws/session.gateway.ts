@@ -14,6 +14,7 @@ import {
   type RunInterruptedEvent,
   type RunReasoningChunkEvent,
   type RunReasoningDoneEvent,
+  type RunToolCallArgsDeltaEvent,
   type RunToolCallEndEvent,
   type RunToolCallProgressEvent,
   type RunToolCallStartEvent,
@@ -178,6 +179,14 @@ export class SessionGateway extends BaseWebSocketGateway {
     this.server
       .to(payload.sessionId)
       .emit(SESSION_WS_EVENTS.runToolCallProgress, payload);
+  }
+
+  /** run.tool_call_args_delta —— 原样转发到 session 房间（瞬态预览）。 */
+  @OnEvent(SESSION_WS_EVENTS.runToolCallArgsDelta)
+  onRunToolCallArgsDelta(payload: RunToolCallArgsDeltaEvent): void {
+    this.server
+      .to(payload.sessionId)
+      .emit(SESSION_WS_EVENTS.runToolCallArgsDelta, payload);
   }
 
   /**
