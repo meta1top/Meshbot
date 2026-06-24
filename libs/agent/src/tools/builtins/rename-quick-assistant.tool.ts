@@ -17,9 +17,11 @@ export class RenameQuickAssistantTool
 {
   readonly name = "rename_quick_assistant";
   readonly description =
-    "Rename the Quick Ask assistant (随手问) — your own name. " +
-    "Use when the user asks to change your name. Persists the new name and " +
-    "updates the UI in real time. Returns the new name.";
+    "Rename yourself — set your own display name. " +
+    "Use ONLY when the user explicitly asks to change your name " +
+    "(e.g. “改名叫 X” / “call you X”). Takes the new name; persists it and " +
+    "updates the UI in real time. Returns the new name. " +
+    "This is a rename action only — it does not define what your name currently is.";
   readonly schema = renameQuickAssistantSchema;
 
   constructor(

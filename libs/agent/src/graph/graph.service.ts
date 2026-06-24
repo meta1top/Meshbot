@@ -181,14 +181,14 @@ export class GraphService {
       : null;
     const tz =
       ext?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
-    // 随手问（quick）会话：注入助手身份（即“你”的名字），让回复贴合用户设定的名字
+    // 随手问（quick）会话：注入助手自己的名字（用户可改），让回复贴合用户设定的名字
     const isQuick = kind === "quick";
     const lines = [
       `cloudUserId: ${cloudUserId}`,
       `sessionId: ${threadId}`,
       ...(ext?.displayName ? [`user: ${ext.displayName}`] : []),
       ...(isQuick && ext?.quickAssistantName
-        ? [`assistant: ${ext.quickAssistantName}（随手问助手的名字，即“你”）`]
+        ? [`assistantName: ${ext.quickAssistantName}（你自己的名字）`]
         : []),
       `model: ${this.modelMeta.model}`,
       ...(ext?.language ? [`language: ${ext.language}`] : []),
