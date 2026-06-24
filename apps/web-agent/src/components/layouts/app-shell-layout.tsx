@@ -133,7 +133,7 @@ export function AppShellLayout({
               type="button"
               aria-label={t("rail.messages")}
               onClick={() => setSidebarDrawerOpen(false)}
-              className="absolute inset-x-0 top-0 bottom-1.5 z-30 rounded-(--shell-radius) bg-black/50 md:hidden"
+              className="absolute top-0 right-1.5 bottom-1.5 left-0 z-30 rounded-(--shell-radius) bg-black/50 md:hidden"
             />
           )}
 
@@ -193,7 +193,7 @@ export function AppShellLayout({
               type="button"
               aria-label={t("assistant")}
               onClick={() => setPanelOpen(false)}
-              className="absolute inset-x-0 top-0 bottom-1.5 z-30 rounded-(--shell-radius) bg-black/50 xl:hidden"
+              className="absolute top-0 right-1.5 bottom-1.5 left-0 z-30 rounded-(--shell-radius) bg-black/50 xl:hidden"
             />
           )}
 
