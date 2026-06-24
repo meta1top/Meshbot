@@ -16,6 +16,7 @@ import {
 import { addSessionAtom } from "@/atoms/sessions";
 import { ChatInput } from "@/components/common/chat-input";
 import { MessageList } from "@/components/session/message-list";
+import { useChatScroll } from "@/hooks/use-chat-scroll";
 import { useSessionStream } from "@/hooks/use-session-stream";
 import {
   fetchQuickAssistantName,
@@ -35,6 +36,17 @@ export function AssistantDock() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const stream = useSessionStream(sessionId, scrollRef);
+
+  // 自动吸底：流式/新消息时跟随到底（与中间会话同套 useChatScroll 逻辑）。
+  // dock 无历史分页，hasMore=false → 顶部哨兵仅占位、不挂 IO。
+  const topSentinelRef = useRef<HTMLDivElement>(null);
+  useChatScroll({
+    scrollContainerRef: scrollRef,
+    topSentinelRef,
+    messages: stream.messages,
+    hasMore: false,
+    onLoadMore: () => {},
+  });
   const [draft, setDraft] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<SessionSummary[]>([]);
