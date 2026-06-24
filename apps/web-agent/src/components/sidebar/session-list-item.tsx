@@ -18,7 +18,7 @@ import {
   scheduleActivityAtom,
 } from "@/atoms/schedule-activity";
 import { deleteSessionAtom, renameSessionAtom } from "@/atoms/sessions";
-import { SessionDeleteDialog } from "./session-delete-dialog";
+import { ConfirmDialog } from "@/components/common/confirm-dialog";
 
 /**
  * 单条会话。三态：
@@ -33,6 +33,7 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const t = useTranslations("appShell.sessionMenu");
+  const tDelete = useTranslations("appShell.deleteConfirm");
   const scheduleActivity = useAtomValue(scheduleActivityAtom);
   const clearScheduleActivity = useSetAtom(clearScheduleActivityAtom);
   const hasActivity = scheduleActivity.has(session.id);
@@ -179,10 +180,14 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
           </DropdownMenu>
         )}
       </div>
-      <SessionDeleteDialog
+      <ConfirmDialog
         open={confirmOpen}
-        title={session.title}
+        title={tDelete("title", { title: session.title })}
+        description={tDelete("description")}
+        confirmText={tDelete("confirm")}
+        cancelText={tDelete("cancel")}
         loading={deleting}
+        destructive
         onCancel={() => setConfirmOpen(false)}
         onConfirm={handleDeleteConfirm}
       />
