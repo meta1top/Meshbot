@@ -11,6 +11,7 @@ import { SkillService } from "./skills/skill.service";
 import { ToolRegistry } from "./tools/tool-registry";
 import { FileStateService } from "./tools/builtins/file-state.service";
 import { BashTool } from "./tools/builtins/bash.tool";
+import { ReadFileTool } from "./tools/builtins/read-file.tool";
 import { DateTool } from "./tools/builtins/date.tool";
 import { MemoryAddTool } from "./tools/builtins/memory-add.tool";
 import { MemoryCoreWriteTool } from "./tools/builtins/memory-core-write.tool";
@@ -42,6 +43,7 @@ import { SkillUninstallTool } from "./tools/builtins/skill-uninstall.tool";
     ToolRegistry,
     FileStateService,
     BashTool,
+    ReadFileTool,
     DateTool,
     ScheduleCreateTool,
     ScheduleListTool,
