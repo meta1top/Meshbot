@@ -9,6 +9,7 @@ import { McpService } from "./mcp/mcp.service";
 import { MemoryService } from "./memory/memory.service";
 import { SkillService } from "./skills/skill.service";
 import { ToolRegistry } from "./tools/tool-registry";
+import { FileStateService } from "./tools/builtins/file-state.service";
 import { BashTool } from "./tools/builtins/bash.tool";
 import { DateTool } from "./tools/builtins/date.tool";
 import { MemoryAddTool } from "./tools/builtins/memory-add.tool";
@@ -39,6 +40,7 @@ import { SkillUninstallTool } from "./tools/builtins/skill-uninstall.tool";
   ],
   providers: [
     ToolRegistry,
+    FileStateService,
     BashTool,
     DateTool,
     ScheduleCreateTool,
