@@ -133,7 +133,7 @@ export function AppShellLayout({
               type="button"
               aria-label={t("rail.messages")}
               onClick={() => setSidebarDrawerOpen(false)}
-              className="absolute inset-0 z-30 bg-black/50 md:hidden"
+              className="absolute inset-x-0 top-0 bottom-1.5 z-30 rounded-(--shell-radius) bg-black/50 md:hidden"
             />
           )}
 
@@ -142,10 +142,11 @@ export function AppShellLayout({
             <aside
               className={cn(
                 "z-40 flex flex-col w-[260px] shrink-0 overflow-hidden bg-(--shell-sidebar) transition-transform duration-200",
-                // 抽屉态：底部留出壳的 gutter（与内容容器 pb-1.5 一致），不紧贴窗口底
-                "absolute top-0 bottom-1.5 left-0 shadow-2xl",
+                // 抽屉态：底部留出壳的 gutter（与内容容器 pb-1.5 一致）+ 全圆角浮起卡片
+                "absolute top-0 bottom-1.5 left-0 rounded-(--shell-radius) shadow-2xl",
                 sidebarDrawerOpen ? "translate-x-0" : "-translate-x-full",
-                "md:static md:z-auto md:w-[240px] md:translate-x-0 md:rounded-l-(--shell-radius) md:shadow-none md:transition-none",
+                // 内联态还原：去右圆角与内容卡无缝拼接（基类已给左圆角），bottom-1.5 在 static 下被忽略
+                "md:static md:z-auto md:w-[240px] md:translate-x-0 md:rounded-r-none md:shadow-none md:transition-none",
               )}
             >
               {resolvedSidebar}
@@ -192,7 +193,7 @@ export function AppShellLayout({
               type="button"
               aria-label={t("assistant")}
               onClick={() => setPanelOpen(false)}
-              className="absolute inset-0 z-30 bg-black/50 xl:hidden"
+              className="absolute inset-x-0 top-0 bottom-1.5 z-30 rounded-(--shell-radius) bg-black/50 xl:hidden"
             />
           )}
 
@@ -201,8 +202,8 @@ export function AppShellLayout({
             style={{ width: panelWidth }}
             className={cn(
               "z-40 flex shrink-0 overflow-hidden bg-(--shell-content)",
-              // 抽屉态：底部留出壳的 gutter（与内容容器 pb-1.5 一致），不紧贴窗口底
-              "absolute top-0 bottom-1.5 right-0 max-w-[88vw] shadow-2xl transition-transform duration-200",
+              // 抽屉态：底部留出壳的 gutter（与内容容器 pb-1.5 一致）+ 全圆角浮起卡片
+              "absolute top-0 bottom-1.5 right-0 max-w-[88vw] rounded-(--shell-radius) shadow-2xl transition-transform duration-200",
               panelOpen ? "translate-x-0" : "translate-x-full",
               "xl:static xl:z-auto xl:max-w-none xl:translate-x-0 xl:rounded-(--shell-radius) xl:shadow-none xl:transition-none",
               !panelOpen && "xl:hidden",
