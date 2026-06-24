@@ -67,4 +67,15 @@ describe("GrepTool 真实搜索", () => {
     const out = await tool.execute({ pattern: "zzzzz" }, makeCtx());
     expect(out).toContain("No matches");
   });
+
+  it("非法正则返回错误而非 No matches found.", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "grep-"));
+    writeFileSync(path.join(dir, "a.txt"), "hello");
+    // biome-ignore lint/suspicious/noExplicitAny: 仅用到 getWorkspaceDir
+    const config = { getWorkspaceDir: () => dir } as any;
+    const tool = new GrepTool(config);
+    const out = await tool.execute({ pattern: "(" }, makeCtx());
+    expect(out).toContain("Error");
+    expect(out).not.toContain("No matches found.");
+  });
 });

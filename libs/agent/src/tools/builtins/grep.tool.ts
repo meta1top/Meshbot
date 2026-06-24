@@ -7,6 +7,7 @@ import type { MeshbotTool, ToolContext } from "../tool.types";
 
 const TIMEOUT_MS = 30_000;
 const OUTPUT_LIMIT = 30_000;
+const STDERR_LIMIT = 2_000;
 
 const GrepArgsSchema = z.object({
   pattern: z.string().min(1).describe("Regular expression to search for."),
@@ -83,6 +84,8 @@ function runRg(
   return new Promise((resolve) => {
     const buf: string[] = [];
     let len = 0;
+    const errBuf: string[] = [];
+    let errLen = 0;
     const child = spawn(rgPath, argv, { cwd, signal });
     const timer = setTimeout(() => child.kill("SIGKILL"), TIMEOUT_MS);
     child.stdout.on("data", (c: Buffer) => {
@@ -90,6 +93,13 @@ function runRg(
         const s = c.toString("utf8");
         buf.push(s);
         len += s.length;
+      }
+    });
+    child.stderr.on("data", (c: Buffer) => {
+      if (errLen < STDERR_LIMIT) {
+        const s = c.toString("utf8");
+        errBuf.push(s);
+        errLen += s.length;
       }
     });
     child.on("error", (err: NodeJS.ErrnoException) => {
@@ -100,8 +110,18 @@ function runRg(
         resolve(`Error: ripgrep failed: ${err.message}`);
       }
     });
-    child.on("close", () => {
+    child.on("close", (code) => {
       clearTimeout(timer);
+      // rg exit code：0=有匹配 / 1=无匹配 / >=2=真错误（非法正则、路径不可读等）
+      if (code !== null && code >= 2) {
+        const firstLine = errBuf
+          .join("")
+          .split("\n")
+          .map((l) => l.trim())
+          .find((l) => l !== "");
+        resolve(`Error: ripgrep: ${firstLine ?? `exit code ${code}`}`);
+        return;
+      }
       let out = buf.join("");
       if (headLimit !== undefined) {
         out = out.split("\n").slice(0, headLimit).join("\n");
