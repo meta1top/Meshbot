@@ -25,6 +25,7 @@
     "@meshbot/types": "workspace:*",
     "@meshbot/types-agent": "workspace:*",
     "axios": "^1.16.0",
+    "best-effort-json-parser": "^1.4.1",
     "zod": "^3"
   },
   "peerDependencies": {
