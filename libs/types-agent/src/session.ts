@@ -357,6 +357,22 @@ export type RunToolCallProgressEvent = z.infer<
 >;
 
 /**
+ * socket: run.tool_call_args_delta —— LLM 生成某个 tool_call 参数 JSON 的增量。
+ * 纯瞬态（不落库），仅供前端流式「实时预览」write/edit 的内容。
+ * `index` 标识同轮内第几个 tool_call；权威参数随后由 run.tool_call_start 给出。
+ */
+export const RunToolCallArgsDeltaEventSchema = z.object({
+  sessionId: z.string(),
+  messageId: z.string(),
+  index: z.number().int(),
+  name: z.string().optional(),
+  delta: z.string(),
+});
+export type RunToolCallArgsDeltaEvent = z.infer<
+  typeof RunToolCallArgsDeltaEventSchema
+>;
+
+/**
  * Tool 执行结束（成功/失败）。
  *
  * - `resultPreview`：前 200 字符摘要，前端显示。
@@ -455,6 +471,7 @@ export const SESSION_WS_EVENTS = {
   runUsage: "run.usage",
   runToolCallStart: "run.tool_call_start",
   runToolCallProgress: "run.tool_call_progress",
+  runToolCallArgsDelta: "run.tool_call_args_delta",
   runToolCallEnd: "run.tool_call_end",
   runCompactionStart: "run.compaction_start",
   runCompactionDone: "run.compaction_done",
