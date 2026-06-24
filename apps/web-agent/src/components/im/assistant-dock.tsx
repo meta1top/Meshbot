@@ -165,7 +165,7 @@ export function AssistantDock() {
       </div>
 
       {/* 输入 */}
-      <div className="border-t border-border p-2.5">
+      <div className="p-2.5">
         <ChatInput
           value={draft}
           onChange={setDraft}
