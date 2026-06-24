@@ -14,6 +14,7 @@ import { BashTool } from "./tools/builtins/bash.tool";
 import { ReadFileTool } from "./tools/builtins/read-file.tool";
 import { WriteFileTool } from "./tools/builtins/write-file.tool";
 import { EditFileTool } from "./tools/builtins/edit-file.tool";
+import { GrepTool } from "./tools/builtins/grep.tool";
 import { DateTool } from "./tools/builtins/date.tool";
 import { MemoryAddTool } from "./tools/builtins/memory-add.tool";
 import { MemoryCoreWriteTool } from "./tools/builtins/memory-core-write.tool";
@@ -48,6 +49,7 @@ import { SkillUninstallTool } from "./tools/builtins/skill-uninstall.tool";
     ReadFileTool,
     WriteFileTool,
     EditFileTool,
+    GrepTool,
     DateTool,
     ScheduleCreateTool,
     ScheduleListTool,
