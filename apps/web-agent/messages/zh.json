@@ -95,7 +95,6 @@
   },
   "assistantDock": {
     "title": "随手问",
-    "subtitle": "全局助手 · 不绑定当前对话",
     "history": "历史",
     "newChat": "新对话",
     "close": "关闭",

@@ -95,7 +95,6 @@
   },
   "assistantDock": {
     "title": "Quick Ask",
-    "subtitle": "Global assistant · not tied to this conversation",
     "history": "History",
     "newChat": "New chat",
     "close": "Close",
