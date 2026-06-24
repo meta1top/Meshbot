@@ -517,6 +517,18 @@ export class RunnerService implements OnModuleInit {
         // tool_calls 在 assistant_done 里一并带过来，这里不需要单独处理
         continue;
       }
+      if (event.kind === "tool_call_args") {
+        // 纯瞬态：转发给前端做实时预览，不落库。必须在此 continue，
+        // 否则会落进末尾的 usage 兜底分支（event 字段不匹配 → 误记 LLM 调用）。
+        this.emitter.emit(SESSION_WS_EVENTS.runToolCallArgsDelta, {
+          sessionId,
+          messageId: event.messageId,
+          index: event.index,
+          name: event.name,
+          delta: event.delta,
+        });
+        continue;
+      }
       if (event.kind === "chunk") {
         if (!firstChunkLogged) {
           firstChunkLogged = true;

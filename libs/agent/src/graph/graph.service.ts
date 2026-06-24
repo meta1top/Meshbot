@@ -74,6 +74,13 @@ export type StreamChunk =
       toolCalls: unknown[];
     }
   | {
+      kind: "tool_call_args";
+      messageId: string;
+      index: number;
+      name?: string;
+      delta: string;
+    }
+  | {
       kind: "assistant_done";
       messageId: string;
       content: string;
@@ -93,6 +100,33 @@ export type StreamChunk =
       reasoningTokens: number;
       durationMs: number;
     };
+
+/** 从一条 AIMessageChunk 抽取 tool_call 参数增量（流式预览用）。 */
+export function extractToolCallArgDeltas(
+  msg: AIMessageChunk,
+): { index: number; name?: string; delta: string }[] {
+  const chunks = (
+    msg as {
+      tool_call_chunks?: Array<{
+        index?: number;
+        name?: string;
+        args?: string;
+      }>;
+    }
+  ).tool_call_chunks;
+  if (!chunks || chunks.length === 0) return [];
+  const out: { index: number; name?: string; delta: string }[] = [];
+  for (const c of chunks) {
+    const delta = typeof c.args === "string" ? c.args : "";
+    if (!delta && !c.name) continue;
+    out.push({
+      index: typeof c.index === "number" ? c.index : 0,
+      name: c.name,
+      delta,
+    });
+  }
+  return out;
+}
 
 @Injectable()
 export class GraphService {
@@ -732,6 +766,15 @@ export class GraphService {
       ) {
         reasoningDoneYielded = true;
         yield { kind: "reasoning_done", messageId: sid };
+      }
+      for (const d of extractToolCallArgDeltas(msg)) {
+        yield {
+          kind: "tool_call_args",
+          messageId: sid,
+          index: d.index,
+          name: d.name,
+          delta: d.delta,
+        };
       }
       const reasoningDelta =
         typeof msg.additional_kwargs?.reasoning_content === "string"
