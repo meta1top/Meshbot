@@ -15,6 +15,7 @@ import { ReadFileTool } from "./tools/builtins/read-file.tool";
 import { WriteFileTool } from "./tools/builtins/write-file.tool";
 import { EditFileTool } from "./tools/builtins/edit-file.tool";
 import { GrepTool } from "./tools/builtins/grep.tool";
+import { GlobTool } from "./tools/builtins/glob.tool";
 import { DateTool } from "./tools/builtins/date.tool";
 import { MemoryAddTool } from "./tools/builtins/memory-add.tool";
 import { MemoryCoreWriteTool } from "./tools/builtins/memory-core-write.tool";
@@ -50,6 +51,7 @@ import { SkillUninstallTool } from "./tools/builtins/skill-uninstall.tool";
     WriteFileTool,
     EditFileTool,
     GrepTool,
+    GlobTool,
     DateTool,
     ScheduleCreateTool,
     ScheduleListTool,
