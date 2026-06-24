@@ -13,6 +13,7 @@ import { FileStateService } from "./tools/builtins/file-state.service";
 import { BashTool } from "./tools/builtins/bash.tool";
 import { ReadFileTool } from "./tools/builtins/read-file.tool";
 import { WriteFileTool } from "./tools/builtins/write-file.tool";
+import { EditFileTool } from "./tools/builtins/edit-file.tool";
 import { DateTool } from "./tools/builtins/date.tool";
 import { MemoryAddTool } from "./tools/builtins/memory-add.tool";
 import { MemoryCoreWriteTool } from "./tools/builtins/memory-core-write.tool";
@@ -46,6 +47,7 @@ import { SkillUninstallTool } from "./tools/builtins/skill-uninstall.tool";
     BashTool,
     ReadFileTool,
     WriteFileTool,
+    EditFileTool,
     DateTool,
     ScheduleCreateTool,
     ScheduleListTool,
