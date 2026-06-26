@@ -5,6 +5,7 @@ import { AccountContextModule } from "./account/account-context.module";
 import { MeshbotConfigModule } from "./config/meshbot-config.module";
 import { AccountGraphProvider } from "./graph/account-graph.provider";
 import { ContextBuilder } from "./graph/context-builder";
+import { GraphRunner } from "./graph/graph-runner.service";
 import { GraphService } from "./graph/graph.service";
 import { ModelResolver } from "./graph/model-resolver.service";
 import { ThreadStateService } from "./graph/thread-state.service";
@@ -79,6 +80,7 @@ import { SkillUninstallTool } from "./tools/builtins/skill-uninstall.tool";
     AccountGraphProvider,
     ContextBuilder,
     ThreadStateService,
+    GraphRunner,
     GraphService,
   ],
   exports: [

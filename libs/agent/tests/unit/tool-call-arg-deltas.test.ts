@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   extractToolCallArgDeltas,
   resolveToolCallId,
-} from "../../src/graph/graph.service.js";
+} from "../../src/graph/graph-runner.service.js";
 
 describe("extractToolCallArgDeltas", () => {
   it("无 tool_call_chunks → 空数组", () => {

@@ -11,6 +11,7 @@ import { AccountContextService } from "../../src/account/account-context.service
 import { MeshbotConfigService } from "../../src/config/meshbot-config.service";
 import { AccountGraphProvider } from "../../src/graph/account-graph.provider";
 import { ContextBuilder } from "../../src/graph/context-builder.js";
+import { GraphRunner } from "../../src/graph/graph-runner.service.js";
 import { GraphService } from "../../src/graph/graph.service";
 import { ModelResolver } from "../../src/graph/model-resolver.service.js";
 import { ThreadStateService } from "../../src/graph/thread-state.service.js";
@@ -76,13 +77,14 @@ function makeGraphService(opts: {
     modelResolver,
   );
   const threadState = new ThreadStateService(accountGraphProvider);
-  const gs = new GraphService(
+  const graphRunner = new GraphRunner(
     opts.promptService,
-    modelResolver,
     accountGraphProvider,
+    modelResolver,
     contextBuilder,
     threadState,
   );
+  const gs = new GraphService(modelResolver, threadState, graphRunner);
   return { gs, contextBuilder };
 }
 
