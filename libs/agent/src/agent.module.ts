@@ -7,6 +7,7 @@ import { AccountGraphProvider } from "./graph/account-graph.provider";
 import { ContextBuilder } from "./graph/context-builder";
 import { GraphService } from "./graph/graph.service";
 import { ModelResolver } from "./graph/model-resolver.service";
+import { ThreadStateService } from "./graph/thread-state.service";
 import { PromptService } from "./prompt/prompt.service";
 import { McpService } from "./mcp/mcp.service";
 import { MemoryService } from "./memory/memory.service";
@@ -77,6 +78,7 @@ import { SkillUninstallTool } from "./tools/builtins/skill-uninstall.tool";
     ModelResolver,
     AccountGraphProvider,
     ContextBuilder,
+    ThreadStateService,
     GraphService,
   ],
   exports: [

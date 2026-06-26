@@ -13,6 +13,7 @@ import { AccountGraphProvider } from "../../src/graph/account-graph.provider";
 import { ContextBuilder } from "../../src/graph/context-builder.js";
 import { GraphService } from "../../src/graph/graph.service";
 import { ModelResolver } from "../../src/graph/model-resolver.service.js";
+import { ThreadStateService } from "../../src/graph/thread-state.service.js";
 import type { RuntimeContextPort } from "../../src/graph/runtime-context.port";
 import { MEMORY_GUIDE } from "../../src/memory/memory-guide";
 import type { MemoryService } from "../../src/memory/memory.service";
@@ -74,11 +75,13 @@ function makeGraphService(opts: {
     opts.skills,
     modelResolver,
   );
+  const threadState = new ThreadStateService(accountGraphProvider);
   const gs = new GraphService(
     opts.promptService,
     modelResolver,
     accountGraphProvider,
     contextBuilder,
+    threadState,
   );
   return { gs, contextBuilder };
 }

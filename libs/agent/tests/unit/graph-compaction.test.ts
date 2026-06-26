@@ -10,6 +10,7 @@ import { AccountGraphProvider } from "../../src/graph/account-graph.provider";
 import { ContextBuilder } from "../../src/graph/context-builder.js";
 import { GraphService } from "../../src/graph/graph.service";
 import { ModelResolver } from "../../src/graph/model-resolver.service.js";
+import { ThreadStateService } from "../../src/graph/thread-state.service.js";
 import { PromptService } from "../../src/prompt/prompt.service";
 import { ToolRegistry } from "../../src/tools/tool-registry";
 
@@ -60,11 +61,13 @@ describe("GraphService compaction hooks", () => {
       modelResolver,
     );
     const contextBuilder = new ContextBuilder(ctx);
+    const threadState = new ThreadStateService(accountGraphProvider);
     graphService = new GraphService(
       promptService,
       modelResolver,
       accountGraphProvider,
       contextBuilder,
+      threadState,
     );
   });
 
