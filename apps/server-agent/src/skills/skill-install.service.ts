@@ -205,6 +205,11 @@ export class SkillInstallService {
       // SKILL.md 不存在则 readme 为空字符串
     }
 
+    // description 从 SKILL.md frontmatter 解析（与 install 同源）。server-main 的
+    // PublishSkillSchema 要求 description 非空，frontmatter 缺失则回退 displayName 兜底。
+    const description =
+      parseFrontmatterField(readme, "description") || input.displayName;
+
     // 获取 cloud token
     const token = await this.token();
 
@@ -212,6 +217,7 @@ export class SkillInstallService {
     const body: Record<string, unknown> = {
       slug: input.slug,
       displayName: input.displayName,
+      description,
       version: input.version,
       readme,
       archiveBase64,

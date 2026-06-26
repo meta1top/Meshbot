@@ -452,6 +452,8 @@ describe("SkillInstallService", () => {
         expect.objectContaining({
           slug: "pub-skill",
           displayName: "Pub Skill",
+          // description 从 SKILL.md frontmatter 解析（server-main 要求非空）
+          description: "发布测试",
           version: "1.2.3",
           changelog: "初始版本",
           readme: expect.stringContaining("pub-skill") as string,
@@ -467,7 +469,7 @@ describe("SkillInstallService", () => {
       expect(() => Buffer.from(body.archiveBase64, "base64")).not.toThrow();
     });
 
-    it("description 可选字段正确传递", async () => {
+    it("SKILL.md 无 description → 回退 displayName；changelog 未传则不带", async () => {
       const skillDir = path.join(skillsDir, "pub2-skill");
       await mkdir(skillDir, { recursive: true });
       await writeFile(
@@ -488,6 +490,8 @@ describe("SkillInstallService", () => {
         expect.objectContaining({
           slug: "pub2-skill",
           version: "0.1.0",
+          // frontmatter 无 description → 回退 displayName，保证 server-main 的非空校验
+          description: "Pub2",
         }),
         "tok-test",
       );
