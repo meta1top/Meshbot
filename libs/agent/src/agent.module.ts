@@ -83,6 +83,8 @@ import { SkillUninstallTool } from "./tools/builtins/skill-uninstall.tool";
   ],
   exports: [
     GraphRunner,
+    ModelResolver,
+    ThreadStateService,
     PromptService,
     ToolRegistry,
     SkillService,

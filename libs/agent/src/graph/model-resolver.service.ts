@@ -1,6 +1,6 @@
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 import { AccountContextService } from "../account/account-context.service";
 import { MeshbotConfigService } from "../config/meshbot-config.service";
 import { readActiveModelConfig } from "../config/model-config.reader";
@@ -24,8 +24,8 @@ export class ModelResolver {
   constructor(
     private readonly config: MeshbotConfigService,
     private readonly account: AccountContextService,
-    overrideProvider?: ModelProvider,
-    overrideMeta?: { providerType: string; model: string },
+    @Optional() overrideProvider?: ModelProvider,
+    @Optional() overrideMeta?: { providerType: string; model: string },
   ) {
     this.modelMeta = overrideMeta ?? {
       providerType: "unknown",
