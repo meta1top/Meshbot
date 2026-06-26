@@ -3,6 +3,7 @@ import { DiscoveryModule } from "@nestjs/core";
 import { EventEmitterModule } from "@nestjs/event-emitter";
 import { AccountContextModule } from "./account/account-context.module";
 import { MeshbotConfigModule } from "./config/meshbot-config.module";
+import { AccountGraphProvider } from "./graph/account-graph.provider";
 import { GraphService } from "./graph/graph.service";
 import { ModelResolver } from "./graph/model-resolver.service";
 import { PromptService } from "./prompt/prompt.service";
@@ -73,6 +74,7 @@ import { SkillUninstallTool } from "./tools/builtins/skill-uninstall.tool";
     McpService,
     PromptService,
     ModelResolver,
+    AccountGraphProvider,
     GraphService,
   ],
   exports: [

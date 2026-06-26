@@ -7,19 +7,14 @@ import {
   RemoveMessage,
   SystemMessage,
 } from "@langchain/core/messages";
-import { generateSnowflakeId } from "@meshbot/common";
 import { Inject, Injectable, Optional } from "@nestjs/common";
-import { EventEmitter2 } from "@nestjs/event-emitter";
 import { AccountContextService } from "../account/account-context.service";
-import { createSqliteCheckpointer } from "../checkpoint/sqlite-checkpointer";
-import { MeshbotConfigService } from "../config/meshbot-config.service";
 import { MEMORY_GUIDE } from "../memory/memory-guide";
 import { MemoryService } from "../memory/memory.service";
 import { PromptService } from "../prompt/prompt.service";
 import { SkillService } from "../skills/skill.service";
-import { ToolRegistry } from "../tools/tool-registry";
+import { AccountGraphProvider } from "./account-graph.provider";
 import type { GraphState } from "./graph.builder";
-import { buildSupervisorGraph } from "./graph.builder";
 import { ModelResolver } from "./model-resolver.service";
 import {
   RUNTIME_CONTEXT_PORT,
@@ -110,36 +105,11 @@ export function buildSkillsBlock(
 
 @Injectable()
 export class GraphService {
-  /** 按账号缓存的 {graph, checkpointer}：checkpointer 指向该账号 accounts/<id>/agent.db。 */
-  private readonly graphsByAccount = new Map<
-    string,
-    {
-      graph: ReturnType<typeof buildSupervisorGraph>;
-      checkpointer: ReturnType<typeof createSqliteCheckpointer>;
-    }
-  >();
-  /** 模型生成的 AIMessage UUID -> 我方雪花。node 与 runGraphStream 共享，保证一致。 */
-  private readonly msgIdMap = new Map<string, string>();
-
-  /** 取/建某条 AIMessage 的雪花 id（get-or-create，幂等）。
-   *  supervisor 节点（写 checkpointer）与 runGraphStream（发事件）解析同一雪花，
-   *  使 checkpointer / session_messages / WS 事件三处 id 收口一致。 */
-  private readonly resolveMessageId = (modelId: string): string => {
-    let s = this.msgIdMap.get(modelId);
-    if (!s) {
-      s = generateSnowflakeId();
-      this.msgIdMap.set(modelId, s);
-    }
-    return s;
-  };
-
   constructor(
-    private configService: MeshbotConfigService,
     private promptService: PromptService,
-    private readonly toolRegistry: ToolRegistry,
-    private readonly eventEmitter: EventEmitter2,
     private readonly account: AccountContextService,
     private readonly modelResolver: ModelResolver,
+    private readonly accountGraphProvider: AccountGraphProvider,
     @Optional()
     @Inject(RUNTIME_CONTEXT_PORT)
     private readonly runtimeContext?: RuntimeContextPort,
@@ -205,43 +175,13 @@ export class GraphService {
   }
 
   /**
-   * 解析当前账号的 graph+checkpointer（首次建、之后缓存）。须在账号上下文内调用。
-   *
-   * 缓存常驻进程生命周期、不主动关闭——与改造前「单例 checkpointer 从不关闭」一致：
-   * 同账号登出再登录复用同一连接（无重登双连接、无连接泄漏、无 use-after-close）；
-   * 本地轨账号数有限，每账号一条常驻 SqliteSaver 连接的开销可接受。
-   */
-  private accountGraph(): {
-    graph: ReturnType<typeof buildSupervisorGraph>;
-    checkpointer: ReturnType<typeof createSqliteCheckpointer>;
-  } {
-    const acct = this.account.getOrThrow();
-    let entry = this.graphsByAccount.get(acct);
-    if (!entry) {
-      const checkpointer = createSqliteCheckpointer(
-        this.configService.getAccountCheckpointDbPath(),
-      );
-      const graph = buildSupervisorGraph(
-        checkpointer,
-        this.modelResolver.provider(),
-        this.toolRegistry,
-        this.eventEmitter,
-        this.resolveMessageId,
-      );
-      entry = { graph, checkpointer };
-      this.graphsByAccount.set(acct, entry);
-    }
-    return entry;
-  }
-
-  /**
    * 删除某 thread（=sessionId）在当前账号 checkpoint 库的 checkpoints/writes 行。
    * 复用该账号 checkpointer 的同一 better-sqlite3 连接（不另开连接，避免与
    * checkpointer 争锁）。同步执行；幂等：表未懒建或无匹配行均不报错。
    * 须在账号上下文内调用。
    */
   clearThread(threadId: string): void {
-    const db = this.accountGraph().checkpointer.db;
+    const db = this.accountGraphProvider.accountGraph().checkpointer.db;
     for (const table of ["checkpoints", "writes"]) {
       try {
         db.prepare(`DELETE FROM ${table} WHERE thread_id = ?`).run(threadId);
@@ -313,9 +253,11 @@ export class GraphService {
       .filter(Boolean)
       .join("\n\n");
     await this.sanitizeOrphanToolCalls(threadId);
-    const state = await this.accountGraph().graph.getState({
-      configurable: { thread_id: threadId },
-    });
+    const state = await this.accountGraphProvider
+      .accountGraph()
+      .graph.getState({
+        configurable: { thread_id: threadId },
+      });
     const hasHistory =
       Array.isArray((state.values as GraphState)?.messages) &&
       (state.values as GraphState).messages.length > 0;
@@ -356,9 +298,11 @@ export class GraphService {
    * 对应 id（messages.reducer 已扩展过）。
    */
   private async sanitizeOrphanToolCalls(threadId: ThreadId): Promise<void> {
-    const snapshot = await this.accountGraph().graph.getState({
-      configurable: { thread_id: threadId },
-    });
+    const snapshot = await this.accountGraphProvider
+      .accountGraph()
+      .graph.getState({
+        configurable: { thread_id: threadId },
+      });
     const msgs = (snapshot.values as GraphState | undefined)?.messages;
     if (!Array.isArray(msgs) || msgs.length === 0) return;
     const toRemove: string[] = [];
@@ -389,10 +333,12 @@ export class GraphService {
     console.warn(
       `[graph] sanitizeOrphanToolCalls thread=${threadId} 剪掉 ${toRemove.length} 条孤儿 tool_calls AI 消息：${toRemove.join(", ")}`,
     );
-    await this.accountGraph().graph.updateState(
-      { configurable: { thread_id: threadId } },
-      { messages: toRemove.map((id) => new RemoveMessage({ id })) },
-    );
+    await this.accountGraphProvider
+      .accountGraph()
+      .graph.updateState(
+        { configurable: { thread_id: threadId } },
+        { messages: toRemove.map((id) => new RemoveMessage({ id })) },
+      );
   }
 
   /**
@@ -406,9 +352,11 @@ export class GraphService {
     threadId: ThreadId,
     cutoffMessageId: string,
   ): Promise<void> {
-    const snapshot = await this.accountGraph().graph.getState({
-      configurable: { thread_id: threadId },
-    });
+    const snapshot = await this.accountGraphProvider
+      .accountGraph()
+      .graph.getState({
+        configurable: { thread_id: threadId },
+      });
     const msgs = (snapshot.values as GraphState | undefined)?.messages ?? [];
     const idx = msgs.findIndex((m) => m.id === cutoffMessageId);
     if (idx < 0) return;
@@ -420,10 +368,12 @@ export class GraphService {
     console.warn(
       `[graph] cutMessagesAfter thread=${threadId} cutoff=${cutoffMessageId} 剪掉 ${toRemove.length} 条后续消息：${toRemove.join(", ")}`,
     );
-    await this.accountGraph().graph.updateState(
-      { configurable: { thread_id: threadId } },
-      { messages: toRemove.map((id) => new RemoveMessage({ id })) },
-    );
+    await this.accountGraphProvider
+      .accountGraph()
+      .graph.updateState(
+        { configurable: { thread_id: threadId } },
+        { messages: toRemove.map((id) => new RemoveMessage({ id })) },
+      );
   }
 
   /**
@@ -432,9 +382,11 @@ export class GraphService {
    * 给 ContextCompactor 用于切分计算。返回空数组表示线程没历史。
    */
   async getMessagesSnapshot(threadId: ThreadId): Promise<BaseMessage[]> {
-    const snapshot = await this.accountGraph().graph.getState({
-      configurable: { thread_id: threadId },
-    });
+    const snapshot = await this.accountGraphProvider
+      .accountGraph()
+      .graph.getState({
+        configurable: { thread_id: threadId },
+      });
     const msgs = (snapshot.values as GraphState | undefined)?.messages;
     return Array.isArray(msgs) ? msgs : [];
   }
@@ -486,10 +438,12 @@ export class GraphService {
       }),
     );
     ops.push(...params.keep);
-    await this.accountGraph().graph.updateState(
-      { configurable: { thread_id: threadId } },
-      { messages: ops },
-    );
+    await this.accountGraphProvider
+      .accountGraph()
+      .graph.updateState(
+        { configurable: { thread_id: threadId } },
+        { messages: ops },
+      );
   }
 
   /**
@@ -537,14 +491,16 @@ export class GraphService {
   ): AsyncGenerator<StreamChunk> {
     const timing = process.env.MESHBOT_GRAPH_TIMING !== "0";
     const startedAt = Date.now();
-    const stream = await this.accountGraph().graph.stream(input, {
-      configurable: { thread_id: threadId },
-      streamMode: ["messages", "updates"] as const,
-      signal,
-      // LangGraph 默认 recursionLimit=25，长会话 + 频繁 tool 调用容易撞墙
-      // （报 GraphRecursionError）。可通过 MESHBOT_GRAPH_RECURSION_LIMIT 调整。
-      recursionLimit: resolveRecursionLimit(),
-    });
+    const stream = await this.accountGraphProvider
+      .accountGraph()
+      .graph.stream(input, {
+        configurable: { thread_id: threadId },
+        streamMode: ["messages", "updates"] as const,
+        signal,
+        // LangGraph 默认 recursionLimit=25，长会话 + 频繁 tool 调用容易撞墙
+        // （报 GraphRecursionError）。可通过 MESHBOT_GRAPH_RECURSION_LIMIT 调整。
+        recursionLimit: resolveRecursionLimit(),
+      });
     const initMs = Date.now() - startedAt;
     if (timing) {
       console.log(`[graph timing] thread=${threadId} stream-init=${initMs}ms`);
@@ -673,7 +629,7 @@ export class GraphService {
       // 模型 UUID 解析为我方雪花：本轮所有事件 messageId 用 sid，与 supervisor 节点
       // 写入 checkpointer 的 id 同源（get-or-create 命中缓存）。
       seenModelIds.add(messageId);
-      const sid = this.resolveMessageId(messageId);
+      const sid = this.accountGraphProvider.resolveMessageId(messageId);
       currentSid = sid;
       // 本轮首次见到非空 tool_calls：yield reasoning_done。比较 concat 前后的
       // 长度——若之前为 0、之后 > 0，说明这条 chunk 是 reasoning→tool_calls 的
@@ -734,7 +690,7 @@ export class GraphService {
     // 流结束：flush 最后一轮
     yield* flushRound();
     // 清理本 run 见过的模型 UUID 映射，避免长进程累积。
-    for (const id of seenModelIds) this.msgIdMap.delete(id);
+    this.accountGraphProvider.deleteMsgIds(seenModelIds);
     const streamClosedAt = Date.now();
     if (timing) {
       const lastChunkOffset = lastChunkAt ? lastChunkAt - startedAt : -1;
@@ -755,9 +711,11 @@ export class GraphService {
    * 缺 id 的也跳过（不再用 randomUUID 兜底，因为每次刷新会变 → 前端按 id 去重失效）。
    */
   async getHistory(threadId: ThreadId): Promise<Message[]> {
-    const snapshot = await this.accountGraph().graph.getState({
-      configurable: { thread_id: threadId },
-    });
+    const snapshot = await this.accountGraphProvider
+      .accountGraph()
+      .graph.getState({
+        configurable: { thread_id: threadId },
+      });
     const values = snapshot.values as GraphState;
     if (!values?.messages) return [];
     const result: Message[] = [];

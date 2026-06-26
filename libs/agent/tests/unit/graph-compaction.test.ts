@@ -6,6 +6,7 @@ import { EventEmitter2 } from "@nestjs/event-emitter";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AccountContextService } from "../../src/account/account-context.service";
 import { MeshbotConfigService } from "../../src/config/meshbot-config.service";
+import { AccountGraphProvider } from "../../src/graph/account-graph.provider";
 import { GraphService } from "../../src/graph/graph.service";
 import { ModelResolver } from "../../src/graph/model-resolver.service.js";
 import { PromptService } from "../../src/prompt/prompt.service";
@@ -49,13 +50,19 @@ describe("GraphService compaction hooks", () => {
       () => Promise.resolve(fakeModel as never),
       { providerType: "fake", model: "fake-model" },
     );
-    graphService = new GraphService(
+    const eventEmitter = new EventEmitter2();
+    const accountGraphProvider = new AccountGraphProvider(
       configService,
-      promptService,
+      ctx,
       toolRegistry,
-      new EventEmitter2(),
+      eventEmitter,
+      modelResolver,
+    );
+    graphService = new GraphService(
+      promptService,
       ctx,
       modelResolver,
+      accountGraphProvider,
     );
   });
 

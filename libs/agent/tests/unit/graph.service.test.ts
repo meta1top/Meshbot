@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { AccountContextService } from "../../src/account/account-context.service";
 import { MeshbotConfigService } from "../../src/config/meshbot-config.service";
+import { AccountGraphProvider } from "../../src/graph/account-graph.provider";
 import { GraphService } from "../../src/graph/graph.service";
 import { ModelResolver } from "../../src/graph/model-resolver.service.js";
 import type { RuntimeContextPort } from "../../src/graph/runtime-context.port";
@@ -57,13 +58,18 @@ function makeGraphService(opts: {
     () => Promise.resolve(opts.fakeModel as never),
     { providerType: "fake", model: "fake-model" },
   );
-  return new GraphService(
+  const accountGraphProvider = new AccountGraphProvider(
     opts.configService,
-    opts.promptService,
+    opts.account,
     toolRegistry,
     eventEmitter,
+    modelResolver,
+  );
+  return new GraphService(
+    opts.promptService,
     opts.account,
     modelResolver,
+    accountGraphProvider,
     opts.runtimeContext,
     opts.memory,
   );
