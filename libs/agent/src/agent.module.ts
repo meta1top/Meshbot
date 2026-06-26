@@ -4,6 +4,7 @@ import { EventEmitterModule } from "@nestjs/event-emitter";
 import { AccountContextModule } from "./account/account-context.module";
 import { MeshbotConfigModule } from "./config/meshbot-config.module";
 import { GraphService } from "./graph/graph.service";
+import { ModelResolver } from "./graph/model-resolver.service";
 import { PromptService } from "./prompt/prompt.service";
 import { McpService } from "./mcp/mcp.service";
 import { MemoryService } from "./memory/memory.service";
@@ -71,6 +72,7 @@ import { SkillUninstallTool } from "./tools/builtins/skill-uninstall.tool";
     MemoryDeleteTool,
     McpService,
     PromptService,
+    ModelResolver,
     GraphService,
   ],
   exports: [

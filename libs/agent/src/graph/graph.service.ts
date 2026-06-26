@@ -13,7 +13,6 @@ import { EventEmitter2 } from "@nestjs/event-emitter";
 import { AccountContextService } from "../account/account-context.service";
 import { createSqliteCheckpointer } from "../checkpoint/sqlite-checkpointer";
 import { MeshbotConfigService } from "../config/meshbot-config.service";
-import { readActiveModelConfig } from "../config/model-config.reader";
 import { MEMORY_GUIDE } from "../memory/memory-guide";
 import { MemoryService } from "../memory/memory.service";
 import { PromptService } from "../prompt/prompt.service";
@@ -21,12 +20,11 @@ import { SkillService } from "../skills/skill.service";
 import { ToolRegistry } from "../tools/tool-registry";
 import type { GraphState } from "./graph.builder";
 import { buildSupervisorGraph } from "./graph.builder";
+import { ModelResolver } from "./model-resolver.service";
 import {
   RUNTIME_CONTEXT_PORT,
   type RuntimeContextPort,
 } from "./runtime-context.port";
-import { createChatModel } from "./llm.factory";
-import type { ModelProvider } from "./nodes/supervisor.node";
 import type {
   AgentConfig,
   Message,
@@ -120,25 +118,6 @@ export class GraphService {
       checkpointer: ReturnType<typeof createSqliteCheckpointer>;
     }
   >();
-  /**
-   * 当前活跃模型的 provider/model meta，用于 usage 事件标注。
-   *
-   * 当前实现：单例字段，resolveModel() 时刷新。本地轨同一时刻只有一个 enabled
-   * model（model_configs 唯一启用），并发 run 拿到的 modelMeta 相同 → 安全。
-   * 未来支持多模型并发时，要么走 LangGraph configurable 透传，要么 inline 到 usage emit。
-   */
-  private modelMeta: { providerType: string; model: string };
-  /**
-   * 缓存 chat model 实例。key 由 provider/model/baseUrl/apiKey 拼成，配置变化
-   * 自动 miss。避免每次 runOnce 都 initChatModel 动态加载包（~200ms / 次）。
-   */
-  private modelCache = new Map<string, BaseChatModel>();
-  /**
-   * 最终使用的 ModelProvider（注入的 or resolveModel 包装）。
-   * summarize 等非 graph 路径通过此字段调 invoke，避免重复走 DB 读取。
-   */
-  private readonly modelProvider: ModelProvider;
-
   /** 模型生成的 AIMessage UUID -> 我方雪花。node 与 runGraphStream 共享，保证一致。 */
   private readonly msgIdMap = new Map<string, string>();
 
@@ -160,17 +139,13 @@ export class GraphService {
     private readonly toolRegistry: ToolRegistry,
     private readonly eventEmitter: EventEmitter2,
     private readonly account: AccountContextService,
-    @Optional() modelProvider?: ModelProvider,
-    @Optional() modelMeta?: { providerType: string; model: string },
+    private readonly modelResolver: ModelResolver,
     @Optional()
     @Inject(RUNTIME_CONTEXT_PORT)
     private readonly runtimeContext?: RuntimeContextPort,
     @Optional() private readonly memory?: MemoryService,
     @Optional() private readonly skills?: SkillService,
-  ) {
-    this.modelProvider = modelProvider ?? (() => this.resolveModel());
-    this.modelMeta = modelMeta ?? { providerType: "unknown", model: "unknown" };
-  }
+  ) {}
 
   /**
    * 组装记忆段落，追加至系统提示末尾。
@@ -207,7 +182,7 @@ export class GraphService {
       ...(isQuick && ext?.quickAssistantName
         ? [`assistantName: ${ext.quickAssistantName}（你自己的名字）`]
         : []),
-      `model: ${this.modelMeta.model}`,
+      `model: ${this.modelResolver.getMeta().model}`,
       ...(ext?.language ? [`language: ${ext.language}`] : []),
       `timezone: ${tz}`,
     ];
@@ -248,7 +223,7 @@ export class GraphService {
       );
       const graph = buildSupervisorGraph(
         checkpointer,
-        this.modelProvider,
+        this.modelResolver.provider(),
         this.toolRegistry,
         this.eventEmitter,
         this.resolveMessageId,
@@ -280,57 +255,16 @@ export class GraphService {
     }
   }
 
-  /**
-   * 按当前 agent.db 的启用 ModelConfig 构造 chat model。
-   *
-   * 命中缓存直接返回；key 把可能影响行为的字段都拼上，配置变化自动 miss。
-   */
+  /** 委派给 ModelResolver。 */
   private async resolveModel(): Promise<BaseChatModel> {
-    const cfg = readActiveModelConfig(
-      this.configService.getDatabasePath(),
-      this.account.getOrThrow(),
-    );
-    if (!cfg) {
-      throw new Error("当前账号没有启用的模型配置，请先在设置中配置模型");
-    }
-    this.modelMeta = { providerType: cfg.providerType, model: cfg.model };
-    const key = `${cfg.providerType}|${cfg.model}|${cfg.baseUrl ?? ""}|${cfg.apiKey ?? ""}`;
-    const cached = this.modelCache.get(key);
-    if (cached) return cached;
-    const model = await createChatModel(cfg);
-    this.modelCache.set(key, model);
-    return model;
+    return this.modelResolver.resolveModel();
   }
 
   /**
-   * 给 SessionTitleService 用的标题模型：复用 enabled model 凭证，但
-   * - streaming: false（一次性 invoke 不需要流式开销）
-   * - 关掉 deepseek thinking（标题用例不需要 reasoning，关掉可减少 ~1s 思考
-   *   时间 + 节省 token；非 deepseek provider 不传 thinking 参数）
-   *
-   * 独立 cache key 跟主 graph model 共存，避免互相覆盖。
+   * 给 SessionTitleService 用的标题模型：委派给 ModelResolver。
    */
   async getTitleModel(): Promise<BaseChatModel> {
-    const cfg = readActiveModelConfig(
-      this.configService.getDatabasePath(),
-      this.account.getOrThrow(),
-    );
-    if (!cfg) {
-      throw new Error("当前账号没有启用的模型配置，请先在设置中配置模型");
-    }
-    const key = `title|${cfg.providerType}|${cfg.model}|${cfg.baseUrl ?? ""}|${cfg.apiKey ?? ""}`;
-    const cached = this.modelCache.get(key);
-    if (cached) return cached;
-    const modelKwargs =
-      cfg.providerType === "deepseek"
-        ? { thinking: { type: "disabled" } }
-        : undefined;
-    const model = await createChatModel(cfg, {
-      streaming: false,
-      modelKwargs,
-    });
-    this.modelCache.set(key, model);
-    return model;
+    return this.modelResolver.getTitleModel();
   }
 
   /**
@@ -512,23 +446,12 @@ export class GraphService {
    *
    * 用 AbortController 实现 timeoutMs；超时直接抛 Error("Summarize timeout")。
    */
+  /** 委派给 ModelResolver。 */
   async summarize(
     serialized: string,
     opts: { systemPrompt: string; timeoutMs: number; maxTokens: number },
   ): Promise<string> {
-    const model = await this.modelProvider();
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), opts.timeoutMs);
-    try {
-      const resp = await model.invoke(
-        [new SystemMessage(opts.systemPrompt), new HumanMessage(serialized)],
-        { signal: controller.signal, maxTokens: opts.maxTokens } as never,
-      );
-      const content = resp.content;
-      return typeof content === "string" ? content : JSON.stringify(content);
-    } finally {
-      clearTimeout(timer);
-    }
+    return this.modelResolver.summarize(serialized, opts);
   }
 
   /**
@@ -674,8 +597,8 @@ export class GraphService {
         yield {
           kind: "usage",
           messageId: currentSid,
-          providerType: this.modelMeta.providerType,
-          model: this.modelMeta.model,
+          providerType: this.modelResolver.getMeta().providerType,
+          model: this.modelResolver.getMeta().model,
           inputTokens: extracted.inputTokens,
           outputTokens: extracted.outputTokens,
           totalTokens: extracted.totalTokens,
@@ -686,7 +609,7 @@ export class GraphService {
         };
       } else {
         console.warn(
-          `LLM provider ${this.modelMeta.providerType} (${this.modelMeta.model}) 未上报 usage（usage_metadata / response_metadata.usage / additional_kwargs.usage 均缺失）, thread=${threadId} msg=${currentId}`,
+          `LLM provider ${this.modelResolver.getMeta().providerType} (${this.modelResolver.getMeta().model}) 未上报 usage（usage_metadata / response_metadata.usage / additional_kwargs.usage 均缺失）, thread=${threadId} msg=${currentId}`,
         );
       }
     }.bind(this);

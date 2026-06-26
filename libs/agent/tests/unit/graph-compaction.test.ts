@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AccountContextService } from "../../src/account/account-context.service";
 import { MeshbotConfigService } from "../../src/config/meshbot-config.service";
 import { GraphService } from "../../src/graph/graph.service";
+import { ModelResolver } from "../../src/graph/model-resolver.service.js";
 import { PromptService } from "../../src/prompt/prompt.service";
 import { ToolRegistry } from "../../src/tools/tool-registry";
 
@@ -42,14 +43,19 @@ describe("GraphService compaction hooks", () => {
       { getProviders: () => [] } as never,
       new AccountContextService(),
     );
+    const modelResolver = new ModelResolver(
+      configService,
+      ctx,
+      () => Promise.resolve(fakeModel as never),
+      { providerType: "fake", model: "fake-model" },
+    );
     graphService = new GraphService(
       configService,
       promptService,
       toolRegistry,
       new EventEmitter2(),
       ctx,
-      () => Promise.resolve(fakeModel as never),
-      { providerType: "fake", model: "fake-model" },
+      modelResolver,
     );
   });
 

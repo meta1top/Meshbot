@@ -1,7 +1,6 @@
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { AIMessageChunk } from "@langchain/core/messages";
 import type { SystemMessage } from "@langchain/core/messages";
 import { ChatGenerationChunk } from "@langchain/core/outputs";
@@ -11,6 +10,7 @@ import { z } from "zod";
 import { AccountContextService } from "../../src/account/account-context.service";
 import { MeshbotConfigService } from "../../src/config/meshbot-config.service";
 import { GraphService } from "../../src/graph/graph.service";
+import { ModelResolver } from "../../src/graph/model-resolver.service.js";
 import type { RuntimeContextPort } from "../../src/graph/runtime-context.port";
 import { MEMORY_GUIDE } from "../../src/memory/memory-guide";
 import type { MemoryService } from "../../src/memory/memory.service";
@@ -30,6 +30,43 @@ function makeTestServices(testDir: string): {
   (configService as unknown as Record<string, string>).meshbotDir = testDir;
   const promptService = new PromptService(configService, ctx);
   return { ctx, configService, promptService };
+}
+
+/** 构造受测 GraphService 及其依赖的小对象图（fake model 经 ModelResolver 注入）。 */
+function makeGraphService(opts: {
+  configService: MeshbotConfigService;
+  promptService: PromptService;
+  account: AccountContextService;
+  fakeModel: unknown;
+  toolRegistry?: ToolRegistry;
+  eventEmitter?: EventEmitter2;
+  runtimeContext?: RuntimeContextPort;
+  memory?: MemoryService;
+  skills?: never;
+}): GraphService {
+  const toolRegistry =
+    opts.toolRegistry ??
+    new ToolRegistry(
+      { getProviders: () => [] } as never,
+      new AccountContextService(),
+    );
+  const eventEmitter = opts.eventEmitter ?? new EventEmitter2();
+  const modelResolver = new ModelResolver(
+    opts.configService,
+    opts.account,
+    () => Promise.resolve(opts.fakeModel as never),
+    { providerType: "fake", model: "fake-model" },
+  );
+  return new GraphService(
+    opts.configService,
+    opts.promptService,
+    toolRegistry,
+    eventEmitter,
+    opts.account,
+    modelResolver,
+    opts.runtimeContext,
+    opts.memory,
+  );
 }
 
 describe("GraphService", () => {
@@ -74,20 +111,12 @@ describe("GraphService", () => {
         return gen();
       },
     };
-    const toolRegistry = new ToolRegistry(
-      { getProviders: () => [] } as never,
-      new AccountContextService(),
-    );
-    const eventEmitter = new EventEmitter2();
-    graphService = new GraphService(
+    graphService = makeGraphService({
       configService,
       promptService,
-      toolRegistry,
-      eventEmitter,
-      ctx,
-      () => Promise.resolve(fakeModel as never),
-      { providerType: "fake", model: "fake-model" },
-    );
+      account: ctx,
+      fakeModel,
+    });
   });
 
   afterEach(() => {
@@ -313,15 +342,13 @@ describe("GraphService", () => {
       promptService: ps2,
     } = makeTestServices(testDir);
     const model2 = new TwoRoundModel({});
-    const gs = new GraphService(
-      cfg2,
-      ps2,
-      toolRegistry2,
-      new EventEmitter2(),
-      ctx2,
-      () => Promise.resolve(model2 as BaseChatModel),
-      { providerType: "fake", model: "fake-model" },
-    );
+    const gs = makeGraphService({
+      configService: cfg2,
+      promptService: ps2,
+      account: ctx2,
+      fakeModel: model2,
+      toolRegistry: toolRegistry2,
+    });
     const threadId = await gs.startSession({ model: "fake" });
     const events: Array<{ kind: string; messageId: string; t: number }> = [];
     await ctx2.run(TEST_ACCOUNT, async () => {
@@ -418,15 +445,13 @@ describe("GraphService", () => {
       { getProviders: () => [] } as never,
       new AccountContextService(),
     );
-    const gs = new GraphService(
-      cfg3,
-      ps3,
-      toolRegistry3,
-      new EventEmitter2(),
-      ctx3,
-      () => Promise.resolve(new ReasoningModel({}) as BaseChatModel),
-      { providerType: "fake", model: "fake-model" },
-    );
+    const gs = makeGraphService({
+      configService: cfg3,
+      promptService: ps3,
+      account: ctx3,
+      fakeModel: new ReasoningModel({}),
+      toolRegistry: toolRegistry3,
+    });
     const threadId = await gs.startSession({ model: "fake" });
     // biome-ignore lint/suspicious/noExplicitAny: 测试装载事件
     const events: any[] = [];
@@ -537,16 +562,14 @@ describe("GraphService system:ctx 刷新不累积", () => {
       }),
     };
 
-    const gs = new GraphService(
+    const gs = makeGraphService({
       configService,
       promptService,
+      account: ctx,
+      fakeModel: new SimpleModel({}),
       toolRegistry,
-      new EventEmitter2(),
-      ctx,
-      () => Promise.resolve(new SimpleModel({}) as never),
-      { providerType: "fake", model: "fake-model" },
-      fakePort,
-    );
+      runtimeContext: fakePort,
+    });
 
     const threadId = await gs.startSession({ model: "fake" });
 
@@ -618,17 +641,14 @@ describe("GraphService core 记忆注入系统提示", () => {
         return gen();
       },
     };
-    const gs = new GraphService(
+    const gs = makeGraphService({
       configService,
       promptService,
+      account: ctx,
+      fakeModel,
       toolRegistry,
-      new EventEmitter2(),
-      ctx,
-      () => Promise.resolve(fakeModel as never),
-      { providerType: "fake", model: "fake-model" },
-      undefined,
-      fakeMemory as MemoryService | undefined,
-    );
+      memory: fakeMemory as MemoryService | undefined,
+    });
     return { gs, ctx };
   }
 
@@ -749,16 +769,14 @@ describe("GraphService.buildContextMessage", () => {
         return gen();
       },
     };
-    const gs = new GraphService(
+    const gs = makeGraphService({
       configService,
       promptService,
+      account: ctx,
+      fakeModel,
       toolRegistry,
-      new EventEmitter2(),
-      ctx,
-      () => Promise.resolve(fakeModel as never),
-      { providerType: "fake", model: "fake-model" },
       runtimeContext,
-    );
+    });
     return { gs, ctx };
   }
 
