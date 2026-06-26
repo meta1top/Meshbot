@@ -4,20 +4,31 @@ import { Injectable } from "@nestjs/common";
 import { AgentErrorCode } from "../../errors/agent.error-codes";
 import type { SkillPackage, SkillSourceAdapter } from "./skill-source";
 
-/** clawhub.ai API 返回的技能条目形状（按公开 API 推断）。 */
+/**
+ * clawhub.ai API 返回的技能条目形状（按 2026-06 真实响应校准）。
+ * 搜索（/search）与浏览（/skills）字段不完全一致，做并集：
+ * - 搜索条目：`downloads` 扁平、作者在 `ownerHandle`/`owner.handle`、`version` 多为 null
+ * - 浏览条目：下载在 `stats.downloads`、版本在 `latestVersion.version`、`description` 多为 null
+ * 两端展示名都在 `displayName`、简介都在 `summary`。
+ */
 interface ClawhubSkillItem {
   slug?: string;
-  name?: string;
-  display_name?: string;
+  displayName?: string;
+  summary?: string;
   description?: string;
-  author?: string;
-  version?: string;
+  ownerHandle?: string;
+  owner?: { handle?: string };
+  version?: string | null;
+  latestVersion?: { version?: string };
+  tags?: { latest?: string };
   downloads?: number;
+  stats?: { downloads?: number };
 }
 
 /**
  * Clawhub 来源适配器。
- * - list：无关键字走 `GET /api/v1/skills`，有关键字走 `GET /api/v1/search?q=`，映射为 MarketSkillSummary。
+ * - list：无关键字走 `GET /api/v1/skills`（信封 `{items}`），有关键字走
+ *   `GET /api/v1/search?q=`（信封 `{results}`，词法/关键词检索、非自然语言），映射为 MarketSkillSummary。
  * - fetchPackage：`GET /api/v1/download?slug=&version=` 取 zip 包安装。
  */
 @Injectable()
@@ -42,28 +53,36 @@ export class ClawhubSource implements SkillSourceAdapter {
       return [];
     }
 
-    let items: unknown;
+    let payload: unknown;
     try {
-      items = await res.json();
+      payload = await res.json();
     } catch {
       return [];
     }
 
-    const raw = Array.isArray(items)
-      ? items
-      : ((items as { data?: unknown[]; items?: unknown[] }).data ??
-        (items as { items?: unknown[] }).items ??
-        []);
+    // 信封：search→{results}、browse→{items}；data 为防御性兜底，亦容忍裸数组。
+    const env = payload as {
+      results?: unknown[];
+      items?: unknown[];
+      data?: unknown[];
+    };
+    const raw = Array.isArray(payload)
+      ? payload
+      : (env.results ?? env.items ?? env.data ?? []);
 
     return (raw as ClawhubSkillItem[]).map((item) => ({
       source: "clawhub" as const,
       ref: item.slug ?? "",
       slug: item.slug ?? "",
-      displayName: item.display_name ?? item.name ?? item.slug ?? "",
-      description: item.description ?? "",
-      author: item.author ?? "",
-      latestVersion: item.version ?? "0.0.0",
-      downloads: item.downloads,
+      displayName: item.displayName ?? item.slug ?? "",
+      // summary 是两端共有的简介；浏览的 description 多为 null，仅作兜底。
+      description: item.summary ?? item.description ?? "",
+      author: item.ownerHandle ?? item.owner?.handle ?? "",
+      // 版本取处：浏览在 latestVersion.version / tags.latest；搜索的 version 多为
+      // null（且无 latestVersion/tags）→ 落空串表「未知」，由前端隐藏徽章、安装回退最新。
+      latestVersion:
+        item.latestVersion?.version ?? item.version ?? item.tags?.latest ?? "",
+      downloads: item.downloads ?? item.stats?.downloads,
     }));
   }
 

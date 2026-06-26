@@ -13,20 +13,68 @@ describe("ClawhubSource", () => {
   });
 
   // ── list ──────────────────────────────────────────────────────────────────
+  // 真实 clawhub.ai API（2026-06 抓取）：
+  // - 搜索 GET /api/v1/search?q= → { results: [{ slug, displayName, summary,
+  //   version, downloads, ownerHandle, owner:{handle} }] }（带 score 排序）
+  // - 浏览 GET /api/v1/skills    → { items: [{ slug, displayName, summary,
+  //   description, tags:{latest}, stats:{downloads}, latestVersion:{version} }],
+  //   nextCursor }
+  // 两端字段形状不同：camelCase + 嵌套，且 author/version/downloads 取处各异。
   describe("list - 映射 MarketSkillSummary", () => {
-    it("从 clawhub.ai 拉取并映射为 MarketSkillSummary（source='clawhub'）", async () => {
+    it("search 响应 {results:[…]}：displayName/summary/ownerHandle/扁平 downloads", async () => {
       jest.spyOn(global, "fetch").mockResolvedValue({
         ok: true,
-        json: async () => [
-          {
-            slug: "my-skill",
-            display_name: "My Skill",
-            description: "A cool skill",
-            author: "alice",
-            version: "1.2.0",
-            downloads: 500,
-          },
-        ],
+        json: async () => ({
+          results: [
+            {
+              score: 4.09,
+              slug: "chrome",
+              displayName: "Chrome",
+              summary: "Chrome DevTools Protocol and automation patterns.",
+              version: null,
+              downloads: 4939,
+              updatedAt: 1778486238781,
+              ownerHandle: "ivangdavila",
+              owner: { handle: "ivangdavila", displayName: "Iván" },
+            },
+          ],
+        }),
+      } as unknown as Response);
+
+      const result = await source.list("chrome");
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        source: "clawhub",
+        ref: "chrome",
+        slug: "chrome",
+        displayName: "Chrome",
+        description: "Chrome DevTools Protocol and automation patterns.",
+        author: "ivangdavila",
+        downloads: 4939,
+        // 搜索响应 version 为 null、无 latestVersion/tags → 版本未知用空串
+        //（前端据此隐藏 vX 徽章，安装时空版本回退「下载最新」），不再误显 v0.0.0。
+        latestVersion: "",
+      });
+    });
+
+    it("browse 响应 {items:[…]}：summary 作描述、stats.downloads、latestVersion.version", async () => {
+      jest.spyOn(global, "fetch").mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          items: [
+            {
+              slug: "ai-woodworking",
+              displayName: "Ai Woodworking",
+              summary: "AI 木工制作指南。",
+              description: null,
+              tags: { latest: "1.0.1" },
+              stats: { downloads: 62, stars: 0 },
+              latestVersion: { version: "1.0.0", license: "MIT-0" },
+            },
+          ],
+          nextCursor: "abc",
+        }),
       } as unknown as Response);
 
       const result = await source.list();
@@ -34,20 +82,19 @@ describe("ClawhubSource", () => {
       expect(result).toHaveLength(1);
       expect(result[0]).toMatchObject({
         source: "clawhub",
-        ref: "my-skill",
-        slug: "my-skill",
-        displayName: "My Skill",
-        description: "A cool skill",
-        author: "alice",
-        latestVersion: "1.2.0",
-        downloads: 500,
+        ref: "ai-woodworking",
+        slug: "ai-woodworking",
+        displayName: "Ai Woodworking",
+        description: "AI 木工制作指南。",
+        latestVersion: "1.0.0",
+        downloads: 62,
       });
     });
 
     it("带查询参数 q 时，URL 包含 encoded q", async () => {
       jest.spyOn(global, "fetch").mockResolvedValue({
         ok: true,
-        json: async () => [],
+        json: async () => ({ results: [] }),
       } as unknown as Response);
 
       await source.list("file tools");
@@ -68,27 +115,6 @@ describe("ClawhubSource", () => {
         status: 503,
       } as unknown as Response);
       expect(await source.list()).toEqual([]);
-    });
-
-    it("支持 { data: [] } 响应信封", async () => {
-      jest.spyOn(global, "fetch").mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          data: [
-            {
-              slug: "wrapped",
-              display_name: "Wrapped",
-              description: "",
-              author: "bob",
-              version: "0.1.0",
-            },
-          ],
-        }),
-      } as unknown as Response);
-
-      const result = await source.list();
-      expect(result).toHaveLength(1);
-      expect(result[0].slug).toBe("wrapped");
     });
   });
 
