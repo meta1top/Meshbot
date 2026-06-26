@@ -7,7 +7,7 @@ export type {
   Message,
   StreamChunk,
   ThreadId,
-} from "./graph/graph.service";
+} from "./graph/graph.types";
 export { COMPACTION_SYSTEM_PROMPT } from "./prompt/compactor.prompt";
 export { GraphService } from "./graph/graph.service";
 export type { ModelProvider } from "./graph/nodes/supervisor.node";
