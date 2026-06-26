@@ -4,9 +4,9 @@ import type { InstalledSkill, MarketSkillSummary } from "@meshbot/types-agent";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ToolPage } from "@/components/layouts/tool-page";
-import { InstallFromGithub } from "@/components/skills/install-from-github";
 import { InstalledSkillCard } from "@/components/skills/installed-skill-card";
 import { MarketSkillCard } from "@/components/skills/market-skill-card";
+import { MarketSkillCardSkeleton } from "@/components/skills/market-skill-card-skeleton";
 import { PublishSkillDialog } from "@/components/skills/publish-skill-dialog";
 import {
   SkillsSidebar,
@@ -30,8 +30,11 @@ export default function SkillsPage() {
   const [query, setQuery] = useState("");
   const [marketItems, setMarketItems] = useState<MarketSkillSummary[]>([]);
   const [loadingMarket, setLoadingMarket] = useState(false);
-  const [marketError, setMarketError] = useState<string | null>(null);
+  const [marketLoadFailed, setMarketLoadFailed] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 请求时序守卫：只认最新一次 loadMarket 的响应，丢弃迟到的旧响应。
+  // 否则「浏览(慢~1.5s) 与 搜索」乱序返回会互相覆盖 → 结果闪烁 / 偶发被旧空响应清空。
+  const reqIdRef = useRef(0);
 
   const reloadInstalled = useCallback(async () => {
     setLoadingInstalled(true);
@@ -47,29 +50,34 @@ export default function SkillsPage() {
     void reloadInstalled();
   }, [reloadInstalled]);
 
-  // 切换到市场视图时拉取列表
+  // 市场列表拉取。useCallback 依赖恒为空（错误用布尔位、不引 t）→ 引用稳定，
+  // 避免进入视图切换 effect 的依赖后因 t 重建而反复触发「清空+重拉」造成闪烁/空窗。
+  // reqIdRef 守卫：仅最新一次请求的响应被采纳，迟到的旧响应丢弃。
   const loadMarket = useCallback(
     async (source: "system" | "clawhub", q: string) => {
+      const myId = ++reqIdRef.current;
       setLoadingMarket(true);
-      setMarketError(null);
+      setMarketLoadFailed(false);
       try {
         const items = await fetchMarket(source, q || undefined);
-        setMarketItems(items);
+        if (myId === reqIdRef.current) setMarketItems(items);
       } catch {
-        setMarketError(t("marketLoadFailed"));
-        setMarketItems([]);
+        if (myId === reqIdRef.current) {
+          setMarketLoadFailed(true);
+          setMarketItems([]);
+        }
       } finally {
-        setLoadingMarket(false);
+        if (myId === reqIdRef.current) setLoadingMarket(false);
       }
     },
-    [t],
+    [],
   );
 
   // 视图切换时重置搜索 + 拉取市场数据
   useEffect(() => {
     setQuery("");
     setMarketItems([]);
-    setMarketError(null);
+    setMarketLoadFailed(false);
     if (activeView === "system" || activeView === "clawhub") {
       void loadMarket(activeView, "");
     }
@@ -100,25 +108,19 @@ export default function SkillsPage() {
 
   const isMarketView = activeView === "system" || activeView === "clawhub";
 
-  // 页头标题随当前视图（已安装 / MeshBot / ClawHub / GitHub）。
+  // 页头标题随当前视图（已安装 / MeshBot / ClawHub）。
   const pageTitle =
     activeView === "installed"
       ? t("installedTitle")
       : activeView === "system"
         ? t("sourceOurMarket")
-        : activeView === "clawhub"
-          ? t("sourceClawhub")
-          : t("sourceGithub");
+        : t("sourceClawhub");
 
   return (
     <ToolPage
       title={pageTitle}
       sidebar={
-        <SkillsSidebar
-          installed={installed}
-          activeView={activeView}
-          onSelect={setActiveView}
-        />
+        <SkillsSidebar activeView={activeView} onSelect={setActiveView} />
       }
       tabs={
         isMarketView ? (
@@ -135,7 +137,7 @@ export default function SkillsPage() {
       {/* ── 已安装视图 ── */}
       {activeView === "installed" &&
         (loadingInstalled ? (
-          <p className="text-sm text-muted-foreground">{t("loading")}</p>
+          <MarketSkillCardSkeleton />
         ) : installed.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t("installedEmpty")}</p>
         ) : (
@@ -154,9 +156,9 @@ export default function SkillsPage() {
       {/* ── 市场视图（system / clawhub）── */}
       {isMarketView &&
         (loadingMarket ? (
-          <p className="text-sm text-muted-foreground">{t("loading")}</p>
-        ) : marketError ? (
-          <p className="text-sm text-destructive">{marketError}</p>
+          <MarketSkillCardSkeleton />
+        ) : marketLoadFailed ? (
+          <p className="text-sm text-destructive">{t("marketLoadFailed")}</p>
         ) : marketItems.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t("marketEmpty")}</p>
         ) : (
@@ -171,11 +173,6 @@ export default function SkillsPage() {
             ))}
           </div>
         ))}
-
-      {/* ── GitHub 安装视图 ── */}
-      {activeView === "github" && (
-        <InstallFromGithub onInstalled={handleInstalled} />
-      )}
 
       {/* 上传到市场对话框 */}
       <PublishSkillDialog
