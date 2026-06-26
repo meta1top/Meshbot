@@ -10,11 +10,13 @@ import { z } from "zod";
 import { AccountContextService } from "../../src/account/account-context.service";
 import { MeshbotConfigService } from "../../src/config/meshbot-config.service";
 import { AccountGraphProvider } from "../../src/graph/account-graph.provider";
+import { ContextBuilder } from "../../src/graph/context-builder.js";
 import { GraphService } from "../../src/graph/graph.service";
 import { ModelResolver } from "../../src/graph/model-resolver.service.js";
 import type { RuntimeContextPort } from "../../src/graph/runtime-context.port";
 import { MEMORY_GUIDE } from "../../src/memory/memory-guide";
 import type { MemoryService } from "../../src/memory/memory.service";
+import type { SkillService } from "../../src/skills/skill.service";
 import { PromptService } from "../../src/prompt/prompt.service";
 import { ToolRegistry } from "../../src/tools/tool-registry";
 import type { MeshbotTool } from "../../src/tools/tool.types";
@@ -43,8 +45,8 @@ function makeGraphService(opts: {
   eventEmitter?: EventEmitter2;
   runtimeContext?: RuntimeContextPort;
   memory?: MemoryService;
-  skills?: never;
-}): GraphService {
+  skills?: SkillService;
+}): { gs: GraphService; contextBuilder: ContextBuilder } {
   const toolRegistry =
     opts.toolRegistry ??
     new ToolRegistry(
@@ -65,14 +67,20 @@ function makeGraphService(opts: {
     eventEmitter,
     modelResolver,
   );
-  return new GraphService(
-    opts.promptService,
+  const contextBuilder = new ContextBuilder(
     opts.account,
-    modelResolver,
-    accountGraphProvider,
     opts.runtimeContext,
     opts.memory,
+    opts.skills,
+    modelResolver,
   );
+  const gs = new GraphService(
+    opts.promptService,
+    modelResolver,
+    accountGraphProvider,
+    contextBuilder,
+  );
+  return { gs, contextBuilder };
 }
 
 describe("GraphService", () => {
@@ -117,12 +125,12 @@ describe("GraphService", () => {
         return gen();
       },
     };
-    graphService = makeGraphService({
+    ({ gs: graphService } = makeGraphService({
       configService,
       promptService,
       account: ctx,
       fakeModel,
-    });
+    }));
   });
 
   afterEach(() => {
@@ -348,7 +356,7 @@ describe("GraphService", () => {
       promptService: ps2,
     } = makeTestServices(testDir);
     const model2 = new TwoRoundModel({});
-    const gs = makeGraphService({
+    const { gs } = makeGraphService({
       configService: cfg2,
       promptService: ps2,
       account: ctx2,
@@ -451,7 +459,7 @@ describe("GraphService", () => {
       { getProviders: () => [] } as never,
       new AccountContextService(),
     );
-    const gs = makeGraphService({
+    const { gs } = makeGraphService({
       configService: cfg3,
       promptService: ps3,
       account: ctx3,
@@ -568,7 +576,7 @@ describe("GraphService system:ctx 刷新不累积", () => {
       }),
     };
 
-    const gs = makeGraphService({
+    const { gs } = makeGraphService({
       configService,
       promptService,
       account: ctx,
@@ -629,6 +637,7 @@ describe("GraphService core 记忆注入系统提示", () => {
 
   function makeGs(fakeMemory?: Partial<MemoryService>): {
     gs: GraphService;
+    contextBuilder: ContextBuilder;
     ctx: AccountContextService;
   } {
     const ctx = new AccountContextService();
@@ -647,7 +656,7 @@ describe("GraphService core 记忆注入系统提示", () => {
         return gen();
       },
     };
-    const gs = makeGraphService({
+    const { gs, contextBuilder } = makeGraphService({
       configService,
       promptService,
       account: ctx,
@@ -655,14 +664,12 @@ describe("GraphService core 记忆注入系统提示", () => {
       toolRegistry,
       memory: fakeMemory as MemoryService | undefined,
     });
-    return { gs, ctx };
+    return { gs, contextBuilder, ctx };
   }
 
   it("core 非空时：buildMemorySection 含 MEMORY_GUIDE + <memory> + core 内容", () => {
-    const { gs } = makeGs({ readCore: () => "用户偏好简洁" });
-    const section = (
-      gs as unknown as { buildMemorySection(): string }
-    ).buildMemorySection();
+    const { contextBuilder } = makeGs({ readCore: () => "用户偏好简洁" });
+    const section = contextBuilder.buildMemorySection();
     // 含 MEMORY_GUIDE 关键句
     expect(section).toContain("two-tier persistent memory");
     expect(section).toContain(MEMORY_GUIDE.slice(0, 30));
@@ -673,19 +680,15 @@ describe("GraphService core 记忆注入系统提示", () => {
   });
 
   it("core 为空时：buildMemorySection 含 MEMORY_GUIDE，不含 <memory>", () => {
-    const { gs } = makeGs({ readCore: () => "" });
-    const section = (
-      gs as unknown as { buildMemorySection(): string }
-    ).buildMemorySection();
+    const { contextBuilder } = makeGs({ readCore: () => "" });
+    const section = contextBuilder.buildMemorySection();
     expect(section).toContain("two-tier persistent memory");
     expect(section).not.toContain("<memory>");
   });
 
   it("无 MemoryService 时：buildMemorySection 仍返回 MEMORY_GUIDE（不报错）", () => {
-    const { gs } = makeGs(undefined);
-    const section = (
-      gs as unknown as { buildMemorySection(): string }
-    ).buildMemorySection();
+    const { contextBuilder } = makeGs(undefined);
+    const section = contextBuilder.buildMemorySection();
     // 无 MemoryService → memory?.readCore() 为 undefined → core="" → 仅返回 GUIDE
     expect(section).toContain("two-tier persistent memory");
     expect(section).not.toContain("<memory>");
@@ -754,9 +757,9 @@ describe("GraphService.buildContextMessage", () => {
     rmSync(testDir, { recursive: true, force: true });
   });
 
-  /** 构造带可选 runtimeContext 的 GraphService。 */
+  /** 构造带可选 runtimeContext 的 ContextBuilder。 */
   function makeGs(runtimeContext?: RuntimeContextPort): {
-    gs: GraphService;
+    contextBuilder: ContextBuilder;
     ctx: AccountContextService;
   } {
     const ctx = new AccountContextService();
@@ -775,7 +778,7 @@ describe("GraphService.buildContextMessage", () => {
         return gen();
       },
     };
-    const gs = makeGraphService({
+    const { contextBuilder } = makeGraphService({
       configService,
       promptService,
       account: ctx,
@@ -783,7 +786,7 @@ describe("GraphService.buildContextMessage", () => {
       toolRegistry,
       runtimeContext,
     });
-    return { gs, ctx };
+    return { contextBuilder, ctx };
   }
 
   it("有 port 时：id=system:ctx，content 含各字段，不含 now/日期", async () => {
@@ -794,14 +797,10 @@ describe("GraphService.buildContextMessage", () => {
         timezone: "Asia/Shanghai",
       }),
     };
-    const { gs, ctx } = makeGs(fakePort);
+    const { contextBuilder, ctx } = makeGs(fakePort);
 
     const msg = await ctx.run("acct-1", () =>
-      (
-        gs as unknown as {
-          buildContextMessage(t: string): Promise<SystemMessage>;
-        }
-      ).buildContextMessage("s1"),
+      contextBuilder.buildContextMessage("s1"),
     );
 
     expect(msg.id).toBe("system:ctx");
@@ -819,14 +818,10 @@ describe("GraphService.buildContextMessage", () => {
   });
 
   it("无 port 时：timezone 兜底为 Intl 本地时区", async () => {
-    const { gs, ctx } = makeGs(undefined);
+    const { contextBuilder, ctx } = makeGs(undefined);
 
     const msg = await ctx.run("acct-2", () =>
-      (
-        gs as unknown as {
-          buildContextMessage(t: string): Promise<SystemMessage>;
-        }
-      ).buildContextMessage("s2"),
+      contextBuilder.buildContextMessage("s2"),
     );
 
     const content = typeof msg.content === "string" ? msg.content : "";
