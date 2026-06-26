@@ -1,4 +1,4 @@
-import { GraphService } from "@meshbot/agent";
+import { ThreadStateService } from "@meshbot/agent";
 import { Injectable } from "@nestjs/common";
 
 /**
@@ -10,13 +10,13 @@ import { Injectable } from "@nestjs/common";
  */
 @Injectable()
 export class CheckpointerCleanupService {
-  constructor(private readonly graph: GraphService) {}
+  constructor(private readonly threadState: ThreadStateService) {}
 
   /**
    * 删某 thread_id（=sessionId）的全部 checkpoints + writes。幂等：不存在不报错。
    * 须在账号上下文内调用（GraphService 按当前账号解析 checkpoint 库）。
    */
   async deleteThread(threadId: string): Promise<void> {
-    this.graph.clearThread(threadId);
+    this.threadState.clearThread(threadId);
   }
 }

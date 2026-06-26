@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { GraphService, PromptService } from "@meshbot/agent";
+import { ModelResolver, PromptService } from "@meshbot/agent";
 import { Injectable } from "@nestjs/common";
 import { SessionService } from "./session.service";
 import { parseSuggestions } from "./suggestion.util";
@@ -26,7 +26,7 @@ export class SuggestionService {
 
   constructor(
     private readonly sessions: SessionService,
-    private readonly graph: GraphService,
+    private readonly modelResolver: ModelResolver,
     private readonly prompt: PromptService,
   ) {}
 
@@ -53,7 +53,7 @@ export class SuggestionService {
     const template =
       this.prompt.getPrompt("next-action-suggestions") ?? FALLBACK_PROMPT;
     const promptText = template.replaceAll("{{titles}}", titles.join("\n"));
-    const model = await this.graph.getTitleModel();
+    const model = await this.modelResolver.getTitleModel();
     const res = await model.invoke(promptText);
     const raw = typeof res.content === "string" ? res.content : "";
     return parseSuggestions(raw, MAX_SUGGESTIONS);

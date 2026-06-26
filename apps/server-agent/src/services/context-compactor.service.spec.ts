@@ -1,6 +1,6 @@
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import type { BaseMessage } from "@langchain/core/messages";
-import { GraphService } from "@meshbot/agent";
+import { ModelResolver, ThreadStateService } from "@meshbot/agent";
 import { SESSION_WS_EVENTS } from "@meshbot/types-agent";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { Test } from "@nestjs/testing";
@@ -24,18 +24,21 @@ function buildMessages(count: number): BaseMessage[] {
 
 describe("ContextCompactor", () => {
   let compactor: ContextCompactor;
-  let graph: jest.Mocked<GraphService>;
+  let threadState: jest.Mocked<ThreadStateService>;
+  let modelResolver: jest.Mocked<ModelResolver>;
   let modelConfig: jest.Mocked<ModelConfigService>;
   let sessionMessages: jest.Mocked<SessionMessageService>;
   let emitter: EventEmitter2;
   let emitSpy: jest.SpyInstance;
 
   beforeEach(async () => {
-    graph = {
+    threadState = {
       getMessagesSnapshot: jest.fn(),
-      summarize: jest.fn(),
       applyCompaction: jest.fn(),
-    } as unknown as jest.Mocked<GraphService>;
+    } as unknown as jest.Mocked<ThreadStateService>;
+    modelResolver = {
+      summarize: jest.fn(),
+    } as unknown as jest.Mocked<ModelResolver>;
     modelConfig = {
       findEnabled: jest.fn(),
     } as unknown as jest.Mocked<ModelConfigService>;
@@ -47,7 +50,8 @@ describe("ContextCompactor", () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         ContextCompactor,
-        { provide: GraphService, useValue: graph },
+        { provide: ThreadStateService, useValue: threadState },
+        { provide: ModelResolver, useValue: modelResolver },
         { provide: ModelConfigService, useValue: modelConfig },
         { provide: SessionMessageService, useValue: sessionMessages },
         { provide: EventEmitter2, useValue: emitter },
@@ -61,12 +65,12 @@ describe("ContextCompactor", () => {
     modelConfig.findEnabled.mockResolvedValue({
       contextWindow: 10_000,
     } as never);
-    graph.getMessagesSnapshot.mockResolvedValue(buildMessages(10));
-    graph.summarize.mockResolvedValue("MOCK_SUMMARY");
+    threadState.getMessagesSnapshot.mockResolvedValue(buildMessages(10));
+    modelResolver.summarize.mockResolvedValue("MOCK_SUMMARY");
     await compactor.compact("s1");
-    expect(graph.summarize).toHaveBeenCalledTimes(1);
-    expect(graph.applyCompaction).toHaveBeenCalledTimes(1);
-    const applyArg = graph.applyCompaction.mock.calls[0][1] as {
+    expect(modelResolver.summarize).toHaveBeenCalledTimes(1);
+    expect(threadState.applyCompaction).toHaveBeenCalledTimes(1);
+    const applyArg = threadState.applyCompaction.mock.calls[0][1] as {
       removeIds: string[];
       summaryText: string;
       keep: unknown[];
@@ -95,10 +99,10 @@ describe("ContextCompactor", () => {
     modelConfig.findEnabled.mockResolvedValue({
       contextWindow: 1_000_000,
     } as never);
-    graph.getMessagesSnapshot.mockResolvedValue(buildMessages(2));
+    threadState.getMessagesSnapshot.mockResolvedValue(buildMessages(2));
     const r = await compactor.compact("s1");
     expect(r).toBeNull();
-    expect(graph.summarize).not.toHaveBeenCalled();
+    expect(modelResolver.summarize).not.toHaveBeenCalled();
     expect(emitSpy).not.toHaveBeenCalled();
   });
 
@@ -106,7 +110,7 @@ describe("ContextCompactor", () => {
     modelConfig.findEnabled.mockResolvedValue({
       contextWindow: 1_000_000,
     } as never);
-    graph.getMessagesSnapshot.mockResolvedValue(buildMessages(2));
+    threadState.getMessagesSnapshot.mockResolvedValue(buildMessages(2));
     await expect(
       compactor.compact("s1", { force: true, reason: "ctx-exceeded" }),
     ).rejects.toBeInstanceOf(CompactionNothingToCompact);
@@ -116,12 +120,12 @@ describe("ContextCompactor", () => {
     modelConfig.findEnabled.mockResolvedValue({
       contextWindow: 10_000,
     } as never);
-    graph.getMessagesSnapshot.mockResolvedValue(buildMessages(10));
-    graph.summarize.mockRejectedValue(new Error("LLM down"));
+    threadState.getMessagesSnapshot.mockResolvedValue(buildMessages(10));
+    modelResolver.summarize.mockRejectedValue(new Error("LLM down"));
     await expect(compactor.compact("s1")).rejects.toBeInstanceOf(
       CompactionError,
     );
-    expect(graph.applyCompaction).not.toHaveBeenCalled();
+    expect(threadState.applyCompaction).not.toHaveBeenCalled();
     const errEmits = emitSpy.mock.calls.filter(
       ([name]) => name === SESSION_WS_EVENTS.runCompactionError,
     );
@@ -132,9 +136,9 @@ describe("ContextCompactor", () => {
     modelConfig.findEnabled.mockResolvedValue({
       contextWindow: 10_000,
     } as never);
-    graph.getMessagesSnapshot.mockResolvedValue(buildMessages(10));
+    threadState.getMessagesSnapshot.mockResolvedValue(buildMessages(10));
     let resolveSum!: (v: string) => void;
-    graph.summarize.mockReturnValue(
+    modelResolver.summarize.mockReturnValue(
       new Promise<string>((r) => {
         resolveSum = r;
       }),
@@ -143,8 +147,8 @@ describe("ContextCompactor", () => {
     const p2 = compactor.compact("s1");
     resolveSum("S");
     await Promise.all([p1, p2]);
-    expect(graph.summarize).toHaveBeenCalledTimes(1);
-    expect(graph.applyCompaction).toHaveBeenCalledTimes(1);
+    expect(modelResolver.summarize).toHaveBeenCalledTimes(1);
+    expect(threadState.applyCompaction).toHaveBeenCalledTimes(1);
   });
 
   it("findEnabled 返 null（无启用 model）→ 抛 CompactionError", async () => {
@@ -161,14 +165,14 @@ describe("ContextCompactor", () => {
     modelConfig.findEnabled.mockResolvedValue({
       contextWindow: 4_096, // keepBudget = 409 token
     } as never);
-    graph.getMessagesSnapshot.mockResolvedValue([
+    threadState.getMessagesSnapshot.mockResolvedValue([
       new HumanMessage({ id: "h0", content: "X".repeat(2000) }), // ~500 token，超 keepBudget
       new AIMessage({ id: "a0", content: "Y".repeat(400) }), // ~100 token
     ]);
     const r = await compactor.compact("s1");
     expect(r).toBeNull();
-    expect(graph.summarize).not.toHaveBeenCalled();
-    expect(graph.applyCompaction).not.toHaveBeenCalled();
+    expect(modelResolver.summarize).not.toHaveBeenCalled();
+    expect(threadState.applyCompaction).not.toHaveBeenCalled();
     expect(sessionMessages.recordCompactionPlaceholder).not.toHaveBeenCalled();
   });
 
@@ -176,7 +180,9 @@ describe("ContextCompactor", () => {
     modelConfig.findEnabled.mockResolvedValue({
       contextWindow: 10_000,
     } as never);
-    graph.getMessagesSnapshot.mockRejectedValue(new Error("checkpointer fail"));
+    threadState.getMessagesSnapshot.mockRejectedValue(
+      new Error("checkpointer fail"),
+    );
     await expect(compactor.compact("s1")).rejects.toThrow();
     expect(emitSpy).not.toHaveBeenCalled();
   });

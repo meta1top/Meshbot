@@ -65,7 +65,7 @@ function fakeSessionService() {
   };
 }
 
-/** 产出固定 chunk 流（含 usage 事件）的 GraphService 替身。 */
+/** 产出固定 chunk 流（含 usage 事件）的 GraphRunner 替身。 */
 function fakeGraphService(opts?: { throwErr?: boolean }) {
   return {
     async *streamMessage() {

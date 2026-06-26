@@ -4,7 +4,7 @@ import {
   ConflictException,
   NotFoundException,
 } from "@nestjs/common";
-import { AccountContextService, GraphService } from "@meshbot/agent";
+import { AccountContextService, ThreadStateService } from "@meshbot/agent";
 import { DataSource } from "typeorm";
 import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
 import { LlmCall } from "../entities/llm-call.entity";
@@ -68,7 +68,7 @@ describe("SessionService", () => {
       scopedFactory,
       ctx,
     );
-    // 假 GraphService：cutMessagesAfter 记调用验证 regenerateAfter；clearThread 同步删
+    // 假 ThreadStateService：cutMessagesAfter 记调用验证 regenerateAfter；clearThread 同步删
     // checkpoints/writes —— 生产里走该账号 checkpointer 的 better-sqlite3 连接，此处复用
     // ds 底层连接同步删，保持「deleteSession 级联删 checkpointer」断言成立。
     const fakeGraph = {
@@ -89,7 +89,7 @@ describe("SessionService", () => {
       },
     };
     const checkpointer = new CheckpointerCleanupService(
-      fakeGraph as unknown as GraphService,
+      fakeGraph as unknown as ThreadStateService,
     );
     // 假 ScheduleService：deleteBySession 只记调用，验证 deleteSession 触达 schedules
     const fakeSchedules = {
@@ -105,7 +105,7 @@ describe("SessionService", () => {
       llmCalls,
       sessionMessages,
       checkpointer,
-      fakeGraph as unknown as GraphService,
+      fakeGraph as unknown as ThreadStateService,
       fakeSchedules as unknown as any,
     );
     // 暴露给 deleteSession / regenerateAfter 测试用

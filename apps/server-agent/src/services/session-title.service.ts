@@ -1,6 +1,6 @@
 import {
   AccountContextService,
-  GraphService,
+  ModelResolver,
   PromptService,
 } from "@meshbot/agent";
 import {
@@ -38,7 +38,7 @@ export class SessionTitleService {
   private readonly logger = new Logger(SessionTitleService.name);
 
   constructor(
-    private readonly graph: GraphService,
+    private readonly modelResolver: ModelResolver,
     private readonly sessions: SessionService,
     private readonly prompt: PromptService,
     private readonly emitter: EventEmitter2,
@@ -80,7 +80,7 @@ export class SessionTitleService {
     if (cur.titleGenerated) return;
     const t1 = Date.now();
 
-    const model = await this.graph.getTitleModel();
+    const model = await this.modelResolver.getTitleModel();
     const promptText = this.buildPrompt(content);
     const t2 = Date.now();
     const res = await model.invoke(promptText);

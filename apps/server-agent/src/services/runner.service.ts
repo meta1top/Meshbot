@@ -1,4 +1,4 @@
-import { AccountContextService, GraphService } from "@meshbot/agent";
+import { AccountContextService, GraphRunner } from "@meshbot/agent";
 import {
   type RunToolCallEndEvent,
   SESSION_WS_EVENTS,
@@ -70,7 +70,7 @@ export class RunnerService implements OnModuleInit {
 
   constructor(
     private readonly sessions: SessionService,
-    private readonly graph: GraphService,
+    private readonly graph: GraphRunner,
     private readonly emitter: EventEmitter2,
     private readonly llmCalls: LlmCallService,
     private readonly sessionMessages: SessionMessageService,

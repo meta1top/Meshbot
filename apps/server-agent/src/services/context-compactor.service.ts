@@ -1,4 +1,8 @@
-import { GraphService, COMPACTION_SYSTEM_PROMPT } from "@meshbot/agent";
+import {
+  ThreadStateService,
+  ModelResolver,
+  COMPACTION_SYSTEM_PROMPT,
+} from "@meshbot/agent";
 import { SESSION_WS_EVENTS } from "@meshbot/types-agent";
 import { Injectable, Logger } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
@@ -68,7 +72,8 @@ export class ContextCompactor {
   private readonly locks = new Map<string, Promise<CompactionResult | null>>();
 
   constructor(
-    private readonly graph: GraphService,
+    private readonly threadState: ThreadStateService,
+    private readonly modelResolver: ModelResolver,
     private readonly modelConfig: ModelConfigService,
     private readonly sessionMessages: SessionMessageService,
     private readonly llmCalls: LlmCallService, // v1 未直接用，预留 v2 标记 purpose 用
@@ -105,7 +110,7 @@ export class ContextCompactor {
       throw new CompactionError("No enabled ModelConfig");
     }
     const ctx = model.contextWindow;
-    const messages = await this.graph.getMessagesSnapshot(sessionId);
+    const messages = await this.threadState.getMessagesSnapshot(sessionId);
 
     // 切分
     const keepBudget = Math.floor(ctx * COMPACTION_RECENT_RATIO);
@@ -138,7 +143,7 @@ export class ContextCompactor {
     let summaryText: string;
     try {
       const serialized = serializeForSummary(toSummarize);
-      summaryText = await this.graph.summarize(serialized, {
+      summaryText = await this.modelResolver.summarize(serialized, {
         systemPrompt: COMPACTION_SYSTEM_PROMPT,
         timeoutMs: COMPACTION_SUMMARIZE_TIMEOUT_MS,
         maxTokens: COMPACTION_SUMMARY_MAX_TOKENS,
@@ -155,7 +160,7 @@ export class ContextCompactor {
     // 摘要区删掉换摘要；保留区删掉后由 applyCompaction 按序重新 append 到摘要之后，
     // 实现 [system, summary, ...keep] 的目标顺序。系统提示词无 id，不在此列、自动留最前。
     try {
-      await this.graph.applyCompaction(sessionId, {
+      await this.threadState.applyCompaction(sessionId, {
         removeIds: messages
           .map((m) => m.id)
           .filter((id): id is string => typeof id === "string"),

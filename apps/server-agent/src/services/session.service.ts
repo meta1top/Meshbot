@@ -5,7 +5,7 @@ import type {
   SessionStatus,
   SessionSummary,
 } from "@meshbot/types-agent";
-import { GraphService } from "@meshbot/agent";
+import { ThreadStateService } from "@meshbot/agent";
 import {
   BadRequestException,
   ConflictException,
@@ -73,7 +73,7 @@ export class SessionService {
     private readonly llmCalls: LlmCallService,
     private readonly sessionMessages: SessionMessageService,
     private readonly checkpointer: CheckpointerCleanupService,
-    private readonly graph: GraphService,
+    private readonly threadState: ThreadStateService,
     private readonly schedules: ScheduleService,
   ) {
     // 包裹 tx-aware 注入代理：作用域仓库的操作仍参与外层 @Transactional 边界
@@ -496,6 +496,9 @@ export class SessionService {
     // 但 assistant 调用天然晚于该 user 消息，createdAt 裁剪正确。
     await this.sessionMessages.deleteAfter(sessionId, msg.seq);
     await this.llmCalls.deleteAfter(sessionId, msg.createdAt);
-    await this.graph.cutMessagesAfter(sessionId, msg.langgraphId ?? messageId);
+    await this.threadState.cutMessagesAfter(
+      sessionId,
+      msg.langgraphId ?? messageId,
+    );
   }
 }

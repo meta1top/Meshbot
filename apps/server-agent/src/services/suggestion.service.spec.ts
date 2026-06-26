@@ -1,4 +1,4 @@
-import type { GraphService } from "@meshbot/agent";
+import type { ModelResolver } from "@meshbot/agent";
 import type { PromptService } from "@meshbot/agent";
 import type { SessionService } from "./session.service";
 import { SuggestionService } from "./suggestion.service";
@@ -20,7 +20,7 @@ describe("SuggestionService", () => {
           return { content: "x" };
         },
       }),
-    } as unknown as GraphService;
+    } as unknown as ModelResolver;
     const prompt = { getPrompt: () => undefined } as unknown as PromptService;
     const svc = new SuggestionService(makeSessions([]), graph, prompt);
     expect(await svc.getSuggestions()).toEqual([]);
@@ -36,7 +36,7 @@ describe("SuggestionService", () => {
           return { content: "继续优化 Harness\n写测试\n梳理 PR" };
         },
       }),
-    } as unknown as GraphService;
+    } as unknown as ModelResolver;
     const prompt = { getPrompt: () => undefined } as unknown as PromptService;
     const svc = new SuggestionService(makeSessions(["A", "B"]), graph, prompt);
     expect(await svc.getSuggestions()).toEqual([

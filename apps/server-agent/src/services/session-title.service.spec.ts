@@ -51,7 +51,7 @@ function fakePromptService(content?: string) {
   };
 }
 
-/** 假 GraphService —— 仅 getTitleModel，返一个 invoke 假 model。 */
+/** 假 ModelResolver —— 仅 getTitleModel，返一个 invoke 假 model。 */
 function fakeGraph(content: string) {
   return {
     async getTitleModel() {
