@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSkillsBlock } from "../../src/graph/graph.service.js";
+import { buildSkillsBlock } from "../../src/graph/context-builder.js";
 
 describe("buildSkillsBlock", () => {
   it("列出已装技能：- name: description，完整描述不截断", () => {

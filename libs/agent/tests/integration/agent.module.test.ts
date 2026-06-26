@@ -2,18 +2,18 @@ import { Test } from "@nestjs/testing";
 import { describe, expect, it } from "vitest";
 import { AgentModule } from "../../src/agent.module";
 import { MeshbotConfigService } from "../../src/config/meshbot-config.service";
-import { GraphService } from "../../src/graph/graph.service";
+import { GraphRunner } from "../../src/graph/graph-runner.service";
 import { PromptService } from "../../src/prompt/prompt.service";
 import { ToolRegistry } from "../../src/tools/tool-registry";
 
 describe("AgentModule", () => {
-  it("compiles and provides GraphService", async () => {
+  it("compiles and provides GraphRunner", async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [AgentModule],
     }).compile();
 
-    const graphService = moduleRef.get(GraphService);
-    expect(graphService).toBeDefined();
+    const graphRunner = moduleRef.get(GraphRunner);
+    expect(graphRunner).toBeDefined();
   });
 
   it("provides PromptService", async () => {

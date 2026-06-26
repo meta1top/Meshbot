@@ -9,7 +9,6 @@ import { MeshbotConfigService } from "../../src/config/meshbot-config.service";
 import { AccountGraphProvider } from "../../src/graph/account-graph.provider";
 import { ContextBuilder } from "../../src/graph/context-builder.js";
 import { GraphRunner } from "../../src/graph/graph-runner.service.js";
-import { GraphService } from "../../src/graph/graph.service";
 import { ModelResolver } from "../../src/graph/model-resolver.service.js";
 import { ThreadStateService } from "../../src/graph/thread-state.service.js";
 import { PromptService } from "../../src/prompt/prompt.service";
@@ -20,7 +19,9 @@ const TEST_ACCOUNT = "test-compaction-account";
 describe("GraphService compaction hooks", () => {
   let testDir: string;
   let ctx: AccountContextService;
-  let graphService: GraphService;
+  let graphRunner: GraphRunner;
+  let threadState: ThreadStateService;
+  let modelResolver: ModelResolver;
   let invokeCalls: { messages: { content: string }[]; config: unknown }[];
 
   beforeEach(() => {
@@ -47,7 +48,7 @@ describe("GraphService compaction hooks", () => {
       { getProviders: () => [] } as never,
       new AccountContextService(),
     );
-    const modelResolver = new ModelResolver(
+    modelResolver = new ModelResolver(
       configService,
       ctx,
       () => Promise.resolve(fakeModel as never),
@@ -62,15 +63,14 @@ describe("GraphService compaction hooks", () => {
       modelResolver,
     );
     const contextBuilder = new ContextBuilder(ctx);
-    const threadState = new ThreadStateService(accountGraphProvider);
-    const graphRunner = new GraphRunner(
+    threadState = new ThreadStateService(accountGraphProvider);
+    graphRunner = new GraphRunner(
       promptService,
       accountGraphProvider,
       modelResolver,
       contextBuilder,
       threadState,
     );
-    graphService = new GraphService(modelResolver, threadState, graphRunner);
   });
 
   afterEach(() => {
@@ -78,30 +78,30 @@ describe("GraphService compaction hooks", () => {
   });
 
   it("getMessagesSnapshot 空 thread 返空数组", async () => {
-    const threadId = await graphService.startSession({ model: "fake" });
+    const threadId = await graphRunner.startSession({ model: "fake" });
     const msgs = await ctx.run(TEST_ACCOUNT, () =>
-      graphService.getMessagesSnapshot(threadId),
+      threadState.getMessagesSnapshot(threadId),
     );
     expect(msgs).toEqual([]);
   });
 
   it("getMessagesSnapshot 在 streamMessage 后返非空", async () => {
-    const threadId = await graphService.startSession({ model: "fake" });
+    const threadId = await graphRunner.startSession({ model: "fake" });
     await ctx.run(TEST_ACCOUNT, async () => {
-      for await (const _ of graphService.streamMessage(threadId, [
+      for await (const _ of graphRunner.streamMessage(threadId, [
         { id: "h1", content: "hi" },
       ])) {
         // drain
       }
     });
     const msgs = await ctx.run(TEST_ACCOUNT, () =>
-      graphService.getMessagesSnapshot(threadId),
+      threadState.getMessagesSnapshot(threadId),
     );
     expect(msgs.length).toBeGreaterThan(0);
   });
 
   it("summarize 调 model.invoke 传 system + user 并返字符串", async () => {
-    const out = await graphService.summarize("[user] hi\n[assistant] hello", {
+    const out = await modelResolver.summarize("[user] hi\n[assistant] hello", {
       systemPrompt: "SYS",
       timeoutMs: 1000,
       maxTokens: 100,
@@ -113,22 +113,22 @@ describe("GraphService compaction hooks", () => {
   });
 
   it("applyCompaction：摘要排在保留区之前，删掉摘要区、保留区移到摘要后", async () => {
-    const threadId = await graphService.startSession({ model: "fake" });
+    const threadId = await graphRunner.startSession({ model: "fake" });
     // 跑两轮，制造多条 messages
     await ctx.run(TEST_ACCOUNT, async () => {
-      for await (const _ of graphService.streamMessage(threadId, [
+      for await (const _ of graphRunner.streamMessage(threadId, [
         { id: "h1", content: "first" },
       ])) {
         // drain
       }
-      for await (const _ of graphService.streamMessage(threadId, [
+      for await (const _ of graphRunner.streamMessage(threadId, [
         { id: "h2", content: "second" },
       ])) {
         // drain
       }
     });
     const before = await ctx.run(TEST_ACCOUNT, () =>
-      graphService.getMessagesSnapshot(threadId),
+      threadState.getMessagesSnapshot(threadId),
     );
     // 假设保留最后 2 条，前面的都压缩
     const splitIdx = before.length - 2;
@@ -139,7 +139,7 @@ describe("GraphService compaction hooks", () => {
       .filter((id): id is string => typeof id === "string");
 
     await ctx.run(TEST_ACCOUNT, () =>
-      graphService.applyCompaction(threadId, {
+      threadState.applyCompaction(threadId, {
         removeIds,
         summaryText: "COMPRESSED_SUMMARY",
         keep,
@@ -147,7 +147,7 @@ describe("GraphService compaction hooks", () => {
     );
 
     const after = await ctx.run(TEST_ACCOUNT, () =>
-      graphService.getMessagesSnapshot(threadId),
+      threadState.getMessagesSnapshot(threadId),
     );
     // 恰好一条摘要 SystemMessage
     const summaryIdx = after.findIndex(

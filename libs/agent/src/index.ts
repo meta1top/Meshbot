@@ -9,7 +9,6 @@ export type {
   ThreadId,
 } from "./graph/graph.types";
 export { COMPACTION_SYSTEM_PROMPT } from "./prompt/compactor.prompt";
-export { GraphService } from "./graph/graph.service";
 export { GraphRunner } from "./graph/graph-runner.service";
 export { ModelResolver } from "./graph/model-resolver.service";
 export { ThreadStateService } from "./graph/thread-state.service";

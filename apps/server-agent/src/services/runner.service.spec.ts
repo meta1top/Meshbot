@@ -66,7 +66,7 @@ function fakeSessionService() {
 }
 
 /** 产出固定 chunk 流（含 usage 事件）的 GraphRunner 替身。 */
-function fakeGraphService(opts?: { throwErr?: boolean }) {
+function fakeGraphRunner(opts?: { throwErr?: boolean }) {
   return {
     async *streamMessage() {
       if (opts?.throwErr) throw new Error("llm boom");
@@ -194,7 +194,7 @@ describe("RunnerService", () => {
     sess.enqueue("s1", "hi");
     const runner = new RunnerService(
       sess as never,
-      fakeGraphService() as never,
+      fakeGraphRunner() as never,
       emitter,
       llmCalls as never,
       fakeSessionMessageService() as never,
@@ -223,7 +223,7 @@ describe("RunnerService", () => {
     sess.enqueue("s1", "first");
     const runner = new RunnerService(
       sess as never,
-      fakeGraphService() as never,
+      fakeGraphRunner() as never,
       emitter,
       llmCalls as never,
       fakeSessionMessageService() as never,
@@ -243,7 +243,7 @@ describe("RunnerService", () => {
     sess.enqueue("s1", "first");
     const runner = new RunnerService(
       sess as never,
-      fakeGraphService() as never,
+      fakeGraphRunner() as never,
       emitter,
       llmCalls as never,
       fakeSessionMessageService() as never,
@@ -271,7 +271,7 @@ describe("RunnerService", () => {
     sess.enqueue("s1", "hi");
     const runner = new RunnerService(
       sess as never,
-      fakeGraphService({ throwErr: true }) as never,
+      fakeGraphRunner({ throwErr: true }) as never,
       emitter,
       llmCalls as never,
       fakeSessionMessageService() as never,
@@ -294,7 +294,7 @@ describe("RunnerService", () => {
     sess.store[0].status = "failed";
     const runner = new RunnerService(
       sess as never,
-      fakeGraphService() as never,
+      fakeGraphRunner() as never,
       emitter,
       llmCalls as never,
       fakeSessionMessageService() as never,
@@ -315,7 +315,7 @@ describe("RunnerService", () => {
     let snapshotDuringRun: unknown = null;
     const runner = new RunnerService(
       sess as never,
-      fakeGraphService() as never,
+      fakeGraphRunner() as never,
       emitter,
       llmCalls as never,
       fakeSessionMessageService() as never,
@@ -440,7 +440,7 @@ describe("RunnerService", () => {
     };
     const runner = new RunnerService(
       sessWithRollback as never,
-      fakeGraphService() as never,
+      fakeGraphRunner() as never,
       new EventEmitter2(),
       llmCalls as never,
       fakeSessionMessageService() as never,
@@ -461,7 +461,7 @@ describe("RunnerService", () => {
     sess.enqueue("s1", "hi");
     const runner = new RunnerService(
       sess as never,
-      fakeGraphService() as never,
+      fakeGraphRunner() as never,
       emitter,
       llmCalls as never,
       fakeSessionMessageService() as never,
@@ -495,7 +495,7 @@ describe("RunnerService", () => {
     // 注意：不 enqueue 任何 pending / failed
     const runner = new RunnerService(
       sess as never,
-      fakeGraphService() as never,
+      fakeGraphRunner() as never,
       emitter,
       llmCalls as never,
       fakeSessionMessageService() as never,
@@ -525,7 +525,7 @@ describe("RunnerService", () => {
     sess.enqueue("s1", "hi");
     const runner = new RunnerService(
       sess as never,
-      fakeGraphService() as never,
+      fakeGraphRunner() as never,
       emitter,
       llmCalls as never,
       fakeSessionMessageService() as never,
@@ -555,7 +555,7 @@ describe("RunnerService", () => {
     };
     const runner = new RunnerService(
       sess as never,
-      fakeGraphService() as never,
+      fakeGraphRunner() as never,
       new EventEmitter2(),
       fakeLlmCallService() as never,
       fakeSessionMessageService() as never,
@@ -570,11 +570,11 @@ describe("RunnerService", () => {
 
 describe("RunnerService context compaction integration", () => {
   /**
-   * fakeGraphService 模拟"首次 streamMessage 抛 ctx_exceeded，重试改走
+   * fakeGraphRunner 模拟"首次 streamMessage 抛 ctx_exceeded，重试改走
    * resumeStream 正常出"：runner 的 ctx-exceeded 兜底重试用 resume 模式
    * （HumanMessage 第一次调用时已写入 checkpointer，避免重写）。
    */
-  function fakeGraphServiceCtxThenOk() {
+  function fakeGraphRunnerCtxThenOk() {
     let streamCount = 0;
     let resumeCount = 0;
     return {
@@ -627,7 +627,7 @@ describe("RunnerService context compaction integration", () => {
     sess.enqueue("s1", "hi");
     const runner = new RunnerService(
       sess as never,
-      fakeGraphService() as never,
+      fakeGraphRunner() as never,
       emitter,
       llmCalls as never,
       fakeSessionMessageService() as never,
@@ -650,7 +650,7 @@ describe("RunnerService context compaction integration", () => {
     sess.enqueue("s1", "hi");
     const runner = new RunnerService(
       sess as never,
-      fakeGraphService() as never,
+      fakeGraphRunner() as never,
       emitter,
       llmCalls as never,
       fakeSessionMessageService() as never,
@@ -674,7 +674,7 @@ describe("RunnerService context compaction integration", () => {
     emitter.onAny((name, payload) =>
       events.push({ name: String(name), payload }),
     );
-    const graph = fakeGraphService();
+    const graph = fakeGraphRunner();
     const streamSpy = jest.spyOn(graph, "streamMessage");
     const runner = new RunnerService(
       sess as never,
@@ -698,7 +698,7 @@ describe("RunnerService context compaction integration", () => {
     const llmCalls = fakeLlmCallServiceWithLast(1_000); // pre-check 未命中
     const compactor = fakeCompactor();
     compactor.shouldCompactReturns = false;
-    const graph = fakeGraphServiceCtxThenOk();
+    const graph = fakeGraphRunnerCtxThenOk();
     sess.enqueue("s1", "hi");
     const runner = new RunnerService(
       sess as never,
@@ -729,7 +729,7 @@ describe("RunnerService context compaction integration", () => {
     sess.enqueue("s1", "hi");
     const runner = new RunnerService(
       sess as never,
-      fakeGraphService({ throwErr: true }) as never,
+      fakeGraphRunner({ throwErr: true }) as never,
       emitter,
       llmCalls as never,
       fakeSessionMessageService() as never,
@@ -749,7 +749,7 @@ describe("RunnerService context compaction integration", () => {
     const compactor = fakeCompactor();
     compactor.shouldCompactReturns = false;
     compactor.compactError = new Error("compact pipeline boom");
-    const graph = fakeGraphServiceCtxThenOk();
+    const graph = fakeGraphRunnerCtxThenOk();
     sess.enqueue("s1", "hi");
     const events: { name: string; payload: unknown }[] = [];
     emitter.onAny((name, payload) =>
