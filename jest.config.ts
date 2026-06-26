@@ -35,6 +35,10 @@ const config: Config = {
     "^@nestjs/typeorm/(.*)$": "<rootDir>/node_modules/@nestjs/typeorm/$1",
     "^typeorm$": "<rootDir>/node_modules/typeorm",
     "^typeorm/(.*)$": "<rootDir>/node_modules/typeorm/$1",
+    // @vscode/ripgrep 是 ESM-only：jest 经模块图传递 import 到它会报「Cannot use
+    // import statement outside a module」（jest 不跑 grep 测试，libs/agent 走 vitest）。
+    // 换成 CommonJS 桩解开这条 import 链。
+    "^@vscode/ripgrep$": "<rootDir>/test/mocks/vscode-ripgrep.js",
   },
   transform: {
     "^.+\\.ts$": [
