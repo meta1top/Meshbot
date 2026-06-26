@@ -489,35 +489,42 @@ export function useSessionStream(
     };
     const onToolArgsDelta = (e: RunToolCallArgsDeltaEvent) => {
       if (e.sessionId !== sessionId) return;
+      // 按 toolCallId 把 args 增量合并到「同一个工具块」（像 chunk 按 messageId
+      // 合并到消息）：流式 args → running → 完成 是同一个块的状态推进，不再先建
+      // 独立预览块再整批清空。个别 provider 流里不带 id → 跳过预览，等 onToolStart。
+      const toolCallId = e.toolCallId;
+      if (!toolCallId) return;
       apply((prev) => {
-        const append = (m: TimelineMessage): TimelineMessage => {
-          const list = m.streamingToolArgs ? [...m.streamingToolArgs] : [];
-          const i = list.findIndex((s) => s.index === e.index);
+        const merge = (m: TimelineMessage): TimelineMessage => {
+          const list = m.toolCalls ? [...m.toolCalls] : [];
+          const i = list.findIndex((t) => t.toolCallId === toolCallId);
           if (i === -1) {
-            list.push({ index: e.index, name: e.name, argsText: e.delta });
+            list.push({
+              toolCallId,
+              name: e.name ?? "",
+              status: "streaming",
+              argsText: e.delta,
+            });
           } else {
             list[i] = {
               ...list[i],
               name: e.name ?? list[i].name,
-              argsText: list[i].argsText + e.delta,
+              argsText: (list[i].argsText ?? "") + e.delta,
             };
           }
-          return { ...m, streamingToolArgs: list };
+          return { ...m, toolCalls: list };
         };
         const idx = prev.findIndex((m) => m.id === e.messageId);
+        // 中间决策轮可能无 content/reasoning：不存在则建一个无正文的 assistant 壳，
+        // 不设 streaming（避免空正文闪烁光标），由 toolCalls 块自身呈现进行态。
         if (idx === -1) {
           return [
             ...prev,
-            append({
-              id: e.messageId,
-              role: "assistant",
-              content: "",
-              streaming: true,
-            }),
+            merge({ id: e.messageId, role: "assistant", content: "" }),
           ];
         }
         const copy = [...prev];
-        copy[idx] = append(copy[idx]);
+        copy[idx] = merge(copy[idx]);
         return copy;
       });
     };
@@ -535,20 +542,28 @@ export function useSessionStream(
             m.reasoningDurationMs === undefined
               ? { reasoningDurationMs: Date.now() - m.reasoningStartedAt }
               : {};
+          // 合并到流式阶段已建的同一块（按 toolCallId 命中）：升级 running、填权威
+          // args、清流式文本。命不中（无流式预览 / 重复 start）则新建/覆盖。
+          // 按 toolCallId 命中 = 幂等：重复 start 不会再 push 出重复块。
+          const list = m.toolCalls ? [...m.toolCalls] : [];
+          const i = list.findIndex((t) => t.toolCallId === e.toolCallId);
+          const next = {
+            toolCallId: e.toolCallId,
+            name: e.name,
+            args: e.args,
+            status: "running" as const,
+            argsText: undefined,
+          };
+          if (i === -1) {
+            list.push(next);
+          } else {
+            list[i] = { ...list[i], ...next };
+          }
           return {
             ...m,
             ...lockDuration,
             streaming: false,
-            streamingToolArgs: undefined,
-            toolCalls: [
-              ...(m.toolCalls ?? []),
-              {
-                toolCallId: e.toolCallId,
-                name: e.name,
-                args: e.args,
-                status: "running" as const,
-              },
-            ],
+            toolCalls: list,
           };
         }),
       );

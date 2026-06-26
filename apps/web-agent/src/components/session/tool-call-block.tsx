@@ -1,6 +1,10 @@
 "use client";
 
 import { cn } from "@meshbot/design";
+import {
+  extractPartialString,
+  parsePartialToolArgs,
+} from "@meshbot/web-common";
 import { ChevronDown, Loader2 } from "lucide-react";
 import { useState } from "react";
 import type { ToolCallView } from "./message-list";
@@ -14,15 +18,33 @@ import type { ToolCallView } from "./message-list";
  * - 左侧 6px 圆点（按状态着色）+ 等宽工具名 + 行内 args 摘要 + 状态徽章；
  * - 默认收起；点击整行展开请求 / 响应分区，向右缩进对齐圆点右侧；
  * - bash 等流式工具运行期间响应区显示 progress，结束后切到 result。
+ *
+ * 同一个块按 toolCallId 贯穿三态：streaming（LLM 仍在打字生成参数）→ running
+ * （执行中）→ ok/error（完成）。streaming 阶段 args 未定稿，用 argsText 尽力部分
+ * 解析出行内摘要 + write/edit/bash 的正文打字预览；不再先建独立预览块再清空。
  */
 export function ToolCallBlock({ tool }: { tool: ToolCallView }) {
   const [open, setOpen] = useState(false);
-  const argsJson = formatJson(tool.args);
-  const argsSummary = formatArgsSummary(tool.args);
+  const streaming = tool.status === "streaming";
+  // streaming 阶段权威 args 还没到，用累积的 argsText 尽力部分解析。
+  const displayArgs =
+    tool.args !== undefined
+      ? tool.args
+      : tool.argsText
+        ? parsePartialToolArgs(tool.argsText)
+        : undefined;
+  const argsJson = formatJson(displayArgs);
+  const argsSummary = formatArgsSummary(displayArgs);
+  // 文件写入 / bash 等有「正文」的工具：流式阶段逐字预览正文（打字效果）。
+  const streamBody = streaming
+    ? extractPartialString(tool.argsText ?? "", "command") ||
+      extractPartialString(tool.argsText ?? "", "content") ||
+      extractPartialString(tool.argsText ?? "", "new_string")
+    : "";
   const output = tool.progress || tool.result || "";
   const { server, name: displayName } = parseToolName(tool.name);
   const dotColor =
-    tool.status === "running"
+    tool.status === "running" || streaming
       ? "bg-primary/70"
       : tool.status === "error"
         ? "bg-destructive"
@@ -36,7 +58,11 @@ export function ToolCallBlock({ tool }: { tool: ToolCallView }) {
         aria-expanded={open}
       >
         <span
-          className={cn("inline-block h-2 w-2 shrink-0 rounded-full", dotColor)}
+          className={cn(
+            "inline-block h-2 w-2 shrink-0 rounded-full",
+            dotColor,
+            streaming && "animate-pulse",
+          )}
         />
         <span className="flex shrink-0 items-center gap-1 whitespace-nowrap font-mono">
           {server && (
@@ -63,6 +89,12 @@ export function ToolCallBlock({ tool }: { tool: ToolCallView }) {
           )}
         />
       </button>
+      {streamBody && (
+        <pre className="max-h-64 overflow-auto whitespace-pre-wrap px-2.5 py-2 font-mono text-[11px] leading-relaxed text-foreground">
+          {streamBody}
+          <span className="animate-pulse">▋</span>
+        </pre>
+      )}
       {open && (
         <div className="flex flex-col gap-3 px-2.5 py-2">
           <ToolSection label="请求">
@@ -112,7 +144,7 @@ function ToolSection({
 }
 
 function renderStatusBadge(status: ToolCallView["status"]) {
-  if (status === "running") {
+  if (status === "running" || status === "streaming") {
     return <Loader2 className="h-3 w-3 animate-spin text-primary/70" />;
   }
   if (status === "ok") {

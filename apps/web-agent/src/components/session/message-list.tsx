@@ -10,19 +10,25 @@ import { currentUserAtom } from "@/atoms/auth";
 import { AssistantMessageActions } from "./assistant-message-actions";
 import { CompactionRow } from "./compaction-row";
 import { MarkdownContent } from "./markdown-content";
-import { ToolCallArgsPreview } from "./tool-call-args-preview";
 import { ToolCallBlock } from "./tool-call-block";
 import { UserMessageActions } from "./user-message-actions";
 
 export interface ToolCallView {
   toolCallId: string;
   name: string;
-  args: unknown;
+  /** 权威参数（run.tool_call_start 后填；历史读取也填）。流式阶段为 undefined。 */
+  args?: unknown;
+  /**
+   * 流式累积的原始 args JSON（status==="streaming" 时打字预览用）。
+   * run.tool_call_start 到达升级为 running 时清空（已有权威 args）。
+   */
+  argsText?: string;
   /** 流式累积的 stdout/stderr（仅 bash 等流式 tool）。 */
   progress?: string;
   /** 最终结果（end 后；历史读取也填这里）。 */
   result?: string;
-  status: "running" | "ok" | "error";
+  /** streaming = LLM 仍在流式生成本工具的参数（尚未开始执行）。 */
+  status: "streaming" | "running" | "ok" | "error";
 }
 
 /** 时间线上的一条消息（统一视图模型）。 */
@@ -50,8 +56,6 @@ export interface TimelineMessage {
   /** 推理结束耗时（毫秒，仅 assistant）。设值后认为推理已结束。 */
   reasoningDurationMs?: number;
   toolCalls?: ToolCallView[];
-  /** LLM 正在生成、尚未收尾的 tool_call 参数增量（流式预览用，按 index）。 */
-  streamingToolArgs?: { index: number; name?: string; argsText: string }[];
   /**
    * 结构化元数据（来自 session_message.metadata JSON 列）。
    * 压缩占位行携带 kind="compaction"；其余消息为 null / undefined。
@@ -179,14 +183,6 @@ export function MessageList({
                       ))}
                     </div>
                   )}
-                {m.role === "assistant" &&
-                  m.streamingToolArgs?.map((s) => (
-                    <ToolCallArgsPreview
-                      key={`pre-${s.index}`}
-                      name={s.name}
-                      argsText={s.argsText}
-                    />
-                  ))}
                 {m.role === "assistant" && m.content && !m.streaming && (
                   <AssistantMessageActions
                     sessionId={sessionId}
