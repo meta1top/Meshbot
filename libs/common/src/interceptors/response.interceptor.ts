@@ -4,6 +4,7 @@ import {
   Injectable,
   type NestInterceptor,
   SetMetadata,
+  StreamableFile,
 } from "@nestjs/common";
 // biome-ignore lint/style/useImportType: Reflector 必须值导入，NestJS 构造器 DI 用得到运行时类引用
 import { Reflector } from "@nestjs/core";
@@ -81,8 +82,12 @@ export class ResponseInterceptor implements NestInterceptor {
 
     const req = context.switchToHttp().getRequest<HttpRequestLike>();
     return next.handle().pipe(
-      map(
-        (data): SuccessEnvelope<unknown> => ({
+      map((data): unknown => {
+        // 流式响应（StreamableFile）不能包进 JSON envelope：NestJS 会对含 socket 的
+        // 流对象走 res.json → "Converting circular structure to JSON" 崩溃。原样放行，
+        // 由 NestJS 自身 pipe 到响应。覆盖所有流式端点，无需逐个 @SkipResponseEnvelope()。
+        if (data instanceof StreamableFile) return data;
+        const envelope: SuccessEnvelope<unknown> = {
           success: true,
           code: CommonErrorCode.SUCCESS.code as 0,
           message: "success",
@@ -90,8 +95,9 @@ export class ResponseInterceptor implements NestInterceptor {
           timestamp: new Date().toISOString(),
           path: req.url ?? "",
           traceId: req.traceId,
-        }),
-      ),
+        };
+        return envelope;
+      }),
     );
   }
 }

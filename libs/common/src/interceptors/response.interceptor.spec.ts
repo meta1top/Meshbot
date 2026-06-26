@@ -1,5 +1,9 @@
 import "reflect-metadata";
-import type { CallHandler, ExecutionContext } from "@nestjs/common";
+import {
+  type CallHandler,
+  type ExecutionContext,
+  StreamableFile,
+} from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { firstValueFrom, of } from "rxjs";
 
@@ -65,5 +69,14 @@ describe("ResponseInterceptor", () => {
     const raw = { status: "up", details: { db: "ok" } };
     const out = await firstValueFrom(interceptor.intercept(ctx, makeNext(raw)));
     expect(out).toEqual(raw);
+  });
+
+  it("StreamableFile 原样返回（不包 envelope，否则流对象走 res.json 会循环序列化崩溃）", async () => {
+    const ctx = makeCtx();
+    const file = new StreamableFile(Buffer.from("zip-bytes"));
+    const out = await firstValueFrom(
+      interceptor.intercept(ctx, makeNext(file)),
+    );
+    expect(out).toBe(file);
   });
 });
