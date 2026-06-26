@@ -17,6 +17,7 @@ import { readActiveModelConfig } from "../config/model-config.reader";
 import { MEMORY_GUIDE } from "../memory/memory-guide";
 import { MemoryService } from "../memory/memory.service";
 import { PromptService } from "../prompt/prompt.service";
+import { SkillService } from "../skills/skill.service";
 import { ToolRegistry } from "../tools/tool-registry";
 import type { GraphState } from "./graph.builder";
 import { buildSupervisorGraph } from "./graph.builder";
@@ -76,6 +77,8 @@ export type StreamChunk =
   | {
       kind: "tool_call_args";
       messageId: string;
+      /** 该 tool_call 的稳定 id（前端据此合并增量到同一工具块）；流里无 id 时 undefined。 */
+      toolCallId?: string;
       index: number;
       name?: string;
       delta: string;
@@ -126,6 +129,55 @@ export function extractToolCallArgDeltas(
     });
   }
   return out;
+}
+
+/**
+ * 从累积的 AIMessageChunk 按 index 取某个 tool_call 的稳定 id。
+ *
+ * tool_call 的 id 只在该工具的首个流式分片里出现，后续 args 分片不带 id。
+ * LangChain 的 `AIMessageChunk.concat` 用 `_mergeLists` 按 index 合并 tool_call_chunks
+ * 并保留首个非空 id，所以从累积器里按 index 查即可拿到每个分片都对得上的稳定 id。
+ * 取不到（id 还没流到 / 该 provider 流里不带 id）返回 undefined。
+ */
+export function resolveToolCallId(
+  acc: AIMessageChunk,
+  index: number,
+): string | undefined {
+  const chunks = (
+    acc as {
+      tool_call_chunks?: Array<{ index?: number; id?: string }>;
+    }
+  ).tool_call_chunks;
+  const hit = chunks?.find((c) => c.index === index);
+  return typeof hit?.id === "string" && hit.id ? hit.id : undefined;
+}
+
+/**
+ * 组装 `<skills>` 系统块内容：已装技能的「名字 + 完整描述」目录。
+ *
+ * 这是「目录常驻、内容按需」：让 agent 始终知道有哪些技能(否则要先 skill_list 才知道)，
+ * 完整 SKILL.md 仍由 skill_load 渐进加载。描述不截断,完整呈现。
+ * 无技能时给出搜索/安装引导,避免空块。
+ */
+export function buildSkillsBlock(
+  entries: { name: string; description: string }[],
+): string {
+  if (entries.length === 0) {
+    return [
+      "<skills>",
+      "当前未安装任何技能。需要某类能力时用 skill_search_market 搜索市场，再 skill_install 安装。",
+      "</skills>",
+    ].join("\n");
+  }
+  const lines = entries.map((e) =>
+    e.description ? `- ${e.name}: ${e.description}` : `- ${e.name}`,
+  );
+  return [
+    "<skills>",
+    "已安装技能（按需用 skill_load <name> 加载完整说明后再执行；更多能力用 skill_search_market 搜索市场再 skill_install）:",
+    ...lines,
+    "</skills>",
+  ].join("\n");
 }
 
 @Injectable()
@@ -184,6 +236,7 @@ export class GraphService {
     @Inject(RUNTIME_CONTEXT_PORT)
     private readonly runtimeContext?: RuntimeContextPort,
     @Optional() private readonly memory?: MemoryService,
+    @Optional() private readonly skills?: SkillService,
   ) {
     this.modelProvider = modelProvider ?? (() => this.resolveModel());
     this.modelMeta = modelMeta ?? { providerType: "unknown", model: "unknown" };
@@ -231,6 +284,18 @@ export class GraphService {
     return new SystemMessage({
       id: "system:ctx",
       content: `<context>\n${lines.join("\n")}\n</context>`,
+    });
+  }
+
+  /**
+   * 组装已装技能目录消息（稳定 id system:skills；每 run 刷新、reducer 按 id 原地更新）。
+   * 目录常驻让 agent 始终知道有哪些技能；完整内容仍按需 skill_load 加载。
+   */
+  private buildSkillsMessage(): SystemMessage {
+    const entries = this.skills?.list() ?? [];
+    return new SystemMessage({
+      id: "system:skills",
+      content: buildSkillsBlock(entries),
     });
   }
 
@@ -394,8 +459,12 @@ export class GraphService {
     if (systemPrompt && !hasHistory) {
       inputMessages.push(new SystemMessage(systemPrompt));
     }
-    inputMessages.push(new RemoveMessage({ id: "system:ctx" })); // 删旧（首 run 无则 no-op）
-    inputMessages.push(await this.buildContextMessage(threadId, kind)); // 加新
+    // system:ctx / system:skills 用稳定 id 每轮重发；reducer 按 id 原地更新
+    //（位置不变、不累积），无需先 RemoveMessage 再 Add。
+    inputMessages.push(await this.buildContextMessage(threadId, kind));
+    if (this.skills) {
+      inputMessages.push(this.buildSkillsMessage());
+    }
     for (const input of inputs) {
       inputMessages.push(
         new HumanMessage({ content: input.content, id: input.id }),
@@ -771,6 +840,9 @@ export class GraphService {
         yield {
           kind: "tool_call_args",
           messageId: sid,
+          // 从累积器按 index 取稳定 toolCallId（与随后 tool_call_start 同源）。
+          // currentAcc 此处刚 concat 过 msg，必然已含本 chunk 的 tool_call_chunks。
+          toolCallId: resolveToolCallId(currentAcc, d.index),
           index: d.index,
           name: d.name,
           delta: d.delta,

@@ -358,12 +358,18 @@ export type RunToolCallProgressEvent = z.infer<
 
 /**
  * socket: run.tool_call_args_delta —— LLM 生成某个 tool_call 参数 JSON 的增量。
- * 纯瞬态（不落库），仅供前端流式「实时预览」write/edit 的内容。
- * `index` 标识同轮内第几个 tool_call；权威参数随后由 run.tool_call_start 给出。
+ * 纯瞬态（不落库），供前端流式「实时预览」工具参数（write/edit/bash 等）。
+ *
+ * `toolCallId` 是该 tool_call 的稳定 id（与随后的 run.tool_call_start 同源）：
+ * 前端据此把增量合并到「同一个工具块」上（像 chunk 按 messageId 合并到消息），
+ * 流式 args → running → 完成 一气呵成，不再先建预览块再整批清空。
+ * 个别 provider 流里不带 id 时缺省 undefined，前端跳过该轮流式预览、等 start。
+ * `index` 仅作同轮内序号备用（id 缺失时的兜底定位）。
  */
 export const RunToolCallArgsDeltaEventSchema = z.object({
   sessionId: z.string(),
   messageId: z.string(),
+  toolCallId: z.string().optional(),
   index: z.number().int(),
   name: z.string().optional(),
   delta: z.string(),

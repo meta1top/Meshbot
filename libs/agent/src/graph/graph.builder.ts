@@ -14,6 +14,49 @@ export interface GraphState {
 }
 
 /**
+ * messages 通道 reducer。
+ * - `RemoveMessage(id)` → 从 base 删除该 id（sanitize 剪孤儿 tool_calls / 压缩 / regenerate 用）
+ * - 非 Remove 且 id 已存在 → **原地替换**（如 system:ctx / system:skills 每轮刷新，
+ *   位置不变、利于 prompt 缓存，无需先 Remove 再 Add）
+ * - 新 id → 追加到末尾
+ *
+ * 同批「`RemoveMessage(id)` + 同 id 新消息」→ 先删原位、再追加到末尾
+ * （等价旧的 remove-then-add，保持向后兼容）。
+ */
+export function mergeMessages(
+  x: BaseMessage[],
+  y: BaseMessage[],
+): BaseMessage[] {
+  const removeIds = new Set<string>();
+  for (const m of y) {
+    if (m instanceof RemoveMessage && m.id) removeIds.add(m.id);
+  }
+  const incoming = y.filter((m) => !(m instanceof RemoveMessage));
+  const incomingById = new Map<string, BaseMessage>();
+  for (const m of incoming) {
+    if (m.id) incomingById.set(m.id, m);
+  }
+  const result: BaseMessage[] = [];
+  const replaced = new Set<string>();
+  for (const m of x) {
+    if (m.id && removeIds.has(m.id)) continue; // 被删除
+    if (m.id && incomingById.has(m.id)) {
+      // 原地替换（id 既被删又被替换的情况上面 removeIds 已先行 continue）
+      const next = incomingById.get(m.id);
+      if (next) result.push(next);
+      replaced.add(m.id);
+    } else {
+      result.push(m);
+    }
+  }
+  for (const m of incoming) {
+    if (m.id && replaced.has(m.id)) continue; // 已就地替换，不再追加
+    result.push(m);
+  }
+  return result;
+}
+
+/**
  * 构建 supervisor + tools 双节点图，ReAct 循环：
  *
  *   START → supervisor → [tool_calls?] → tools → supervisor → … → END
@@ -39,17 +82,8 @@ export function buildSupervisorGraph(
   return new StateGraph<GraphState>({
     channels: {
       messages: {
-        // 默认 append；遇到 RemoveMessage(id) 则从 base 删该 id（让 sanitize
-        // 能剪掉孤儿 tool_calls 等脏 trailing message，让 retry 不再循环挂）。
-        value: (x: BaseMessage[], y: BaseMessage[]) => {
-          const removeIds = new Set<string>();
-          for (const m of y) {
-            if (m instanceof RemoveMessage && m.id) removeIds.add(m.id);
-          }
-          const kept = x.filter((m) => !m.id || !removeIds.has(m.id));
-          const appended = y.filter((m) => !(m instanceof RemoveMessage));
-          return kept.concat(appended);
-        },
+        // 见 mergeMessages：append + 同 id 原地替换 + RemoveMessage 按 id 删除。
+        value: mergeMessages,
         default: () => [],
       },
     },

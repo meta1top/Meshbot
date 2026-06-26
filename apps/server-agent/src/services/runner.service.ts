@@ -523,6 +523,7 @@ export class RunnerService implements OnModuleInit {
         this.emitter.emit(SESSION_WS_EVENTS.runToolCallArgsDelta, {
           sessionId,
           messageId: event.messageId,
+          toolCallId: event.toolCallId,
           index: event.index,
           name: event.name,
           delta: event.delta,
