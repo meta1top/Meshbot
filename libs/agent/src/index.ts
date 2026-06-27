@@ -45,3 +45,7 @@ export {
   QUICK_ASSISTANT_PORT,
   type QuickAssistantPort,
 } from "./tools/quick-assistant.port";
+export {
+  IM_CONTEXT_PORT,
+  type ImContextPort,
+} from "./tools/im-context.port";
