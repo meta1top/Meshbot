@@ -8,6 +8,7 @@ import {
 } from "@meshbot/web-common";
 import { ChevronDown, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { AskQuestionCard } from "./ask-question-card";
 import { ImSendConfirmCard } from "./im-send-confirm-card";
 import type { ToolCallView } from "./message-list";
 import { TodoList } from "./todo-list";
@@ -36,6 +37,9 @@ export function ToolCallBlock({
   const [open, setOpen] = useState(false);
   if (tool.name === "im_send_message" && tool.status !== "streaming") {
     return <ImSendConfirmCard tool={tool} sessionId={sessionId} />;
+  }
+  if (tool.name === "ask_question" && tool.status !== "streaming") {
+    return <AskQuestionCard tool={tool} sessionId={sessionId} />;
   }
   if (tool.name === "todo_write" && tool.status !== "streaming") {
     const todos = ((tool.args ?? {}) as { todos?: TodoItem[] }).todos ?? [];

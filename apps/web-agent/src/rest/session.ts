@@ -152,6 +152,19 @@ export async function regenerateMessage(
   return data;
 }
 
+/** 提交 ask_question 的回答（每问题 {selected, other}，按 question 顺序）。 */
+export async function confirmAnswers(
+  sessionId: string,
+  toolCallId: string,
+  answers: { selected: string[]; other?: string }[],
+): Promise<{ ok: true }> {
+  const { data } = await apiClient.post<{ ok: true }>(
+    `/api/sessions/${sessionId}/answer`,
+    { toolCallId, answers },
+  );
+  return data;
+}
+
 /** 确认/取消一次待发送的 im_send_message 工具调用。 */
 export async function confirmSend(
   sessionId: string,
