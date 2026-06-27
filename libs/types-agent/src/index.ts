@@ -18,6 +18,7 @@ export {
   type SetupStep,
   type UserInfo,
 } from "./auth";
+export * from "./confirm";
 export * from "./im-tools";
 export * from "./llmuse";
 export * from "./quick-assistant";
