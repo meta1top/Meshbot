@@ -14,6 +14,7 @@ import { MessageSkeleton } from "@/components/im/message-skeleton";
 import { MessageList } from "@/components/session/message-list";
 import { PendingList } from "@/components/session/pending-list";
 import { useChatScroll } from "@/hooks/use-chat-scroll";
+import { useLlmusePrefix } from "@/hooks/use-llmuse-prefix";
 import { useSessionStream } from "@/hooks/use-session-stream";
 import { toI18nList } from "@/lib/i18n-list";
 import { useModelConfigs } from "@/rest/model-config";
@@ -55,6 +56,7 @@ export function AssistantConversationBody({
   // contextWindow 由后端在配置入库时按 MODEL_SPECS 解析后固化（用户可覆盖），前端直接读
   const contextWindow = enabledModel?.contextWindow ?? 128_000;
 
+  const prefix = useLlmusePrefix();
   const stream = useSessionStream(id, scrollRef);
 
   const timelineMessages = useMemo(
@@ -216,7 +218,7 @@ export function AssistantConversationBody({
           ref={chatInputRef}
           value={draft}
           onChange={setDraft}
-          onSend={stream.send}
+          onSend={(t) => stream.send(prefix(t))}
           onInterrupt={stream.interrupt}
           isLoading={stream.running}
           placeholder={inputPlaceholder}

@@ -13,6 +13,7 @@ import {
 import { ChatInput } from "@/components/common/chat-input";
 import { MessageList } from "@/components/session/message-list";
 import { useChatScroll } from "@/hooks/use-chat-scroll";
+import { useLlmusePrefix } from "@/hooks/use-llmuse-prefix";
 import { useSessionStream } from "@/hooks/use-session-stream";
 import {
   fetchQuickAssistantName,
@@ -90,16 +91,18 @@ export function AssistantDock() {
   }, [nameDraft, name, setName]);
 
   // 首条惰性创建全局 quick 会话；之后走 stream.send
+  const prefix = useLlmusePrefix();
   const handleSend = useCallback(
     async (body: string) => {
+      const text = prefix(body);
       if (!sessionId) {
-        const res = await createSession(body, "quick");
+        const res = await createSession(text, "quick");
         setSessionId(res.sessionId);
         return;
       }
-      await stream.send(body);
+      await stream.send(text);
     },
-    [sessionId, stream, setSessionId],
+    [sessionId, stream, setSessionId, prefix],
   );
 
   return (

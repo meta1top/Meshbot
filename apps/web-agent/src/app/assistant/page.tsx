@@ -12,6 +12,7 @@ import {
 } from "@/components/common/chat-input";
 import { SuggestionChips } from "@/components/common/suggestion-chips";
 import { AppShellLayout } from "@/components/layouts/app-shell-layout";
+import { useLlmusePrefix } from "@/hooks/use-llmuse-prefix";
 import { toI18nList } from "@/lib/i18n-list";
 import { createSession } from "@/rest/session";
 
@@ -19,6 +20,7 @@ export default function AssistantHome() {
   const t = useTranslations("home");
   const router = useRouter();
   const addSession = useSetAtom(addSessionAtom);
+  const prefix = useLlmusePrefix();
   const [sending, setSending] = useState(false);
   const [draft, setDraft] = useState("");
   const inputRef = useRef<ChatInputHandle>(null);
@@ -51,7 +53,7 @@ export default function AssistantHome() {
     if (sending) return;
     setSending(true);
     try {
-      const { sessionId, session } = await createSession(msg);
+      const { sessionId, session } = await createSession(prefix(msg));
       addSession(session);
       router.push(`/messages?kind=assistant&id=${sessionId}`);
     } catch (err) {
