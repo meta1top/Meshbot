@@ -32,6 +32,9 @@ import { SkillInstallTool } from "./tools/builtins/skill-install.tool";
 import { SkillListTool } from "./tools/builtins/skill-list.tool";
 import { SkillLoadTool } from "./tools/builtins/skill-load.tool";
 import { RenameQuickAssistantTool } from "./tools/builtins/rename-quick-assistant.tool";
+import { ImUnreadOverviewTool } from "./tools/builtins/im-unread-overview.tool";
+import { ImReadConversationTool } from "./tools/builtins/im-read-conversation.tool";
+import { ImListMembersTool } from "./tools/builtins/im-list-members.tool";
 import { SkillPublishTool } from "./tools/builtins/skill-publish.tool";
 import { SkillSearchMarketTool } from "./tools/builtins/skill-search-market.tool";
 import { SkillUninstallTool } from "./tools/builtins/skill-uninstall.tool";
@@ -68,6 +71,9 @@ import { SkillUninstallTool } from "./tools/builtins/skill-uninstall.tool";
     SkillSearchMarketTool,
     SkillPublishTool,
     RenameQuickAssistantTool,
+    ImUnreadOverviewTool,
+    ImReadConversationTool,
+    ImListMembersTool,
     MemoryService,
     MemoryCoreWriteTool,
     MemoryAddTool,
