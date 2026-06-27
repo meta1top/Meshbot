@@ -1,4 +1,5 @@
 import { computeToolCallStatus } from "./session-history-status";
+import { AccountContextService } from "@meshbot/agent";
 import {
   type CreateSessionResponse,
   type DeletePendingResponse,
@@ -11,6 +12,7 @@ import {
   type SessionDeleteResponse,
   type SessionListResponse,
   type SessionSummary,
+  confirmToolCallSchema,
 } from "@meshbot/types-agent";
 import {
   Body,
@@ -25,12 +27,14 @@ import {
 import { ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import {
   AppendMessageDto,
+  ConfirmToolCallDto,
   CreateSessionDto,
   MessageFeedbackDto,
   SessionListResponseDto,
   SessionPatchDto,
   SessionSummaryDto,
 } from "../dto/session.dto";
+import { ConfirmationService } from "../services/confirmation.service";
 import { LlmCallService } from "../services/llm-call.service";
 import { RunnerService } from "../services/runner.service";
 import { SessionMessageService } from "../services/session-message.service";
@@ -47,6 +51,8 @@ export class SessionController {
     private readonly llmCalls: LlmCallService,
     private readonly sessionMessages: SessionMessageService,
     private readonly titleService: SessionTitleService,
+    private readonly confirmation: ConfirmationService,
+    private readonly account: AccountContextService,
   ) {}
 
   /** 创建会话：写库后异步发起 run，立即返回 sessionId + session 完整对象。 */
@@ -196,6 +202,23 @@ export class SessionController {
       this.runner.kickRetry(id);
     }
     return { retried: hasFailed };
+  }
+
+  /** 确认或取消一次挂起的 HITL 工具调用（send/cancel + 可选编辑内容）。 */
+  @Post(":sessionId/confirm")
+  @ApiOperation({ summary: "确认/取消一次待发送的工具调用（send/cancel）" })
+  confirm(
+    @Param("sessionId") sessionId: string,
+    @Body() body: ConfirmToolCallDto,
+  ): { ok: true } {
+    const { toolCallId, decision, content } = confirmToolCallSchema.parse(body);
+    const key = ConfirmationService.key(
+      this.account.getOrThrow(),
+      sessionId,
+      toolCallId,
+    );
+    this.confirmation.resolve(key, { action: decision, content });
+    return { ok: true };
   }
 
   /**

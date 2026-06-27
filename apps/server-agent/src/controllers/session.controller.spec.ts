@@ -47,6 +47,8 @@ describe("SessionController.history byMessage（id==langgraphId 回归）", () =
         listPage: async () => ({ messages: [msg], hasMore: false }),
       } as unknown as SessionMessageService,
       {} as unknown as SessionTitleService,
+      undefined as never,
+      undefined as never,
     );
 
     const res = await controller.history("s1", { limit: "10" });

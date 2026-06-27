@@ -6,6 +6,7 @@ import {
   SessionListResponseSchema,
   SessionPatchSchema,
   SessionSummarySchema,
+  confirmToolCallSchema,
 } from "@meshbot/types-agent";
 
 /** POST /api/sessions 入参 DTO。 */
@@ -27,3 +28,6 @@ export class SessionSummaryDto extends createZodDto(SessionSummarySchema) {}
 export class SessionListResponseDto extends createZodDto(
   SessionListResponseSchema,
 ) {}
+
+/** POST /api/sessions/:sessionId/confirm 入参 DTO（send/cancel 工具调用确认）。 */
+export class ConfirmToolCallDto extends createZodDto(confirmToolCallSchema) {}
