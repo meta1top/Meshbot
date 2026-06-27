@@ -5,6 +5,7 @@ import type {
   SessionStatus,
   SessionSummary,
 } from "@meshbot/types-agent";
+import { stripLlmuse } from "@meshbot/types-agent";
 import { ThreadStateService } from "@meshbot/agent";
 import {
   BadRequestException,
@@ -97,7 +98,7 @@ export class SessionService {
     input: CreateSessionInput,
   ): Promise<{ sessionId: string; session: SessionSummary }> {
     const saved = (await this.sessionRepo.save({
-      title: input.content.slice(0, TITLE_MAX),
+      title: stripLlmuse(input.content).slice(0, TITLE_MAX),
       status: "running" as const,
       kind: input.kind ?? "user",
     })) as Session;

@@ -64,6 +64,20 @@ function fakeGraph(content: string) {
   };
 }
 
+/** 假 ModelResolver —— 记录 invoke 收到的 prompt，便于断言喂给 LLM 的内容。 */
+function fakeGraphCapture(captured: { prompt: string }) {
+  return {
+    async getTitleModel() {
+      return {
+        async invoke(prompt: string) {
+          captured.prompt = prompt;
+          return { content: "标题" };
+        },
+      };
+    },
+  };
+}
+
 function fakeGraphError(err: Error) {
   return {
     async getTitleModel() {
@@ -101,6 +115,26 @@ describe("SessionTitleService", () => {
     expect(events.map((e) => e.name)).toContain(SESSION_WS_EVENTS.titleUpdated);
     const evt = events.find((e) => e.name === SESSION_WS_EVENTS.titleUpdated);
     expect(evt?.payload).toEqual({ sessionId: "s1", title: "会话标题" });
+  });
+
+  it("剔除首条消息的 <llmuse> 块后再喂 LLM 生成标题", async () => {
+    const sess = fakeSessionService();
+    const { emitter } = spyEmitter();
+    const captured = { prompt: "" };
+    const svc = new SessionTitleService(
+      fakeGraphCapture(captured) as never,
+      sess as never,
+      fakePromptService() as never,
+      emitter,
+      new AccountContextService(),
+    );
+    svc.schedule(
+      "s1",
+      "<llmuse>\n页面: 消息\n会话: Test06 (dm, id=1), 未读 0\n</llmuse>\n帮我写个周报",
+    );
+    await flushPromises();
+    expect(captured.prompt).not.toContain("<llmuse>");
+    expect(captured.prompt).toContain("帮我写个周报");
   });
 
   it("LLM 返空白 → 不写库 + 不 emit", async () => {

@@ -5,6 +5,7 @@ import {
 } from "@meshbot/agent";
 import {
   SESSION_WS_EVENTS,
+  stripLlmuse,
   type SessionTitleUpdatedEvent,
 } from "@meshbot/types-agent";
 import { Injectable, Logger } from "@nestjs/common";
@@ -106,7 +107,7 @@ export class SessionTitleService {
 
   private buildPrompt(content: string): string {
     const template = this.prompt.getPrompt("session-title") ?? FALLBACK_PROMPT;
-    return template.replaceAll("{{content}}", content);
+    return template.replaceAll("{{content}}", stripLlmuse(content));
   }
 }
 

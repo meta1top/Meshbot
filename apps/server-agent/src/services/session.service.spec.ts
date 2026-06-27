@@ -149,6 +149,15 @@ describe("SessionService", () => {
     expect(session.title).toBe("a".repeat(30));
   });
 
+  it("createSession 默认标题剔除 <llmuse> 块", async () => {
+    const { sessionId } = await service.createSession({
+      content:
+        "<llmuse>\n页面: 消息\n会话: Test06 (dm, id=1), 未读 0\n</llmuse>\n你好世界",
+    });
+    const session = await service.findSessionOrFail(sessionId);
+    expect(session.title).toBe("你好世界");
+  });
+
   it("appendMessage 写 pending 消息并返回 queued 标志", async () => {
     const { sessionId } = await service.createSession({ content: "first" });
     const res = await service.appendMessage(sessionId, {
