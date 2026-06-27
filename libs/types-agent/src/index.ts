@@ -1,4 +1,5 @@
 export * from "./ai";
+export * from "./ask-question";
 export {
   type AuthStatus,
   type CreateOrgInput,
