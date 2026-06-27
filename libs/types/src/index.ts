@@ -37,6 +37,4 @@ export {
   type ImSendInput,
   ImSendSchema,
   type PresenceState,
-  type SetAgentEnabledInput,
-  SetAgentEnabledSchema,
 } from "./im/im.schema";

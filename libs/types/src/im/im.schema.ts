@@ -61,6 +61,3 @@ export type CreateDmInput = z.infer<typeof CreateDmSchema>;
 
 export const AddChannelMemberSchema = z.object({ userId: z.string() });
 export type AddChannelMemberInput = z.infer<typeof AddChannelMemberSchema>;
-
-export const SetAgentEnabledSchema = z.object({ enabled: z.boolean() });
-export type SetAgentEnabledInput = z.infer<typeof SetAgentEnabledSchema>;

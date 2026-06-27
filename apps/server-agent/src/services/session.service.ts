@@ -14,7 +14,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { In, QueryFailedError, Repository } from "typeorm";
+import { In, Repository } from "typeorm";
 import { ScopedRepository } from "../account/scoped-repository";
 import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
 import { PendingMessage } from "../entities/pending-message.entity";
@@ -25,16 +25,6 @@ import { ScheduleService } from "./schedule.service";
 import { SessionMessageService } from "./session-message.service";
 
 const TITLE_MAX = 30;
-
-/** 判定是否 SQLite 唯一约束冲突（伴生会话并发首建竞态）。 */
-function isUniqueViolation(err: unknown): boolean {
-  if (!(err instanceof QueryFailedError)) return false;
-  const code = (err.driverError as { code?: string } | undefined)?.code;
-  return (
-    code === "SQLITE_CONSTRAINT_UNIQUE" ||
-    /UNIQUE constraint failed/i.test(err.message)
-  );
-}
 
 /** Session entity → SessionSummary（Date → ISO，pinned 派生）。 */
 function toSummary(s: Session): SessionSummary {
@@ -342,60 +332,6 @@ export class SessionService {
     );
     const s = await this.findSessionOrFail(sessionId);
     return toSummary(s);
-  }
-
-  /**
-   * 找/建某 IM 会话的伴生会话（kind='im'）；同 conversationId 幂等。
-   * 单表写入，无需事务。并发首建竞态由 DB 级唯一索引兜底：save 冲突时重读返回赢家。
-   */
-  async findOrCreateImCompanion(
-    conversationId: string,
-    convType: "channel" | "dm",
-    title: string,
-  ): Promise<Session> {
-    const existing = await this.sessionRepo.findOneBy({
-      imConversationId: conversationId,
-      kind: "im",
-    });
-    if (existing) return existing;
-    try {
-      return (await this.sessionRepo.save({
-        title,
-        status: "idle" as const,
-        kind: "im" as const,
-        imConversationId: conversationId,
-        imConvType: convType,
-        agentEnabled: true,
-      })) as Session;
-    } catch (err) {
-      if (isUniqueViolation(err)) {
-        const winner = await this.sessionRepo.findOneBy({
-          imConversationId: conversationId,
-          kind: "im",
-        });
-        if (winner) return winner;
-      }
-      throw err;
-    }
-  }
-
-  /** 取某 IM 会话的伴生会话；无则 null。 */
-  async getImCompanion(conversationId: string): Promise<Session | null> {
-    return this.sessionRepo.findOneBy({
-      imConversationId: conversationId,
-      kind: "im",
-    });
-  }
-
-  /** 切换某 IM 会话伴生 Agent 开关。 */
-  async setCompanionAgentEnabled(
-    conversationId: string,
-    enabled: boolean,
-  ): Promise<void> {
-    await this.sessionRepo.update(
-      { imConversationId: conversationId, kind: "im" },
-      { agentEnabled: enabled },
-    );
   }
 
   /**
