@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@meshbot/design";
+import type { TodoItem } from "@meshbot/types-agent";
 import {
   extractPartialString,
   parsePartialToolArgs,
@@ -9,6 +10,7 @@ import { ChevronDown, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { ImSendConfirmCard } from "./im-send-confirm-card";
 import type { ToolCallView } from "./message-list";
+import { TodoList } from "./todo-list";
 
 /**
  * 单次 tool 调用的「时间线事件」式展示。
@@ -34,6 +36,17 @@ export function ToolCallBlock({
   const [open, setOpen] = useState(false);
   if (tool.name === "im_send_message" && tool.status !== "streaming") {
     return <ImSendConfirmCard tool={tool} sessionId={sessionId} />;
+  }
+  if (tool.name === "todo_write" && tool.status !== "streaming") {
+    const todos = ((tool.args ?? {}) as { todos?: TodoItem[] }).todos ?? [];
+    return (
+      <div className="flex w-full flex-col gap-1.5 rounded-[8px] border border-border bg-muted/30 px-3 py-2">
+        <div className="text-xs font-medium text-muted-foreground">
+          待办清单
+        </div>
+        <TodoList todos={todos} />
+      </div>
+    );
   }
   const streaming = tool.status === "streaming";
   // streaming 阶段权威 args 还没到，用累积的 argsText 尽力部分解析。

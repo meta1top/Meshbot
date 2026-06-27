@@ -11,6 +11,7 @@ import { currentUserAtom } from "@/atoms/auth";
 import { AssistantMessageActions } from "./assistant-message-actions";
 import { CompactionRow } from "./compaction-row";
 import { MarkdownContent } from "./markdown-content";
+import { TodoPanel } from "./todo-panel";
 import { ToolCallBlock } from "./tool-call-block";
 import { UserMessageActions } from "./user-message-actions";
 
@@ -107,6 +108,7 @@ export function MessageList({
   const assistantName = t("assistantName");
   return (
     <div className="flex flex-col gap-1 pb-6">
+      <TodoPanel messages={messages} />
       {messages
         .filter(
           (m) => !(m.role === "system" && m.metadata?.kind !== "compaction"),
