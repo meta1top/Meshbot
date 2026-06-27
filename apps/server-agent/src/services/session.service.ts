@@ -293,7 +293,7 @@ export class SessionService {
 
   /**
    * 列出全部会话，按「固定优先 / 固定组按 pinnedAt desc / 其余按 updatedAt desc」
-   * 排序。仅返回 kind='user' 的普通会话，伴生会话（kind='im'）隐藏。
+   * 排序。仅返回 kind='user' 的普通会话（排除 quick 随手问临时会话）。
    *
    * id desc 作 tie-breaker（避免同毫秒漂移）。当前 dev 量级一次性全取，未来上
    * 千再加分页。
