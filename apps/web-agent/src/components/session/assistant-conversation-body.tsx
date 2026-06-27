@@ -1,5 +1,6 @@
 "use client";
 
+import { stripLlmuse } from "@meshbot/types-agent";
 import { useAtomValue } from "jotai";
 import { ArrowDown } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -115,10 +116,11 @@ export function AssistantConversationBody({
     try {
       const { content } = await deletePendingMessage(id, pendingId);
       stream.apply((prev) => prev.filter((m) => m.id !== pendingId));
-      setDraft(content);
-      // 把 content 显式传给 focus —— setDraft 是异步的，focus 同一 tick 调用时
+      const clean = stripLlmuse(content);
+      setDraft(clean);
+      // 把 clean 显式传给 focus —— setDraft 是异步的，focus 同一 tick 调用时
       // 闭包里的 value 仍是旧值。withText 让组件直接同步 DOM 到末尾。
-      chatInputRef.current?.focus(content);
+      chatInputRef.current?.focus(clean);
     } catch (err) {
       const status =
         err instanceof Error &&

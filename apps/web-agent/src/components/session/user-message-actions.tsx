@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@meshbot/design";
+import { stripLlmuse } from "@meshbot/types-agent";
 import { Check, Copy, Loader2, RotateCcw } from "lucide-react";
 import { useCallback, useState } from "react";
 import { regenerateMessage } from "@/rest/session";
@@ -43,7 +44,7 @@ export function UserMessageActions({
 
   const handleCopy = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(content);
+      await navigator.clipboard.writeText(stripLlmuse(content));
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {

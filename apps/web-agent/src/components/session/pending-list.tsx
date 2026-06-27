@@ -1,5 +1,6 @@
 "use client";
 
+import { stripLlmuse } from "@meshbot/types-agent";
 import { Loader2, Pencil, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
@@ -48,7 +49,7 @@ export function PendingList({ messages, onDelete, onEdit }: PendingListProps) {
             key={m.id}
             className="group flex items-center justify-between gap-2 border-b border-border/60 px-2 py-1.5 text-xs text-muted-foreground"
           >
-            <span className="truncate">{m.content}</span>
+            <span className="truncate">{stripLlmuse(m.content)}</span>
             <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
               <button
                 type="button"
