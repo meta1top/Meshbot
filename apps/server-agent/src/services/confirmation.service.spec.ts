@@ -44,4 +44,18 @@ describe("ConfirmationService", () => {
     const svc = new ConfirmationService();
     expect(svc.resolve("nope", { action: "cancel" })).toBe(false);
   });
+
+  it("泛型 resolve/waitForDecision 支持任意 payload（非 send/cancel）", async () => {
+    const svc = new ConfirmationService();
+    const ac = new AbortController();
+    const p = svc.waitForDecision<{ answers: string[] }>(
+      "k",
+      ac.signal,
+      10_000,
+    );
+    expect(
+      svc.resolve<{ answers: string[] }>("k", { answers: ["A", "B"] }),
+    ).toBe(true);
+    await expect(p).resolves.toEqual({ answers: ["A", "B"] });
+  });
 });
