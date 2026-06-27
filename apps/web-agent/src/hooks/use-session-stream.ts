@@ -55,7 +55,7 @@ export interface SessionStream {
 /**
  * 会话流式状态 hook：拉历史 + 订阅 SESSION_WS 事件 → 维护 TimelineMessage 列表、
  * running、compaction、历史分页，并暴露 send/interrupt/loadMoreHistory 与 apply。
- * sessionId 为 null 时惰性 inert（不请求不订阅）—— 供侧栏在伴生会话未就绪时安全挂载。
+ * sessionId 为 null 时惰性 inert（不请求不订阅），可安全挂载。
  */
 export function useSessionStream(
   sessionId: string | null,
