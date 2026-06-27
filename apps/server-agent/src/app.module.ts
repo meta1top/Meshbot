@@ -31,6 +31,7 @@ import { AuthModule } from "./auth.module";
 import { CronJobModule } from "./cron-job.module";
 import { ImContextModule } from "./im-context.module";
 import { ImModule } from "./im.module";
+import { ImSendModule } from "./im-send.module";
 import { QuickAssistantModule } from "./quick-assistant.module";
 import { RuntimeContextModule } from "./runtime-context.module";
 import { SkillModule } from "./skill.module";
@@ -126,6 +127,7 @@ const meshbotDir = resolveMeshbotDir();
     AuthModule,
     ImModule,
     ImContextModule,
+    ImSendModule,
     SkillModule,
     QuickAssistantModule,
     StaticModule.forRoot(),
