@@ -11,7 +11,6 @@ import { conversationsAtom, upsertConversationAtom } from "@/atoms/im";
 import { addSessionAtom } from "@/atoms/sessions";
 import { ChatInput } from "@/components/common/chat-input";
 import { ChannelPicker } from "@/components/im/channel-picker";
-import { useLlmusePrefix } from "@/hooks/use-llmuse-prefix";
 import { getEventsSocket } from "@/lib/events-socket";
 import { filterRecipients } from "@/lib/recipient-filter";
 import { createDm } from "@/rest/im";
@@ -34,7 +33,6 @@ export function NewMessageView() {
   const orgId = currentUser?.org?.id ?? null;
   const { data: members = [] } = useMembers(orgId);
 
-  const prefix = useLlmusePrefix();
   const [query, setQuery] = useState("");
   const [recipient, setRecipient] = useState<Recipient | null>(null);
   const [draft, setDraft] = useState("");
@@ -55,7 +53,7 @@ export function NewMessageView() {
   const handleSend = async (body: string) => {
     if (!recipient) return;
     if (recipient.kind === "session") {
-      const res = await createSession(prefix(body));
+      const res = await createSession(body);
       addSession(res.session);
       router.push(`/messages?kind=assistant&id=${res.sessionId}`);
       return;
