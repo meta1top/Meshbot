@@ -21,6 +21,7 @@ import { EditFileTool } from "./tools/builtins/edit-file.tool";
 import { GrepTool } from "./tools/builtins/grep.tool";
 import { GlobTool } from "./tools/builtins/glob.tool";
 import { DateTool } from "./tools/builtins/date.tool";
+import { TodoWriteTool } from "./tools/builtins/todo-write.tool";
 import { MemoryAddTool } from "./tools/builtins/memory-add.tool";
 import { MemoryCoreWriteTool } from "./tools/builtins/memory-core-write.tool";
 import { MemoryDeleteTool } from "./tools/builtins/memory-delete.tool";
@@ -61,6 +62,7 @@ import { SkillUninstallTool } from "./tools/builtins/skill-uninstall.tool";
     GrepTool,
     GlobTool,
     DateTool,
+    TodoWriteTool,
     ScheduleCreateTool,
     ScheduleListTool,
     ScheduleDeleteTool,
