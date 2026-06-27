@@ -7,6 +7,7 @@ import {
   SystemMessage,
 } from "@langchain/core/messages";
 import { Injectable } from "@nestjs/common";
+import { LLMUSE_GUIDE } from "../prompt/llmuse-guide";
 import { PromptService } from "../prompt/prompt.service";
 import { AccountGraphProvider } from "./account-graph.provider";
 import { ContextBuilder } from "./context-builder";
@@ -253,6 +254,7 @@ export class GraphRunner {
     const systemPrompt = [
       this.promptService.getPrompt("system"),
       this.contextBuilder.buildMemorySection(),
+      LLMUSE_GUIDE,
     ]
       .filter(Boolean)
       .join("\n\n");

@@ -195,6 +195,31 @@ describe("ContextBuilder core 记忆注入系统提示", () => {
     capturedSystemMessages.push(...(sysMsgs as SystemMessage[]));
   });
 
+  it("首轮系统提示含 <llmuse> 说明", async () => {
+    const { graphRunner, threadState, ctx } = makeGs({
+      readCore: () => "用户偏好简洁",
+    });
+    const threadId = await graphRunner.startSession({ model: "fake" });
+    await ctx.run(TEST_ACCOUNT, async () => {
+      for await (const _ of graphRunner.streamMessage(threadId, [
+        { id: "pm-1", content: "hi" },
+      ])) {
+        // 消费完
+      }
+    });
+    const snapshot = await ctx.run(TEST_ACCOUNT, () =>
+      threadState.getMessagesSnapshot(threadId),
+    );
+    const sysMsgs = snapshot.filter(
+      (m) => m._getType() === "system" && m.id !== "system:ctx",
+    );
+    const content =
+      sysMsgs.length > 0 && typeof sysMsgs[0].content === "string"
+        ? sysMsgs[0].content
+        : "";
+    expect(content).toContain("<llmuse>");
+  });
+
   it("既有 harness（无 MemoryService）：构造不报错，streamMessage 正常流式", async () => {
     const { graphRunner, ctx } = makeGs(undefined);
     const threadId = await graphRunner.startSession({ model: "fake" });
