@@ -284,6 +284,26 @@ describe("ContextBuilder.buildContextMessage", () => {
     expect(content).not.toMatch(/\d{4}-\d{2}-\d{2}/);
   });
 
+  it("quickAssistantName 非空：assistantName 注入所有会话类型（不再限 quick）", async () => {
+    const fakePort: RuntimeContextPort = {
+      resolve: async () => ({
+        displayName: "Grant",
+        language: "zh",
+        timezone: "Asia/Shanghai",
+        quickAssistantName: "小M",
+      }),
+    };
+    const { contextBuilder, ctx } = makeGs(fakePort);
+
+    // 普通会话（不传 kind，等价 kind!=="quick"）也应注入助手名字
+    const msg = await ctx.run("acct-3", () =>
+      contextBuilder.buildContextMessage("s3"),
+    );
+
+    const content = typeof msg.content === "string" ? msg.content : "";
+    expect(content).toContain("assistantName: 小M");
+  });
+
   it("无 port 时：timezone 兜底为 Intl 本地时区", async () => {
     const { contextBuilder, ctx } = makeGs(undefined);
 

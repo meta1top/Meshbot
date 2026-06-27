@@ -68,23 +68,19 @@ export class ContextBuilder {
   }
 
   /** 组装运行时上下文消息（稳定 id system:ctx；每 run 刷新；不含易变 now）。 */
-  async buildContextMessage(
-    threadId: ThreadId,
-    kind?: string,
-  ): Promise<SystemMessage> {
+  async buildContextMessage(threadId: ThreadId): Promise<SystemMessage> {
     const cloudUserId = this.account.getOrThrow();
     const ext = this.runtimeContext
       ? await this.runtimeContext.resolve()
       : null;
     const tz =
       ext?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
-    // 随手问（quick）会话：注入助手自己的名字（用户可改），让回复贴合用户设定的名字
-    const isQuick = kind === "quick";
+    // 注入助手自己的名字（用户可改）：所有会话类型一致，让 agent 始终知道自己叫什么
     const lines = [
       `cloudUserId: ${cloudUserId}`,
       `sessionId: ${threadId}`,
       ...(ext?.displayName ? [`user: ${ext.displayName}`] : []),
-      ...(isQuick && ext?.quickAssistantName
+      ...(ext?.quickAssistantName
         ? [`assistantName: ${ext.quickAssistantName}（你自己的名字）`]
         : []),
       `model: ${this.modelResolver?.getMeta().model ?? ""}`,

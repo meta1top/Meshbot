@@ -443,16 +443,9 @@ export class RunnerService implements OnModuleInit {
   ): Promise<void> {
     let firstHumanLogged = false;
     let firstChunkLogged = false;
-    // 会话类型透传给 graph：quick（随手问）会话据此把随手问名字注入上下文
-    const kind = (await this.sessions.findOrNull(sessionId))?.kind;
     const stream = resume
-      ? this.graphRunner.resumeStream(sessionId, run.abort.signal, kind)
-      : this.graphRunner.streamMessage(
-          sessionId,
-          batch,
-          run.abort.signal,
-          kind,
-        );
+      ? this.graphRunner.resumeStream(sessionId, run.abort.signal)
+      : this.graphRunner.streamMessage(sessionId, batch, run.abort.signal);
     for await (const event of stream) {
       if (event.kind === "human") {
         if (!firstHumanLogged) {

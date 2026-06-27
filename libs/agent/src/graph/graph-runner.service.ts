@@ -240,16 +240,14 @@ export class GraphRunner {
     threadId: ThreadId,
     inputs: { id: string; content: string }[],
     signal?: AbortSignal,
-    kind?: string,
   ): AsyncGenerator<StreamChunk> {
-    yield* this.streamMessageImpl(threadId, inputs, signal, kind);
+    yield* this.streamMessageImpl(threadId, inputs, signal);
   }
 
   private async *streamMessageImpl(
     threadId: ThreadId,
     inputs: { id: string; content: string }[],
     signal?: AbortSignal,
-    kind?: string,
   ): AsyncGenerator<StreamChunk> {
     this.promptService.reloadIfChanged();
     const systemPrompt = [
@@ -273,9 +271,7 @@ export class GraphRunner {
     }
     // system:ctx / system:skills 用稳定 id 每轮重发；reducer 按 id 原地更新
     //（位置不变、不累积），无需先 RemoveMessage 再 Add。
-    inputMessages.push(
-      await this.contextBuilder.buildContextMessage(threadId, kind),
-    );
+    inputMessages.push(await this.contextBuilder.buildContextMessage(threadId));
     if (this.contextBuilder.hasSkills()) {
       inputMessages.push(this.contextBuilder.buildSkillsMessage());
     }
@@ -306,7 +302,6 @@ export class GraphRunner {
   async *resumeStream(
     threadId: ThreadId,
     signal?: AbortSignal,
-    kind?: string,
   ): AsyncGenerator<StreamChunk> {
     await this.threadState.sanitizeOrphanToolCalls(threadId);
     yield* this.runGraphStream(
@@ -314,7 +309,7 @@ export class GraphRunner {
       {
         messages: [
           new RemoveMessage({ id: "system:ctx" }),
-          await this.contextBuilder.buildContextMessage(threadId, kind),
+          await this.contextBuilder.buildContextMessage(threadId),
         ],
       },
       signal,

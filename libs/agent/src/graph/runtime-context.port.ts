@@ -14,7 +14,7 @@ export interface RuntimeContextPort {
     displayName: string | null;
     language: string | null;
     timezone: string | null;
-    /** 随手问（quick 助手）全局名字；图层仅在 quick 会话把它注入上下文。 */
+    /** 助手（随手问）全局名字；图层在所有会话类型把它注入 system:ctx 上下文。 */
     quickAssistantName: string | null;
   }>;
 }
