@@ -152,6 +152,20 @@ export async function regenerateMessage(
   return data;
 }
 
+/** 确认/取消一次待发送的 im_send_message 工具调用。 */
+export async function confirmSend(
+  sessionId: string,
+  toolCallId: string,
+  decision: "send" | "cancel",
+  content?: string,
+): Promise<{ ok: true }> {
+  const { data } = await apiClient.post<{ ok: true }>(
+    `/api/sessions/${sessionId}/confirm`,
+    { toolCallId, decision, content },
+  );
+  return data;
+}
+
 /** 设置 assistant 消息反馈（点赞 up / 不喜欢 down / 取消 null）。 */
 export async function setMessageFeedback(
   sessionId: string,

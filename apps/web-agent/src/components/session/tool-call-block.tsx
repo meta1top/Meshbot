@@ -7,6 +7,7 @@ import {
 } from "@meshbot/web-common";
 import { ChevronDown, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { ImSendConfirmCard } from "./im-send-confirm-card";
 import type { ToolCallView } from "./message-list";
 
 /**
@@ -23,8 +24,17 @@ import type { ToolCallView } from "./message-list";
  * （执行中）→ ok/error（完成）。streaming 阶段 args 未定稿，用 argsText 尽力部分
  * 解析出行内摘要 + write/edit/bash 的正文打字预览；不再先建独立预览块再清空。
  */
-export function ToolCallBlock({ tool }: { tool: ToolCallView }) {
+export function ToolCallBlock({
+  tool,
+  sessionId,
+}: {
+  tool: ToolCallView;
+  sessionId: string;
+}) {
   const [open, setOpen] = useState(false);
+  if (tool.name === "im_send_message" && tool.status !== "streaming") {
+    return <ImSendConfirmCard tool={tool} sessionId={sessionId} />;
+  }
   const streaming = tool.status === "streaming";
   // streaming 阶段权威 args 还没到，用累积的 argsText 尽力部分解析。
   const displayArgs =

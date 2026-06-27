@@ -180,7 +180,11 @@ export function MessageList({
                   m.toolCalls.length > 0 && (
                     <div className="flex flex-col gap-2">
                       {m.toolCalls.map((tc) => (
-                        <ToolCallBlock key={tc.toolCallId} tool={tc} />
+                        <ToolCallBlock
+                          key={tc.toolCallId}
+                          tool={tc}
+                          sessionId={sessionId}
+                        />
                       ))}
                     </div>
                   )}
