@@ -53,3 +53,7 @@ export {
   IM_SEND_PORT,
   type ImSendPort,
 } from "./tools/im-send.port";
+export {
+  ASK_QUESTION_PORT,
+  type AskQuestionPort,
+} from "./tools/ask-question.port";
