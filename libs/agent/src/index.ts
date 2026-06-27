@@ -49,3 +49,7 @@ export {
   IM_CONTEXT_PORT,
   type ImContextPort,
 } from "./tools/im-context.port";
+export {
+  IM_SEND_PORT,
+  type ImSendPort,
+} from "./tools/im-send.port";
