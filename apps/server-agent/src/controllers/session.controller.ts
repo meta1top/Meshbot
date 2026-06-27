@@ -12,6 +12,7 @@ import {
   type SessionDeleteResponse,
   type SessionListResponse,
   type SessionSummary,
+  answerQuestionsSchema,
   confirmToolCallSchema,
 } from "@meshbot/types-agent";
 import {
@@ -26,6 +27,7 @@ import {
 } from "@nestjs/common";
 import { ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import {
+  AnswerQuestionsDto,
   AppendMessageDto,
   ConfirmToolCallDto,
   CreateSessionDto,
@@ -218,6 +220,23 @@ export class SessionController {
       toolCallId,
     );
     this.confirmation.resolve(key, { action: decision, content });
+    return { ok: true };
+  }
+
+  /** 提交一组问题的回答，解锁挂起的 ask_question 工具。 */
+  @Post(":sessionId/answer")
+  @ApiOperation({ summary: "提交 ask_question 的回答" })
+  answer(
+    @Param("sessionId") sessionId: string,
+    @Body() body: AnswerQuestionsDto,
+  ): { ok: true } {
+    const { toolCallId, answers } = answerQuestionsSchema.parse(body);
+    const key = ConfirmationService.key(
+      this.account.getOrThrow(),
+      sessionId,
+      toolCallId,
+    );
+    this.confirmation.resolve(key, { answers });
     return { ok: true };
   }
 
