@@ -25,5 +25,6 @@ import { EventsGateway } from "./ws/events.gateway";
   imports: [AuthModule, SessionModule],
   controllers: [CloudImController, ImAgentController, SidebarController],
   providers: [CloudImService, EventsGateway, ImAgentService, SidebarService],
+  exports: [CloudImService],
 })
 export class ImModule {}
