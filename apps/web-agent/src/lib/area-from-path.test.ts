@@ -10,9 +10,9 @@ describe("areaFromPath", () => {
     expect(areaFromPath("/messages?id=abc")).toBe("messages");
   });
 
-  it("把助手相关路由 /session /assistant 归入 messages", () => {
+  it("把 /session 归入 messages（/assistant 路由已废弃 → other）", () => {
     expect(areaFromPath("/session?id=x")).toBe("messages");
-    expect(areaFromPath("/assistant")).toBe("messages");
+    expect(areaFromPath("/assistant")).toBe("other");
   });
 
   it("把 /more 与 /schedule（定时任务并入更多）归入 more", () => {
