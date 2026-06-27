@@ -2,6 +2,7 @@
 
 import { cn } from "@meshbot/design";
 import type { MessageUsage } from "@meshbot/types-agent";
+import { stripLlmuse } from "@meshbot/types-agent";
 import { useAtomValue } from "jotai";
 import { ChevronRight, Sparkles } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -168,7 +169,7 @@ export function MessageList({
                       <TypingDots />
                     ) : (
                       <MarkdownContent
-                        text={m.content}
+                        text={stripLlmuse(m.content)}
                         streaming={m.role === "assistant" && m.streaming}
                       />
                     )}
