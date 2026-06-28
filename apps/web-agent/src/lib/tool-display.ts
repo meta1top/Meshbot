@@ -25,6 +25,7 @@ const TOOL_LABELS: Record<string, string> = {
   skill_publish: "发布技能",
   skill_search_market: "搜索技能市场",
   skill_uninstall: "卸载技能",
+  present_file: "呈现文件",
   todo_write: "更新待办",
   write_file: "写入文件",
 };

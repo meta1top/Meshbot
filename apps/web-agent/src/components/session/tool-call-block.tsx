@@ -9,6 +9,7 @@ import {
 import { ChevronDown, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { sanitizeMeshbotPaths, toolDisplayName } from "@/lib/tool-display";
+import { ArtifactFileCard } from "./artifact-file-card";
 import { AskQuestionCard } from "./ask-question-card";
 import { ImSendConfirmCard } from "./im-send-confirm-card";
 import type { ToolCallView } from "./message-list";
@@ -41,6 +42,9 @@ export function ToolCallBlock({
   }
   if (tool.name === "ask_question" && tool.status !== "streaming") {
     return <AskQuestionCard tool={tool} sessionId={sessionId} />;
+  }
+  if (tool.name === "present_file" && tool.status !== "streaming") {
+    return <ArtifactFileCard tool={tool} />;
   }
   if (tool.name === "todo_write" && tool.status !== "streaming") {
     const todos = ((tool.args ?? {}) as { todos?: TodoItem[] }).todos ?? [];

@@ -24,3 +24,15 @@ export const assistantPanelWidthAtom = atomWithStorage(
   "meshbot.assistantPanelWidth",
   340,
 );
+
+/** 右侧面板当前内容：助手 or 产物预览。 */
+export const assistantPanelTypeAtom = atom<"assistant" | "preview">(
+  "assistant",
+);
+
+/** 当前预览的产物（相对 workspace 路径 + 标题）。 */
+export interface PreviewArtifact {
+  path: string;
+  title?: string;
+}
+export const previewArtifactAtom = atom<PreviewArtifact | null>(null);
