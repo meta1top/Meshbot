@@ -203,6 +203,51 @@ describe("CloudNodeService", () => {
     expect(ancestors.length).toBe(2);
   });
 
+  // ── listAncestors 环路保护（C-1）────────────────────────────────────────
+  it("listAncestors 对 parentId 自引用不死循环，能正常返回", async () => {
+    // 坏数据：节点 A 的 parentId 指向自身
+    const nodeA = makeNode({
+      id: "self-loop",
+      parentId: "self-loop",
+      name: "A",
+    });
+
+    const findOne = jest
+      .fn()
+      .mockImplementation(({ where: { id } }: { where: { id: string } }) => {
+        if (id === "self-loop") return Promise.resolve(nodeA);
+        return Promise.resolve(null);
+      });
+    const repo = makeNodeRepo({ findOne });
+    const svc = new CloudNodeService(repo);
+
+    // 不应无限挂起；jest 默认 5 s 超时即可覆盖
+    const result = await svc.listAncestors(nodeA);
+    // 自引用：先访问 "self-loop" → 推入 visited → 下次 break → 仅含 nodeA 自身一个结果
+    expect(result.length).toBe(1);
+    expect(result[0].id).toBe("self-loop");
+  });
+
+  it("listAncestors 对两节点成环（A→B→A）不死循环", async () => {
+    const nodeA = makeNode({ id: "cycleA", parentId: "cycleB", name: "A" });
+    const nodeB = makeNode({ id: "cycleB", parentId: "cycleA", name: "B" });
+
+    const findOne = jest
+      .fn()
+      .mockImplementation(({ where: { id } }: { where: { id: string } }) => {
+        if (id === "cycleA") return Promise.resolve(nodeA);
+        if (id === "cycleB") return Promise.resolve(nodeB);
+        return Promise.resolve(null);
+      });
+    const repo = makeNodeRepo({ findOne });
+    const svc = new CloudNodeService(repo);
+
+    // 从 nodeA 出发：cur=cycleB → 推 nodeB → cur=cycleA → cycleA 在 visited → break
+    const result = await svc.listAncestors(nodeA);
+    expect(result.length).toBe(2);
+    expect(result.map((n) => n.id)).toEqual(["cycleB", "cycleA"]);
+  });
+
   // ── nameExists ────────────────────────────────────────────────────────────
   it("nameExists 同级同名返回 true，不存在时返回 false", async () => {
     const countMock = jest
@@ -226,6 +271,17 @@ describe("CloudNodeService", () => {
     expect(updateMock).toHaveBeenCalledWith("node-1", {
       parentId: "new-parent-1",
     });
+  });
+
+  // ── move to root (M-1) ───────────────────────────────────────────────────
+  it("move(id, null) 传 null 而非 undefined，能移回根目录", async () => {
+    const updateMock = jest.fn().mockResolvedValue({ affected: 1 });
+    const repo = makeNodeRepo({ update: updateMock });
+    const svc = new CloudNodeService(repo);
+
+    await svc.move("node-1", null);
+    // 必须传 null（让 TypeORM 将列更新为 NULL），而非 undefined（被忽略）
+    expect(updateMock).toHaveBeenCalledWith("node-1", { parentId: null });
   });
 
   // ── delete ────────────────────────────────────────────────────────────────

@@ -46,7 +46,10 @@ export class CloudNodeService {
   async listAncestors(node: CloudNode): Promise<CloudNode[]> {
     const out: CloudNode[] = [];
     let cur = node.parentId;
+    const visited = new Set<string>();
     while (cur) {
+      if (visited.has(cur)) break;
+      visited.add(cur);
       const p = await this.repo.findOne({ where: { id: cur } });
       if (!p) break;
       out.push(p);
@@ -132,7 +135,7 @@ export class CloudNodeService {
 
   /** 移动节点到新父目录。 */
   async move(id: string, parentId: string | null): Promise<void> {
-    await this.repo.update(id, { parentId: parentId ?? undefined });
+    await this.repo.update(id, { parentId });
   }
 
   /**
@@ -167,8 +170,8 @@ export class CloudNodeService {
   async sumOrgReadySize(orgId: string): Promise<number> {
     const row = await this.repo
       .createQueryBuilder("n")
-      .select("COALESCE(SUM(n.sizeBytes), 0)", "total")
-      .where("n.orgId = :orgId AND n.type = 'file' AND n.status = 'ready'", {
+      .select("COALESCE(SUM(n.size_bytes), 0)", "total")
+      .where("n.org_id = :orgId AND n.type = 'file' AND n.status = 'ready'", {
         orgId,
       })
       .getRawOne<{ total: string | number }>();
