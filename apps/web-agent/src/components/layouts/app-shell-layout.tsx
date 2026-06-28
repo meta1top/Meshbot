@@ -1,15 +1,18 @@
 "use client";
 
 import { cn } from "@meshbot/design";
-import { useAtom } from "jotai";
+import { useAtom, useAtomValue } from "jotai";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { type ReactNode, Suspense, useCallback, useEffect } from "react";
 import {
   assistantPanelOpenAtom,
+  assistantPanelTypeAtom,
   assistantPanelWidthAtom,
+  previewArtifactAtom,
   sidebarDrawerOpenAtom,
 } from "@/atoms/assistant-panel";
+import { ArtifactPreviewPanel } from "@/components/artifact/artifact-preview-panel";
 import { DragRegion } from "@/components/drag-region";
 import { AssistantDock } from "@/components/im/assistant-dock";
 import { MessagesSidebar } from "@/components/shell/messages-sidebar";
@@ -59,6 +62,8 @@ export function AppShellLayout({
   // Shell 级全局事件总线订阅：常驻于壳，任何页面都能实时更新未读/会话/在线/定时任务。
   useGlobalEvents();
   const [panelWidth, setPanelWidth] = useAtom(assistantPanelWidthAtom);
+  const panelType = useAtomValue(assistantPanelTypeAtom);
+  const previewArtifact = useAtomValue(previewArtifactAtom);
 
   // 随手问面板左缘拖拽改宽（仅 xl+ 内联态）：鼠标左移→变宽；clamp 300–640；持久化在 atom。
   const startPanelResize = useCallback(
@@ -209,7 +214,11 @@ export function AppShellLayout({
               !panelOpen && "xl:hidden",
             )}
           >
-            <AssistantDock />
+            {panelType === "preview" && previewArtifact ? (
+              <ArtifactPreviewPanel />
+            ) : (
+              <AssistantDock />
+            )}
           </aside>
         </div>
       </div>
