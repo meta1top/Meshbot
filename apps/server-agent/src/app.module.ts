@@ -36,6 +36,7 @@ import { ImSendModule } from "./im-send.module";
 import { QuickAssistantModule } from "./quick-assistant.module";
 import { RuntimeContextModule } from "./runtime-context.module";
 import { SkillModule } from "./skill.module";
+import { ArtifactController } from "./controllers/artifact.controller";
 import { HealthController } from "./controllers/health.controller";
 import { ModelConfigController } from "./controllers/model-config.controller";
 import { SettingController } from "./controllers/setting.controller";
@@ -135,6 +136,7 @@ const meshbotDir = resolveMeshbotDir();
     StaticModule.forRoot(),
   ],
   controllers: [
+    ArtifactController,
     HealthController,
     ModelConfigController,
     SettingController,
