@@ -28,7 +28,7 @@ import { deletePendingMessage } from "@/rest/session";
 interface AssistantConversationBodyProps {
   /** 当前会话 ID，由 page 传入（渲染时必有）。 */
   id: string;
-  /** 共享滚动容器 ref，由 AppShellLayout/page 传入。 */
+  /** 共享滚动容器 ref，由 PageShell/page 传入。 */
   scrollRef: RefObject<HTMLDivElement | null>;
 }
 

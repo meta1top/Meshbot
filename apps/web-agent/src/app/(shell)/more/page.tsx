@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { ActivityHeatmap } from "@/components/common/activity-heatmap";
 import { ToolPage } from "@/components/layouts/tool-page";
+import { MoreSidebar } from "@/components/shell/more-sidebar";
 import { formatPeakHour, formatStreak } from "@/lib/format-stats";
 import { formatTokens } from "@/lib/format-tokens";
 import { fetchStats } from "@/rest/stats";
@@ -66,6 +67,7 @@ export default function MorePage() {
   return (
     <ToolPage
       title={tNav("usage")}
+      sidebar={<MoreSidebar />}
       actions={
         <div className="flex items-center gap-2 text-[11px] text-foreground/60">
           {RANGES.map((r) => (

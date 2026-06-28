@@ -7,9 +7,10 @@ import { Suspense, useEffect, useRef } from "react";
 import { currentConversationIdAtom, messagesAtom } from "@/atoms/im";
 import { ImConversationBody } from "@/components/im/im-conversation-body";
 import { ImConversationHeader } from "@/components/im/im-conversation-header";
-import { AppShellLayout } from "@/components/layouts/app-shell-layout";
+import { PageShell } from "@/components/layouts/page-shell";
 import { AssistantConversationBody } from "@/components/session/assistant-conversation-body";
 import { SessionHeader } from "@/components/session/session-header";
+import { MessagesSidebar } from "@/components/shell/messages-sidebar";
 
 function MessagesView() {
   const t = useTranslations("messages");
@@ -30,7 +31,8 @@ function MessagesView() {
   }, [id, isAssistant, setCurrentConversationId, setMessages]);
 
   return (
-    <AppShellLayout
+    <PageShell
+      sidebar={<MessagesSidebar />}
       scrollContainerRef={scrollRef}
       header={
         !id ? undefined : isAssistant ? (
@@ -49,7 +51,7 @@ function MessagesView() {
       ) : (
         <ImConversationBody id={id} scrollRef={scrollRef} />
       )}
-    </AppShellLayout>
+    </PageShell>
   );
 }
 

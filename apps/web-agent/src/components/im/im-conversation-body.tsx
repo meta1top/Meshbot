@@ -32,7 +32,7 @@ import { useMembers } from "@/rest/org";
 interface ImConversationBodyProps {
   /** 当前会话 ID，由 page 传入（渲染时必有）。 */
   id: string;
-  /** 共享滚动容器 ref，由 AppShellLayout/page 传入。 */
+  /** 共享滚动容器 ref，由 PageShell/page 传入。 */
   scrollRef: RefObject<HTMLDivElement | null>;
 }
 
@@ -97,7 +97,7 @@ export function ImConversationBody({ id, scrollRef }: ImConversationBodyProps) {
   }, [id, setCurrentConversationId]);
 
   // conversations 由侧栏 MessagesSidebar 的 loadSidebarAtom（/api/sidebar 聚合）填充；
-  // 实时订阅（message/presence/会话增删）已上移到 shell 级 useGlobalEvents（AppShellLayout），
+  // 实时订阅（message/presence/会话增删）已上移到 shell 级 useGlobalEvents（(shell)/layout），
   // 任何页面常驻。当前会话的消息追加由 applyIncomingMessage 内部按 currentId 统一处理，
   // 本组件不再单独订阅。
 

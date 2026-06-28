@@ -14,7 +14,7 @@ interface PageHeaderProps {
 /**
  * 二级页统一页头条：钉在内容区顶部、全宽、不随内容滚动。
  *
- * 经 AppShellLayout 的 `header` 槽位渲染（滚动容器之外，与会话页标题栏同机制）。
+ * 经 PageShell 的 `header` 槽位渲染（滚动容器之外，与会话页标题栏同机制）。
  * 水平内边距与内容体一致（px-4 lg:px-6），保证标题与内容左缘对齐。
  */
 export function PageHeader({ title, actions, tabs }: PageHeaderProps) {

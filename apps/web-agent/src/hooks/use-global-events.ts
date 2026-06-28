@@ -70,7 +70,7 @@ export function dispatchGlobalEvent(
 }
 
 /**
- * Shell 级全局事件总线订阅（常驻，挂在 AppShellLayout）。单一 `event` 信封 → 按 type
+ * Shell 级全局事件总线订阅（常驻，挂在 (shell)/layout）。单一 `event` 信封 → 按 type
  * 分发到 atom：IM 消息/在线/会话增删/已读、定时任务触发。任何页面都实时。
  */
 export function useGlobalEvents(): void {
