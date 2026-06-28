@@ -107,7 +107,7 @@ export function MessageList({
   const userInitial = userName.charAt(0).toUpperCase();
   const assistantName = t("assistantName");
   return (
-    <div className="flex flex-col gap-1 pb-6">
+    <div className="flex flex-col gap-1 pb-6 pt-2">
       <TodoPanel messages={messages} />
       {messages
         .filter(

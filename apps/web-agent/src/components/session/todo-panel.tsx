@@ -13,7 +13,7 @@ export function TodoPanel({ messages }: { messages: TimelineMessage[] }) {
     return null;
   }
   return (
-    <div className="sticky top-0 z-10 mb-2 flex flex-col gap-1.5 rounded-[8px] border border-border bg-background/95 px-3 py-2 backdrop-blur">
+    <div className="sticky top-2 z-20 mb-2 flex flex-col gap-1.5 rounded-[8px] border border-border bg-background/95 px-3 py-2 backdrop-blur">
       <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
         <ListTodo className="h-3.5 w-3.5" />
         待办（{done}/{todos.length} 完成）
