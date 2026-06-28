@@ -9,6 +9,8 @@ export const JWT_MAIN_STRATEGY_NAME = "jwt-main";
 export interface JwtMainPayload {
   userId: string;
   email: string;
+  /** 当前活跃组织 id；未加入任何组织时为 null */
+  orgId: string | null;
 }
 
 /**
@@ -29,6 +31,10 @@ export class JwtMainStrategy extends PassportStrategy(
   }
 
   validate(payload: JwtMainPayload): JwtMainPayload {
-    return { userId: payload.userId, email: payload.email };
+    return {
+      userId: payload.userId,
+      email: payload.email,
+      orgId: payload.orgId ?? null,
+    };
   }
 }

@@ -65,6 +65,7 @@
     "orgJoining": "Joining...",
     "orgJoinAndContinue": "Join and continue",
     "orgJoinFailed": "Failed to join, please check the invite code",
+    "orgSwitchFailed": "Failed to switch organization, please retry",
     "validation": {
       "confirmPasswordRequired": "Please confirm your password",
       "passwordNotMatch": "The two passwords do not match",
@@ -139,7 +140,8 @@
     },
     "userMenu": {
       "addAccount": "Add account",
-      "org": "Organization",
+      "org": "Manage organization",
+      "orgSwitcher": "Switch organization",
       "settings": "Settings",
       "logout": "Log out"
     },
@@ -525,7 +527,8 @@
     "settings": "",
     "org": "",
     "logout": "",
-    "addAccount": ""
+    "addAccount": "",
+    "orgSwitcher": ""
   },
   "search": {
     "placeholder": ""
@@ -671,5 +674,6 @@
   "githubPlaceholder": "",
   "installing": "",
   "install": "",
-  "sourceGithub": ""
+  "sourceGithub": "",
+  "orgSwitchFailed": ""
 }

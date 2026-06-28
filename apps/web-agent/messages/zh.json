@@ -65,6 +65,7 @@
     "orgJoining": "加入中...",
     "orgJoinAndContinue": "加入并继续",
     "orgJoinFailed": "加入失败，请检查邀请码",
+    "orgSwitchFailed": "切换组织失败，请重试",
     "validation": {
       "confirmPasswordRequired": "请确认密码",
       "passwordNotMatch": "两次输入的密码不一致",
@@ -139,7 +140,8 @@
     },
     "userMenu": {
       "addAccount": "添加账号",
-      "org": "组织",
+      "org": "管理组织",
+      "orgSwitcher": "切换组织",
       "settings": "设置",
       "logout": "退出登录"
     },
@@ -525,7 +527,8 @@
     "settings": "",
     "org": "",
     "logout": "",
-    "addAccount": ""
+    "addAccount": "",
+    "orgSwitcher": ""
   },
   "search": {
     "placeholder": ""
@@ -671,5 +674,6 @@
   "githubPlaceholder": "",
   "installing": "",
   "install": "",
-  "sourceGithub": ""
+  "sourceGithub": "",
+  "orgSwitchFailed": ""
 }

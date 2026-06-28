@@ -63,6 +63,14 @@ export class ScheduleExecutor implements OnApplicationBootstrap {
       "id" | "kind" | "cronExpr" | "timezone" | "runAt" | "cloudUserId"
     >,
   ): Promise<void> {
+    // 幂等：boot 全量装载（onApplicationBootstrap）与账号运行时恢复（onRuntimeCreated）
+    // 会并发注册同一 job，已在 SchedulerRegistry 的直接跳过，避免 DUPLICATE_SCHEDULER 崩溃。
+    if (
+      this.registry.doesExist("cron", job.id) ||
+      this.registry.doesExist("timeout", job.id)
+    ) {
+      return;
+    }
     if (job.kind === "cron") {
       const cronJob = new CronJobLib(
         job.cronExpr as string,
@@ -143,7 +151,7 @@ export class ScheduleExecutor implements OnApplicationBootstrap {
 
   /**
    * 在该账号上下文内列出其 enabled 任务并注册（作用域读，不走 unscoped 旁路）。
-   * 幂等：已在 SchedulerRegistry 的 job 跳过，避免与 boot 全量装载重复注册。
+   * 幂等由 register() 内部保证（与 boot 全量装载并发时自动跳过已注册的）。
    */
   private async registerAccountJobs(cloudUserId: string): Promise<void> {
     const jobs = await this.account.run(cloudUserId, () =>
@@ -151,10 +159,6 @@ export class ScheduleExecutor implements OnApplicationBootstrap {
     );
     for (const job of jobs) {
       if (!job.enabled) continue;
-      const exists =
-        this.registry.doesExist("cron", job.id) ||
-        this.registry.doesExist("timeout", job.id);
-      if (exists) continue;
       await this.register(job);
     }
   }

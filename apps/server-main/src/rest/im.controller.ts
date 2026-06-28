@@ -7,7 +7,6 @@ import {
   MainErrorCode,
   MembershipService,
   MessageService,
-  UserService,
 } from "@meshbot/main";
 import {
   IM_WS_EVENTS,
@@ -50,7 +49,6 @@ export class ImController {
     private readonly conversation: ConversationService,
     private readonly message: MessageService,
     private readonly membership: MembershipService,
-    private readonly users: UserService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -59,7 +57,7 @@ export class ImController {
   async listConversations(
     @CurrentUser() user: JwtMainPayload,
   ): Promise<ConversationSummary[]> {
-    const orgId = await this.resolveOrgId(user.userId);
+    const orgId = this.requireOrg(user);
     return this.conversation.listConversations(user.userId, orgId);
   }
 
@@ -69,7 +67,7 @@ export class ImController {
     @CurrentUser() user: JwtMainPayload,
     @Body() dto: CreateChannelDto,
   ): Promise<ConversationSummary> {
-    const orgId = await this.resolveOrgId(user.userId);
+    const orgId = this.requireOrg(user);
     const summary = await this.conversation.persistChannelInTx(
       orgId,
       dto.name,
@@ -99,7 +97,7 @@ export class ImController {
     @CurrentUser() user: JwtMainPayload,
     @Body() dto: CreateDmDto,
   ): Promise<ConversationSummary> {
-    const orgId = await this.resolveOrgId(user.userId);
+    const orgId = this.requireOrg(user);
     const targetIsMember = await this.membership.isMember(orgId, dto.userId);
     if (!targetIsMember) {
       throw new AppError(MainErrorCode.DM_TARGET_INVALID);
@@ -129,7 +127,7 @@ export class ImController {
     @Query("before") before?: string,
     @Query("limit") limitStr?: string,
   ): Promise<MessagePage> {
-    const orgId = await this.resolveOrgId(user.userId);
+    const orgId = this.requireOrg(user);
     await this.conversation.getVisibleOrThrow(id, user.userId, orgId);
     const n = Number(limitStr);
     const limit = Math.max(
@@ -180,17 +178,15 @@ export class ImController {
     @CurrentUser() user: JwtMainPayload,
     @Param("id") id: string,
   ): Promise<ChannelMember[]> {
-    const orgId = await this.resolveOrgId(user.userId);
+    const orgId = this.requireOrg(user);
     return this.conversation.listMembers(id, user.userId, orgId);
   }
 
-  /** 解析当前用户的活跃组织 ID；未设置活跃组织则抛 ORG_NOT_FOUND，非成员则抛 ORG_FORBIDDEN。 */
-  private async resolveOrgId(userId: string): Promise<string> {
-    const user = await this.users.findById(userId);
-    if (!user?.activeOrgId) {
+  /** 取当前请求的活跃组织（token 签发时已验成员）；未选组织抛 ORG_NOT_FOUND。 */
+  private requireOrg(user: JwtMainPayload): string {
+    if (!user.orgId) {
       throw new AppError(MainErrorCode.ORG_NOT_FOUND);
     }
-    await this.membership.assertMember(user.activeOrgId, userId);
-    return user.activeOrgId;
+    return user.orgId;
   }
 }

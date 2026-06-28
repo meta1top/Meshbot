@@ -18,6 +18,8 @@ import {
   LoginSchema,
   type RegisterUserInput,
   RegisterUserSchema,
+  type SwitchOrgInput,
+  SwitchOrgSchema,
 } from "@meshbot/types-main";
 
 /**
@@ -68,5 +70,9 @@ export class AddChannelMemberDto extends createI18nZodDto(
   AddChannelMemberSchema,
 ) {}
 export interface AddChannelMemberDto extends AddChannelMemberInput {}
+
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
+export class SwitchOrgDto extends createI18nZodDto(SwitchOrgSchema) {}
+export interface SwitchOrgDto extends SwitchOrgInput {}
 
 export { PublishSkillDto } from "./skill.dto";

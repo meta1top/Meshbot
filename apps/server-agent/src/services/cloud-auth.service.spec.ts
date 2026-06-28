@@ -132,3 +132,116 @@ describe("CloudAuthService.login", () => {
     expect(identity.setLoggedOut).toHaveBeenCalledWith("u1");
   });
 });
+
+/** switchOrg：代理云端 switch-org + 刷新镜像，不重建 runtime，不重签 JWT。 */
+describe("CloudAuthService.switchOrg", () => {
+  it("切换组织成功：调云端 switch-org + profile，upsert 新 cloudToken + 新 org，不调 createRuntime", async () => {
+    const account = new AccountContextService();
+
+    const cloud = {
+      post: jest.fn().mockResolvedValue({
+        token: "new-cloud-jwt",
+        expiresIn: "7d",
+        user: { id: "u1", email: "a@x.io", displayName: "Alice" },
+      }),
+      get: jest.fn().mockResolvedValue({
+        user: { id: "u1", email: "a@x.io", displayName: "Alice" },
+        activeOrg: { id: "org2", name: "Beta Corp", role: "member" },
+        memberships: [{ id: "org2", name: "Beta Corp", role: "member" }],
+      }),
+    };
+    const identity = {
+      get: jest.fn().mockResolvedValue({
+        cloudUserId: "u1",
+        email: "a@x.io",
+        displayName: "Alice",
+        cloudToken: "old-cloud-jwt",
+        orgId: "org1",
+        orgName: "Acme",
+        role: "owner",
+      }),
+      upsert: jest.fn().mockResolvedValue(undefined),
+    };
+    const runtime = makeRuntime();
+
+    const svc = new CloudAuthService(
+      cloud as never,
+      identity as never,
+      {} as never,
+      account,
+      runtime as never,
+    );
+
+    // getProfile 内部也调 identity.get，追加一次返回新 org 的结果
+    identity.get
+      .mockResolvedValueOnce({
+        cloudUserId: "u1",
+        email: "a@x.io",
+        displayName: "Alice",
+        cloudToken: "old-cloud-jwt",
+        orgId: "org1",
+        orgName: "Acme",
+        role: "owner",
+      })
+      .mockResolvedValueOnce({
+        cloudUserId: "u1",
+        email: "a@x.io",
+        displayName: "Alice",
+        cloudToken: "new-cloud-jwt",
+        orgId: "org2",
+        orgName: "Beta Corp",
+        role: "member",
+      });
+
+    const result = await account.run("u1", () => svc.switchOrg("org2"));
+
+    // 调云端 switch-org（携带旧 cloudToken）
+    expect(cloud.post).toHaveBeenCalledWith(
+      "/api/auth/switch-org",
+      { orgId: "org2" },
+      "old-cloud-jwt",
+    );
+    // 用新 token 拉 profile
+    expect(cloud.get).toHaveBeenCalledWith(
+      "/api/auth/profile",
+      "new-cloud-jwt",
+    );
+    // upsert 含新 cloudToken + 新 org 信息
+    expect(identity.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cloudUserId: "u1",
+        cloudToken: "new-cloud-jwt",
+        orgId: "org2",
+        orgName: "Beta Corp",
+        role: "member",
+        cloudTokenExpiresAt: expect.stringMatching(/T/),
+      }),
+    );
+    // 不重建 runtime
+    expect(runtime.createRuntime).not.toHaveBeenCalled();
+    // 返回的 profile 反映新组织
+    expect(result.org).toEqual({
+      id: "org2",
+      name: "Beta Corp",
+      role: "member",
+    });
+  });
+
+  it("无 cloudToken 时抛 AUTH_UNAUTHORIZED", async () => {
+    const account = new AccountContextService();
+    const identity = {
+      get: jest.fn().mockResolvedValue({ cloudUserId: "u1", cloudToken: null }),
+    };
+    const svc = new CloudAuthService(
+      {} as never,
+      identity as never,
+      {} as never,
+      account,
+      makeRuntime() as never,
+    );
+
+    await expect(
+      account.run("u1", () => svc.switchOrg("org2")),
+    ).rejects.toMatchObject({ name: "AppError" });
+  });
+});
