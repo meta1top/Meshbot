@@ -18,6 +18,10 @@ export abstract class AssetService {
   abstract exists(key: string): Promise<boolean>;
   /** 取临时下载签名 URL。 */
   abstract getSignedUrl(key: string, ttlSeconds: number): Promise<string>;
+  /** 取临时上传（PUT）签名 URL —— 客户端直传 Minio 用。 */
+  abstract getUploadUrl(key: string, ttlSeconds: number): Promise<string>;
+  /** 取对象元信息（size 等）。 */
+  abstract stat(key: string): Promise<AssetStat>;
   /** 确保 bucket 存在（模块初始化时调）。 */
   abstract ensureBucket(): Promise<void>;
 }

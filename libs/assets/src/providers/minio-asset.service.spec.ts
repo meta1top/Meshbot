@@ -8,6 +8,7 @@ const mockClient = {
   removeObject: jest.fn(),
   statObject: jest.fn(),
   presignedGetObject: jest.fn(),
+  presignedPutObject: jest.fn(),
 };
 jest.mock("minio", () => ({
   Client: jest.fn(() => mockClient),
@@ -96,5 +97,29 @@ describe("MinioAssetService", () => {
     mockClient.bucketExists.mockResolvedValue(true);
     await svc.ensureBucket();
     expect(mockClient.makeBucket).not.toHaveBeenCalled();
+  });
+
+  it("getUploadUrl 调 presignedPutObject(bucket,key,ttl) 返回 URL", async () => {
+    mockClient.presignedPutObject.mockResolvedValue("http://minio/put-url");
+    const url = await svc.getUploadUrl("drive/o1/n1", 600);
+    expect(mockClient.presignedPutObject).toHaveBeenCalledWith(
+      "meshbot",
+      "drive/o1/n1",
+      600,
+    );
+    expect(url).toBe("http://minio/put-url");
+  });
+
+  it("stat 调 statObject(bucket,key) 返回 size", async () => {
+    mockClient.statObject.mockResolvedValue({
+      size: 1234,
+      contentType: "application/octet-stream",
+    });
+    const res = await svc.stat("drive/o1/n1");
+    expect(mockClient.statObject).toHaveBeenCalledWith(
+      "meshbot",
+      "drive/o1/n1",
+    );
+    expect(res).toEqual({ size: 1234 });
   });
 });

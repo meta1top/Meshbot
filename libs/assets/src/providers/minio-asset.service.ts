@@ -1,6 +1,6 @@
 import { Client } from "minio";
 import { AssetService } from "../asset.service";
-import type { MinioConfig } from "../asset.types";
+import type { AssetStat, MinioConfig } from "../asset.types";
 
 /**
  * minio 实现。key 由调用方给定，全部操作落在 cfg.bucket。
@@ -62,6 +62,17 @@ export class MinioAssetService extends AssetService {
   /** 取临时下载签名 URL。 */
   async getSignedUrl(key: string, ttlSeconds: number): Promise<string> {
     return this.client.presignedGetObject(this.bucket, key, ttlSeconds);
+  }
+
+  /** 取临时上传（PUT）签名 URL。 */
+  async getUploadUrl(key: string, ttlSeconds: number): Promise<string> {
+    return this.client.presignedPutObject(this.bucket, key, ttlSeconds);
+  }
+
+  /** 取对象元信息（size）。 */
+  async stat(key: string): Promise<AssetStat> {
+    const s = await this.client.statObject(this.bucket, key);
+    return { size: s.size };
   }
 
   /** 确保 bucket 存在（模块初始化时调）。 */
