@@ -1,3 +1,4 @@
+import { Transactional } from "@meshbot/common";
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, type Repository } from "typeorm";
@@ -37,8 +38,9 @@ export class CloudNodeGrantService {
 
   /**
    * 替换节点的全部授权：先删除旧记录，再批量插入新记录。
-   * 单表删+插，不跨表，不需 @Transactional。
+   * 两步写入同表，挂 @Transactional() 保证原子性（delete+save 不会撕裂）。
    */
+  @Transactional()
   async replaceForNode(nodeId: string, grants: GrantInput[]): Promise<void> {
     // 先删除该节点的所有旧授权
     await this.repo.delete({ nodeId });

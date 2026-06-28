@@ -1,3 +1,4 @@
+import { Transactional } from "@meshbot/common";
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { IsNull, LessThan, type Repository } from "typeorm";
@@ -81,7 +82,9 @@ export class CloudNodeService {
    * 创建文件上传占位行，status='uploading'，type='file'。
    * 先 create+save 触发 @BeforeInsert 生成雪花 id，再用 id 计算 assetKey 并更新。
    * 注意：不能用 plain-object save 或 .insert()，否则 id 为 NULL。
+   * 两步写入同一行，挂 @Transactional() 保证原子性。
    */
+  @Transactional()
   async createUploadingRow(
     orgId: string,
     ownerUserId: string,

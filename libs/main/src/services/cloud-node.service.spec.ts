@@ -43,6 +43,20 @@ function makeGrant(overrides: Partial<CloudNodeGrant> = {}): CloudNodeGrant {
   } as CloudNodeGrant;
 }
 
+// ─── fake DataSource（供 @Transactional() root 路径使用）──────────────────
+
+function makeFakeDataSource() {
+  return {
+    createQueryRunner: () => ({
+      connect: jest.fn().mockResolvedValue(undefined),
+      startTransaction: jest.fn().mockResolvedValue(undefined),
+      commitTransaction: jest.fn().mockResolvedValue(undefined),
+      rollbackTransaction: jest.fn().mockResolvedValue(undefined),
+      release: jest.fn().mockResolvedValue(undefined),
+    }),
+  };
+}
+
 // ─────────────────── CloudNodeService repo mock ────────────────────────────
 
 function makeNodeRepo(
@@ -68,6 +82,7 @@ function makeNodeRepo(
       where: jest.fn().mockReturnThis(),
       getRawOne: jest.fn().mockResolvedValue({ total: "0" }),
     }),
+    manager: { connection: makeFakeDataSource() },
     ...overrides,
   }) as unknown as Repository<CloudNode>;
 }
@@ -86,6 +101,7 @@ function makeGrantRepo(
       .fn()
       .mockImplementation((entities: unknown) => Promise.resolve(entities)),
     delete: jest.fn().mockResolvedValue({ affected: 1 }),
+    manager: { connection: makeFakeDataSource() },
     ...overrides,
   }) as unknown as Repository<CloudNodeGrant>;
 }
