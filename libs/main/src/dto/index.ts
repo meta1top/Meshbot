@@ -10,6 +10,10 @@ import {
 import {
   type AcceptInvitationInput,
   AcceptInvitationSchema,
+  type CompleteUploadInput,
+  CompleteUploadSchema,
+  type CreateFolderInput,
+  CreateFolderSchema,
   type CreateInvitationInput,
   CreateInvitationSchema,
   type CreateOrgInput,
@@ -18,6 +22,12 @@ import {
   LoginSchema,
   type RegisterUserInput,
   RegisterUserSchema,
+  type RenameOrMoveInput,
+  RenameOrMoveSchema,
+  type RequestUploadInput,
+  RequestUploadSchema,
+  type SetGrantsInput,
+  SetGrantsSchema,
   type SwitchOrgInput,
   SwitchOrgSchema,
 } from "@meshbot/types-main";
@@ -76,3 +86,23 @@ export class SwitchOrgDto extends createI18nZodDto(SwitchOrgSchema) {}
 export interface SwitchOrgDto extends SwitchOrgInput {}
 
 export { PublishSkillDto } from "./skill.dto";
+
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
+export class CreateFolderDto extends createI18nZodDto(CreateFolderSchema) {}
+export interface CreateFolderDto extends CreateFolderInput {}
+
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
+export class RequestUploadDto extends createI18nZodDto(RequestUploadSchema) {}
+export interface RequestUploadDto extends RequestUploadInput {}
+
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
+export class CompleteUploadDto extends createI18nZodDto(CompleteUploadSchema) {}
+export interface CompleteUploadDto extends CompleteUploadInput {}
+
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
+export class RenameOrMoveDto extends createI18nZodDto(RenameOrMoveSchema) {}
+export interface RenameOrMoveDto extends RenameOrMoveInput {}
+
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
+export class SetGrantsDto extends createI18nZodDto(SetGrantsSchema) {}
+export interface SetGrantsDto extends SetGrantsInput {}

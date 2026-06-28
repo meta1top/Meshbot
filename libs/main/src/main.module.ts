@@ -23,6 +23,7 @@ import { MessageService } from "./services/message.service";
 import { OrgService } from "./services/org.service";
 import { CloudNodeService } from "./services/cloud-node.service";
 import { CloudNodeGrantService } from "./services/cloud-node-grant.service";
+import { CloudDriveService } from "./services/cloud-drive.service";
 import { PresenceService } from "./services/presence.service";
 import { SkillMarketService } from "./services/skill-market.service";
 import { SkillPackageService } from "./services/skill-package.service";
@@ -84,6 +85,7 @@ export class MainModule {
         SkillMarketService,
         CloudNodeService,
         CloudNodeGrantService,
+        CloudDriveService,
         { provide: INVITATION_CONFIG, useValue: invitation },
       ],
       exports: [
@@ -98,6 +100,7 @@ export class MainModule {
         SkillMarketService,
         CloudNodeService,
         CloudNodeGrantService,
+        CloudDriveService,
       ],
     };
   }

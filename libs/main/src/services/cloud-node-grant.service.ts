@@ -63,4 +63,15 @@ export class CloudNodeGrantService {
   async deleteForNode(nodeId: string): Promise<void> {
     await this.repo.delete({ nodeId });
   }
+
+  /**
+   * 查询被授权给指定被授权方（user 或 org）的所有 grant 记录。
+   * 供 CloudDriveService.listShared 使用。
+   */
+  async listByGrantee(
+    granteeType: "user" | "org",
+    granteeId: string,
+  ): Promise<CloudNodeGrant[]> {
+    return this.repo.find({ where: { granteeType, granteeId } });
+  }
 }

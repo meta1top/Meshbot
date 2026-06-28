@@ -31,3 +31,7 @@ export { SkillPackageService } from "./services/skill-package.service";
 export { UserService } from "./services/user.service";
 export { CloudNodeService } from "./services/cloud-node.service";
 export { CloudNodeGrantService } from "./services/cloud-node-grant.service";
+export {
+  CloudDriveService,
+  type NodeView,
+} from "./services/cloud-drive.service";
