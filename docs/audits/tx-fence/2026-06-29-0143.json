@@ -1,0 +1,31 @@
+{
+  "generatedAt": "2026-06-28T17:43:16.614Z",
+  "paths": ["libs", "apps"],
+  "fileCount": 550,
+  "filterTypes": null,
+  "strict": false,
+  "total": 2,
+  "issues": [
+    {
+      "type": "REDUNDANT",
+      "file": "/Users/grant/Meta1/meshbot/libs/main/src/services/cloud-drive.service.ts",
+      "line": 308,
+      "className": "CloudDriveService",
+      "methodName": "deleteSubtreeInTx",
+      "details": "挂了 @Transactional() 但方法体内未检测到任何写动作",
+      "evidence": []
+    },
+    {
+      "type": "MISSING",
+      "file": "/Users/grant/Meta1/meshbot/libs/main/src/services/conversation.service.ts",
+      "line": 280,
+      "className": "ConversationService",
+      "methodName": "markRead",
+      "details": "检测到 2 处写动作但未挂 @Transactional()",
+      "evidence": [
+        "287: this.memberRepo.save(...)",
+        "290: this.memberRepo.save(...)"
+      ]
+    }
+  ]
+}

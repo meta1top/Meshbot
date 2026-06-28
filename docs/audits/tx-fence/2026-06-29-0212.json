@@ -1,0 +1,31 @@
+{
+  "generatedAt": "2026-06-28T18:12:02.721Z",
+  "paths": ["libs", "apps"],
+  "fileCount": 550,
+  "filterTypes": null,
+  "strict": false,
+  "total": 2,
+  "issues": [
+    {
+      "type": "REDUNDANT",
+      "file": "/Users/grant/Meta1/meshbot/libs/main/src/services/cloud-node.service.ts",
+      "line": 169,
+      "className": "CloudNodeService",
+      "methodName": "deleteSubtreeInTx",
+      "details": "挂了 @Transactional() 但仅 1 处写动作（事务无意义）",
+      "evidence": ["193: this.repo.delete(...)"]
+    },
+    {
+      "type": "MISSING",
+      "file": "/Users/grant/Meta1/meshbot/libs/main/src/services/conversation.service.ts",
+      "line": 280,
+      "className": "ConversationService",
+      "methodName": "markRead",
+      "details": "检测到 2 处写动作但未挂 @Transactional()",
+      "evidence": [
+        "287: this.memberRepo.save(...)",
+        "290: this.memberRepo.save(...)"
+      ]
+    }
+  ]
+}

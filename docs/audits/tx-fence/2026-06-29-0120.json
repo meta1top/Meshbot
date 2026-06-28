@@ -1,0 +1,40 @@
+{
+  "generatedAt": "2026-06-28T17:20:32.626Z",
+  "paths": ["libs", "apps"],
+  "fileCount": 547,
+  "filterTypes": null,
+  "strict": false,
+  "total": 3,
+  "issues": [
+    {
+      "type": "MISSING",
+      "file": "/Users/grant/Meta1/meshbot/libs/main/src/services/cloud-node-grant.service.ts",
+      "line": 42,
+      "className": "CloudNodeGrantService",
+      "methodName": "replaceForNode",
+      "details": "检测到 2 处写动作但未挂 @Transactional()",
+      "evidence": ["44: this.repo.delete(...)", "56: this.repo.save(...)"]
+    },
+    {
+      "type": "MISSING",
+      "file": "/Users/grant/Meta1/meshbot/libs/main/src/services/cloud-node.service.ts",
+      "line": 85,
+      "className": "CloudNodeService",
+      "methodName": "createUploadingRow",
+      "details": "检测到 2 处写动作但未挂 @Transactional()",
+      "evidence": ["104: this.repo.save(...)", "108: this.repo.update(...)"]
+    },
+    {
+      "type": "MISSING",
+      "file": "/Users/grant/Meta1/meshbot/libs/main/src/services/conversation.service.ts",
+      "line": 280,
+      "className": "ConversationService",
+      "methodName": "markRead",
+      "details": "检测到 2 处写动作但未挂 @Transactional()",
+      "evidence": [
+        "287: this.memberRepo.save(...)",
+        "290: this.memberRepo.save(...)"
+      ]
+    }
+  ]
+}

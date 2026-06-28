@@ -46,6 +46,7 @@ import { EmailModule } from "./email/email.module";
 import { EventEmitterModule } from "@nestjs/event-emitter";
 import { HealthController } from "./health.controller";
 import { AuthController } from "./rest/auth.controller";
+import { DriveController } from "./rest/drive.controller";
 import { ImController } from "./rest/im.controller";
 import { OrgController } from "./rest/org.controller";
 import { SkillController } from "./rest/skill.controller";
@@ -195,6 +196,7 @@ export class AppModule {
       controllers: [
         HealthController,
         AuthController,
+        DriveController,
         OrgController,
         ImController,
         SkillController,
