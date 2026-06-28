@@ -168,7 +168,7 @@ export function AssistantDock() {
       </div>
 
       {/* 输入 */}
-      <div className="p-2.5">
+      <div className="p-3">
         <ChatInput
           value={draft}
           onChange={setDraft}

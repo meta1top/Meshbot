@@ -119,6 +119,10 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           class:
             "prose-none w-full text-sm text-foreground outline-none [&_p]:my-0 [&_ul]:my-1 [&_ul]:ml-4 [&_ul]:list-disc [&_ol]:my-1 [&_ol]:ml-4 [&_ol]:list-decimal [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_pre]:rounded [&_pre]:bg-muted [&_pre]:p-2 [&_a]:text-accent [&_a]:underline",
         },
+        // 粘贴富文本时剥掉源站内联样式（style/class/color/bgcolor/align），
+        // 避免「白字 + 背景」等样式感染；标签结构保留给 Markdown 提取语义。
+        transformPastedHTML: (html) =>
+          html.replace(/\s(?:style|class|bgcolor|color|align)="[^"]*"/gi, ""),
         handleKeyDown: (_view, event) => {
           // IME 组合期间不拦截 Enter
           if (event.isComposing || event.keyCode === 229) return false;
