@@ -51,9 +51,21 @@ describe("ArtifactController.raw", () => {
       make(ws).raw("../../etc/passwd", undefined, fakeRes()),
     ).toThrow(ForbiddenException);
   });
+  it("绝对路径 /etc/passwd → ForbiddenException", () => {
+    const ws = mkdtempSync(path.join(tmpdir(), "ws-"));
+    expect(() => make(ws).raw("/etc/passwd", undefined, fakeRes())).toThrow(
+      ForbiddenException,
+    );
+  });
   it("不存在 → NotFoundException", () => {
     const ws = mkdtempSync(path.join(tmpdir(), "ws-"));
     expect(() => make(ws).raw("nope.md", undefined, fakeRes())).toThrow(
+      NotFoundException,
+    );
+  });
+  it("空路径指向 workspace 目录 → NotFoundException", () => {
+    const ws = mkdtempSync(path.join(tmpdir(), "ws-"));
+    expect(() => make(ws).raw("", undefined, fakeRes())).toThrow(
       NotFoundException,
     );
   });

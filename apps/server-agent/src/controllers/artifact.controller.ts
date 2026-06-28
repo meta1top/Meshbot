@@ -1,4 +1,4 @@
-import { createReadStream, existsSync } from "node:fs";
+import { createReadStream, existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { MeshbotConfigService } from "@meshbot/agent";
 import {
@@ -50,7 +50,7 @@ export class ArtifactController {
     if (abs !== workspaceDir && !abs.startsWith(workspaceDir + path.sep)) {
       throw new ForbiddenException("path outside workspace");
     }
-    if (!existsSync(abs)) {
+    if (!existsSync(abs) || !statSync(abs).isFile()) {
       throw new NotFoundException("artifact not found");
     }
     res.setHeader(
