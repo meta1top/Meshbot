@@ -22,6 +22,7 @@ export {
 export * from "./confirm";
 export * from "./im-tools";
 export * from "./llmuse";
+export * from "./present-file";
 export * from "./quick-assistant";
 export * from "./quick-assistant.events";
 export * from "./schedule";
