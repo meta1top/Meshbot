@@ -72,7 +72,11 @@ export class AuthController {
   }
 
   private signResponse(user: AppUser): AuthTokenResponse {
-    const token = this.jwt.sign({ userId: user.id, email: user.email });
+    const token = this.jwt.sign({
+      userId: user.id,
+      email: user.email,
+      orgId: user.activeOrgId ?? null,
+    });
     return {
       token,
       expiresIn: this.config.jwt.expires,
