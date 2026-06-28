@@ -139,7 +139,8 @@
     },
     "userMenu": {
       "addAccount": "Add account",
-      "org": "Organization",
+      "org": "Manage organization",
+      "orgSwitcher": "Switch organization",
       "settings": "Settings",
       "logout": "Log out"
     },
@@ -525,7 +526,8 @@
     "settings": "",
     "org": "",
     "logout": "",
-    "addAccount": ""
+    "addAccount": "",
+    "orgSwitcher": ""
   },
   "search": {
     "placeholder": ""

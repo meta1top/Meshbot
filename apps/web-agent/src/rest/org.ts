@@ -12,6 +12,21 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { profileQueryKey } from "@/lib/profile-client";
 import { authStatusQueryKey } from "@/rest/auth";
 
+/** 我的组织列表查询 key。 */
+export const orgsQueryKey = ["org", "list"] as const;
+
+export async function fetchOrgs(): Promise<OrgInfo[]> {
+  const { data } = await apiClient.get<OrgInfo[]>("/api/orgs");
+  return data;
+}
+
+/**
+ * 切换活跃组织：调 server-agent 代理，成功后失效 profile/authStatus/org 相关查询。
+ */
+export async function switchOrg(orgId: string): Promise<void> {
+  await apiClient.post("/api/orgs/switch", { orgId });
+}
+
 export async function createOrg(input: CreateOrgInput): Promise<OrgInfo> {
   const { data } = await apiClient.post<OrgInfo>("/api/orgs", input);
   return data;
@@ -54,6 +69,14 @@ export async function inviteMember(
   return data;
 }
 
+/** 当前账号的组织列表（含所有 membership）。 */
+export function useOrgs() {
+  return useQuery({
+    queryKey: orgsQueryKey,
+    queryFn: fetchOrgs,
+  });
+}
+
 export function useCreateOrg() {
   const qc = useQueryClient();
   return useMutation({
@@ -61,6 +84,7 @@ export function useCreateOrg() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: profileQueryKey });
       qc.invalidateQueries({ queryKey: authStatusQueryKey });
+      qc.invalidateQueries({ queryKey: orgsQueryKey });
     },
   });
 }
@@ -72,6 +96,7 @@ export function useJoinOrg() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: profileQueryKey });
       qc.invalidateQueries({ queryKey: authStatusQueryKey });
+      qc.invalidateQueries({ queryKey: orgsQueryKey });
     },
   });
 }

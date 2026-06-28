@@ -22,7 +22,7 @@ import {
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { ACCENT_BTN } from "@/lib/ui";
-import { useCreateOrg, useJoinOrg } from "@/rest/org";
+import { switchOrg, useCreateOrg, useJoinOrg } from "@/rest/org";
 
 type Tab = "create" | "join";
 
@@ -37,7 +37,8 @@ export function OrgStep({ onDone }: { onDone: () => void }) {
 
   const onCreate = async (values: CreateOrgInput) => {
     try {
-      await createOrg.mutateAsync(values);
+      const org = await createOrg.mutateAsync(values);
+      await switchOrg(org.id);
       onDone();
     } catch {
       // 错误通过 createOrg.error 展示
@@ -45,7 +46,8 @@ export function OrgStep({ onDone }: { onDone: () => void }) {
   };
   const onJoin = async (values: JoinOrgInput) => {
     try {
-      await joinOrg.mutateAsync(values);
+      const { orgId } = await joinOrg.mutateAsync(values);
+      await switchOrg(orgId);
       onDone();
     } catch {
       // 错误通过 joinOrg.error 展示

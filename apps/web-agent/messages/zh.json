@@ -139,7 +139,8 @@
     },
     "userMenu": {
       "addAccount": "添加账号",
-      "org": "组织",
+      "org": "管理组织",
+      "orgSwitcher": "切换组织",
       "settings": "设置",
       "logout": "退出登录"
     },
@@ -525,7 +526,8 @@
     "settings": "",
     "org": "",
     "logout": "",
-    "addAccount": ""
+    "addAccount": "",
+    "orgSwitcher": ""
   },
   "search": {
     "placeholder": ""
