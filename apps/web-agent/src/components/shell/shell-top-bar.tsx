@@ -15,6 +15,7 @@ import { useTranslations } from "next-intl";
 import {
   artifactFullscreenAtom,
   assistantPanelOpenAtom,
+  assistantPanelTypeAtom,
   sidebarDrawerOpenAtom,
 } from "@/atoms/assistant-panel";
 
@@ -28,6 +29,7 @@ export function ShellTopBar() {
   const [panelOpen, setPanelOpen] = useAtom(assistantPanelOpenAtom);
   const setSidebarDrawerOpen = useSetAtom(sidebarDrawerOpenAtom);
   const fullscreen = useAtomValue(artifactFullscreenAtom);
+  const setPanelType = useSetAtom(assistantPanelTypeAtom);
   return (
     <div className="drag-handle flex h-[42px] shrink-0 items-center gap-2 bg-(--shell-chrome) px-3">
       <div className="app-mac-controls-safe-left flex items-center gap-0.5">
@@ -71,7 +73,14 @@ export function ShellTopBar() {
         <button
           type="button"
           data-no-drag
-          onClick={() => setPanelOpen((v) => !v)}
+          onClick={() => {
+            if (panelOpen) {
+              setPanelOpen(false);
+            } else {
+              setPanelType("assistant");
+              setPanelOpen(true);
+            }
+          }}
           title={t("assistant")}
           aria-label={t("assistant")}
           aria-pressed={panelOpen}
