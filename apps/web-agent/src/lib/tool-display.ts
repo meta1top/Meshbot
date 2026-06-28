@@ -38,13 +38,21 @@ export function toolDisplayName(name: string): string {
 }
 
 /**
- * 隐藏工作区绝对路径：把 `~/.meshbot`、`/Users/x/.meshbot`、`<project>/.meshbot`
- * 等「以 .meshbot 结尾的路径前缀」整体替换为 `<工作区>`，只保留其后的相对部分
- * （如 `/skills/foo`）。用于工具调用的参数/结果展示，不向用户暴露真实路径。
+ * 隐藏工作区绝对路径与账户 id。用于工具调用的参数/结果展示，不向用户暴露真实
+ * 文件系统路径或 cloudUserId：
+ * - `<prefix>/.meshbot/accounts/<id>/workspace`（用户文件工作区根）→ `<工作区>`，
+ *   只保留其后相对部分（如 `/test-demo/calc.py`）；
+ * - 其余 `.meshbot` 绝对前缀（skills/memory/account 目录等）→ `<工作区>`；
+ * - 任何残留的 `accounts/<数字 id>` 段 → `accounts/<账户>`（兜底，遮账户 id）。
+ *
+ * 注意只遮 `accounts/` 后的数字 id，不误伤 conversationId / messageId 等裸长数字。
  */
 export function sanitizeMeshbotPaths(text: string): string {
   if (!text) {
     return text;
   }
-  return text.replace(/[^\s"'\n]*\.meshbot\b/g, "<工作区>");
+  return text
+    .replace(/[^\s"'\n]*\.meshbot\/accounts\/\d+\/workspace\b/g, "<工作区>")
+    .replace(/[^\s"'\n]*\.meshbot\b/g, "<工作区>")
+    .replace(/accounts\/\d+/g, "accounts/<账户>");
 }

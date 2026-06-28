@@ -22,6 +22,30 @@ describe("sanitizeMeshbotPaths", () => {
       "<工作区>/memory/core.md",
     );
   });
+  it("工作区根 .meshbot/accounts/<id>/workspace → <工作区>（不露账户 id）", () => {
+    expect(
+      sanitizeMeshbotPaths(
+        "~/.meshbot/accounts/194164575065604096/workspace/test-demo/calc.py",
+      ),
+    ).toBe("<工作区>/test-demo/calc.py");
+  });
+  it("非 workspace 的 account 目录 → 遮账户 id", () => {
+    expect(
+      sanitizeMeshbotPaths(
+        "/home/u/.meshbot/accounts/194164575065604096/agent.db",
+      ),
+    ).toBe("<工作区>/accounts/<账户>/agent.db");
+  });
+  it("裸 accounts/<id> 段也遮（无 .meshbot 前缀）", () => {
+    expect(sanitizeMeshbotPaths("accounts/194164575065604096/x")).toBe(
+      "accounts/<账户>/x",
+    );
+  });
+  it("conversationId 等裸长数字不误伤", () => {
+    expect(sanitizeMeshbotPaths("conversationId: 194164604794830848")).toBe(
+      "conversationId: 194164604794830848",
+    );
+  });
   it("项目内 .meshbot 路径隐藏", () => {
     expect(
       sanitizeMeshbotPaths("/Users/grant/Meta1/meshbot/.meshbot/mcp.json"),
