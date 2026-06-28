@@ -167,7 +167,7 @@ export function useSessionStream(
     oldestMessageIdRef.current = null;
     hasMoreHistoryRef.current = true;
     setHasMoreHistory(true);
-    resetUsage();
+    resetUsage(sessionId);
     let cancelled = false;
     setHistoryLoading(true);
 
@@ -279,12 +279,15 @@ export function useSessionStream(
         });
         if (history.sessionTotals) {
           setInitialUsage({
-            sessionTotals: history.sessionTotals,
-            byMessage: history.byMessage,
+            sessionId,
+            usage: {
+              sessionTotals: history.sessionTotals,
+              byMessage: history.byMessage,
+            },
           });
         } else {
           // 防御：首次必有 sessionTotals
-          appendUsageByMessage(history.byMessage);
+          appendUsageByMessage({ sessionId, batch: history.byMessage });
         }
         oldestMessageIdRef.current = initial[0]?.id ?? null;
         hasMoreHistoryRef.current = history.hasMore;
@@ -480,7 +483,7 @@ export function useSessionStream(
     };
     const onUsage = (e: RunUsageEvent) => {
       if (e.sessionId !== sessionId) return;
-      appendUsage(e);
+      appendUsage({ sessionId, event: e });
     };
     // 标题事件全局广播（不限当前 session）：按事件 sessionId patch 列表 + 标题栏
     //（两处都读 sessionsAtom）。后台 LLM 生成标题完成后实时刷新。
@@ -755,7 +758,7 @@ export function useSessionStream(
         const fresh = newMessages.filter((m) => !existingIds.has(m.id));
         return [...fresh, ...prev];
       });
-      appendUsageByMessage(res.byMessage);
+      appendUsageByMessage({ sessionId, batch: res.byMessage });
       oldestMessageIdRef.current = res.messages[0]?.id ?? cursor;
       hasMoreHistoryRef.current = res.hasMore;
       setHasMoreHistory(res.hasMore);

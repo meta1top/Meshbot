@@ -10,11 +10,16 @@ import {
   currentQuickSessionIdAtom,
   quickAssistantNameAtom,
 } from "@/atoms/assistant-panel";
+import {
+  sessionTotalsFamily,
+  usageByMessageFamily,
+} from "@/atoms/session-usage";
 import { ChatInput } from "@/components/common/chat-input";
 import { MessageList } from "@/components/session/message-list";
 import { useChatScroll } from "@/hooks/use-chat-scroll";
 import { useLlmusePrefix } from "@/hooks/use-llmuse-prefix";
 import { useSessionStream } from "@/hooks/use-session-stream";
+import { useModelConfigs } from "@/rest/model-config";
 import {
   fetchQuickAssistantName,
   renameQuickAssistant,
@@ -35,6 +40,14 @@ export function AssistantDock() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const stream = useSessionStream(sessionId, scrollRef);
+
+  // token 用量：按本 session 隔离读取（与主会话各读各的，互不串台）；
+  // sessionId 未就绪时读空 family（环显示 0/上限，无碍）。
+  const usageByMessage = useAtomValue(usageByMessageFamily(sessionId ?? ""));
+  const sessionTotals = useAtomValue(sessionTotalsFamily(sessionId ?? ""));
+  const { data: modelConfigs } = useModelConfigs();
+  const enabledModel = modelConfigs?.find((c) => c.enabled);
+  const contextWindow = enabledModel?.contextWindow ?? 128_000;
 
   // 自动吸底：流式/新消息时跟随到底（与中间会话同套 useChatScroll 逻辑）。
   // dock 无历史分页，hasMore=false → 顶部哨兵仅占位、不挂 IO。
@@ -158,6 +171,7 @@ export function AssistantDock() {
             messages={stream.messages}
             sessionId={sessionId}
             running={stream.running}
+            usageByMessage={usageByMessage}
             onRegenerateOptimisticCut={() => {}}
           />
         ) : (
@@ -176,6 +190,18 @@ export function AssistantDock() {
           onInterrupt={stream.interrupt}
           isLoading={stream.running}
           placeholder={t("placeholder")}
+          tokenUsage={{
+            current: sessionTotals.lastInputTokens,
+            max: contextWindow,
+            breakdown: {
+              inputTokens: sessionTotals.inputTokens,
+              outputTokens: sessionTotals.outputTokens,
+              cacheReadTokens: sessionTotals.cacheReadTokens,
+              reasoningTokens: sessionTotals.reasoningTokens,
+              callCount: sessionTotals.callCount,
+              cumulativeTokens: sessionTotals.totalTokens,
+            },
+          }}
         />
       </div>
     </div>

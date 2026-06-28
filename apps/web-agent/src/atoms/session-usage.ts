@@ -7,6 +7,7 @@ import type {
   SessionUsage,
 } from "@meshbot/types-agent";
 import { atom } from "jotai";
+import { atomFamily } from "jotai/utils";
 
 const EMPTY_TOTALS: SessionTotals = {
   inputTokens: 0,
@@ -57,76 +58,107 @@ function computeTotals(
   };
 }
 
-/** messageId → 单次 LLM 调用用量。 */
-export const usageByMessageAtom = atom<Record<string, MessageUsage>>({});
+/**
+ * messageId → 单次 LLM 调用用量，**按 sessionId 隔离**。
+ * 主会话与 dock 是两个并发会话，各自 useSessionStream 都写 usage；用 atomFamily
+ * 让每会话各持一份，避免用量互相覆盖/累加（串台）。
+ */
+export const usageByMessageFamily = atomFamily((_sessionId: string) =>
+  atom<Record<string, MessageUsage>>({}),
+);
 
-/** 会话累计 —— 所有 LLM 调用的 SUM + callCount。 */
-export const sessionTotalsAtom = atom<SessionTotals>(EMPTY_TOTALS);
+/** 会话累计 —— 所有 LLM 调用的 SUM + callCount（按 sessionId 隔离）。 */
+export const sessionTotalsFamily = atomFamily((_sessionId: string) =>
+  atom<SessionTotals>(EMPTY_TOTALS),
+);
 
-/** 用 history 接口返回的 usage 初始化 atoms（merge 而非覆盖，避免竞态丢计）。 */
-export const setInitialUsageAtom = atom(null, (get, set, u: SessionUsage) => {
-  const existing = get(usageByMessageAtom);
-  // 合并历史 + 已通过 appendUsage 累计的（按 messageId 去重，atom 中已存在的优先）
-  const merged: Record<string, MessageUsage> = { ...u.byMessage };
-  for (const [id, m] of Object.entries(existing)) {
-    merged[id] = m;
-  }
-  set(usageByMessageAtom, merged);
-  // sessionTotals 从合并后的 byMessage 求和重算（避免双计或丢计）；
-  // lastInputTokens 信任服务端：byMessage 无顺序拿不到，server SessionTotals 是源。
-  set(
-    sessionTotalsAtom,
-    computeTotals(merged, u.sessionTotals.lastInputTokens),
-  );
-});
+/** 用 history 接口返回的 usage 初始化某会话的 atoms（merge 而非覆盖，避免竞态丢计）。 */
+export const setInitialUsageAtom = atom(
+  null,
+  (
+    get,
+    set,
+    { sessionId, usage }: { sessionId: string; usage: SessionUsage },
+  ) => {
+    const byMsg = usageByMessageFamily(sessionId);
+    const existing = get(byMsg);
+    // 合并历史 + 已通过 appendUsage 累计的（按 messageId 去重，atom 中已存在的优先）
+    const merged: Record<string, MessageUsage> = { ...usage.byMessage };
+    for (const [id, m] of Object.entries(existing)) {
+      merged[id] = m;
+    }
+    set(byMsg, merged);
+    // sessionTotals 从合并后的 byMessage 求和重算（避免双计或丢计）；
+    // lastInputTokens 信任服务端：byMessage 无顺序拿不到，server SessionTotals 是源。
+    set(
+      sessionTotalsFamily(sessionId),
+      computeTotals(merged, usage.sessionTotals.lastInputTokens),
+    );
+  },
+);
 
 /** socket run.usage 增量 —— 单条 + 累加（同 messageId 幂等跳过）。 */
-export const appendUsageAtom = atom(null, (get, set, u: RunUsageEvent) => {
-  const existing = get(usageByMessageAtom);
-  // 同 messageId 已在 → 幂等跳过（避免 socket 重传 / setInitialUsage 双计）
-  if (existing[u.messageId]) {
-    return;
-  }
-  const single: MessageUsage = {
-    providerType: u.providerType,
-    model: u.model,
-    inputTokens: u.inputTokens,
-    outputTokens: u.outputTokens,
-    totalTokens: u.totalTokens,
-    cacheReadTokens: u.cacheReadTokens,
-    cacheCreationTokens: u.cacheCreationTokens,
-    reasoningTokens: u.reasoningTokens,
-    durationMs: u.durationMs,
-  };
-  const byMessage = { ...existing, [u.messageId]: single };
-  set(usageByMessageAtom, byMessage);
-  const t = get(sessionTotalsAtom);
-  set(sessionTotalsAtom, {
-    inputTokens: t.inputTokens + u.inputTokens,
-    outputTokens: t.outputTokens + u.outputTokens,
-    totalTokens: t.totalTokens + u.totalTokens,
-    cacheReadTokens: t.cacheReadTokens + u.cacheReadTokens,
-    cacheCreationTokens: t.cacheCreationTokens + u.cacheCreationTokens,
-    reasoningTokens: t.reasoningTokens + u.reasoningTokens,
-    callCount: t.callCount + 1,
-    lastInputTokens: u.inputTokens,
-  });
-});
+export const appendUsageAtom = atom(
+  null,
+  (
+    get,
+    set,
+    { sessionId, event }: { sessionId: string; event: RunUsageEvent },
+  ) => {
+    const byMsg = usageByMessageFamily(sessionId);
+    const existing = get(byMsg);
+    // 同 messageId 已在 → 幂等跳过（避免 socket 重传 / setInitialUsage 双计）
+    if (existing[event.messageId]) {
+      return;
+    }
+    const single: MessageUsage = {
+      providerType: event.providerType,
+      model: event.model,
+      inputTokens: event.inputTokens,
+      outputTokens: event.outputTokens,
+      totalTokens: event.totalTokens,
+      cacheReadTokens: event.cacheReadTokens,
+      cacheCreationTokens: event.cacheCreationTokens,
+      reasoningTokens: event.reasoningTokens,
+      durationMs: event.durationMs,
+    };
+    set(byMsg, { ...existing, [event.messageId]: single });
+    const totals = sessionTotalsFamily(sessionId);
+    const t = get(totals);
+    set(totals, {
+      inputTokens: t.inputTokens + event.inputTokens,
+      outputTokens: t.outputTokens + event.outputTokens,
+      totalTokens: t.totalTokens + event.totalTokens,
+      cacheReadTokens: t.cacheReadTokens + event.cacheReadTokens,
+      cacheCreationTokens: t.cacheCreationTokens + event.cacheCreationTokens,
+      reasoningTokens: t.reasoningTokens + event.reasoningTokens,
+      callCount: t.callCount + 1,
+      lastInputTokens: event.inputTokens,
+    });
+  },
+);
 
-/** 切换会话时重置（避免上轮会话累计串台）。 */
-export const resetUsageAtom = atom(null, (_get, set) => {
-  set(usageByMessageAtom, {});
-  set(sessionTotalsAtom, EMPTY_TOTALS);
+/** 重置某会话的 usage 累计（进入会话时从 history 重建前先清）。 */
+export const resetUsageAtom = atom(null, (_get, set, sessionId: string) => {
+  set(usageByMessageFamily(sessionId), {});
+  set(sessionTotalsFamily(sessionId), EMPTY_TOTALS);
 });
 
 /**
- * 合并一批 byMessage 到 usageByMessageAtom。
+ * 合并一批 byMessage 到某会话的 usageByMessage。
  * 用于翻页时把老消息的 usage 投影合进展示。同 id 覆盖（不该重复）。
  */
 export const appendUsageByMessageAtom = atom(
   null,
-  (get, set, batch: Record<string, MessageUsage>) => {
-    const current = get(usageByMessageAtom);
-    set(usageByMessageAtom, { ...current, ...batch });
+  (
+    get,
+    set,
+    {
+      sessionId,
+      batch,
+    }: { sessionId: string; batch: Record<string, MessageUsage> },
+  ) => {
+    const byMsg = usageByMessageFamily(sessionId);
+    set(byMsg, { ...get(byMsg), ...batch });
   },
 );

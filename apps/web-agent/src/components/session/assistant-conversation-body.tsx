@@ -5,7 +5,10 @@ import { useAtomValue } from "jotai";
 import { ArrowDown } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
-import { sessionTotalsAtom, usageByMessageAtom } from "@/atoms/session-usage";
+import {
+  sessionTotalsFamily,
+  usageByMessageFamily,
+} from "@/atoms/session-usage";
 import {
   ChatInput,
   type ChatInputHandle,
@@ -50,8 +53,8 @@ export function AssistantConversationBody({
   const inputPlaceholder = placeholders[phIdx];
   const topSentinelRef = useRef<HTMLDivElement>(null);
 
-  const usageByMessage = useAtomValue(usageByMessageAtom);
-  const sessionTotals = useAtomValue(sessionTotalsAtom);
+  const usageByMessage = useAtomValue(usageByMessageFamily(id));
+  const sessionTotals = useAtomValue(sessionTotalsFamily(id));
   const { data: modelConfigs } = useModelConfigs();
   const enabledModel = modelConfigs?.find((c) => c.enabled);
   // contextWindow 由后端在配置入库时按 MODEL_SPECS 解析后固化（用户可覆盖），前端直接读
