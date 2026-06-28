@@ -176,9 +176,12 @@ export class CloudNodeService {
 
     const queue: CloudNode[] = [root];
     const toDelete: CloudNode[] = [];
+    const visited = new Set<string>();
     while (queue.length > 0) {
       // biome-ignore lint/style/noNonNullAssertion: while loop 保证 queue 非空时才 shift
       const cur = queue.shift()!;
+      if (visited.has(cur.id)) continue;
+      visited.add(cur.id);
       toDelete.push(cur);
       if (cur.type === "folder") {
         const children = await this.listAllChildren(cur.id);

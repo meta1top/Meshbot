@@ -532,4 +532,56 @@ describe("CloudNodeService.deleteSubtreeInTx", () => {
     expect(deleteMock).not.toHaveBeenCalled();
     expect(deleteForNodeMock).not.toHaveBeenCalled();
   });
+
+  it("脏数据成环（子节点 parentId 指回祖先）→ BFS 正常终止，仅删已访问节点", async () => {
+    // 结构：folderA → folderB，但 folderB 的子节点 folderC 的 parentId 指回 folderA（成环）
+    const folderA = makeNode({ id: "cycleA", type: "folder", assetKey: null });
+    const folderB = makeNode({
+      id: "cycleB",
+      type: "folder",
+      assetKey: null,
+      parentId: "cycleA",
+    });
+    const folderC = makeNode({
+      id: "cycleC",
+      type: "folder",
+      assetKey: null,
+      parentId: "cycleB",
+    });
+
+    const deleteMock = jest.fn().mockResolvedValue({ affected: 1 });
+    const repo = makeNodeRepo({
+      findOne: jest
+        .fn()
+        .mockImplementation(({ where: { id } }: { where: { id: string } }) => {
+          if (id === "cycleA") return Promise.resolve(folderA);
+          return Promise.resolve(null);
+        }),
+      // listAllChildren：folderA→[folderB], folderB→[folderC], folderC→[folderA]（环）
+      find: jest
+        .fn()
+        .mockImplementation(({ where }: { where: { parentId?: string } }) => {
+          if (where.parentId === "cycleA") return Promise.resolve([folderB]);
+          if (where.parentId === "cycleB") return Promise.resolve([folderC]);
+          if (where.parentId === "cycleC") return Promise.resolve([folderA]); // 脏数据：C 指回 A
+          return Promise.resolve([]);
+        }),
+      delete: deleteMock,
+    });
+
+    const deleteForNodeMock = jest.fn().mockResolvedValue(undefined);
+    const grantSvc = makeGrantSvc({ deleteForNode: deleteForNodeMock });
+    const svc = new CloudNodeService(repo, grantSvc);
+
+    // 不应死循环，应正常返回
+    const assetKeys = await svc.deleteSubtreeInTx("cycleA");
+
+    // 三个节点各被删一次（visited 防止 folderA 重复入队）
+    expect(deleteMock).toHaveBeenCalledTimes(3);
+    expect(deleteMock).toHaveBeenCalledWith("cycleA");
+    expect(deleteMock).toHaveBeenCalledWith("cycleB");
+    expect(deleteMock).toHaveBeenCalledWith("cycleC");
+    // 全 folder 无 assetKey，返回空数组
+    expect(assetKeys).toEqual([]);
+  });
 });
