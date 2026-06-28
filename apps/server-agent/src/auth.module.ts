@@ -10,10 +10,12 @@ import { CloudClientService } from "./cloud/cloud-client.service";
 import { ImRelayClientService } from "./cloud/im-relay-client.service";
 import { AuthController } from "./controllers/auth.controller";
 import { CloudOrgController } from "./controllers/cloud-org.controller";
+import { DriveController } from "./controllers/drive.controller";
 import { CloudIdentity } from "./entities/cloud-identity.entity";
 import { CloudAuthService } from "./services/cloud-auth.service";
 import { CloudIdentityService } from "./services/cloud-identity.service";
 import { CloudOrgService } from "./services/cloud-org.service";
+import { DriveGatewayService } from "./services/drive-gateway.service";
 import { JWT_SECRET, JwtStrategy } from "./strategies/jwt.strategy";
 
 @Module({
@@ -25,11 +27,12 @@ import { JWT_SECRET, JwtStrategy } from "./strategies/jwt.strategy";
       signOptions: { expiresIn: "7d" },
     }),
   ],
-  controllers: [AuthController, CloudOrgController],
+  controllers: [AuthController, CloudOrgController, DriveController],
   providers: [
     CloudIdentityService,
     CloudAuthService,
     CloudOrgService,
+    DriveGatewayService,
     JwtStrategy,
     {
       provide: CloudClientService,

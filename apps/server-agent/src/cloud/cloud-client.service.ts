@@ -57,6 +57,16 @@ export class CloudClientService {
     return this.request<T>("DELETE", path, undefined, token);
   }
 
+  /** PATCH 云端接口并解信封返回 data。 */
+  async patch<T>(path: string, body: unknown, token?: string): Promise<T> {
+    return this.request<T>("PATCH", path, body, token);
+  }
+
+  /** PUT 云端接口并解信封返回 data。 */
+  async put<T>(path: string, body: unknown, token?: string): Promise<T> {
+    return this.request<T>("PUT", path, body, token);
+  }
+
   private async request<T>(
     method: string,
     path: string,
