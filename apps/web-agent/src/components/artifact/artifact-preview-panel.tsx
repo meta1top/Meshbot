@@ -1,7 +1,7 @@
 "use client";
 
 import { useAtomValue, useSetAtom } from "jotai";
-import { Download, Maximize2, Share2, X } from "lucide-react";
+import { Download, Maximize2, Share2, Sparkles, X } from "lucide-react";
 import { useState } from "react";
 import {
   assistantPanelTypeAtom,
@@ -25,7 +25,10 @@ export function ArtifactPreviewPanel() {
 
   return (
     <div className="flex h-full w-full flex-col">
-      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3.5">
+      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border bg-[linear-gradient(120deg,#fff3ea,#ffe7ef_45%,#eef2ff)] px-3.5 dark:bg-none">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-(--shell-accent) text-white">
+          <Sparkles className="h-3.5 w-3.5" />
+        </span>
         <DockTabs />
         <button
           type="button"

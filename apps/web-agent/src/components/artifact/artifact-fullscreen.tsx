@@ -1,8 +1,10 @@
 "use client";
 
+import { useSetAtom } from "jotai";
 import { X } from "lucide-react";
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
+import { artifactFullscreenAtom } from "@/atoms/assistant-panel";
 import { ArtifactBody } from "./artifact-body";
 
 /** 产物全屏预览（覆盖整屏，Esc / 点关闭退出）。 */
@@ -15,6 +17,8 @@ export function ArtifactFullscreen({
   title: string;
   onClose: () => void;
 }) {
+  const setFullscreen = useSetAtom(artifactFullscreenAtom);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -22,6 +26,12 @@ export function ArtifactFullscreen({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  // 全屏期间置位，让顶栏隐藏助手 ✦ 按钮；卸载复位。
+  useEffect(() => {
+    setFullscreen(true);
+    return () => setFullscreen(false);
+  }, [setFullscreen]);
 
   return createPortal(
     <div className="fullscreen-titlebar-safe fixed inset-0 z-50 flex flex-col bg-background">

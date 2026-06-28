@@ -1,9 +1,15 @@
 "use client";
 
 import { apiClient } from "@meshbot/web-common";
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { MarkdownContent } from "@/components/session/markdown-content";
 import { artifactKind, artifactRawUrl } from "@/lib/artifact";
+
+/** PDF 用 react-pdf(client-only，避开 static export 的 SSR/prerender 与 pdf.js worker)。 */
+const PdfView = dynamic(() => import("./pdf-view").then((m) => m.PdfView), {
+  ssr: false,
+});
 
 /**
  * 经 apiClient（带 Authorization token）拉产物内容。serving 端点走全局 JWT header
@@ -89,13 +95,21 @@ export function ArtifactBody({ path }: { path: string }) {
       </div>
     );
   }
-  if (kind === "html" || kind === "pdf") {
+  if (kind === "pdf") {
+    if (!blobUrl) return <Loading />;
+    return (
+      <div className="h-full overflow-auto">
+        <PdfView url={blobUrl} />
+      </div>
+    );
+  }
+  if (kind === "html") {
     if (!blobUrl) return <Loading />;
     return (
       <iframe
         title="产物预览"
         src={blobUrl}
-        sandbox={kind === "html" ? "" : undefined}
+        sandbox=""
         className="h-full w-full border-0 bg-white"
       />
     );
@@ -104,6 +118,7 @@ export function ArtifactBody({ path }: { path: string }) {
     if (!blobUrl) return <Loading />;
     return (
       <div className="flex h-full items-center justify-center p-3">
+        {/* biome-ignore lint/performance/noImgElement: 产物是 blob ObjectURL，next/image 不支持 */}
         <img
           src={blobUrl}
           alt="产物"

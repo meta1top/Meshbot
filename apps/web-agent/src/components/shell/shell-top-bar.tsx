@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@meshbot/design";
-import { useAtom, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import {
   ChevronLeft,
   ChevronRight,
@@ -13,6 +13,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
+  artifactFullscreenAtom,
   assistantPanelOpenAtom,
   sidebarDrawerOpenAtom,
 } from "@/atoms/assistant-panel";
@@ -26,6 +27,7 @@ export function ShellTopBar() {
   const t = useTranslations("appShell");
   const [panelOpen, setPanelOpen] = useAtom(assistantPanelOpenAtom);
   const setSidebarDrawerOpen = useSetAtom(sidebarDrawerOpenAtom);
+  const fullscreen = useAtomValue(artifactFullscreenAtom);
   return (
     <div className="drag-handle flex h-[42px] shrink-0 items-center gap-2 bg-(--shell-chrome) px-3">
       <div className="app-mac-controls-safe-left flex items-center gap-0.5">
@@ -65,22 +67,24 @@ export function ShellTopBar() {
           <span className="text-[12px]">{t("search.placeholder")}</span>
         </div>
       </div>
-      <button
-        type="button"
-        data-no-drag
-        onClick={() => setPanelOpen((v) => !v)}
-        title={t("assistant")}
-        aria-label={t("assistant")}
-        aria-pressed={panelOpen}
-        className={cn(
-          "flex h-7 w-7 items-center justify-center rounded-md transition-colors",
-          panelOpen
-            ? "bg-(--shell-accent)/20 text-(--shell-accent)"
-            : "text-white/65 hover:bg-white/10 hover:text-white",
-        )}
-      >
-        <Sparkles className="h-4 w-4" />
-      </button>
+      {!fullscreen && (
+        <button
+          type="button"
+          data-no-drag
+          onClick={() => setPanelOpen((v) => !v)}
+          title={t("assistant")}
+          aria-label={t("assistant")}
+          aria-pressed={panelOpen}
+          className={cn(
+            "flex h-7 w-7 items-center justify-center rounded-md transition-colors",
+            panelOpen
+              ? "bg-(--shell-accent)/20 text-(--shell-accent)"
+              : "text-white/65 hover:bg-white/10 hover:text-white",
+          )}
+        >
+          <Sparkles className="h-4 w-4" />
+        </button>
+      )}
       <button
         type="button"
         data-no-drag

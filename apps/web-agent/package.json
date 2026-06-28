@@ -32,6 +32,7 @@
     "react-dom": "^19",
     "react-hook-form": "^7",
     "react-markdown": "^10.1.0",
+    "react-pdf": "^10.4.1",
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1",
     "simple-icons": "^16.18.1",

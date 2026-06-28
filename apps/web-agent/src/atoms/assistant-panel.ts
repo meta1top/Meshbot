@@ -36,3 +36,6 @@ export interface PreviewArtifact {
   title?: string;
 }
 export const previewArtifactAtom = atom<PreviewArtifact | null>(null);
+
+/** 产物预览是否处于全屏：全屏时隐藏顶栏助手 ✦ 按钮，避免与全屏 modal 重叠。 */
+export const artifactFullscreenAtom = atom(false);
