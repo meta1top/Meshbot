@@ -21,6 +21,8 @@ import { InvitationService } from "./services/invitation.service";
 import { MembershipService } from "./services/membership.service";
 import { MessageService } from "./services/message.service";
 import { OrgService } from "./services/org.service";
+import { CloudNodeService } from "./services/cloud-node.service";
+import { CloudNodeGrantService } from "./services/cloud-node-grant.service";
 import { PresenceService } from "./services/presence.service";
 import { SkillMarketService } from "./services/skill-market.service";
 import { SkillPackageService } from "./services/skill-package.service";
@@ -31,7 +33,8 @@ import { UserService } from "./services/user.service";
  * AppUser→UserService / Organization→OrgService /
  * Membership→MembershipService / Invitation→InvitationService /
  * Conversation+ConversationMember→ConversationService / Message→MessageService /
- * SkillPackage+SkillVersion→SkillPackageService（SkillMarketService 编排）。
+ * SkillPackage+SkillVersion→SkillPackageService（SkillMarketService 编排）/
+ * CloudNode→CloudNodeService / CloudNodeGrant→CloudNodeGrantService。
  *
  * `forRoot(invitation)` 注入邀请配置切片（过期天数），由 server-main 的
  * AppConfig.invitation 提供。
@@ -79,6 +82,8 @@ export class MainModule {
         PresenceService,
         SkillPackageService,
         SkillMarketService,
+        CloudNodeService,
+        CloudNodeGrantService,
         { provide: INVITATION_CONFIG, useValue: invitation },
       ],
       exports: [
@@ -91,6 +96,8 @@ export class MainModule {
         PresenceService,
         SkillPackageService,
         SkillMarketService,
+        CloudNodeService,
+        CloudNodeGrantService,
       ],
     };
   }

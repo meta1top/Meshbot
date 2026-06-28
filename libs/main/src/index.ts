@@ -29,3 +29,5 @@ export { PresenceService } from "./services/presence.service";
 export { SkillMarketService } from "./services/skill-market.service";
 export { SkillPackageService } from "./services/skill-package.service";
 export { UserService } from "./services/user.service";
+export { CloudNodeService } from "./services/cloud-node.service";
+export { CloudNodeGrantService } from "./services/cloud-node-grant.service";
