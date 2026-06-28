@@ -2,7 +2,6 @@
 
 import { cn } from "@meshbot/design";
 import { useAtom, useAtomValue } from "jotai";
-import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import {
   assistantPanelTypeAtom,
@@ -16,7 +15,7 @@ import {
  */
 export function DockTabs() {
   const [type, setType] = useAtom(assistantPanelTypeAtom);
-  const [artifact, setArtifact] = useAtom(previewArtifactAtom);
+  const artifact = useAtomValue(previewArtifactAtom);
   const name = useAtomValue(quickAssistantNameAtom);
   if (!artifact) {
     return null;
@@ -26,22 +25,9 @@ export function DockTabs() {
       <Tab active={type === "assistant"} onClick={() => setType("assistant")}>
         {name}
       </Tab>
-      <span className="flex items-center">
-        <Tab active={type === "preview"} onClick={() => setType("preview")}>
-          预览
-        </Tab>
-        <button
-          type="button"
-          onClick={() => {
-            setArtifact(null);
-            setType("assistant");
-          }}
-          title="关闭预览"
-          className="ml-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-black/10 hover:text-foreground"
-        >
-          <X className="h-3 w-3" />
-        </button>
-      </span>
+      <Tab active={type === "preview"} onClick={() => setType("preview")}>
+        预览
+      </Tab>
     </div>
   );
 }

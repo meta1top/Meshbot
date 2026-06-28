@@ -4,7 +4,7 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { Download, Maximize2, Share2, X } from "lucide-react";
 import { useState } from "react";
 import {
-  assistantPanelOpenAtom,
+  assistantPanelTypeAtom,
   previewArtifactAtom,
 } from "@/atoms/assistant-panel";
 import { DockTabs } from "@/components/im/dock-tabs";
@@ -15,7 +15,8 @@ import { ArtifactFullscreen } from "./artifact-fullscreen";
 /** 产物预览面板（dock 区域，与助手切换）。 */
 export function ArtifactPreviewPanel() {
   const artifact = useAtomValue(previewArtifactAtom);
-  const setOpen = useSetAtom(assistantPanelOpenAtom);
+  const setType = useSetAtom(assistantPanelTypeAtom);
+  const setArtifact = useSetAtom(previewArtifactAtom);
   const [full, setFull] = useState(false);
 
   if (!artifact) {
@@ -57,8 +58,11 @@ export function ArtifactPreviewPanel() {
         </button>
         <button
           type="button"
-          onClick={() => setOpen(false)}
-          title="关闭面板"
+          onClick={() => {
+            setArtifact(null);
+            setType("assistant");
+          }}
+          title="关闭"
           className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-black/5 hover:text-foreground"
         >
           <X className="h-3.5 w-3.5" />
