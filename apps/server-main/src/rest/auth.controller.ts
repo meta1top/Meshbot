@@ -1,8 +1,11 @@
+import { AppError } from "@meshbot/common";
 import {
   type AppUser,
   LoginDto,
+  MainErrorCode,
   MembershipService,
   RegisterUserDto,
+  SwitchOrgDto,
   UserService,
 } from "@meshbot/main";
 import { Body, Controller, Get, HttpCode, Inject, Post } from "@nestjs/common";
@@ -68,6 +71,20 @@ export class AuthController {
   @HttpCode(200)
   async login(@Body() dto: LoginDto): Promise<AuthTokenResponse> {
     const user = await this.users.loginUser(dto);
+    return this.signResponse(user);
+  }
+
+  /** 切换当前活跃组织：校验成员 → 更新 activeOrgId → 重签含新 orgId 的 token。 */
+  @Post("switch-org")
+  @HttpCode(200)
+  async switchOrg(
+    @CurrentUser() jwt: JwtMainPayload,
+    @Body() dto: SwitchOrgDto,
+  ): Promise<AuthTokenResponse> {
+    await this.memberships.assertMember(dto.orgId, jwt.userId);
+    await this.users.setActiveOrg(jwt.userId, dto.orgId);
+    const user = await this.users.findById(jwt.userId);
+    if (!user) throw new AppError(MainErrorCode.ORG_NOT_FOUND);
     return this.signResponse(user);
   }
 

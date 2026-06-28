@@ -23,3 +23,7 @@ export const AcceptInvitationSchema = z.object({
   token: z.string().min(1, { message: "validation.required" }),
 });
 export type AcceptInvitationInput = z.infer<typeof AcceptInvitationSchema>;
+
+/** 切换活跃组织。 */
+export const SwitchOrgSchema = z.object({ orgId: z.string().min(1) });
+export type SwitchOrgInput = z.infer<typeof SwitchOrgSchema>;
