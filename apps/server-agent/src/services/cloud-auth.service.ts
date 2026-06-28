@@ -72,6 +72,39 @@ export class CloudAuthService {
   }
 
   /**
+   * 切换当前账号的活跃组织：代理云端 switch-org 拿新 cloudToken，
+   * 重拉 profile 刷新组织镜像，更新 CloudIdentity。本地 access_token 不变
+   * （本地 JWT 的 sub=cloudUserId 不随 org 改变），前端刷 profile 即可。
+   */
+  async switchOrg(orgId: string): Promise<LocalProfile> {
+    const cloudUserId = this.account.getOrThrow();
+    const id = await this.identity.get(cloudUserId);
+    if (!id?.cloudToken) {
+      throw new AppError(AgentErrorCode.AUTH_UNAUTHORIZED);
+    }
+    const auth = await this.cloud.post<CloudAuthData>(
+      "/api/auth/switch-org",
+      { orgId },
+      id.cloudToken,
+    );
+    const profile = await this.cloud.get<CloudProfileData>(
+      "/api/auth/profile",
+      auth.token,
+    );
+    await this.identity.upsert({
+      cloudUserId: auth.user.id,
+      email: auth.user.email,
+      displayName: auth.user.displayName,
+      cloudToken: auth.token,
+      cloudTokenExpiresAt: computeExpiresAt(auth.expiresIn),
+      orgId: profile.activeOrg?.id ?? null,
+      orgName: profile.activeOrg?.name ?? null,
+      role: profile.activeOrg?.role ?? null,
+    });
+    return this.getProfile();
+  }
+
+  /**
    * 镜像自愈：指定账号有 token 但无活跃组织时，从云端拉一次 profile 刷新组织镜像。
    * 云端不可达 / 401 时静默失败（保持现状，由后续操作再触发）。
    * 由 Public 的 setup-status 路由调用（无账号上下文），cloudUserId 显式传入。

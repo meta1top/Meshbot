@@ -1,10 +1,20 @@
-import { Body, Controller, Delete, Get, Param, Post } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+} from "@nestjs/common";
 
 import {
   AcceptInvitationDto,
   CreateOrgDto,
   InviteMemberDto,
+  SwitchOrgDto,
 } from "../dto/org.dto";
+import { CloudAuthService } from "../services/cloud-auth.service";
 import { CloudOrgService } from "../services/cloud-org.service";
 
 /**
@@ -13,7 +23,10 @@ import { CloudOrgService } from "../services/cloud-org.service";
  */
 @Controller("api/orgs")
 export class CloudOrgController {
-  constructor(private readonly cloudOrg: CloudOrgService) {}
+  constructor(
+    private readonly cloudOrg: CloudOrgService,
+    private readonly cloudAuth: CloudAuthService,
+  ) {}
 
   @Get()
   list() {
@@ -23,6 +36,13 @@ export class CloudOrgController {
   @Post()
   create(@Body() dto: CreateOrgDto) {
     return this.cloudOrg.createOrg(dto.name);
+  }
+
+  /** 切换当前活跃组织（代理云端 + 同步本地镜像）。 */
+  @Post("switch")
+  @HttpCode(200)
+  switchOrg(@Body() dto: SwitchOrgDto) {
+    return this.cloudAuth.switchOrg(dto.orgId);
   }
 
   @Post("invitations/accept")
