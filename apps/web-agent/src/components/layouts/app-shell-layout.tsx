@@ -9,6 +9,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import {
@@ -16,6 +17,7 @@ import {
   assistantPanelTypeAtom,
   assistantPanelWidthAtom,
   previewArtifactAtom,
+  previewPanelWidthAtom,
   sidebarDrawerOpenAtom,
 } from "@/atoms/assistant-panel";
 import { ArtifactPreviewPanel } from "@/components/artifact/artifact-preview-panel";
@@ -67,24 +69,63 @@ export function AppShellLayout({
   );
   // Shell 级全局事件总线订阅：常驻于壳，任何页面都能实时更新未读/会话/在线/定时任务。
   useGlobalEvents();
-  const [panelWidth, setPanelWidth] = useAtom(assistantPanelWidthAtom);
+  const [assistantWidth, setAssistantWidth] = useAtom(assistantPanelWidthAtom);
+  const [previewWidth, setPreviewWidth] = useAtom(previewPanelWidthAtom);
   const [isResizing, setIsResizing] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
+  const [availW, setAvailW] = useState(0);
   const panelType = useAtomValue(assistantPanelTypeAtom);
   const previewArtifact = useAtomValue(previewArtifactAtom);
+  const isPreview = panelType === "preview" && !!previewArtifact;
+  // 预览宽用独立 atom（与助手各自记忆，切换时切换宽度）；0 = 默认内容区 50%。
+  const effectiveWidth = isPreview
+    ? previewWidth > 0
+      ? `${previewWidth}px`
+      : availW > 0
+        ? `${Math.round(availW * 0.5)}px`
+        : "50vw"
+    : `${assistantWidth}px`;
 
-  // 随手问面板左缘拖拽改宽（仅 xl+ 内联态）：鼠标左移→变宽；clamp 300–640；持久化在 atom。
+  // 内容区可用宽 = 内容区容器 − 左侧消息侧栏（不含 rail/侧栏），dock 宽度上限基于它。
+  useEffect(() => {
+    const update = () => {
+      const cw = contentRef.current?.clientWidth ?? 0;
+      const sw = sidebarRef.current?.clientWidth ?? 0;
+      setAvailW(cw - sw);
+    };
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+
+  // 面板左缘拖拽改宽（仅 xl+ 内联态）：基于内容区可用宽，助手 ≤50%、预览 ≤90%。
   const startPanelResize = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
       setIsResizing(true);
       const startX = e.clientX;
-      const startW = panelWidth;
+      const cw = contentRef.current?.clientWidth ?? window.innerWidth;
+      const sw = sidebarRef.current?.clientWidth ?? 0;
+      const avail = cw - sw;
+      const maxW = isPreview
+        ? Math.round(avail * 0.9)
+        : Math.round(avail * 0.5);
+      const startW = isPreview
+        ? previewWidth > 0
+          ? previewWidth
+          : Math.round(avail * 0.5)
+        : assistantWidth;
       const onMove = (ev: MouseEvent) => {
         const next = Math.min(
           Math.max(startW + (startX - ev.clientX), 300),
-          640,
+          maxW,
         );
-        setPanelWidth(next);
+        if (isPreview) {
+          setPreviewWidth(next);
+        } else {
+          setAssistantWidth(next);
+        }
       };
       const onUp = () => {
         document.removeEventListener("mousemove", onMove);
@@ -96,7 +137,13 @@ export function AppShellLayout({
       document.addEventListener("mousemove", onMove);
       document.addEventListener("mouseup", onUp);
     },
-    [panelWidth, setPanelWidth],
+    [
+      isPreview,
+      assistantWidth,
+      previewWidth,
+      setAssistantWidth,
+      setPreviewWidth,
+    ],
   );
 
   useEffect(() => {
@@ -140,7 +187,10 @@ export function AppShellLayout({
       <div className="flex min-h-0 flex-1">
         <WorkspaceRail />
         {/* 内容区容器：relative + overflow-hidden 承载抽屉（绝对定位、关闭时滑出屏外被裁剪） */}
-        <div className="relative flex min-h-0 flex-1 overflow-hidden pr-1.5 pb-1.5">
+        <div
+          ref={contentRef}
+          className="relative flex min-h-0 flex-1 overflow-hidden pr-1.5 pb-1.5"
+        >
           {/* 侧栏遮罩：仅 < md 抽屉打开时 */}
           {resolvedSidebar && sidebarDrawerOpen && (
             <button
@@ -154,6 +204,7 @@ export function AppShellLayout({
           {/* 消息侧栏：md+ 内联；< md 左侧滑出抽屉。单实例常驻，translate 滑动。 */}
           {resolvedSidebar && (
             <aside
+              ref={sidebarRef}
               className={cn(
                 "z-40 flex flex-col w-[260px] shrink-0 overflow-hidden bg-(--shell-sidebar) transition-transform duration-200",
                 // 抽屉态：底部留出壳的 gutter（与内容容器 pb-1.5 一致）+ 全圆角浮起卡片
@@ -195,9 +246,9 @@ export function AppShellLayout({
             <div
               aria-hidden
               onMouseDown={startPanelResize}
-              className="group hidden w-2 shrink-0 cursor-col-resize xl:flex"
+              className="group hidden w-2 shrink-0 cursor-col-resize xl:flex xl:items-center"
             >
-              <div className="mx-auto h-full w-1 rounded-full bg-white/15 transition-colors group-hover:bg-(--shell-accent)" />
+              <div className="mx-auto h-12 w-1 rounded-full bg-white/20 transition-colors group-hover:bg-(--shell-accent)" />
             </div>
           )}
 
@@ -213,7 +264,7 @@ export function AppShellLayout({
 
           {/* 随手问 dock：常驻挂载（关闭不卸载，后台流不退订）。xl+ 内联；< xl 右侧滑出抽屉。 */}
           <aside
-            style={{ width: panelWidth }}
+            style={{ width: effectiveWidth }}
             className={cn(
               "z-40 flex shrink-0 overflow-hidden bg-(--shell-content)",
               // 抽屉态：底部留出壳的 gutter（与内容容器 pb-1.5 一致）+ 全圆角浮起卡片
