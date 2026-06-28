@@ -44,6 +44,13 @@ export function OrgStep({ onDone }: { onDone: () => void }) {
   // 待重试的 switchOrg orgId（mutateAsync 已成功但 switchOrg 尚未成功时非 null）
   const pendingSwitchOrgId = useRef<string | null>(null);
 
+  // 切 tab 时清掉上一个 tab 的未完成切换状态，避免旧 orgId 串台
+  const handleTabChange = (next: Tab) => {
+    pendingSwitchOrgId.current = null;
+    setSwitchErrMsg(null);
+    setTab(next);
+  };
+
   const onCreate = async (values: CreateOrgInput) => {
     setSwitchErrMsg(null);
     try {
@@ -112,14 +119,14 @@ export function OrgStep({ onDone }: { onDone: () => void }) {
           <Button
             type="button"
             variant={tab === "create" ? "default" : "outline"}
-            onClick={() => setTab("create")}
+            onClick={() => handleTabChange("create")}
           >
             {t("orgCreateTab")}
           </Button>
           <Button
             type="button"
             variant={tab === "join" ? "default" : "outline"}
-            onClick={() => setTab("join")}
+            onClick={() => handleTabChange("join")}
           >
             {t("orgJoinTab")}
           </Button>
