@@ -164,7 +164,7 @@ export function AssistantDock() {
       {/* 对话区 */}
       <div
         ref={scrollRef}
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3"
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-3"
       >
         {sessionId ? (
           <MessageList
@@ -181,8 +181,8 @@ export function AssistantDock() {
         )}
       </div>
 
-      {/* 输入 */}
-      <div className="p-3">
+      {/* 输入（横向 16 / 底部 16 对齐主会话 layout p-4 + sticky bottom-4） */}
+      <div className="px-4 pb-4 pt-2">
         <ChatInput
           value={draft}
           onChange={setDraft}
