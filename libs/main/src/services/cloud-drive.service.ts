@@ -6,15 +6,12 @@ import type { CloudNodeGrant } from "../entities/cloud-node-grant.entity";
 import { MainErrorCode } from "../errors/main.error-codes";
 import { CloudNodeGrantService } from "./cloud-node-grant.service";
 import { CloudNodeService } from "./cloud-node.service";
-import { resolvePermission } from "./drive-acl";
+import { resolvePermission, RANK } from "./drive-acl";
 import type { DrivePermission } from "./drive-acl";
 
 // TODO: 迁移到 config 注入（SP-C）
 const DRIVE_ORG_QUOTA_BYTES = 5 * 1024 ** 3;
 const DRIVE_UPLOAD_TTL = 3600;
-
-/** 局部权限等级（对齐 drive-acl.ts RANK，不重复导出）。 */
-const RANK: Record<string, number> = { viewer: 1, editor: 2, owner: 3 };
 
 /** 网盘节点视图（对外暴露类型）。 */
 export interface NodeView {
@@ -79,18 +76,26 @@ export class CloudDriveService {
   }
 
   /**
-   * 列出目录子节点。parentId 为 null 列根目录（org 内所有 parentId=null 的 ready 节点）。
+   * 列出目录子节点。
+   * parentId 为 null 时只列 ownerUserId=ctx.userId 且 parentId=null 的根节点（用户私有根）。
+   * parentId 非 null 时需要 viewer 权限才能列子节点。
    * 无权访问父节点时抛 DRIVE_FORBIDDEN。
    */
   async listNodes(
     ctx: { userId: string; orgId: string },
     parentId: string | null,
   ): Promise<NodeView[]> {
-    if (parentId !== null) {
-      const parent = await this.node.findById(parentId);
-      if (!parent) return [];
-      await this.requirePermission(ctx, parent, "viewer");
+    if (parentId === null) {
+      // 根目录：只列属于当前用户的根节点（ownerUserId = ctx.userId, parentId = null）
+      const roots = await this.node.listChildren(ctx.orgId, null);
+      return roots
+        .filter((n) => n.ownerUserId === ctx.userId)
+        .map((n) => toNodeView(n, "owner"));
     }
+    // 非根：requirePermission + 列子节点 + 批量解析权限
+    const parent = await this.node.findById(parentId);
+    if (!parent) return [];
+    await this.requirePermission(ctx, parent, "viewer");
     const children = await this.node.listChildren(ctx.orgId, parentId);
     const results: NodeView[] = [];
     for (const child of children) {
@@ -232,7 +237,7 @@ export class CloudDriveService {
       await this.node.delete(nodeId);
       throw new AppError(MainErrorCode.DRIVE_QUOTA_EXCEEDED);
     }
-    await this.node.markReady(nodeId, statResult.size, checksum ?? "");
+    await this.node.markReady(nodeId, statResult.size, checksum ?? null);
     const updated = await this.node.findById(nodeId);
     if (!updated) throw new AppError(MainErrorCode.DRIVE_NODE_NOT_FOUND);
     return toNodeView(updated, "owner");

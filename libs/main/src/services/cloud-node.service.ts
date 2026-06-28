@@ -123,7 +123,7 @@ export class CloudNodeService {
   async markReady(
     id: string,
     sizeBytes: number,
-    checksum: string,
+    checksum: string | null,
   ): Promise<void> {
     await this.repo.update(id, { status: "ready", sizeBytes, checksum });
   }

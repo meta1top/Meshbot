@@ -4,7 +4,7 @@ import type { CloudNodeGrant } from "../entities/cloud-node-grant.entity";
 /** 网盘权限级别：owner > editor > viewer。 */
 export type DrivePermission = "owner" | "editor" | "viewer";
 
-const RANK: Record<DrivePermission, number> = {
+export const RANK: Record<DrivePermission, number> = {
   viewer: 1,
   editor: 2,
   owner: 3,

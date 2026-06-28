@@ -211,6 +211,27 @@ describe("CloudDriveService", () => {
     expect(view.status).toBe("ready");
   });
 
+  it("completeUpload 无 checksum → markReady 传 null", async () => {
+    const node = makeFile({
+      id: "n2",
+      orgId: "org1",
+      ownerUserId: "u1",
+      status: "uploading",
+      assetKey: "drive/org1/n2",
+    });
+    const readyNode = { ...node, status: "ready" as const, sizeBytes: 200 };
+    nodeSvc.findById
+      .mockResolvedValueOnce(node)
+      .mockResolvedValueOnce(readyNode as CloudNode);
+    assetSvc.stat.mockResolvedValue({ size: 200 });
+    nodeSvc.sumOrgReadySize.mockResolvedValue(0);
+    nodeSvc.markReady.mockResolvedValue(undefined);
+
+    await svc.completeUpload(ctx, "n2"); // 不传 checksum
+
+    expect(nodeSvc.markReady).toHaveBeenCalledWith("n2", 200, null);
+  });
+
   it("completeUpload stat 后超配额 → delete asset + node + DRIVE_QUOTA_EXCEEDED", async () => {
     const node = makeFile({
       id: "n1",
@@ -349,6 +370,29 @@ describe("CloudDriveService", () => {
   });
 
   // ─── listNodes ────────────────────────────────────────────────────────────
+
+  it("listNodes(null) 只返回 ownerUserId 匹配的根节点", async () => {
+    const mine = makeNode({ id: "r1", ownerUserId: "u1", parentId: null });
+    const others = makeNode({ id: "r2", ownerUserId: "other", parentId: null });
+    nodeSvc.listChildren.mockResolvedValueOnce([mine, others]);
+
+    const views = await svc.listNodes(ctx, null);
+
+    expect(views).toHaveLength(1);
+    expect(views[0].id).toBe("r1");
+    expect(views[0].permission).toBe("owner");
+    // 不应查父节点也不应查 grant
+    expect(nodeSvc.findById).not.toHaveBeenCalled();
+    expect(grantSvc.listForNodes).not.toHaveBeenCalled();
+  });
+
+  it("listNodes(null) 无根节点 → 空数组", async () => {
+    nodeSvc.listChildren.mockResolvedValueOnce([]);
+
+    const views = await svc.listNodes(ctx, null);
+
+    expect(views).toHaveLength(0);
+  });
 
   it("listNodes 父节点无 viewer 权限 → DRIVE_FORBIDDEN", async () => {
     const parent = makeNode({ id: "p1", ownerUserId: "other" });
