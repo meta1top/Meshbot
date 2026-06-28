@@ -8,6 +8,7 @@ import {
 } from "@meshbot/web-common";
 import { ChevronDown, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { sanitizeMeshbotPaths, toolDisplayName } from "@/lib/tool-display";
 import { AskQuestionCard } from "./ask-question-card";
 import { ImSendConfirmCard } from "./im-send-confirm-card";
 import type { ToolCallView } from "./message-list";
@@ -60,16 +61,20 @@ export function ToolCallBlock({
       : tool.argsText
         ? parsePartialToolArgs(tool.argsText)
         : undefined;
-  const argsJson = formatJson(displayArgs);
-  const argsSummary = formatArgsSummary(displayArgs);
+  const argsJson = sanitizeMeshbotPaths(formatJson(displayArgs));
+  const argsSummary = sanitizeMeshbotPaths(formatArgsSummary(displayArgs));
   // 文件写入 / bash 等有「正文」的工具：流式阶段逐字预览正文（打字效果）。
-  const streamBody = streaming
-    ? extractPartialString(tool.argsText ?? "", "command") ||
-      extractPartialString(tool.argsText ?? "", "content") ||
-      extractPartialString(tool.argsText ?? "", "new_string")
-    : "";
-  const output = tool.progress || tool.result || "";
-  const { server, name: displayName } = parseToolName(tool.name);
+  const streamBody = sanitizeMeshbotPaths(
+    streaming
+      ? extractPartialString(tool.argsText ?? "", "command") ||
+          extractPartialString(tool.argsText ?? "", "content") ||
+          extractPartialString(tool.argsText ?? "", "new_string")
+      : "",
+  );
+  const output = sanitizeMeshbotPaths(tool.progress || tool.result || "");
+  // 工具名友好化：内建工具映射中文名，MCP 工具保留 server/tool 两段。
+  const { server, name: rawName } = parseToolName(tool.name);
+  const displayName = server ? rawName : toolDisplayName(rawName);
   const dotColor =
     tool.status === "running" || streaming
       ? "bg-primary/70"

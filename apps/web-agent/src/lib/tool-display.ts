@@ -1,0 +1,50 @@
+/** 内置工具名 → 友好中文显示名（不向用户暴露原始 snake_case 工具名）。 */
+const TOOL_LABELS: Record<string, string> = {
+  ask_question: "提问",
+  bash: "终端命令",
+  date: "当前时间",
+  edit_file: "编辑文件",
+  glob: "查找文件",
+  grep: "搜索内容",
+  im_list_members: "成员列表",
+  im_read_conversation: "读取会话",
+  im_send_message: "发送消息",
+  im_unread_overview: "未读概览",
+  memory_add: "记录记忆",
+  memory_core_write: "更新核心记忆",
+  memory_delete: "删除记忆",
+  memory_search: "检索记忆",
+  read_file: "读取文件",
+  rename_quick_assistant: "重命名助手",
+  schedule_create: "创建定时任务",
+  schedule_delete: "删除定时任务",
+  schedule_list: "定时任务列表",
+  skill_install: "安装技能",
+  skill_list: "技能列表",
+  skill_load: "加载技能",
+  skill_publish: "发布技能",
+  skill_search_market: "搜索技能市场",
+  skill_uninstall: "卸载技能",
+  todo_write: "更新待办",
+  write_file: "写入文件",
+};
+
+/**
+ * 内置工具名 → 友好显示名。未收录的兜底为「下划线转空格」，避免直接暴露
+ * snake_case 原始名。（MCP 工具走 server/tool 两段渲染，不经此。）
+ */
+export function toolDisplayName(name: string): string {
+  return TOOL_LABELS[name] ?? name.replace(/_/g, " ");
+}
+
+/**
+ * 隐藏工作区绝对路径：把 `~/.meshbot`、`/Users/x/.meshbot`、`<project>/.meshbot`
+ * 等「以 .meshbot 结尾的路径前缀」整体替换为 `<工作区>`，只保留其后的相对部分
+ * （如 `/skills/foo`）。用于工具调用的参数/结果展示，不向用户暴露真实路径。
+ */
+export function sanitizeMeshbotPaths(text: string): string {
+  if (!text) {
+    return text;
+  }
+  return text.replace(/[^\s"'\n]*\.meshbot\b/g, "<工作区>");
+}
