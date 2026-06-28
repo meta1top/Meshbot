@@ -161,11 +161,12 @@ pre code.hljs {
   padding-top: calc(var(--titlebar-height) + 8px);
 }
 
-/* 全屏模态（createPortal 到 body，盖整窗）：electron 下从自定义标题栏下方开始，
-   避开 macOS 红绿灯 / Windows 窗口控制（均在标题栏区）。浏览器无 .electron-shell 不受影响。
-   用 top 偏移（不像 titlebar-safe 在大屏被重置），全屏在大屏也避开。 */
+/* 全屏模态（createPortal 到 body，盖整窗，flex-col）：electron 下顶部留出自定义标题栏
+   高度，让 header 下移避开 macOS 红绿灯 / Windows 窗口控制（均在标题栏区）。
+   用 padding-top（不会被 inset-0 的 top:0 覆盖；fullscreen 专用 class，不受 titlebar-safe
+   的 lg+ 重置影响）。浏览器无 .electron-shell 不受影响。 */
 .electron-shell .fullscreen-titlebar-safe {
-  top: var(--titlebar-height);
+  padding-top: var(--titlebar-height);
 }
 
 .electron-shell.mac-shell .mac-controls-safe-left {
