@@ -15,7 +15,7 @@
 - **实时读**：文件被改/删 → serving 404，预览显示「产物已不存在或已变更」。
 - **present_file 路径**：工具返回**相对 workspace** 的路径；前端文件框/预览/serving 都用相对路径（serving 不接收绝对路径）。
 - libs/agent 框架无关：工具纯 `@Tool()` + fs（同 write_file，注入 MeshbotConfigService，无端口）。libs/types-* 纯 Zod。
-- html 预览 iframe 必须 `sandbox`。serving URL 用相对路径（同源）。
+- **前端取产物经 apiClient（带 token）**：serving 端点走全局 JWT header 鉴权；iframe/img/下载**不能直连** serving URL（浏览器不给 iframe/img 加 Authorization → 401），统一用 `apiClient.get(artifactRawUrl(path), { responseType: "blob" | "text" })` 拉内容 → blob `URL.createObjectURL` / text；卸载时 `revokeObjectURL`。html 预览 iframe 必须 `sandbox`。
 - Rules of Hooks：tool-call-block 的 present_file 特判早返回放 `useState(open)` 之后。
 - 中文 JSDoc；不在 `if` 前一行放注释；中文提交；commit 前 `pnpm check`。
 
@@ -556,8 +556,7 @@ import {
   assistantPanelTypeAtom,
   previewArtifactAtom,
 } from "@/atoms/assistant-panel";
-import { artifactRawUrl } from "@/lib/artifact";
-import { ArtifactBody } from "./artifact-body";
+import { ArtifactBody, downloadArtifact } from "./artifact-body";
 import { ArtifactFullscreen } from "./artifact-fullscreen";
 
 /** 产物预览面板（dock 区域，与助手切换）。 */
@@ -577,14 +576,14 @@ export function ArtifactPreviewPanel() {
         <span className="min-w-0 flex-1 truncate text-[14px] font-bold text-foreground">
           {title}
         </span>
-        <a
-          href={artifactRawUrl(artifact.path, { download: true })}
-          download
+        <button
+          type="button"
+          onClick={() => void downloadArtifact(artifact.path, title)}
           title="下载"
           className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-black/5 hover:text-foreground"
         >
           <Download className="h-3.5 w-3.5" />
-        </a>
+        </button>
         <button
           type="button"
           onClick={() => setFull(true)}
@@ -626,37 +625,82 @@ export function ArtifactPreviewPanel() {
 ```tsx
 "use client";
 
+import { apiClient } from "@meshbot/web-common";
 import { useEffect, useState } from "react";
 import { MarkdownContent } from "@/components/session/markdown-content";
 import { artifactKind, artifactRawUrl } from "@/lib/artifact";
 
-/** 按类型分发渲染产物内容（preview 面板与全屏共用）。 */
-export function ArtifactBody({ path }: { path: string }) {
+/**
+ * 经 apiClient（带 Authorization token）拉产物内容。serving 端点走全局 JWT header
+ * 鉴权，iframe/img 直连不带 token 会 401，故所有类型都经 apiClient：
+ * 二进制（html/pdf/image）→ blob ObjectURL；文本（markdown/text）→ string。
+ */
+function useArtifactContent(path: string): {
+  blobUrl: string | null;
+  text: string | null;
+  err: boolean;
+} {
   const kind = artifactKind(path);
-  const url = artifactRawUrl(path);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [text, setText] = useState<string | null>(null);
   const [err, setErr] = useState(false);
 
   useEffect(() => {
-    if (kind !== "markdown" && kind !== "text") return;
+    if (kind === "binary") return;
     let cancelled = false;
+    let obj: string | null = null;
+    setBlobUrl(null);
     setText(null);
     setErr(false);
-    fetch(url)
-      .then((r) => {
-        if (!r.ok) throw new Error(String(r.status));
-        return r.text();
-      })
-      .then((t) => {
-        if (!cancelled) setText(t);
+    const isText = kind === "markdown" || kind === "text";
+    apiClient
+      .get(artifactRawUrl(path), { responseType: isText ? "text" : "blob" })
+      .then((res) => {
+        if (cancelled) return;
+        if (isText) {
+          setText(typeof res.data === "string" ? res.data : String(res.data));
+        } else {
+          obj = URL.createObjectURL(res.data as Blob);
+          setBlobUrl(obj);
+        }
       })
       .catch(() => {
         if (!cancelled) setErr(true);
       });
     return () => {
       cancelled = true;
+      if (obj) URL.revokeObjectURL(obj);
     };
-  }, [kind, url]);
+  }, [path, kind]);
+
+  return { blobUrl, text, err };
+}
+
+/** 下载产物：apiClient 取 blob（带 token）→ a.download 触发 → 释放 ObjectURL。 */
+export async function downloadArtifact(path: string, name: string): Promise<void> {
+  const res = await apiClient.get(artifactRawUrl(path, { download: true }), {
+    responseType: "blob",
+  });
+  const url = URL.createObjectURL(res.data as Blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function Loading() {
+  return (
+    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+      加载中…
+    </div>
+  );
+}
+
+/** 按类型分发渲染产物内容（preview 面板与全屏共用）。 */
+export function ArtifactBody({ path }: { path: string }) {
+  const kind = artifactKind(path);
+  const { blobUrl, text, err } = useArtifactContent(path);
 
   if (err) {
     return (
@@ -666,30 +710,28 @@ export function ArtifactBody({ path }: { path: string }) {
     );
   }
   if (kind === "html" || kind === "pdf") {
+    if (!blobUrl) return <Loading />;
     return (
       <iframe
         title="产物预览"
-        src={url}
+        src={blobUrl}
         sandbox={kind === "html" ? "" : undefined}
         className="h-full w-full border-0 bg-white"
       />
     );
   }
   if (kind === "image") {
+    if (!blobUrl) return <Loading />;
     return (
       <div className="flex h-full items-center justify-center p-3">
-        <img src={url} alt="产物" className="max-h-full max-w-full object-contain" />
+        <img src={blobUrl} alt="产物" className="max-h-full max-w-full object-contain" />
       </div>
     );
   }
   if (kind === "markdown") {
     return (
       <div className="px-4 py-3 text-sm">
-        {text === null ? (
-          <span className="text-muted-foreground">加载中…</span>
-        ) : (
-          <MarkdownContent content={text} />
-        )}
+        {text === null ? <Loading /> : <MarkdownContent content={text} />}
       </div>
     );
   }
