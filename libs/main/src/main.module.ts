@@ -8,6 +8,8 @@ import { Invitation } from "./entities/invitation.entity";
 import { Membership } from "./entities/membership.entity";
 import { Message } from "./entities/message.entity";
 import { Organization } from "./entities/organization.entity";
+import { CloudNode } from "./entities/cloud-node.entity";
+import { CloudNodeGrant } from "./entities/cloud-node-grant.entity";
 import { SkillPackage } from "./entities/skill-package.entity";
 import { SkillVersion } from "./entities/skill-version.entity";
 import {
@@ -63,6 +65,8 @@ export class MainModule {
           Message,
           SkillPackage,
           SkillVersion,
+          CloudNode,
+          CloudNodeGrant,
         ]),
       ],
       providers: [

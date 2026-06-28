@@ -1,0 +1,8 @@
+{
+  "nodeNotFound": "File or folder not found",
+  "forbidden": "No permission to access this file",
+  "quotaExceeded": "Storage quota exceeded",
+  "invalidMove": "Cannot move to the target location",
+  "nameConflict": "A file with the same name already exists",
+  "notReady": "File is not ready yet"
+}

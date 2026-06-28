@@ -9,6 +9,8 @@ export * from "./entities/message.entity";
 export * from "./entities/organization.entity";
 export * from "./entities/skill-package.entity";
 export * from "./entities/skill-version.entity";
+export * from "./entities/cloud-node.entity";
+export * from "./entities/cloud-node-grant.entity";
 export { MainErrorCode } from "./errors/main.error-codes";
 export { MainModule } from "./main.module";
 export {

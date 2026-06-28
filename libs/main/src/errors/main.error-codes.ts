@@ -70,4 +70,10 @@ export const MainErrorCode = defineErrorCode({
     message: "skill.forbidden",
     httpStatus: 403,
   },
+  DRIVE_NODE_NOT_FOUND: { code: 2013, message: "drive.nodeNotFound" },
+  DRIVE_FORBIDDEN: { code: 2014, message: "drive.forbidden", httpStatus: 403 },
+  DRIVE_QUOTA_EXCEEDED: { code: 2015, message: "drive.quotaExceeded" },
+  DRIVE_INVALID_MOVE: { code: 2016, message: "drive.invalidMove" },
+  DRIVE_NAME_CONFLICT: { code: 2017, message: "drive.nameConflict" },
+  DRIVE_NOT_READY: { code: 2018, message: "drive.notReady" },
 });

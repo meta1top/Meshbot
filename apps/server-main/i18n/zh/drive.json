@@ -1,0 +1,8 @@
+{
+  "nodeNotFound": "文件或文件夹不存在",
+  "forbidden": "无权访问该文件",
+  "quotaExceeded": "存储配额已超限",
+  "invalidMove": "无法移动到该位置",
+  "nameConflict": "同名文件已存在",
+  "notReady": "文件尚未就绪"
+}
