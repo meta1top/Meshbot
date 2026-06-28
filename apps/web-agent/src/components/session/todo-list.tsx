@@ -23,7 +23,7 @@ export function TodoList({ todos }: { todos: TodoItem[] }) {
               className={cn(
                 "mt-0.5 h-3.5 w-3.5 shrink-0",
                 t.status === "completed"
-                  ? "text-(--shell-accent)"
+                  ? "text-green-600"
                   : t.status === "in_progress"
                     ? "text-primary"
                     : "text-muted-foreground/50",
