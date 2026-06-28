@@ -74,6 +74,7 @@ describe("CloudDriveService", () => {
             delete: jest.fn(),
             nameExists: jest.fn(),
             sumOrgReadySize: jest.fn(),
+            deleteSubtreeInTx: jest.fn(),
           } as Partial<CloudNodeService>,
         },
         {
@@ -232,7 +233,7 @@ describe("CloudDriveService", () => {
     expect(nodeSvc.markReady).toHaveBeenCalledWith("n2", 200, null);
   });
 
-  it("completeUpload stat 后超配额 → delete asset + node + DRIVE_QUOTA_EXCEEDED", async () => {
+  it("completeUpload stat 后超配额 → 先删 node 再删 asset + DRIVE_QUOTA_EXCEEDED（I2）", async () => {
     const node = makeFile({
       id: "n1",
       orgId: "org1",
@@ -243,13 +244,19 @@ describe("CloudDriveService", () => {
     nodeSvc.findById.mockResolvedValueOnce(node);
     assetSvc.stat.mockResolvedValue({ size: 100 });
     nodeSvc.sumOrgReadySize.mockResolvedValue(QUOTA - 50); // 50 剩余，文件 100 → 超
+    nodeSvc.delete.mockResolvedValue(undefined);
+    assetSvc.delete.mockResolvedValue(undefined);
 
     await expect(svc.completeUpload(ctx, "n1")).rejects.toMatchObject({
       errorCode: { code: MainErrorCode.DRIVE_QUOTA_EXCEEDED.code },
     });
 
-    expect(assetSvc.delete).toHaveBeenCalledWith("drive/org1/n1");
+    // I2：先删 DB node（主数据），再 best-effort 删 Minio 对象
+    const nodeDeleteOrder = nodeSvc.delete.mock.invocationCallOrder[0];
+    const assetDeleteOrder = assetSvc.delete.mock.invocationCallOrder[0];
+    expect(nodeDeleteOrder).toBeLessThan(assetDeleteOrder);
     expect(nodeSvc.delete).toHaveBeenCalledWith("n1");
+    expect(assetSvc.delete).toHaveBeenCalledWith("drive/org1/n1");
   });
 
   // ─── getDownloadUrl ───────────────────────────────────────────────────────
@@ -437,5 +444,48 @@ describe("CloudDriveService", () => {
 
     expect(result.used).toBe(1024);
     expect(result.limit).toBe(QUOTA);
+  });
+
+  // ─── deleteNode ───────────────────────────────────────────────────────────
+
+  it("deleteNode 无 editor 权限 → DRIVE_FORBIDDEN（C1）", async () => {
+    const node = makeNode({ id: "n1", ownerUserId: "other" });
+    nodeSvc.findById.mockResolvedValueOnce(node);
+    nodeSvc.listAncestors.mockResolvedValue([]);
+    grantSvc.listForNodes.mockResolvedValue([]); // 无任何 grant → forbidden
+
+    await expect(svc.deleteNode(ctx, "n1")).rejects.toMatchObject({
+      errorCode: { code: MainErrorCode.DRIVE_FORBIDDEN.code },
+    });
+    expect(nodeSvc.deleteSubtreeInTx).not.toHaveBeenCalled();
+  });
+
+  it("deleteNode 正常 → 调 deleteSubtreeInTx，逐个删 Minio assetKey（C1）", async () => {
+    const node = makeNode({ id: "n1", ownerUserId: "u1" });
+    const assetKeys = ["drive/org1/file1", "drive/org1/file2"];
+    nodeSvc.findById.mockResolvedValueOnce(node);
+    nodeSvc.listAncestors.mockResolvedValue([]);
+    grantSvc.listForNodes.mockResolvedValue([]);
+    nodeSvc.deleteSubtreeInTx.mockResolvedValue(assetKeys);
+    assetSvc.delete.mockResolvedValue(undefined);
+
+    await svc.deleteNode(ctx, "n1");
+
+    expect(nodeSvc.deleteSubtreeInTx).toHaveBeenCalledWith("n1");
+    expect(assetSvc.delete).toHaveBeenCalledTimes(2);
+    expect(assetSvc.delete).toHaveBeenCalledWith("drive/org1/file1");
+    expect(assetSvc.delete).toHaveBeenCalledWith("drive/org1/file2");
+  });
+
+  it("deleteNode Minio delete 抛错 → 不影响整体成功（best-effort）", async () => {
+    const node = makeNode({ id: "n1", ownerUserId: "u1" });
+    nodeSvc.findById.mockResolvedValueOnce(node);
+    nodeSvc.listAncestors.mockResolvedValue([]);
+    grantSvc.listForNodes.mockResolvedValue([]);
+    nodeSvc.deleteSubtreeInTx.mockResolvedValue(["drive/org1/file1"]);
+    assetSvc.delete.mockRejectedValue(new Error("minio error"));
+
+    // best-effort：Minio 失败不应 throw
+    await expect(svc.deleteNode(ctx, "n1")).resolves.toBeUndefined();
   });
 });

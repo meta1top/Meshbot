@@ -3,6 +3,7 @@ import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { IsNull, LessThan, type Repository } from "typeorm";
 import { CloudNode } from "../entities/cloud-node.entity";
+import { CloudNodeGrantService } from "./cloud-node-grant.service";
 
 /**
  * CloudNode 的唯一归属 Service（check:repo）。
@@ -14,6 +15,7 @@ export class CloudNodeService {
   constructor(
     @InjectRepository(CloudNode)
     private readonly repo: Repository<CloudNode>,
+    private readonly grantSvc: CloudNodeGrantService,
   ) {}
 
   /**
@@ -30,6 +32,17 @@ export class CloudNodeService {
         parentId: parentId === null ? IsNull() : parentId,
         status: "ready",
       },
+      order: { type: "ASC", name: "ASC" },
+    });
+  }
+
+  /**
+   * 列出目录下所有子节点（不过滤 status，含 uploading）。
+   * 供 deleteSubtreeInTx 使用，确保 uploading 子文件也被递归删除。
+   */
+  async listAllChildren(parentId: string): Promise<CloudNode[]> {
+    return this.repo.find({
+      where: { parentId },
       order: { type: "ASC", name: "ASC" },
     });
   }
@@ -139,10 +152,50 @@ export class CloudNodeService {
   }
 
   /**
-   * 删除单个节点（递归删除由编排层负责）。
+   * 删除单个节点（递归删除由 deleteSubtreeInTx 负责）。
    */
   async delete(id: string): Promise<void> {
     await this.repo.delete(id);
+  }
+
+  /**
+   * 递归删除以 rootId 为根的整棵子树（含根节点本身）。
+   * BFS 收集全部后代（含 uploading 节点，用 listAllChildren 不过滤 status），
+   * 逆序（叶→根）先清 grant 再删 node 行。
+   * 跨 cloud_node + cloud_node_grant 两表多行写入，挂 @Transactional()；
+   * this 持有 @InjectRepository(CloudNode)，findDataSource 可正常取到 DataSource。
+   * 静态分析仅识别到 this.repo.delete（1 处），而 grantSvc.deleteForNode 也是写操作
+   * 但静态无法穿透 service 边界 —— tx-check: ignore（误报豁免，事务必要性已人工确认）。
+   * @returns 所有被删文件节点的 assetKey 数组（供编排层 best-effort 删 Minio）。
+   */
+  // tx-check: ignore
+  @Transactional()
+  async deleteSubtreeInTx(rootId: string): Promise<string[]> {
+    const root = await this.repo.findOne({ where: { id: rootId } });
+    if (!root) return [];
+
+    const queue: CloudNode[] = [root];
+    const toDelete: CloudNode[] = [];
+    while (queue.length > 0) {
+      // biome-ignore lint/style/noNonNullAssertion: while loop 保证 queue 非空时才 shift
+      const cur = queue.shift()!;
+      toDelete.push(cur);
+      if (cur.type === "folder") {
+        const children = await this.listAllChildren(cur.id);
+        queue.push(...children);
+      }
+    }
+
+    // 叶→根逆序：先清 grant，再删 node
+    const assetKeys: string[] = [];
+    for (const n of toDelete.reverse()) {
+      if (n.type === "file" && n.assetKey) {
+        assetKeys.push(n.assetKey);
+      }
+      await this.grantSvc.deleteForNode(n.id);
+      await this.repo.delete(n.id);
+    }
+    return assetKeys;
   }
 
   /**

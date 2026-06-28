@@ -106,6 +106,20 @@ function makeGrantRepo(
   }) as unknown as Repository<CloudNodeGrant>;
 }
 
+/** 构造 CloudNodeGrantService stub（供 CloudNodeService 注入）。 */
+function makeGrantSvc(
+  overrides: Partial<CloudNodeGrantService> = {},
+): CloudNodeGrantService {
+  return {
+    deleteForNode: jest.fn().mockResolvedValue(undefined),
+    listForNodes: jest.fn().mockResolvedValue([]),
+    listForNode: jest.fn().mockResolvedValue([]),
+    replaceForNode: jest.fn().mockResolvedValue(undefined),
+    listByGrantee: jest.fn().mockResolvedValue([]),
+    ...overrides,
+  } as unknown as CloudNodeGrantService;
+}
+
 // ─────────────────────────── CloudNodeService ──────────────────────────────
 
 describe("CloudNodeService", () => {
@@ -125,7 +139,7 @@ describe("CloudNodeService", () => {
       create: jest.fn().mockReturnValue(folderNode),
       find: jest.fn().mockResolvedValue([folderNode]),
     });
-    const svc = new CloudNodeService(repo);
+    const svc = new CloudNodeService(repo, makeGrantSvc());
 
     const f = await svc.createFolderRow("o1", "u1", null, "docs");
     expect(f.type).toBe("folder");
@@ -148,7 +162,7 @@ describe("CloudNodeService", () => {
     const repo = makeNodeRepo({
       createQueryBuilder: jest.fn().mockReturnValue(qb),
     });
-    const svc = new CloudNodeService(repo);
+    const svc = new CloudNodeService(repo, makeGrantSvc());
 
     expect(await svc.sumOrgReadySize("o1")).toBe(0);
     expect(await svc.sumOrgReadySize("o1")).toBe(100);
@@ -165,7 +179,7 @@ describe("CloudNodeService", () => {
     const repo = makeNodeRepo({
       createQueryBuilder: jest.fn().mockReturnValue(qb),
     });
-    const svc = new CloudNodeService(repo);
+    const svc = new CloudNodeService(repo, makeGrantSvc());
     const result = await svc.sumOrgReadySize("o2");
     expect(result).toBe(999999999999);
     expect(typeof result).toBe("number");
@@ -193,7 +207,7 @@ describe("CloudNodeService", () => {
         return Promise.resolve(null);
       });
     const repo = makeNodeRepo({ findOne });
-    const svc = new CloudNodeService(repo);
+    const svc = new CloudNodeService(repo, makeGrantSvc());
 
     const ancestors = await svc.listAncestors(grandchild);
     const ids = ancestors.map((a) => a.id);
@@ -219,7 +233,7 @@ describe("CloudNodeService", () => {
         return Promise.resolve(null);
       });
     const repo = makeNodeRepo({ findOne });
-    const svc = new CloudNodeService(repo);
+    const svc = new CloudNodeService(repo, makeGrantSvc());
 
     // 不应无限挂起；jest 默认 5 s 超时即可覆盖
     const result = await svc.listAncestors(nodeA);
@@ -240,7 +254,7 @@ describe("CloudNodeService", () => {
         return Promise.resolve(null);
       });
     const repo = makeNodeRepo({ findOne });
-    const svc = new CloudNodeService(repo);
+    const svc = new CloudNodeService(repo, makeGrantSvc());
 
     // 从 nodeA 出发：cur=cycleB → 推 nodeB → cur=cycleA → cycleA 在 visited → break
     const result = await svc.listAncestors(nodeA);
@@ -255,7 +269,7 @@ describe("CloudNodeService", () => {
       .mockResolvedValueOnce(1) // 同名存在
       .mockResolvedValueOnce(0); // 不存在
     const repo = makeNodeRepo({ count: countMock });
-    const svc = new CloudNodeService(repo);
+    const svc = new CloudNodeService(repo, makeGrantSvc());
 
     expect(await svc.nameExists("o1", "parent-1", "docs")).toBe(true);
     expect(await svc.nameExists("o1", null, "docs")).toBe(false);
@@ -265,7 +279,7 @@ describe("CloudNodeService", () => {
   it("move 调用 update 修改 parentId", async () => {
     const updateMock = jest.fn().mockResolvedValue({ affected: 1 });
     const repo = makeNodeRepo({ update: updateMock });
-    const svc = new CloudNodeService(repo);
+    const svc = new CloudNodeService(repo, makeGrantSvc());
 
     await svc.move("node-1", "new-parent-1");
     expect(updateMock).toHaveBeenCalledWith("node-1", {
@@ -277,7 +291,7 @@ describe("CloudNodeService", () => {
   it("move(id, null) 传 null 而非 undefined，能移回根目录", async () => {
     const updateMock = jest.fn().mockResolvedValue({ affected: 1 });
     const repo = makeNodeRepo({ update: updateMock });
-    const svc = new CloudNodeService(repo);
+    const svc = new CloudNodeService(repo, makeGrantSvc());
 
     await svc.move("node-1", null);
     // 必须传 null（让 TypeORM 将列更新为 NULL），而非 undefined（被忽略）
@@ -288,7 +302,7 @@ describe("CloudNodeService", () => {
   it("delete 调用 repo.delete", async () => {
     const deleteMock = jest.fn().mockResolvedValue({ affected: 1 });
     const repo = makeNodeRepo({ delete: deleteMock });
-    const svc = new CloudNodeService(repo);
+    const svc = new CloudNodeService(repo, makeGrantSvc());
 
     await svc.delete("node-1");
     expect(deleteMock).toHaveBeenCalledWith("node-1");
@@ -298,7 +312,7 @@ describe("CloudNodeService", () => {
   it("rename 调用 update 修改 name", async () => {
     const updateMock = jest.fn().mockResolvedValue({ affected: 1 });
     const repo = makeNodeRepo({ update: updateMock });
-    const svc = new CloudNodeService(repo);
+    const svc = new CloudNodeService(repo, makeGrantSvc());
 
     await svc.rename("node-1", "newname");
     expect(updateMock).toHaveBeenCalledWith("node-1", { name: "newname" });
@@ -325,7 +339,7 @@ describe("CloudNodeService", () => {
       update: updateMock,
       findOne: findOneMock,
     });
-    const svc = new CloudNodeService(repo);
+    const svc = new CloudNodeService(repo, makeGrantSvc());
 
     const node = await svc.createUploadingRow(
       "org99",
@@ -349,7 +363,7 @@ describe("CloudNodeService", () => {
     const staleNode = makeNode({ status: "uploading" });
     const findMock = jest.fn().mockResolvedValue([staleNode]);
     const repo = makeNodeRepo({ find: findMock });
-    const svc = new CloudNodeService(repo);
+    const svc = new CloudNodeService(repo, makeGrantSvc());
 
     const result = await svc.listStaleUploading(Date.now() + 60_000);
     expect(result).toHaveLength(1);
@@ -421,5 +435,101 @@ describe("CloudNodeGrantService", () => {
 
     await svc.deleteForNode("node-1");
     expect(deleteMock).toHaveBeenCalledWith({ nodeId: "node-1" });
+  });
+});
+
+// ─────────────────── CloudNodeService.deleteSubtreeInTx ────────────────────
+
+describe("CloudNodeService.deleteSubtreeInTx", () => {
+  beforeEach(() => {
+    _idCounter = 1;
+  });
+
+  it("删除文件夹子树：含 ready 文件 + uploading 文件 + grant，全部被删，返回 assetKeys", async () => {
+    // 结构：folder → readyFile + uploadingFile，各有 1 条 grant
+    const folder = makeNode({
+      id: "folder-1",
+      type: "folder",
+      status: "ready",
+      assetKey: null,
+    });
+    const readyFile = makeNode({
+      id: "file-ready-1",
+      type: "file",
+      status: "ready",
+      assetKey: "drive/o1/file-ready-1",
+      parentId: "folder-1",
+    });
+    const uploadingFile = makeNode({
+      id: "file-up-1",
+      type: "file",
+      status: "uploading",
+      assetKey: "drive/o1/file-up-1",
+      parentId: "folder-1",
+    });
+
+    const deleteMock = jest.fn().mockResolvedValue({ affected: 1 });
+    const repo = makeNodeRepo({
+      // findOne 用于 root 查找
+      findOne: jest
+        .fn()
+        .mockImplementation(({ where: { id } }: { where: { id: string } }) => {
+          if (id === "folder-1") return Promise.resolve(folder);
+          return Promise.resolve(null);
+        }),
+      // find 用于 listAllChildren（按 parentId 查，不带 status 过滤）
+      find: jest
+        .fn()
+        .mockImplementation(
+          ({ where }: { where: { parentId?: string; status?: string } }) => {
+            if (where.parentId === "folder-1") {
+              return Promise.resolve([readyFile, uploadingFile]);
+            }
+            // file 节点无子节点
+            return Promise.resolve([]);
+          },
+        ),
+      delete: deleteMock,
+    });
+
+    const deleteForNodeMock = jest.fn().mockResolvedValue(undefined);
+    const grantSvc = makeGrantSvc({ deleteForNode: deleteForNodeMock });
+    const svc = new CloudNodeService(repo, grantSvc);
+
+    const assetKeys = await svc.deleteSubtreeInTx("folder-1");
+
+    // 三个节点全部被删
+    expect(deleteMock).toHaveBeenCalledTimes(3);
+    expect(deleteMock).toHaveBeenCalledWith("folder-1");
+    expect(deleteMock).toHaveBeenCalledWith("file-ready-1");
+    expect(deleteMock).toHaveBeenCalledWith("file-up-1");
+
+    // grant 对三个节点都清理
+    expect(deleteForNodeMock).toHaveBeenCalledTimes(3);
+    expect(deleteForNodeMock).toHaveBeenCalledWith("folder-1");
+    expect(deleteForNodeMock).toHaveBeenCalledWith("file-ready-1");
+    expect(deleteForNodeMock).toHaveBeenCalledWith("file-up-1");
+
+    // 返回两个文件的 assetKey（uploading 也包含）
+    expect(assetKeys).toHaveLength(2);
+    expect(assetKeys).toContain("drive/o1/file-ready-1");
+    expect(assetKeys).toContain("drive/o1/file-up-1");
+  });
+
+  it("rootId 不存在 → 返回空数组，不调任何 delete", async () => {
+    const deleteMock = jest.fn();
+    const deleteForNodeMock = jest.fn();
+    const repo = makeNodeRepo({
+      findOne: jest.fn().mockResolvedValue(null),
+      delete: deleteMock,
+    });
+    const grantSvc = makeGrantSvc({ deleteForNode: deleteForNodeMock });
+    const svc = new CloudNodeService(repo, grantSvc);
+
+    const result = await svc.deleteSubtreeInTx("nonexistent");
+
+    expect(result).toEqual([]);
+    expect(deleteMock).not.toHaveBeenCalled();
+    expect(deleteForNodeMock).not.toHaveBeenCalled();
   });
 });

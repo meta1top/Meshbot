@@ -1,4 +1,4 @@
-import { AppError, Transactional } from "@meshbot/common";
+import { AppError } from "@meshbot/common";
 import { AssetService } from "@meshbot/assets";
 import { Injectable, Logger } from "@nestjs/common";
 import type { CloudNode } from "../entities/cloud-node.entity";
@@ -233,8 +233,9 @@ export class CloudDriveService {
     const statResult = await this.assets.stat(nodeAssetKey);
     const used = await this.node.sumOrgReadySize(ctx.orgId);
     if (used + statResult.size > DRIVE_ORG_QUOTA_BYTES) {
-      await this.assets.delete(nodeAssetKey);
+      // 先删 DB 行（主数据），再 best-effort 删 Minio 对象（GC 兜底）
       await this.node.delete(nodeId);
+      await this.assets.delete(nodeAssetKey).catch(() => undefined);
       throw new AppError(MainErrorCode.DRIVE_QUOTA_EXCEEDED);
     }
     await this.node.markReady(nodeId, statResult.size, checksum ?? null);
@@ -304,7 +305,9 @@ export class CloudDriveService {
 
   /**
    * 删除节点（及其子树）。需要 editor 权限。
-   * 文件夹递归删除由 deleteSubtreeInTx 完成（跨 cloud_node + cloud_node_grant 多行写入）。
+   * 递归删除（含 grant 清理）由 CloudNodeService.deleteSubtreeInTx 负责，
+   * 事务在持有 @InjectRepository(CloudNode) 的 CloudNodeService 上开启。
+   * Minio 对象删除在事务外 best-effort 执行（失败由 GC 兜底）。
    */
   async deleteNode(
     ctx: { userId: string; orgId: string },
@@ -313,37 +316,11 @@ export class CloudDriveService {
     const n = await this.node.findById(id);
     if (!n) throw new AppError(MainErrorCode.DRIVE_NODE_NOT_FOUND);
     await this.requirePermission(ctx, n, "editor");
-    await this.deleteSubtreeInTx(n);
-  }
-
-  /**
-   * 递归删除节点子树（含根节点）。BFS 收集所有子节点后逆序删除。
-   * 跨 cloud_node + cloud_node_grant 两表多行写入，必须加 @Transactional()。
-   * 写动作通过 CloudNodeService/CloudNodeGrantService/AssetService 间接完成，
-   * 静态分析无法识别 —— tx-check: ignore（误报豁免，事务必要性已人工确认）。
-   * 注意：listChildren 只返回 ready 节点；uploading 子文件在 GC 定时任务处理。
-   */
-  // tx-check: ignore
-  @Transactional()
-  private async deleteSubtreeInTx(root: CloudNode): Promise<void> {
-    const queue: CloudNode[] = [root];
-    const toDelete: CloudNode[] = [];
-    while (queue.length > 0) {
-      // biome-ignore lint/style/noNonNullAssertion: while loop 保证 queue 非空时才 shift
-      const cur = queue.shift()!;
-      toDelete.push(cur);
-      if (cur.type === "folder") {
-        const children = await this.node.listChildren(cur.orgId, cur.id);
-        queue.push(...children);
-      }
-    }
-    // 叶→根逆序删除，先清 Minio 对象 + grant，再删 node 行
-    for (const n of toDelete.reverse()) {
-      if (n.type === "file" && n.assetKey) {
-        await this.assets.delete(n.assetKey);
-      }
-      await this.grant.deleteForNode(n.id);
-      await this.node.delete(n.id);
+    // 事务内完成 DB 删除，返回需清理的 Minio assetKey 列表
+    const assetKeys = await this.node.deleteSubtreeInTx(id);
+    // 事务外 best-effort 删 Minio 对象（失败不影响 DB 一致性，GC 兜底）
+    for (const key of assetKeys) {
+      await this.assets.delete(key).catch(() => undefined);
     }
   }
 
