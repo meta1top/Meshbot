@@ -194,6 +194,7 @@ describe("server-main IM e2e", () => {
 
   /**
    * 建立组织 + 邀请 B + B 接受，返回 { orgId, tokenA, tokenB, userIdA, userIdB }。
+   * token 均已含 orgId（通过 switch-org 刷新），供 requireOrg 使用。
    */
   async function setupOrgWithTwoMembers(
     emailA: string,
@@ -206,14 +207,21 @@ describe("server-main IM e2e", () => {
     userIdA: string;
     userIdB: string;
   }> {
-    const tokenA = await registerAndToken(emailA);
-    const userIdA = parseUserId(tokenA);
+    const tokenA0 = await registerAndToken(emailA);
+    const userIdA = parseUserId(tokenA0);
 
     const orgRes = await request(app.getHttpServer())
       .post("/api/orgs")
-      .set("Authorization", `Bearer ${tokenA}`)
+      .set("Authorization", `Bearer ${tokenA0}`)
       .send({ name: orgName });
     const orgId = orgRes.body.data.id as string;
+
+    // 建组织后刷新 A 的 token，使其含 orgId
+    const switchA = await request(app.getHttpServer())
+      .post("/api/auth/switch-org")
+      .set("Authorization", `Bearer ${tokenA0}`)
+      .send({ orgId });
+    const tokenA = switchA.body.data.token as string;
 
     const inviteRes = await request(app.getHttpServer())
       .post(`/api/orgs/${orgId}/invitations`)
@@ -221,13 +229,20 @@ describe("server-main IM e2e", () => {
       .send({ email: emailB });
     const code = inviteRes.body.data.token as string;
 
-    const tokenB = await registerAndToken(emailB);
-    const userIdB = parseUserId(tokenB);
+    const tokenB0 = await registerAndToken(emailB);
+    const userIdB = parseUserId(tokenB0);
 
     await request(app.getHttpServer())
       .post("/api/orgs/invitations/accept")
-      .set("Authorization", `Bearer ${tokenB}`)
+      .set("Authorization", `Bearer ${tokenB0}`)
       .send({ token: code });
+
+    // 接受邀请后刷新 B 的 token，使其含 orgId
+    const switchB = await request(app.getHttpServer())
+      .post("/api/auth/switch-org")
+      .set("Authorization", `Bearer ${tokenB0}`)
+      .send({ orgId });
+    const tokenB = switchB.body.data.token as string;
 
     return { orgId, tokenA, tokenB, userIdA, userIdB };
   }
@@ -381,11 +396,18 @@ describe("server-main IM e2e", () => {
     const channelId = chanRes.body.data.id as string;
 
     // 第三用户 C 在另一个 org（注册后建独立 org，activeOrg = C 自己的 org）
-    const tokenC = await registerAndToken("im-c4@test.io");
-    await request(app.getHttpServer())
+    const tokenC0 = await registerAndToken("im-c4@test.io");
+    const orgCRes = await request(app.getHttpServer())
       .post("/api/orgs")
-      .set("Authorization", `Bearer ${tokenC}`)
+      .set("Authorization", `Bearer ${tokenC0}`)
       .send({ name: "COrg4" });
+    const orgCId = orgCRes.body.data.id as string;
+    // 刷新 C 的 token 使其含自己的 orgId（否则 requireOrg 抛 2003 而非 2007/2008）
+    const switchC = await request(app.getHttpServer())
+      .post("/api/auth/switch-org")
+      .set("Authorization", `Bearer ${tokenC0}`)
+      .send({ orgId: orgCId });
+    const tokenC = switchC.body.data.token as string;
 
     // C 访问 A's 频道消息
     const res = await request(app.getHttpServer())

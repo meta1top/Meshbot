@@ -163,6 +163,7 @@ describe("server-main 私有频道 e2e", () => {
   /**
    * 建立组织，A 邀请 B 和 C，B 和 C 接受邀请。
    * 返回三人的 token 和 userId，以及 orgId。
+   * token 均已含 orgId（通过 switch-org 刷新），供 requireOrg 使用。
    */
   async function setupOrgWithThreeMembers(
     emailA: string,
@@ -178,14 +179,21 @@ describe("server-main 私有频道 e2e", () => {
     userIdB: string;
     userIdC: string;
   }> {
-    const tokenA = await registerAndToken(emailA);
-    const userIdA = parseUserId(tokenA);
+    const tokenA0 = await registerAndToken(emailA);
+    const userIdA = parseUserId(tokenA0);
 
     const orgRes = await request(app.getHttpServer())
       .post("/api/orgs")
-      .set("Authorization", `Bearer ${tokenA}`)
+      .set("Authorization", `Bearer ${tokenA0}`)
       .send({ name: orgName });
     const orgId = orgRes.body.data.id as string;
+
+    // 建组织后刷新 A 的 token，使其含 orgId
+    const switchA = await request(app.getHttpServer())
+      .post("/api/auth/switch-org")
+      .set("Authorization", `Bearer ${tokenA0}`)
+      .send({ orgId });
+    const tokenA = switchA.body.data.token as string;
 
     // 邀请 B
     const inviteResB = await request(app.getHttpServer())
@@ -194,13 +202,20 @@ describe("server-main 私有频道 e2e", () => {
       .send({ email: emailB });
     const codeB = inviteResB.body.data.token as string;
 
-    const tokenB = await registerAndToken(emailB);
-    const userIdB = parseUserId(tokenB);
+    const tokenB0 = await registerAndToken(emailB);
+    const userIdB = parseUserId(tokenB0);
 
     await request(app.getHttpServer())
       .post("/api/orgs/invitations/accept")
-      .set("Authorization", `Bearer ${tokenB}`)
+      .set("Authorization", `Bearer ${tokenB0}`)
       .send({ token: codeB });
+
+    // 接受邀请后刷新 B 的 token，使其含 orgId
+    const switchB = await request(app.getHttpServer())
+      .post("/api/auth/switch-org")
+      .set("Authorization", `Bearer ${tokenB0}`)
+      .send({ orgId });
+    const tokenB = switchB.body.data.token as string;
 
     // 邀请 C
     const inviteResC = await request(app.getHttpServer())
@@ -209,13 +224,20 @@ describe("server-main 私有频道 e2e", () => {
       .send({ email: emailC });
     const codeC = inviteResC.body.data.token as string;
 
-    const tokenC = await registerAndToken(emailC);
-    const userIdC = parseUserId(tokenC);
+    const tokenC0 = await registerAndToken(emailC);
+    const userIdC = parseUserId(tokenC0);
 
     await request(app.getHttpServer())
       .post("/api/orgs/invitations/accept")
-      .set("Authorization", `Bearer ${tokenC}`)
+      .set("Authorization", `Bearer ${tokenC0}`)
       .send({ token: codeC });
+
+    // 接受邀请后刷新 C 的 token，使其含 orgId
+    const switchC = await request(app.getHttpServer())
+      .post("/api/auth/switch-org")
+      .set("Authorization", `Bearer ${tokenC0}`)
+      .send({ orgId });
+    const tokenC = switchC.body.data.token as string;
 
     return { orgId, tokenA, tokenB, tokenC, userIdA, userIdB, userIdC };
   }
