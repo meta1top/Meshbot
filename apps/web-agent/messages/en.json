@@ -65,6 +65,7 @@
     "orgJoining": "Joining...",
     "orgJoinAndContinue": "Join and continue",
     "orgJoinFailed": "Failed to join, please check the invite code",
+    "orgSwitchFailed": "Failed to switch organization, please retry",
     "validation": {
       "confirmPasswordRequired": "Please confirm your password",
       "passwordNotMatch": "The two passwords do not match",
@@ -673,5 +674,6 @@
   "githubPlaceholder": "",
   "installing": "",
   "install": "",
-  "sourceGithub": ""
+  "sourceGithub": "",
+  "orgSwitchFailed": ""
 }

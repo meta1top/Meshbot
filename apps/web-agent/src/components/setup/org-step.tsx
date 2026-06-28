@@ -20,7 +20,7 @@ import {
   joinOrgSchema,
 } from "@meshbot/types-agent";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ACCENT_BTN } from "@/lib/ui";
 import { switchOrg, useCreateOrg, useJoinOrg } from "@/rest/org";
 
@@ -35,22 +35,69 @@ export function OrgStep({ onDone }: { onDone: () => void }) {
   const createOrg = useCreateOrg();
   const joinOrg = useJoinOrg();
 
+  // switchOrg 与 mutateAsync 分开处理原因：
+  // mutateAsync（建组织/加入）一旦成功，org 已在服务端创建。此时若 switchOrg 失败（网络瞬断等），
+  // 不能让用户重新触发 mutateAsync（会 NAME_CONFLICT 或重复加入）。
+  // 因此用单独 state 记录"org 已建但 switchOrg 失败"的 orgId，
+  // 下次点按钮时只重试 switchOrg，不重跑 mutateAsync。
+  const [switchErrMsg, setSwitchErrMsg] = useState<string | null>(null);
+  // 待重试的 switchOrg orgId（mutateAsync 已成功但 switchOrg 尚未成功时非 null）
+  const pendingSwitchOrgId = useRef<string | null>(null);
+
   const onCreate = async (values: CreateOrgInput) => {
+    setSwitchErrMsg(null);
     try {
-      const org = await createOrg.mutateAsync(values);
-      await switchOrg(org.id);
-      onDone();
+      // 若上次 mutateAsync 已成功（有 pendingSwitchOrgId），跳过 mutateAsync 直接重试 switchOrg
+      let orgId = pendingSwitchOrgId.current;
+      if (!orgId) {
+        const org = await createOrg.mutateAsync(values);
+        orgId = org.id;
+        pendingSwitchOrgId.current = orgId;
+      }
+      try {
+        await switchOrg(orgId);
+        pendingSwitchOrgId.current = null;
+        onDone();
+      } catch (switchErr) {
+        // switchOrg 失败：org 已建，展示错误让用户重试（再次点按钮只会重试 switchOrg）
+        setSwitchErrMsg(
+          switchErr instanceof Error ? switchErr.message : t("orgSwitchFailed"),
+        );
+        console.error(
+          "[org-step] switchOrg 失败（org 已创建，可重试）",
+          switchErr,
+        );
+      }
     } catch {
-      // 错误通过 createOrg.error 展示
+      // 错误通过 createOrg.error 展示（mutateAsync 失败）
     }
   };
   const onJoin = async (values: JoinOrgInput) => {
+    setSwitchErrMsg(null);
     try {
-      const { orgId } = await joinOrg.mutateAsync(values);
-      await switchOrg(orgId);
-      onDone();
+      // 若上次 mutateAsync 已成功（有 pendingSwitchOrgId），跳过 mutateAsync 直接重试 switchOrg
+      let orgId = pendingSwitchOrgId.current;
+      if (!orgId) {
+        const result = await joinOrg.mutateAsync(values);
+        orgId = result.orgId;
+        pendingSwitchOrgId.current = orgId;
+      }
+      try {
+        await switchOrg(orgId);
+        pendingSwitchOrgId.current = null;
+        onDone();
+      } catch (switchErr) {
+        // switchOrg 失败：已加入 org，展示错误让用户重试（再次点按钮只会重试 switchOrg）
+        setSwitchErrMsg(
+          switchErr instanceof Error ? switchErr.message : t("orgSwitchFailed"),
+        );
+        console.error(
+          "[org-step] switchOrg 失败（org 已加入，可重试）",
+          switchErr,
+        );
+      }
     } catch {
-      // 错误通过 joinOrg.error 展示
+      // 错误通过 joinOrg.error 展示（mutateAsync 失败）
     }
   };
 
@@ -97,6 +144,11 @@ export function OrgStep({ onDone }: { onDone: () => void }) {
                 </AlertDescription>
               </Alert>
             ) : null}
+            {switchErrMsg ? (
+              <Alert variant="destructive">
+                <AlertDescription>{switchErrMsg}</AlertDescription>
+              </Alert>
+            ) : null}
             <Button
               type="submit"
               className={ACCENT_BTN}
@@ -124,6 +176,11 @@ export function OrgStep({ onDone }: { onDone: () => void }) {
                     ? joinOrg.error.message
                     : t("orgJoinFailed")}
                 </AlertDescription>
+              </Alert>
+            ) : null}
+            {switchErrMsg ? (
+              <Alert variant="destructive">
+                <AlertDescription>{switchErrMsg}</AlertDescription>
               </Alert>
             ) : null}
             <Button

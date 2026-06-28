@@ -65,6 +65,7 @@
     "orgJoining": "加入中...",
     "orgJoinAndContinue": "加入并继续",
     "orgJoinFailed": "加入失败，请检查邀请码",
+    "orgSwitchFailed": "切换组织失败，请重试",
     "validation": {
       "confirmPasswordRequired": "请确认密码",
       "passwordNotMatch": "两次输入的密码不一致",
@@ -673,5 +674,6 @@
   "githubPlaceholder": "",
   "installing": "",
   "install": "",
-  "sourceGithub": ""
+  "sourceGithub": "",
+  "orgSwitchFailed": ""
 }

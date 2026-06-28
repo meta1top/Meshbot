@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { currentUserAtom } from "@/atoms/auth";
 import { BrandLogo } from "@/components/brand-logo";
 import { RailNavItem } from "@/components/shell/rail-nav-item";
@@ -46,6 +46,8 @@ export function WorkspaceRail() {
   const qc = useQueryClient();
   const { data: orgs } = useOrgs();
   const [switching, setSwitching] = useState(false);
+  // 用 ref 持切换锁，避免把 switching state 纳入 useCallback 依赖导致回调频繁重建
+  const switchingRef = useRef(false);
 
   // 单账号：退出即彻底登出回登录页；切换账号 = 退出后重新登录。
   const handleLogout = useCallback(async () => {
@@ -56,7 +58,8 @@ export function WorkspaceRail() {
   /** 切换活跃组织：调远端，成功后失效 profile/authStatus/org 相关查询。 */
   const handleSwitchOrg = useCallback(
     async (orgId: string) => {
-      if (orgId === user?.org?.id || switching) return;
+      if (orgId === user?.org?.id || switchingRef.current) return;
+      switchingRef.current = true;
       setSwitching(true);
       try {
         await switchOrg(orgId);
@@ -69,10 +72,13 @@ export function WorkspaceRail() {
         // 切换失败：profile 保持原组织，控制台记录错误
         console.error("[org-switch] 切换组织失败", err);
       } finally {
+        switchingRef.current = false;
         setSwitching(false);
       }
     },
-    [user?.org?.id, switching, qc],
+    // switching state 不进依赖：竞态保护由 switchingRef 承担，switching 仅用于 UI 中态展示
+    // switchingRef 是稳定引用（useRef 对象永不变），不需要放入依赖数组
+    [user?.org?.id, qc],
   );
 
   const initial = (user?.displayName ?? user?.email ?? "?")
