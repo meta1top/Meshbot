@@ -17,6 +17,7 @@ import { CompactionBanner } from "@/components/common/compaction-banner";
 import { MessageSkeleton } from "@/components/im/message-skeleton";
 import { MessageList } from "@/components/session/message-list";
 import { PendingList } from "@/components/session/pending-list";
+import { useAutoOpenArtifact } from "@/hooks/use-auto-open-artifact";
 import { useChatScroll } from "@/hooks/use-chat-scroll";
 import { useLlmusePrefix } from "@/hooks/use-llmuse-prefix";
 import { useSessionStream } from "@/hooks/use-session-stream";
@@ -71,6 +72,9 @@ export function AssistantConversationBody({
     () => stream.messages.filter((m) => m.pending),
     [stream.messages],
   );
+
+  // agent 产出 present_file 后自动打开右侧预览（多个产物弹第一个，正在看预览时不打扰）。
+  useAutoOpenArtifact(timelineMessages);
 
   const { stickToBottom, scrollToBottom } = useChatScroll({
     scrollContainerRef: scrollRef,

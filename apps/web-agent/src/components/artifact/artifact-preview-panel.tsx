@@ -7,6 +7,7 @@ import {
   assistantPanelTypeAtom,
   previewArtifactAtom,
 } from "@/atoms/assistant-panel";
+import { DockTabs } from "@/components/im/dock-tabs";
 import { ArtifactBody, downloadArtifact } from "./artifact-body";
 import { ArtifactFullscreen } from "./artifact-fullscreen";
 
@@ -14,6 +15,7 @@ import { ArtifactFullscreen } from "./artifact-fullscreen";
 export function ArtifactPreviewPanel() {
   const artifact = useAtomValue(previewArtifactAtom);
   const setType = useSetAtom(assistantPanelTypeAtom);
+  const setArtifact = useSetAtom(previewArtifactAtom);
   const [full, setFull] = useState(false);
 
   if (!artifact) {
@@ -24,9 +26,7 @@ export function ArtifactPreviewPanel() {
   return (
     <div className="flex h-full w-full flex-col">
       <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3.5">
-        <span className="min-w-0 flex-1 truncate text-[14px] font-bold text-foreground">
-          {title}
-        </span>
+        <DockTabs />
         <button
           type="button"
           onClick={() => void downloadArtifact(artifact.path, title)}
@@ -53,7 +53,10 @@ export function ArtifactPreviewPanel() {
         </button>
         <button
           type="button"
-          onClick={() => setType("assistant")}
+          onClick={() => {
+            setArtifact(null);
+            setType("assistant");
+          }}
           title="关闭"
           className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-black/5 hover:text-foreground"
         >

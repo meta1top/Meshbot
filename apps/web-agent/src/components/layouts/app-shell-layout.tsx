@@ -4,7 +4,13 @@ import { cn } from "@meshbot/design";
 import { useAtom, useAtomValue } from "jotai";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { type ReactNode, Suspense, useCallback, useEffect } from "react";
+import {
+  type ReactNode,
+  Suspense,
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 import {
   assistantPanelOpenAtom,
   assistantPanelTypeAtom,
@@ -62,6 +68,7 @@ export function AppShellLayout({
   // Shell 级全局事件总线订阅：常驻于壳，任何页面都能实时更新未读/会话/在线/定时任务。
   useGlobalEvents();
   const [panelWidth, setPanelWidth] = useAtom(assistantPanelWidthAtom);
+  const [isResizing, setIsResizing] = useState(false);
   const panelType = useAtomValue(assistantPanelTypeAtom);
   const previewArtifact = useAtomValue(previewArtifactAtom);
 
@@ -69,6 +76,7 @@ export function AppShellLayout({
   const startPanelResize = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
+      setIsResizing(true);
       const startX = e.clientX;
       const startW = panelWidth;
       const onMove = (ev: MouseEvent) => {
@@ -82,6 +90,7 @@ export function AppShellLayout({
         document.removeEventListener("mousemove", onMove);
         document.removeEventListener("mouseup", onUp);
         document.body.style.userSelect = "";
+        setIsResizing(false);
       };
       document.body.style.userSelect = "none";
       document.addEventListener("mousemove", onMove);
@@ -222,6 +231,8 @@ export function AppShellLayout({
           </aside>
         </div>
       </div>
+      {/* 拖拽改宽时盖一层全屏遮罩：盖住 iframe（预览）等，避免鼠标移上去 iframe 吞掉 mousemove 导致拖拽卡住。 */}
+      {isResizing && <div className="fixed inset-0 z-50 cursor-col-resize" />}
     </main>
   );
 }

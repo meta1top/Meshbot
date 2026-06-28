@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   assistantPanelOpenAtom,
   currentQuickSessionIdAtom,
+  previewArtifactAtom,
   quickAssistantNameAtom,
 } from "@/atoms/assistant-panel";
 import {
@@ -15,6 +16,7 @@ import {
   usageByMessageFamily,
 } from "@/atoms/session-usage";
 import { ChatInput } from "@/components/common/chat-input";
+import { DockTabs } from "@/components/im/dock-tabs";
 import { MessageList } from "@/components/session/message-list";
 import { useChatScroll } from "@/hooks/use-chat-scroll";
 import { useLlmusePrefix } from "@/hooks/use-llmuse-prefix";
@@ -63,6 +65,7 @@ export function AssistantDock() {
 
   // 随手问名字：dock 标题，可内联改名；ws renamed 事件（agent / 多窗口改名）实时更新 atom
   const name = useAtomValue(quickAssistantNameAtom);
+  const previewArtifact = useAtomValue(previewArtifactAtom);
   const setName = useSetAtom(quickAssistantNameAtom);
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
@@ -125,31 +128,33 @@ export function AssistantDock() {
         <span className="flex h-6 w-6 items-center justify-center rounded-md bg-(--shell-accent) text-white">
           <Sparkles className="h-3.5 w-3.5" />
         </span>
-        {editingName ? (
-          <input
-            // biome-ignore lint/a11y/noAutofocus: 点击标题进入编辑，聚焦即用户意图
-            autoFocus
-            value={nameDraft}
-            maxLength={QUICK_ASSISTANT_NAME_MAX}
-            onChange={(e) => setNameDraft(e.target.value)}
-            onBlur={() => void commitName()}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void commitName();
-              else if (e.key === "Escape") setEditingName(false);
-            }}
-            aria-label={t("rename")}
-            className="min-w-0 flex-1 rounded bg-black/5 px-1.5 py-0.5 text-[14px] font-bold text-foreground outline-none focus:bg-black/10 dark:bg-white/10"
-          />
-        ) : (
-          <button
-            type="button"
-            onClick={startEditName}
-            title={t("rename")}
-            className="min-w-0 flex-1 truncate text-left text-[14px] font-bold text-foreground hover:opacity-80"
-          >
-            {name}
-          </button>
-        )}
+        {previewArtifact && <DockTabs />}
+        {!previewArtifact &&
+          (editingName ? (
+            <input
+              // biome-ignore lint/a11y/noAutofocus: 点击标题进入编辑，聚焦即用户意图
+              autoFocus
+              value={nameDraft}
+              maxLength={QUICK_ASSISTANT_NAME_MAX}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onBlur={() => void commitName()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void commitName();
+                else if (e.key === "Escape") setEditingName(false);
+              }}
+              aria-label={t("rename")}
+              className="min-w-0 flex-1 rounded bg-black/5 px-1.5 py-0.5 text-[14px] font-bold text-foreground outline-none focus:bg-black/10 dark:bg-white/10"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={startEditName}
+              title={t("rename")}
+              className="min-w-0 flex-1 truncate text-left text-[14px] font-bold text-foreground hover:opacity-80"
+            >
+              {name}
+            </button>
+          ))}
         <button
           type="button"
           onClick={() => setOpen(false)}

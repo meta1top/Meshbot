@@ -7,7 +7,7 @@ import {
   parsePartialToolArgs,
 } from "@meshbot/web-common";
 import { ChevronDown, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { sanitizeMeshbotPaths, toolDisplayName } from "@/lib/tool-display";
 import { ArtifactFileCard } from "./artifact-file-card";
 import { AskQuestionCard } from "./ask-question-card";
@@ -125,12 +125,7 @@ export function ToolCallBlock({
           )}
         />
       </button>
-      {streamBody && (
-        <pre className="max-h-64 overflow-auto whitespace-pre-wrap px-2.5 py-2 font-mono text-[11px] leading-relaxed text-foreground">
-          {streamBody}
-          <span className="animate-pulse">▋</span>
-        </pre>
-      )}
+      {streamBody && <StreamBodyPre body={streamBody} />}
       {open && (
         <div className="flex flex-col gap-3 px-2.5 py-2">
           <ToolSection label="请求">
@@ -161,6 +156,35 @@ export function ToolCallBlock({
         </div>
       )}
     </div>
+  );
+}
+
+/** 流式正文预览：内容增长时若用户停在底部就吸底跟随（同消息流逻辑）。 */
+function StreamBodyPre({ body }: { body: string }) {
+  const ref = useRef<HTMLPreElement>(null);
+  const stick = useRef(true);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: body 是「内容变化触发器」，内容增长时吸底；effect 本身不直接读 body
+  useEffect(() => {
+    const el = ref.current;
+    if (el && stick.current) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [body]);
+  return (
+    <pre
+      ref={ref}
+      onScroll={() => {
+        const el = ref.current;
+        if (el) {
+          stick.current =
+            el.scrollHeight - el.scrollTop - el.clientHeight <= 24;
+        }
+      }}
+      className="max-h-64 overflow-auto whitespace-pre-wrap px-2.5 py-2 font-mono text-[11px] leading-relaxed text-foreground"
+    >
+      {body}
+      <span className="animate-pulse">▋</span>
+    </pre>
   );
 }
 
