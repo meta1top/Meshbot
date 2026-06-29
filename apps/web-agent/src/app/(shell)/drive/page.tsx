@@ -3,12 +3,13 @@
 import { Button } from "@meshbot/design";
 import { FolderPlus, Upload } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   type BreadcrumbEntry,
   DriveBreadcrumb,
 } from "@/components/drive/drive-breadcrumb";
 import { DriveFileList } from "@/components/drive/drive-file-list";
+import { DriveUploadArea } from "@/components/drive/drive-upload-area";
 import { ToolPage } from "@/components/layouts/tool-page";
 import { type DriveNode, useDriveNodes, useDriveShared } from "@/rest/drive";
 
@@ -20,10 +21,12 @@ function MineContent({
   pathStack,
   onJump,
   onEnterFolder,
+  uploadInputRef,
 }: {
   pathStack: BreadcrumbEntry[];
   onJump: (index: number) => void;
   onEnterFolder: (node: DriveNode) => void;
+  uploadInputRef: React.RefObject<HTMLInputElement | null>;
 }) {
   const parentId = pathStack.at(-1)?.id ?? null;
   const { data: nodes = [], isLoading } = useDriveNodes(parentId);
@@ -42,6 +45,8 @@ function MineContent({
         onEnterFolder={onEnterFolder}
         onPreview={handlePreview}
       />
+      {/* 上传区：提供拖拽蒙层 + 进度浮窗，input ref 由父层上传按钮触发 */}
+      <DriveUploadArea parentId={parentId} inputRef={uploadInputRef} />
     </div>
   );
 }
@@ -79,6 +84,9 @@ export default function DrivePage() {
 
   /** 目录路径栈（根为 []）。 */
   const [pathStack, setPathStack] = useState<BreadcrumbEntry[]>([]);
+
+  /** 上传 input 的 ref，由顶部「上传」按钮触发 click。 */
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
 
   /** 进入文件夹，将节点压栈。 */
   const handleEnterFolder = useCallback((node: DriveNode) => {
@@ -131,8 +139,13 @@ export default function DrivePage() {
       actions={
         isMine ? (
           <div className="flex items-center gap-2">
-            {/* Task 3 接入：上传文件 */}
-            <Button variant="ghost" size="sm" className="gap-1.5" disabled>
+            {/* 触发隐藏 input，DriveUploadArea 内渲染实际 input */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => uploadInputRef.current?.click()}
+            >
               <Upload className="h-4 w-4" />
               {t("upload")}
             </Button>
@@ -150,6 +163,7 @@ export default function DrivePage() {
           pathStack={pathStack}
           onJump={handleJump}
           onEnterFolder={handleEnterFolder}
+          uploadInputRef={uploadInputRef}
         />
       ) : (
         <SharedContent />

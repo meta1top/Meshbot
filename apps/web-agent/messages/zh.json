@@ -689,7 +689,11 @@
     "fileListLabel": "文件列表",
     "colName": "名称",
     "colSize": "大小",
-    "colModified": "修改时间"
+    "colModified": "修改时间",
+    "dropHint": "松手即可上传",
+    "uploading": "上传中…",
+    "uploadDone": "上传完成",
+    "dismiss": "关闭"
   },
   "rootLabel": "",
   "fileListLabel": "",
@@ -699,5 +703,9 @@
   "tabMine": "",
   "tabShared": "",
   "upload": "",
-  "newFolder": ""
+  "newFolder": "",
+  "dropHint": "",
+  "uploadDone": "",
+  "uploading": "",
+  "dismiss": ""
 }

@@ -689,7 +689,11 @@
     "fileListLabel": "File list",
     "colName": "Name",
     "colSize": "Size",
-    "colModified": "Modified"
+    "colModified": "Modified",
+    "dropHint": "Drop to upload",
+    "uploading": "Uploading…",
+    "uploadDone": "Upload complete",
+    "dismiss": "Dismiss"
   },
   "rootLabel": "",
   "fileListLabel": "",
@@ -699,5 +703,9 @@
   "tabMine": "",
   "tabShared": "",
   "upload": "",
-  "newFolder": ""
+  "newFolder": "",
+  "dropHint": "",
+  "uploadDone": "",
+  "uploading": "",
+  "dismiss": ""
 }
