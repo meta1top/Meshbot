@@ -133,7 +133,8 @@
       "messages": "消息",
       "assistant": "助手",
       "skills": "技能",
-      "more": "更多"
+      "more": "更多",
+      "drive": "云端文件"
     },
     "search": {
       "placeholder": "搜索 meshbot"
@@ -521,7 +522,8 @@
     "messages": "",
     "assistant": "",
     "more": "",
-    "skills": ""
+    "skills": "",
+    "drive": ""
   },
   "userMenu": {
     "settings": "",

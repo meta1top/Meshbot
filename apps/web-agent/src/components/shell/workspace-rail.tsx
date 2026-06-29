@@ -16,6 +16,7 @@ import {
   Blocks,
   Building2,
   Check,
+  Cloud,
   MessageSquare,
   Moon,
   MoreHorizontal,
@@ -106,6 +107,12 @@ export function WorkspaceRail() {
           label={t("rail.more")}
           active={area === "more"}
           onClick={() => router.push("/more")}
+        />
+        <RailNavItem
+          icon={<Cloud className="h-5 w-5" />}
+          label={t("rail.drive")}
+          active={area === "drive"}
+          onClick={() => router.push("/drive")}
         />
       </nav>
       <div className="flex-1" />

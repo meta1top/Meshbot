@@ -133,7 +133,8 @@
       "messages": "Messages",
       "assistant": "Assistant",
       "skills": "Skills",
-      "more": "More"
+      "more": "More",
+      "drive": "Drive"
     },
     "search": {
       "placeholder": "Search meshbot"
@@ -521,7 +522,8 @@
     "messages": "",
     "assistant": "",
     "more": "",
-    "skills": ""
+    "skills": "",
+    "drive": ""
   },
   "userMenu": {
     "settings": "",
