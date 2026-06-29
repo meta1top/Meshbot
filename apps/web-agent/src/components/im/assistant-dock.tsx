@@ -52,11 +52,9 @@ export function AssistantDock() {
   const contextWindow = enabledModel?.contextWindow ?? 128_000;
 
   // 自动吸底：流式/新消息时跟随到底（与中间会话同套 useChatScroll 逻辑）。
-  // dock 无历史分页，hasMore=false → 顶部哨兵仅占位、不挂 IO。
-  const topSentinelRef = useRef<HTMLDivElement>(null);
+  // dock 无历史分页，hasMore=false → 不挂顶部哨兵 IO（返回的 topSentinelRef 不用）。
   useChatScroll({
     scrollContainerRef: scrollRef,
-    topSentinelRef,
     messages: stream.messages,
     hasMore: false,
     onLoadMore: () => {},

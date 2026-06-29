@@ -10,6 +10,8 @@ export interface ChatScroll {
   stickToBottom: boolean;
   /** 立即滚到底并恢复吸附（「滚到底」按钮用）。 */
   scrollToBottom: () => void;
+  /** 顶部哨兵的 callback ref：哨兵真正挂载/卸载时建/拆 IO（不受 hasMore 变化时机影响）。 */
+  topSentinelRef: (el: HTMLDivElement | null) => void;
 }
 
 /**
@@ -21,13 +23,17 @@ export interface ChatScroll {
  *   天然满足「用户主动上滚后不被强行拽回底部」；
  * - 跟随用 instant（scrollTop=scrollHeight），不受 smooth 动画追不上内容增长
  *   导致的跟随中断（修复流式/新消息不实时滚底）。
+ *
+ * 顶部哨兵用 callback ref（而非外部 RefObject + hasMore 依赖）：哨兵的渲染条件是
+ * `!historyLoading && hasMore`，若用 hasMore 做 effect 依赖，会在「hasMore 一直为
+ * true、仅 historyLoading 由 true→false 让哨兵出现」时错过建 IO 的时机。callback ref
+ * 在哨兵真正挂载时触发，IO 必然在哨兵存在后建立。
  */
 export function useChatScroll(opts: {
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
-  topSentinelRef: React.RefObject<HTMLDivElement | null>;
   /** 触发自动滚的依赖：可见消息列表（长度/末条变化即跟随）。 */
   messages: unknown[];
-  /** 是否还有更早历史（false 时不挂顶部哨兵）。 */
+  /** 是否还有更早历史（false 时不挂顶部哨兵 IO）。 */
   hasMore: boolean;
   /** 顶部哨兵进入视口时调用（上拉加载更早）。 */
   onLoadMore: () => void;
@@ -41,6 +47,12 @@ export function useChatScroll(opts: {
   /** 持有最新 onLoadMore，避免内联箭头每渲染重建顶部哨兵 IO。 */
   const onLoadMoreRef = useRef(opts.onLoadMore);
   onLoadMoreRef.current = opts.onLoadMore;
+
+  /** 顶部哨兵 DOM：callback ref 在挂载/卸载时更新，驱动 IO effect 重建。 */
+  const [sentinelEl, setSentinelEl] = useState<HTMLDivElement | null>(null);
+  const topSentinelRef = useCallback((el: HTMLDivElement | null) => {
+    setSentinelEl(el);
+  }, []);
 
   const scrollToEnd = useCallback(() => {
     const el = opts.scrollContainerRef.current;
@@ -86,23 +98,22 @@ export function useChatScroll(opts: {
     scrollToEnd();
   }, [opts.messages, scrollToEnd]);
 
-  // 顶部哨兵触发上拉加载更早历史。仅随 hasMore 重建 IO（onLoadMore 走 ref）。
-  // biome-ignore lint/correctness/useExhaustiveDependencies: topSentinelRef 稳定 RefObject、onLoadMore 走 onLoadMoreRef
+  // 顶部哨兵进入滚动容器视口 → 上拉加载更早历史。
+  // root 用滚动容器（而非默认 viewport）：聊天在内部容器滚动，viewport 判可见在
+  // dock/分栏布局下会失效。依赖 sentinelEl：哨兵挂载后才建 IO；hasMore=false 不挂。
   useEffect(() => {
-    if (!opts.hasMore) return;
-    const sentinel = opts.topSentinelRef.current;
-    if (!sentinel) return;
+    if (!opts.hasMore || !sentinelEl) return;
     const io = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) {
           onLoadMoreRef.current();
         }
       },
-      { rootMargin: "100px" },
+      { root: opts.scrollContainerRef.current, rootMargin: "100px" },
     );
-    io.observe(sentinel);
+    io.observe(sentinelEl);
     return () => io.disconnect();
-  }, [opts.hasMore]);
+  }, [opts.hasMore, sentinelEl, opts.scrollContainerRef]);
 
   const scrollToBottom = useCallback(() => {
     stickRef.current = true;
@@ -110,5 +121,5 @@ export function useChatScroll(opts: {
     scrollToEnd();
   }, [scrollToEnd]);
 
-  return { stickToBottom, scrollToBottom };
+  return { stickToBottom, scrollToBottom, topSentinelRef };
 }

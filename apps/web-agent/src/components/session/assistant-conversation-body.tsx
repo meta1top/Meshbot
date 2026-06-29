@@ -52,7 +52,6 @@ export function AssistantConversationBody({
     }
   }, [placeholders.length]);
   const inputPlaceholder = placeholders[phIdx];
-  const topSentinelRef = useRef<HTMLDivElement>(null);
 
   const usageByMessage = useAtomValue(usageByMessageFamily(id));
   const sessionTotals = useAtomValue(sessionTotalsFamily(id));
@@ -74,11 +73,10 @@ export function AssistantConversationBody({
   );
 
   // agent 产出 present_file 后自动打开右侧预览（多个产物弹第一个，正在看预览时不打扰）。
-  useAutoOpenArtifact(timelineMessages);
+  useAutoOpenArtifact(timelineMessages, stream.running);
 
-  const { stickToBottom, scrollToBottom } = useChatScroll({
+  const { stickToBottom, scrollToBottom, topSentinelRef } = useChatScroll({
     scrollContainerRef: scrollRef,
-    topSentinelRef,
     messages: timelineMessages,
     hasMore: stream.hasMoreHistory,
     onLoadMore: () => void stream.loadMoreHistory(),

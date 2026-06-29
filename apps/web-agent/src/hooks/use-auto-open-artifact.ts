@@ -10,12 +10,17 @@ import {
 import type { TimelineMessage } from "@/components/session/message-list";
 
 /**
- * agent 产出产物（`present_file`）后自动打开右侧预览面板：
- * - 进入会话首次加载历史只记 seen、不自动弹（避免一进会话就弹旧产物）；
- * - 之后新出现的 present_file，仅在当前**不在看预览**时弹**第一个**新产物
- *   （多个同时产出只弹第一个；用户正在看某产物时不打扰、不覆盖）。
+ * agent 实时产出产物（`present_file`）后自动打开右侧预览面板：
+ * - 仅在 **running（WebSocket 实时流式输出）** 期间新出现的 present_file 才弹；
+ * - 历史加载 / 切换会话（running=false）只记 seen、不自动弹（历史查看不打扰）；
+ * - 同时只弹**第一个**新产物；用户正在看预览时不打扰、不覆盖。
+ *
+ * seen 累积跨会话无妨：toolCallId 全局唯一，历史产物一旦记入 seen 就不会再弹。
  */
-export function useAutoOpenArtifact(messages: TimelineMessage[]): void {
+export function useAutoOpenArtifact(
+  messages: TimelineMessage[],
+  running: boolean,
+): void {
   const setArtifact = useSetAtom(previewArtifactAtom);
   const setType = useSetAtom(assistantPanelTypeAtom);
   const setOpen = useSetAtom(assistantPanelOpenAtom);
@@ -24,7 +29,6 @@ export function useAutoOpenArtifact(messages: TimelineMessage[]): void {
   const panelTypeRef = useRef(panelType);
   panelTypeRef.current = panelType;
   const seenRef = useRef<Set<string>>(new Set());
-  const initRef = useRef(false);
 
   useEffect(() => {
     const presents: { id: string; path: string; title?: string }[] = [];
@@ -43,20 +47,16 @@ export function useAutoOpenArtifact(messages: TimelineMessage[]): void {
         }
       }
     }
-    if (!initRef.current) {
-      initRef.current = true;
-      for (const p of presents) {
-        seenRef.current.add(p.id);
-      }
-      return;
-    }
+    // 先全部记 seen（无论弹不弹），保证历史/切会话产物不会在后续 running 时被误弹。
     const fresh = presents.filter((p) => !seenRef.current.has(p.id));
-    if (fresh.length === 0) {
-      return;
-    }
     for (const p of fresh) {
       seenRef.current.add(p.id);
     }
+    // 仅实时流式期间弹；历史加载 / 切会话（running=false）只记 seen、不弹。
+    if (!running || fresh.length === 0) {
+      return;
+    }
+    // 用户正在看某个预览时不打扰、不覆盖。
     if (panelTypeRef.current === "preview") {
       return;
     }
@@ -64,5 +64,5 @@ export function useAutoOpenArtifact(messages: TimelineMessage[]): void {
     setArtifact({ path: first.path, title: first.title });
     setType("preview");
     setOpen(true);
-  }, [messages, setArtifact, setType, setOpen]);
+  }, [messages, running, setArtifact, setType, setOpen]);
 }
