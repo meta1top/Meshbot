@@ -74,7 +74,7 @@
     "typeorm-naming-strategies": "^4.1.0",
     "typescript": "^5"
   },
-  "packageManager": "pnpm@11.7.0",
+  "packageManager": "pnpm@11.9.0",
   "engines": {
     "node": ">=22",
     "pnpm": ">=11"
