@@ -39,6 +39,10 @@ import { ImReadConversationTool } from "./tools/builtins/im-read-conversation.to
 import { ImListMembersTool } from "./tools/builtins/im-list-members.tool";
 import { ImSendMessageTool } from "./tools/builtins/im-send-message.tool";
 import { AskQuestionTool } from "./tools/builtins/ask-question.tool";
+import { DriveListTool } from "./tools/builtins/drive-list.tool";
+import { DriveMkdirTool } from "./tools/builtins/drive-mkdir.tool";
+import { DriveUploadTool } from "./tools/builtins/drive-upload.tool";
+import { DriveDownloadTool } from "./tools/builtins/drive-download.tool";
 import { SkillPublishTool } from "./tools/builtins/skill-publish.tool";
 import { SkillSearchMarketTool } from "./tools/builtins/skill-search-market.tool";
 import { SkillUninstallTool } from "./tools/builtins/skill-uninstall.tool";
@@ -82,6 +86,10 @@ import { SkillUninstallTool } from "./tools/builtins/skill-uninstall.tool";
     ImListMembersTool,
     ImSendMessageTool,
     AskQuestionTool,
+    DriveListTool,
+    DriveMkdirTool,
+    DriveUploadTool,
+    DriveDownloadTool,
     MemoryService,
     MemoryCoreWriteTool,
     MemoryAddTool,
