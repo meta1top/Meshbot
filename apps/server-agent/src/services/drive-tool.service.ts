@@ -193,7 +193,9 @@ export class DriveToolService implements DrivePort {
       120_000,
     );
     if (outcome === "timeout") return JSON.stringify({ status: "timeout" });
-    if (outcome === "aborted") return JSON.stringify({ status: "cancelled" });
+    if (outcome === "aborted") return JSON.stringify({ status: "interrupted" });
+    if (outcome.action === "cancel")
+      return JSON.stringify({ status: "cancelled" });
     const existing =
       ((await this.gateway.getGrants(args.nodeId)) as { grants?: GrantItem[] })
         .grants ?? [];

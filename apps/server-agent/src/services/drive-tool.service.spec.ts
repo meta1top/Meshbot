@@ -495,12 +495,31 @@ describe("DriveToolService.share", () => {
     expect(gateway.setGrants).not.toHaveBeenCalled();
   });
 
-  // ── 确认 "aborted" → cancelled，不调 setGrants ───────────────
-  it('确认 "aborted" → {status:"cancelled"}，不调 setGrants', async () => {
+  // ── 确认 "aborted" → interrupted，不调 setGrants ────────────
+  it('确认 "aborted" → {status:"interrupted"}，不调 setGrants', async () => {
     const confirmation = buildMockConfirmation();
     const gateway = buildMockGateway();
 
     confirmation.waitForDecision.mockResolvedValue("aborted");
+
+    const svc = await buildShareService({ confirmation, gateway });
+    const result = JSON.parse(
+      await svc.share(
+        { ...shareArgs, shareWith: "org" },
+        new AbortController().signal,
+      ),
+    );
+
+    expect(result.status).toBe("interrupted");
+    expect(gateway.setGrants).not.toHaveBeenCalled();
+  });
+
+  // ── 用户点取消 {action:"cancel"} → cancelled，不调 setGrants ──
+  it('{action:"cancel"} → {status:"cancelled"}，setGrants 未被调用', async () => {
+    const confirmation = buildMockConfirmation();
+    const gateway = buildMockGateway();
+
+    confirmation.waitForDecision.mockResolvedValue({ action: "cancel" });
 
     const svc = await buildShareService({ confirmation, gateway });
     const result = JSON.parse(

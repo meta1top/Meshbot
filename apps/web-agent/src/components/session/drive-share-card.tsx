@@ -105,8 +105,6 @@ function terminalLabel(status: string | null): string {
       return "确认超时，未共享";
     case "interrupted":
       return "已中断，未共享";
-    case "error":
-      return "共享失败";
     default:
       return "已结束";
   }
