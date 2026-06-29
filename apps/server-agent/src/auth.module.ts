@@ -73,6 +73,7 @@ import { JWT_SECRET, JwtStrategy } from "./strategies/jwt.strategy";
     CloudAuthService,
     CloudClientService,
     ImRelayClientService,
+    CloudOrgService,
     DriveGatewayService,
     JwtModule,
   ],

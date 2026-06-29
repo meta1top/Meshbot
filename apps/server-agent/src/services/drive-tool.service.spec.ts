@@ -1,4 +1,4 @@
-import { MeshbotConfigService } from "@meshbot/agent";
+import { AccountContextService, MeshbotConfigService } from "@meshbot/agent";
 import { AppError } from "@meshbot/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import {
@@ -10,6 +10,9 @@ import {
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { CloudIdentityService } from "./cloud-identity.service";
+import { CloudOrgService } from "./cloud-org.service";
+import { ConfirmationService } from "./confirmation.service";
 import { DriveGatewayService } from "./drive-gateway.service";
 import { DriveToolService } from "./drive-tool.service";
 
@@ -39,6 +42,8 @@ function buildMockGateway(): jest.Mocked<DriveGatewayService> {
     requestUpload: jest.fn(),
     completeUpload: jest.fn(),
     getFileUrl: jest.fn(),
+    getGrants: jest.fn(),
+    setGrants: jest.fn(),
   } as unknown as jest.Mocked<DriveGatewayService>;
 }
 
@@ -46,6 +51,37 @@ function buildMockConfig(): jest.Mocked<MeshbotConfigService> {
   return {
     getWorkspaceDir: jest.fn(() => workspaceDir),
   } as unknown as jest.Mocked<MeshbotConfigService>;
+}
+
+function buildMockConfirmation(): jest.Mocked<ConfirmationService> {
+  return {
+    waitForDecision: jest.fn(),
+  } as unknown as jest.Mocked<ConfirmationService>;
+}
+
+function buildMockAccount(
+  userId = "user-123",
+): jest.Mocked<AccountContextService> {
+  return {
+    getOrThrow: jest.fn(() => userId),
+    get: jest.fn(() => userId),
+  } as unknown as jest.Mocked<AccountContextService>;
+}
+
+function buildMockIdentity(
+  orgId: string | null = "org-001",
+): jest.Mocked<CloudIdentityService> {
+  return {
+    get: jest.fn().mockResolvedValue({ orgId, cloudToken: "tok" }),
+  } as unknown as jest.Mocked<CloudIdentityService>;
+}
+
+function buildMockCloudOrg(
+  members: Array<{ userId: string; email: string }> = [],
+): jest.Mocked<CloudOrgService> {
+  return {
+    listMembers: jest.fn().mockResolvedValue(members),
+  } as unknown as jest.Mocked<CloudOrgService>;
 }
 
 async function buildService(
@@ -57,6 +93,49 @@ async function buildService(
       DriveToolService,
       { provide: DriveGatewayService, useValue: gateway },
       { provide: MeshbotConfigService, useValue: config },
+      { provide: ConfirmationService, useValue: buildMockConfirmation() },
+      { provide: AccountContextService, useValue: buildMockAccount() },
+      { provide: CloudIdentityService, useValue: buildMockIdentity() },
+      { provide: CloudOrgService, useValue: buildMockCloudOrg() },
+    ],
+  }).compile();
+  return module.get(DriveToolService);
+}
+
+/** share 专用构建函数，可自定义各依赖 mock。 */
+async function buildShareService(
+  opts: {
+    confirmation?: jest.Mocked<ConfirmationService>;
+    account?: jest.Mocked<AccountContextService>;
+    identity?: jest.Mocked<CloudIdentityService>;
+    cloudOrg?: jest.Mocked<CloudOrgService>;
+    gateway?: jest.Mocked<DriveGatewayService>;
+  } = {},
+): Promise<DriveToolService> {
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      DriveToolService,
+      {
+        provide: DriveGatewayService,
+        useValue: opts.gateway ?? buildMockGateway(),
+      },
+      { provide: MeshbotConfigService, useValue: buildMockConfig() },
+      {
+        provide: ConfirmationService,
+        useValue: opts.confirmation ?? buildMockConfirmation(),
+      },
+      {
+        provide: AccountContextService,
+        useValue: opts.account ?? buildMockAccount(),
+      },
+      {
+        provide: CloudIdentityService,
+        useValue: opts.identity ?? buildMockIdentity(),
+      },
+      {
+        provide: CloudOrgService,
+        useValue: opts.cloudOrg ?? buildMockCloudOrg(),
+      },
     ],
   }).compile();
   return module.get(DriveToolService);
@@ -265,22 +344,238 @@ describe("DriveToolService.download", () => {
   });
 });
 
-// ── share（Task 5 占位） ──────────────────────────────────────
+// ── share（Task 5） ───────────────────────────────────────────
 describe("DriveToolService.share", () => {
-  it("抛出 not implemented", async () => {
+  const shareArgs = {
+    nodeId: "node-abc",
+    shareWith: "org",
+    permission: "viewer" as const,
+    sessionId: "sess-1",
+    toolCallId: "tc-1",
+  };
+
+  // ── shareWith="org" 确认通过 → setGrants 含 org grant ────────
+  it('shareWith="org" 确认通过 → setGrants 含 org grant（granteeId=当前 orgId）', async () => {
+    const confirmation = buildMockConfirmation();
+    const account = buildMockAccount("user-123");
+    const identity = buildMockIdentity("org-001");
     const gateway = buildMockGateway();
-    const svc = await buildService(gateway, buildMockConfig());
-    await expect(
-      svc.share(
-        {
-          nodeId: "n1",
-          shareWith: "user@example.com",
-          permission: "viewer",
-          sessionId: "s1",
-          toolCallId: "t1",
-        },
+
+    // 确认通过（任意 payload 视为通过）
+    confirmation.waitForDecision.mockResolvedValue({ action: "send" });
+    // 现有 grants 为空
+    gateway.getGrants.mockResolvedValue({ grants: [] });
+    gateway.setGrants.mockResolvedValue({});
+
+    const svc = await buildShareService({
+      confirmation,
+      account,
+      identity,
+      gateway,
+    });
+    const result = JSON.parse(
+      await svc.share(
+        { ...shareArgs, shareWith: "org" },
         new AbortController().signal,
       ),
-    ).rejects.toThrow("not implemented");
+    );
+
+    expect(result.status).toBe("shared");
+    expect(result.shareWith).toBe("org");
+    expect(gateway.setGrants).toHaveBeenCalledWith(
+      "node-abc",
+      expect.objectContaining({
+        grants: expect.arrayContaining([
+          expect.objectContaining({
+            granteeType: "org",
+            granteeId: "org-001",
+            permission: "viewer",
+          }),
+        ]),
+      }),
+    );
+  });
+
+  // ── shareWith=email 命中成员 → setGrants 含 user grant ───────
+  it("shareWith=email 命中成员 → setGrants 含 user grant（granteeId=userId）", async () => {
+    const confirmation = buildMockConfirmation();
+    const identity = buildMockIdentity("org-001");
+    const cloudOrg = buildMockCloudOrg([
+      { userId: "u-42", email: "alice@example.com" },
+    ]);
+    const gateway = buildMockGateway();
+
+    confirmation.waitForDecision.mockResolvedValue({ action: "send" });
+    gateway.getGrants.mockResolvedValue({ grants: [] });
+    gateway.setGrants.mockResolvedValue({});
+
+    const svc = await buildShareService({
+      confirmation,
+      identity,
+      cloudOrg,
+      gateway,
+    });
+    const result = JSON.parse(
+      await svc.share(
+        { ...shareArgs, shareWith: "alice@example.com", permission: "editor" },
+        new AbortController().signal,
+      ),
+    );
+
+    expect(result.status).toBe("shared");
+    expect(gateway.setGrants).toHaveBeenCalledWith(
+      "node-abc",
+      expect.objectContaining({
+        grants: expect.arrayContaining([
+          expect.objectContaining({
+            granteeType: "user",
+            granteeId: "u-42",
+            permission: "editor",
+          }),
+        ]),
+      }),
+    );
+  });
+
+  // ── email 不命中 → 返回 Error 字符串，不挂起 ─────────────────
+  it("email 不命中成员 → 返回 Error 字符串，不调 waitForDecision", async () => {
+    const confirmation = buildMockConfirmation();
+    const cloudOrg = buildMockCloudOrg([]); // 无成员
+    const gateway = buildMockGateway();
+
+    const svc = await buildShareService({ confirmation, cloudOrg, gateway });
+    const result = await svc.share(
+      { ...shareArgs, shareWith: "nobody@example.com" },
+      new AbortController().signal,
+    );
+
+    expect(result).toMatch(/cannot resolve share target/);
+    expect(confirmation.waitForDecision).not.toHaveBeenCalled();
+    expect(gateway.setGrants).not.toHaveBeenCalled();
+  });
+
+  // ── 确认 "aborted" → cancelled，不调 setGrants ───────────────
+  it('确认 "aborted" → {status:"cancelled"}，不调 setGrants', async () => {
+    const confirmation = buildMockConfirmation();
+    const gateway = buildMockGateway();
+
+    confirmation.waitForDecision.mockResolvedValue("aborted");
+
+    const svc = await buildShareService({ confirmation, gateway });
+    const result = JSON.parse(
+      await svc.share(
+        { ...shareArgs, shareWith: "org" },
+        new AbortController().signal,
+      ),
+    );
+
+    expect(result.status).toBe("cancelled");
+    expect(gateway.setGrants).not.toHaveBeenCalled();
+  });
+
+  // ── 确认 "timeout" → timeout，不调 setGrants ─────────────────
+  it('确认 "timeout" → {status:"timeout"}，不调 setGrants', async () => {
+    const confirmation = buildMockConfirmation();
+    const gateway = buildMockGateway();
+
+    confirmation.waitForDecision.mockResolvedValue("timeout");
+
+    const svc = await buildShareService({ confirmation, gateway });
+    const result = JSON.parse(
+      await svc.share(
+        { ...shareArgs, shareWith: "org" },
+        new AbortController().signal,
+      ),
+    );
+
+    expect(result.status).toBe("timeout");
+    expect(gateway.setGrants).not.toHaveBeenCalled();
+  });
+
+  // ── mergeGrant：同 grantee 覆盖 permission ───────────────────
+  it("mergeGrant：同 (granteeType, granteeId) 覆盖 permission", async () => {
+    const confirmation = buildMockConfirmation();
+    const identity = buildMockIdentity("org-001");
+    const gateway = buildMockGateway();
+
+    confirmation.waitForDecision.mockResolvedValue({ action: "send" });
+    // 现有 grant：org-001 已有 viewer
+    gateway.getGrants.mockResolvedValue({
+      grants: [
+        { granteeType: "org", granteeId: "org-001", permission: "viewer" },
+      ],
+    });
+    gateway.setGrants.mockResolvedValue({});
+
+    const svc = await buildShareService({ confirmation, identity, gateway });
+    await svc.share(
+      { ...shareArgs, shareWith: "org", permission: "editor" },
+      new AbortController().signal,
+    );
+
+    const [, body] = gateway.setGrants.mock.calls[0] as [
+      string,
+      { grants: unknown[] },
+    ];
+    const grants = body.grants;
+    // 应只有一条，permission 被覆盖为 editor
+    expect(grants).toHaveLength(1);
+    expect(grants[0]).toMatchObject({
+      granteeType: "org",
+      granteeId: "org-001",
+      permission: "editor",
+    });
+  });
+
+  // ── mergeGrant：不同 grantee 追加 ────────────────────────────
+  it("mergeGrant：不同 grantee 追加（保留原有）", async () => {
+    const confirmation = buildMockConfirmation();
+    const identity = buildMockIdentity("org-001");
+    const cloudOrg = buildMockCloudOrg([
+      { userId: "u-99", email: "bob@example.com" },
+    ]);
+    const gateway = buildMockGateway();
+
+    confirmation.waitForDecision.mockResolvedValue({ action: "send" });
+    // 现有 grant：org-001 viewer
+    gateway.getGrants.mockResolvedValue({
+      grants: [
+        { granteeType: "org", granteeId: "org-001", permission: "viewer" },
+      ],
+    });
+    gateway.setGrants.mockResolvedValue({});
+
+    const svc = await buildShareService({
+      confirmation,
+      identity,
+      cloudOrg,
+      gateway,
+    });
+    await svc.share(
+      { ...shareArgs, shareWith: "bob@example.com", permission: "editor" },
+      new AbortController().signal,
+    );
+
+    const [, body] = gateway.setGrants.mock.calls[0] as [
+      string,
+      { grants: unknown[] },
+    ];
+    const grants = body.grants;
+    // 原有 org grant + 新 user grant，共 2 条
+    expect(grants).toHaveLength(2);
+    expect(grants).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          granteeType: "org",
+          granteeId: "org-001",
+          permission: "viewer",
+        }),
+        expect.objectContaining({
+          granteeType: "user",
+          granteeId: "u-99",
+          permission: "editor",
+        }),
+      ]),
+    );
   });
 });
