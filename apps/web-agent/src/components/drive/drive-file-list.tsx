@@ -65,8 +65,6 @@ interface DriveFileListProps {
   parentId: string | null;
   /** 点击文件夹时的回调。 */
   onEnterFolder: (node: DriveNode) => void;
-  /** 点击文件时的预览回调（Task 6 接入，先占位）。 */
-  onPreview: (node: DriveNode) => void;
   className?: string;
 }
 
@@ -203,12 +201,10 @@ function FileListRow({
   node,
   parentId,
   onEnterFolder,
-  onPreview,
 }: {
   node: DriveNode;
   parentId: string | null;
   onEnterFolder: (node: DriveNode) => void;
-  onPreview: (node: DriveNode) => void;
 }) {
   const t = useTranslations("drive");
   const isFolder = node.type === "folder";
@@ -227,14 +223,6 @@ function FileListRow({
   const [shareOpen, setShareOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  function handleRowClick() {
-    if (isFolder) {
-      onEnterFolder(node);
-    } else {
-      onPreview(node);
-    }
-  }
-
   /** 拿 presigned URL 后打开 dock 预览。 */
   async function handlePreview() {
     const { url } = await getFileUrl(node.id);
@@ -243,13 +231,25 @@ function FileListRow({
     setPanelOpen(true);
   }
 
-  /** 拿 presigned URL 后触发浏览器下载。 */
+  function handleRowClick() {
+    if (isFolder) {
+      onEnterFolder(node);
+    } else {
+      void handlePreview();
+    }
+  }
+
+  /** 拿 presigned URL 后 fetch blob，确保跨域 download 属性生效。 */
   async function handleDownload() {
     const { url } = await getFileUrl(node.id);
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const objUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
+    a.href = objUrl;
     a.download = node.name;
     a.click();
+    URL.revokeObjectURL(objUrl);
   }
 
   async function handleDeleteConfirm() {
@@ -433,7 +433,6 @@ export function DriveFileList({
   loading = false,
   parentId,
   onEnterFolder,
-  onPreview,
   className,
 }: DriveFileListProps) {
   const t = useTranslations("drive");
@@ -476,7 +475,6 @@ export function DriveFileList({
           node={node}
           parentId={parentId}
           onEnterFolder={onEnterFolder}
-          onPreview={onPreview}
         />
       ))}
     </div>

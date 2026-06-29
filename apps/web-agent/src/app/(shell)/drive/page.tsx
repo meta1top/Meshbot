@@ -139,11 +139,6 @@ function MineContent({
   const parentId = pathStack.at(-1)?.id ?? null;
   const { data: nodes = [], isLoading } = useDriveNodes(parentId);
 
-  /** 文件预览占位（Task 6 接入）。 */
-  function handlePreview(_node: DriveNode) {
-    // TODO Task 6: 接入产物预览面板
-  }
-
   return (
     <div className="flex flex-col gap-3">
       <DriveBreadcrumb pathStack={pathStack} onJump={onJump} />
@@ -152,7 +147,6 @@ function MineContent({
         loading={isLoading}
         parentId={parentId}
         onEnterFolder={onEnterFolder}
-        onPreview={handlePreview}
       />
       {/* 上传区：提供拖拽蒙层 + 进度浮窗，input ref 由父层上传按钮触发 */}
       <DriveUploadArea parentId={parentId} inputRef={uploadInputRef} />
@@ -168,17 +162,12 @@ function SharedContent() {
     // 共享 tab 暂不进入子目录
   }
 
-  function handlePreview(_node: DriveNode) {
-    // TODO Task 6: 接入产物预览面板
-  }
-
   return (
     <DriveFileList
       nodes={nodes}
       loading={isLoading}
       parentId={null}
       onEnterFolder={handleEnterFolder}
-      onPreview={handlePreview}
     />
   );
 }
