@@ -677,5 +677,27 @@
   "installing": "",
   "install": "",
   "sourceGithub": "",
-  "orgSwitchFailed": ""
+  "orgSwitchFailed": "",
+  "drive": {
+    "title": "Drive",
+    "rootLabel": "My Drive",
+    "tabMine": "My Files",
+    "tabShared": "Shared with Me",
+    "upload": "Upload",
+    "newFolder": "New Folder",
+    "emptyHint": "No files here",
+    "fileListLabel": "File list",
+    "colName": "Name",
+    "colSize": "Size",
+    "colModified": "Modified"
+  },
+  "rootLabel": "",
+  "fileListLabel": "",
+  "colName": "",
+  "colSize": "",
+  "colModified": "",
+  "tabMine": "",
+  "tabShared": "",
+  "upload": "",
+  "newFolder": ""
 }

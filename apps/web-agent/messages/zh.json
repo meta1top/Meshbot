@@ -677,5 +677,27 @@
   "installing": "",
   "install": "",
   "sourceGithub": "",
-  "orgSwitchFailed": ""
+  "orgSwitchFailed": "",
+  "drive": {
+    "title": "网盘",
+    "rootLabel": "我的网盘",
+    "tabMine": "我的文件",
+    "tabShared": "共享给我的",
+    "upload": "上传",
+    "newFolder": "新建文件夹",
+    "emptyHint": "此处暂无文件",
+    "fileListLabel": "文件列表",
+    "colName": "名称",
+    "colSize": "大小",
+    "colModified": "修改时间"
+  },
+  "rootLabel": "",
+  "fileListLabel": "",
+  "colName": "",
+  "colSize": "",
+  "colModified": "",
+  "tabMine": "",
+  "tabShared": "",
+  "upload": "",
+  "newFolder": ""
 }
