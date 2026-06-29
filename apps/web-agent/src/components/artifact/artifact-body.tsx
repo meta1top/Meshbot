@@ -42,7 +42,8 @@ function useArtifactContent(
     setBlobUrl(null);
     setText(null);
     setErr(false);
-    const isText = kind === "markdown" || kind === "text";
+    // html 也按文本拉取，用 iframe srcDoc 渲染——不依赖 blob 的 MIME（presigned 可能不带 Content-Type）
+    const isText = kind === "markdown" || kind === "text" || kind === "html";
 
     const fetchContent: Promise<string | Blob> = url
       ? // 网盘 presigned：裸 fetch，presigned URL 自带凭证
@@ -159,11 +160,11 @@ export function ArtifactBody({
     );
   }
   if (kind === "html") {
-    if (!blobUrl) return <Loading />;
+    if (text === null) return <Loading />;
     return (
       <iframe
         title="产物预览"
-        src={blobUrl}
+        srcDoc={text}
         sandbox=""
         className="h-full w-full border-0 bg-white"
       />
