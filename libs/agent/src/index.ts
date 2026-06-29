@@ -57,3 +57,7 @@ export {
   ASK_QUESTION_PORT,
   type AskQuestionPort,
 } from "./tools/ask-question.port";
+export {
+  DRIVE_PORT,
+  type DrivePort,
+} from "./tools/drive.port";

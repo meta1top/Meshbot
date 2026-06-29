@@ -53,4 +53,17 @@ export const AgentErrorCode = defineErrorCode({
     code: 3010,
     message: "skill.sourceUnsupported",
   },
+  DRIVE_UPLOAD_FAILED: {
+    code: 3011,
+    message: "drive.uploadFailed",
+  },
+  DRIVE_DOWNLOAD_FAILED: {
+    code: 3012,
+    message: "drive.downloadFailed",
+  },
+  DRIVE_SHARE_TARGET_INVALID: {
+    code: 3013,
+    message: "drive.shareTargetInvalid",
+    httpStatus: 400,
+  },
 });
