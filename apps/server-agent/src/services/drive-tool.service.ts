@@ -231,7 +231,9 @@ export class DriveToolService implements DrivePort {
       userId: string;
       email: string;
     }>;
-    const member = members.find((m) => m.email === shareWith);
+    const member = members.find(
+      (m) => m.email.toLowerCase() === shareWith.toLowerCase(),
+    );
     if (!member) return null;
     return { granteeType: "user", granteeId: member.userId };
   }

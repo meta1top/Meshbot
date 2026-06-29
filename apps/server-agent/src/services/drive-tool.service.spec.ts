@@ -437,6 +437,47 @@ describe("DriveToolService.share", () => {
     );
   });
 
+  // ── email 大小写不敏感 → 匹配成功 ───────────────────────────
+  it("email 大小写不同也能匹配（库里 bob@x.com，传入 Bob@X.com）", async () => {
+    const confirmation = buildMockConfirmation();
+    const identity = buildMockIdentity("org-001");
+    const cloudOrg = buildMockCloudOrg([
+      { userId: "u-99", email: "bob@x.com" },
+    ]);
+    const gateway = buildMockGateway();
+
+    confirmation.waitForDecision.mockResolvedValue({ action: "send" });
+    gateway.getGrants.mockResolvedValue({ grants: [] });
+    gateway.setGrants.mockResolvedValue({});
+
+    const svc = await buildShareService({
+      confirmation,
+      identity,
+      cloudOrg,
+      gateway,
+    });
+    const result = JSON.parse(
+      await svc.share(
+        { ...shareArgs, shareWith: "Bob@X.com", permission: "viewer" },
+        new AbortController().signal,
+      ),
+    );
+
+    expect(result.status).toBe("shared");
+    expect(gateway.setGrants).toHaveBeenCalledWith(
+      "node-abc",
+      expect.objectContaining({
+        grants: expect.arrayContaining([
+          expect.objectContaining({
+            granteeType: "user",
+            granteeId: "u-99",
+            permission: "viewer",
+          }),
+        ]),
+      }),
+    );
+  });
+
   // ── email 不命中 → 返回 Error 字符串，不挂起 ─────────────────
   it("email 不命中成员 → 返回 Error 字符串，不调 waitForDecision", async () => {
     const confirmation = buildMockConfirmation();
