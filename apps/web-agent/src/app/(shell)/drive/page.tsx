@@ -168,6 +168,7 @@ function SharedContent() {
       loading={isLoading}
       parentId={null}
       onEnterFolder={handleEnterFolder}
+      readOnly={true}
     />
   );
 }

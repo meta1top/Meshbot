@@ -733,7 +733,8 @@
     "shareCancel": "Cancel",
     "shareRemove": "Remove",
     "shareRestore": "Undo",
-    "shareError": "Failed to save share settings, please try again"
+    "shareError": "Failed to save share settings, please try again",
+    "noSubFolders": "No subfolders here"
   },
   "rootLabel": "",
   "fileListLabel": "",
@@ -786,5 +787,6 @@
   "shareRemove": "",
   "shareAddTitle": "",
   "shareConfirm": "",
-  "menuPreview": ""
+  "menuPreview": "",
+  "noSubFolders": ""
 }

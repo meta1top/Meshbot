@@ -65,6 +65,8 @@ interface DriveFileListProps {
   parentId: string | null;
   /** 点击文件夹时的回调。 */
   onEnterFolder: (node: DriveNode) => void;
+  /** 只读模式：隐藏重命名/移动/删除/共享等写操作，仅保留预览/下载。 */
+  readOnly?: boolean;
   className?: string;
 }
 
@@ -201,10 +203,12 @@ function FileListRow({
   node,
   parentId,
   onEnterFolder,
+  readOnly = false,
 }: {
   node: DriveNode;
   parentId: string | null;
   onEnterFolder: (node: DriveNode) => void;
+  readOnly?: boolean;
 }) {
   const t = useTranslations("drive");
   const isFolder = node.type === "folder";
@@ -328,8 +332,8 @@ function FileListRow({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-            {/* editor / owner 才能重命名、移动、删除 */}
-            {canEdit && (
+            {/* editor / owner 才能重命名、移动、删除；只读模式下隐藏 */}
+            {canEdit && !readOnly && (
               <>
                 <DropdownMenuItem onSelect={() => setRenameOpen(true)}>
                   {t("menuRename")}
@@ -350,8 +354,8 @@ function FileListRow({
                 <DropdownMenuSeparator />
               </>
             )}
-            {/* 共享仅 owner 可见 */}
-            {isOwner && (
+            {/* 共享仅 owner 可见；只读模式下隐藏 */}
+            {isOwner && !readOnly && (
               <DropdownMenuItem onSelect={() => setShareOpen(true)}>
                 {t("menuShare")}
               </DropdownMenuItem>
@@ -433,6 +437,7 @@ export function DriveFileList({
   loading = false,
   parentId,
   onEnterFolder,
+  readOnly = false,
   className,
 }: DriveFileListProps) {
   const t = useTranslations("drive");
@@ -475,6 +480,7 @@ export function DriveFileList({
           node={node}
           parentId={parentId}
           onEnterFolder={onEnterFolder}
+          readOnly={readOnly}
         />
       ))}
     </div>

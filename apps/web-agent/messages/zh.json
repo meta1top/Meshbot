@@ -733,7 +733,8 @@
     "shareCancel": "取消",
     "shareRemove": "移除",
     "shareRestore": "撤销",
-    "shareError": "共享设置失败，请重试"
+    "shareError": "共享设置失败，请重试",
+    "noSubFolders": "此目录下无子文件夹"
   },
   "rootLabel": "",
   "fileListLabel": "",
@@ -786,5 +787,6 @@
   "shareRemove": "",
   "shareAddTitle": "",
   "shareConfirm": "",
-  "menuPreview": ""
+  "menuPreview": "",
+  "noSubFolders": ""
 }

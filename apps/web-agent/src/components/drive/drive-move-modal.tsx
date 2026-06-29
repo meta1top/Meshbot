@@ -31,6 +31,7 @@ function FolderBrowser({
   excludeId: string;
   onEnter: (node: DriveNode) => void;
 }) {
+  const t = useTranslations("drive");
   const { data: nodes = [], isLoading } = useDriveNodes(browsedParentId);
   const folders = nodes.filter(
     (n) => n.type === "folder" && n.id !== excludeId,
@@ -47,7 +48,7 @@ function FolderBrowser({
   if (folders.length === 0) {
     return (
       <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-        此目录下无子文件夹
+        {t("noSubFolders")}
       </div>
     );
   }
