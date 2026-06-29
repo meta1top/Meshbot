@@ -21,6 +21,7 @@ import {
 } from "@/atoms/assistant-panel";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { DriveMoveModal } from "@/components/drive/drive-move-modal";
+import { DriveShareLinkModal } from "@/components/drive/drive-share-link-modal";
 import { DriveShareModal } from "@/components/drive/drive-share-modal";
 import type { DriveNode } from "@/rest/drive";
 import { getFileUrl, useDeleteNode, useRenameNode } from "@/rest/drive";
@@ -225,6 +226,7 @@ function FileListRow({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [shareLinkOpen, setShareLinkOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   /** 拿 presigned URL 后打开 dock 预览。 */
@@ -360,6 +362,12 @@ function FileListRow({
                 {t("menuShare")}
               </DropdownMenuItem>
             )}
+            {/* 公开链接仅 owner 且 file 行可见；只读模式下隐藏 */}
+            {isOwner && !readOnly && !isFolder && (
+              <DropdownMenuItem onSelect={() => setShareLinkOpen(true)}>
+                {t("menuShareLink")}
+              </DropdownMenuItem>
+            )}
             {/* 下载 / 预览：仅文件可用，所有权限可见 */}
             {!isFolder && (
               <>
@@ -422,6 +430,15 @@ function FileListRow({
           nodeId={node.id}
           open={shareOpen}
           onClose={() => setShareOpen(false)}
+        />
+      )}
+
+      {/* 公开链接弹窗（仅 owner 且 file 行） */}
+      {isOwner && !isFolder && (
+        <DriveShareLinkModal
+          nodeId={node.id}
+          open={shareLinkOpen}
+          onClose={() => setShareLinkOpen(false)}
         />
       )}
     </>

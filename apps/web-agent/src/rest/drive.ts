@@ -224,6 +224,78 @@ export function useDeleteNode(parentId: string | null) {
   });
 }
 
+/** 公开分享链接条目。 */
+export interface ShareLinkView {
+  id: string;
+  token: string;
+  url: string;
+  expiresAt: string | null;
+  requiresPassword: boolean;
+  createdAt: string;
+}
+
+/** 创建公开分享链接。 */
+export async function createShareLink(
+  nodeId: string,
+  body: { expiresInDays?: number | null; password?: string },
+): Promise<{ token: string; url: string }> {
+  const { data } = await apiClient.post<{ token: string; url: string }>(
+    `/api/drive/nodes/${nodeId}/share-links`,
+    body,
+  );
+  return data;
+}
+
+/** 列出节点的全部公开分享链接。 */
+export async function listShareLinks(nodeId: string): Promise<ShareLinkView[]> {
+  const { data } = await apiClient.get<ShareLinkView[]>(
+    `/api/drive/nodes/${nodeId}/share-links`,
+  );
+  return data;
+}
+
+/** 撤销指定公开分享链接。 */
+export async function revokeShareLink(
+  linkId: string,
+): Promise<{ ok: boolean }> {
+  const { data } = await apiClient.delete<{ ok: boolean }>(
+    `/api/drive/share-links/${linkId}`,
+  );
+  return data;
+}
+
+/** 查询节点的公开分享链接列表。 */
+export function useShareLinks(nodeId: string | null) {
+  return useQuery({
+    queryKey: ["drive", "share-links", nodeId],
+    queryFn: () => listShareLinks(nodeId as string),
+    enabled: !!nodeId,
+  });
+}
+
+/** 创建公开分享链接 mutation；成功后失效链接列表。 */
+export function useCreateShareLink(nodeId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { expiresInDays?: number | null; password?: string }) =>
+      createShareLink(nodeId, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["drive", "share-links", nodeId] });
+    },
+  });
+}
+
+/** 撤销公开分享链接 mutation；成功后失效链接列表。 */
+export function useRevokeShareLink(nodeId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (linkId: string) => revokeShareLink(linkId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["drive", "share-links", nodeId] });
+    },
+  });
+}
+
 /** 获取节点授权列表查询。 */
 export function useGrants(id: string | null) {
   return useQuery({
