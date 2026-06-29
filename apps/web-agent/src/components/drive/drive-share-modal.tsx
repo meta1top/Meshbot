@@ -4,7 +4,7 @@ import { Button } from "@meshbot/design";
 import { useAtomValue } from "jotai";
 import { Loader2, Share2, Trash2, X } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { currentUserAtom } from "@/atoms/auth";
 import { type DriveGrant, useGrants, useSetGrants } from "@/rest/drive";
@@ -48,6 +48,16 @@ export function DriveShareModal({
 
   // 本地维护的「待移除」列表（granteeType+granteeId 的 key）
   const [removedKeys, setRemovedKeys] = useState<Set<string>>(new Set());
+
+  // 弹窗关闭时重置表单状态（避免下次打开时残留上次的选择）
+  useEffect(() => {
+    if (!open) {
+      setRemovedKeys(new Set());
+      setShareWith("org");
+      setPermission("viewer");
+      setError(null);
+    }
+  }, [open]);
 
   // 渲染前：弹窗未开或 SSR 时不挂 portal
   if (!open || typeof document === "undefined") return null;
