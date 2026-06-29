@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { DriveMoveModal } from "@/components/drive/drive-move-modal";
+import { DriveShareModal } from "@/components/drive/drive-share-modal";
 import type { DriveNode } from "@/rest/drive";
 import { useDeleteNode, useRenameNode } from "@/rest/drive";
 
@@ -213,6 +214,7 @@ function FileListRow({
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   function handleRowClick() {
@@ -323,7 +325,9 @@ function FileListRow({
             )}
             {/* 共享仅 owner 可见 */}
             {isOwner && (
-              <DropdownMenuItem disabled>{t("menuShare")}</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setShareOpen(true)}>
+                {t("menuShare")}
+              </DropdownMenuItem>
             )}
             {/* 下载 / 预览：全部权限可见（Task 6 接入） */}
             <DropdownMenuItem disabled>{t("menuDownload")}</DropdownMenuItem>
@@ -371,6 +375,15 @@ function FileListRow({
         open={moveOpen}
         onClose={() => setMoveOpen(false)}
       />
+
+      {/* 共享设置弹窗（仅 owner） */}
+      {isOwner && (
+        <DriveShareModal
+          nodeId={node.id}
+          open={shareOpen}
+          onClose={() => setShareOpen(false)}
+        />
+      )}
     </>
   );
 }
