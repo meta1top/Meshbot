@@ -4,5 +4,8 @@
   "quotaExceeded": "存储配额已超限",
   "invalidMove": "无法移动到该位置",
   "nameConflict": "同名文件已存在",
-  "notReady": "文件尚未就绪"
+  "notReady": "文件尚未就绪",
+  "shareNotFound": "分享链接不存在或已撤销",
+  "shareExpired": "分享链接已过期",
+  "sharePasswordInvalid": "分享链接密码错误"
 }

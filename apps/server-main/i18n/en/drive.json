@@ -4,5 +4,8 @@
   "quotaExceeded": "Storage quota exceeded",
   "invalidMove": "Cannot move to the target location",
   "nameConflict": "A file with the same name already exists",
-  "notReady": "File is not ready yet"
+  "notReady": "File is not ready yet",
+  "shareNotFound": "Share link not found or revoked",
+  "shareExpired": "Share link has expired",
+  "sharePasswordInvalid": "Incorrect share link password"
 }
