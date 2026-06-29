@@ -2,7 +2,9 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    // typecheck(--noEmit)与 dev(emit)共享 tsbuildinfo 会让 dev 跳过 emit、dist/main.js 不生成；关掉增量编译根治（仅 5 个源文件，无增量收益）
+    "incremental": false
   },
   "include": ["src"]
 }
