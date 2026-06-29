@@ -2,6 +2,7 @@ export { AgentModule } from "./agent.module";
 export { AccountContextService } from "./account/account-context.service";
 export { AccountContextModule } from "./account/account-context.module";
 export { MeshbotConfigService } from "./config/meshbot-config.service";
+export { MeshbotConfigModule } from "./config/meshbot-config.module";
 export type {
   AgentConfig,
   Message,
