@@ -66,4 +66,8 @@ export const AgentErrorCode = defineErrorCode({
     message: "drive.shareTargetInvalid",
     httpStatus: 400,
   },
+  DRIVE_SHARE_FETCH_FAILED: {
+    code: 3014,
+    message: "drive.shareFetchFailed",
+  },
 });

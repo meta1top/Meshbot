@@ -33,6 +33,8 @@ const TOOL_LABELS: Record<string, string> = {
   drive_upload: "上传到网盘",
   drive_download: "从网盘下载",
   drive_share: "共享网盘文件",
+  drive_create_share: "创建分享链接",
+  drive_fetch_share: "下载分享文件",
 };
 
 /**

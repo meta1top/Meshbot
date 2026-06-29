@@ -104,4 +104,26 @@ export class DriveGatewayService {
       await this.token(),
     );
   }
+
+  /** 创建节点公开分享链接（需 cloudToken）。 */
+  async createShareLink(nodeId: string, body: unknown): Promise<unknown> {
+    return this.cloud.post(
+      `/api/drive/nodes/${encodeURIComponent(nodeId)}/share-links`,
+      body,
+      await this.token(),
+    );
+  }
+
+  /** 匿名：解析分享 token（无需 cloudToken）。 */
+  async resolveShare(token: string): Promise<unknown> {
+    return this.cloud.get(`/api/share/${encodeURIComponent(token)}`);
+  }
+
+  /** 匿名：申请下载分享文件（无需 cloudToken）。 */
+  async downloadShare(token: string, body: unknown): Promise<unknown> {
+    return this.cloud.post(
+      `/api/share/${encodeURIComponent(token)}/download`,
+      body,
+    );
+  }
 }

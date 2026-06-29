@@ -1,5 +1,6 @@
 {
   "uploadFailed": "网盘文件上传失败",
   "downloadFailed": "网盘文件下载失败",
-  "shareTargetInvalid": "共享目标用户无效"
+  "shareTargetInvalid": "共享目标用户无效",
+  "shareFetchFailed": "分享链接文件下载失败"
 }

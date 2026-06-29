@@ -35,3 +35,19 @@ export const driveShareSchema = z.object({
   permission: z.enum(["viewer", "editor"]),
 });
 export type DriveShareInput = z.infer<typeof driveShareSchema>;
+
+/** drive_create_share 工具入参：为节点创建公开分享链接（HITL 确认）。 */
+export const driveCreateShareSchema = z.object({
+  nodeId: z.string().min(1),
+  expiresInDays: z.number().int().positive().nullable().optional(),
+  password: z.string().min(1).optional(),
+});
+export type DriveCreateShareInput = z.infer<typeof driveCreateShareSchema>;
+
+/** drive_fetch_share 工具入参：通过公开分享链接下载文件到 workspace。 */
+export const driveFetchShareSchema = z.object({
+  token: z.string().min(1),
+  destPath: z.string().min(1),
+  password: z.string().optional(),
+});
+export type DriveFetchShareInput = z.infer<typeof driveFetchShareSchema>;

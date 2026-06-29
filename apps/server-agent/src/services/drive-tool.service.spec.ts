@@ -44,6 +44,8 @@ function buildMockGateway(): jest.Mocked<DriveGatewayService> {
     getFileUrl: jest.fn(),
     getGrants: jest.fn(),
     setGrants: jest.fn(),
+    createShareLink: jest.fn(),
+    downloadShare: jest.fn(),
   } as unknown as jest.Mocked<DriveGatewayService>;
 }
 
@@ -637,5 +639,155 @@ describe("DriveToolService.share", () => {
         }),
       ]),
     );
+  });
+});
+
+// ── createShare（Task 6） ─────────────────────────────────────
+describe("DriveToolService.createShare", () => {
+  const createShareArgs = {
+    nodeId: "node-share-1",
+    expiresInDays: 7,
+    password: "secret",
+    sessionId: "sess-2",
+    toolCallId: "tc-2",
+  };
+
+  it("确认 send → 调 gateway.createShareLink → 返回 {status:shared,token,url}", async () => {
+    const confirmation = buildMockConfirmation();
+    const gateway = buildMockGateway();
+
+    confirmation.waitForDecision.mockResolvedValue({ action: "send" });
+    gateway.createShareLink.mockResolvedValue({
+      token: "shrtk",
+      url: "https://share.example.com/shrtk",
+    });
+
+    const svc = await buildShareService({ confirmation, gateway });
+    const result = JSON.parse(
+      await svc.createShare(createShareArgs, new AbortController().signal),
+    );
+
+    expect(result.status).toBe("shared");
+    expect(result.token).toBe("shrtk");
+    expect(result.url).toBe("https://share.example.com/shrtk");
+    expect(gateway.createShareLink).toHaveBeenCalledWith("node-share-1", {
+      expiresInDays: 7,
+      password: "secret",
+    });
+  });
+
+  it("{action:cancel} → {status:cancelled}，不调 createShareLink", async () => {
+    const confirmation = buildMockConfirmation();
+    const gateway = buildMockGateway();
+
+    confirmation.waitForDecision.mockResolvedValue({ action: "cancel" });
+
+    const svc = await buildShareService({ confirmation, gateway });
+    const result = JSON.parse(
+      await svc.createShare(createShareArgs, new AbortController().signal),
+    );
+
+    expect(result.status).toBe("cancelled");
+    expect(gateway.createShareLink).not.toHaveBeenCalled();
+  });
+
+  it('"timeout" → {status:timeout}，不调 createShareLink', async () => {
+    const confirmation = buildMockConfirmation();
+    const gateway = buildMockGateway();
+
+    confirmation.waitForDecision.mockResolvedValue("timeout");
+
+    const svc = await buildShareService({ confirmation, gateway });
+    const result = JSON.parse(
+      await svc.createShare(createShareArgs, new AbortController().signal),
+    );
+
+    expect(result.status).toBe("timeout");
+    expect(gateway.createShareLink).not.toHaveBeenCalled();
+  });
+
+  it('"aborted" → {status:interrupted}，不调 createShareLink', async () => {
+    const confirmation = buildMockConfirmation();
+    const gateway = buildMockGateway();
+
+    confirmation.waitForDecision.mockResolvedValue("aborted");
+
+    const svc = await buildShareService({ confirmation, gateway });
+    const result = JSON.parse(
+      await svc.createShare(createShareArgs, new AbortController().signal),
+    );
+
+    expect(result.status).toBe("interrupted");
+    expect(gateway.createShareLink).not.toHaveBeenCalled();
+  });
+});
+
+// ── fetchShare（Task 6） ──────────────────────────────────────
+describe("DriveToolService.fetchShare", () => {
+  it("成功：downloadShare → fetch url → 写文件 → 返回 {status:downloaded,path}", async () => {
+    const gateway = buildMockGateway();
+    const config = buildMockConfig();
+
+    gateway.downloadShare.mockResolvedValue({
+      url: "https://cdn.example.com/share-file",
+    });
+    const fileContent = "share content";
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      arrayBuffer: async () => new TextEncoder().encode(fileContent).buffer,
+    }) as never;
+
+    const svc = await buildService(gateway, config);
+    const result = await svc.fetchShare(
+      "shrtk",
+      "downloads/shared.txt",
+      undefined,
+    );
+
+    expect(gateway.downloadShare).toHaveBeenCalledWith("shrtk", {
+      password: undefined,
+    });
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://cdn.example.com/share-file",
+    );
+    const destAbs = path.join(workspaceDir, "downloads", "shared.txt");
+    expect(existsSync(destAbs)).toBe(true);
+    expect(readFileSync(destAbs, "utf8")).toBe(fileContent);
+    const parsed = JSON.parse(result);
+    expect(parsed.status).toBe("downloaded");
+    expect(parsed.path).toBe(path.join("downloads", "shared.txt"));
+  });
+
+  it("越界 destPath → 返回 Error 字符串，不调 downloadShare", async () => {
+    const gateway = buildMockGateway();
+    const svc = await buildService(gateway, buildMockConfig());
+
+    const result = await svc.fetchShare("shrtk", "../evil.txt", undefined);
+    expect(result).toMatch(/outside.*workspace/);
+    expect(gateway.downloadShare).not.toHaveBeenCalled();
+  });
+
+  it("绝对路径越界 → 拒绝", async () => {
+    const gateway = buildMockGateway();
+    const svc = await buildService(gateway, buildMockConfig());
+
+    const result = await svc.fetchShare("shrtk", "/tmp/evil.txt", undefined);
+    expect(result).toMatch(/outside.*workspace/);
+  });
+
+  it("fetch 非 ok → 抛出 AppError(DRIVE_SHARE_FETCH_FAILED)", async () => {
+    const gateway = buildMockGateway();
+    gateway.downloadShare.mockResolvedValue({
+      url: "https://cdn.example.com/share-file",
+    });
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+    }) as never;
+
+    const svc = await buildService(gateway, buildMockConfig());
+    await expect(
+      svc.fetchShare("shrtk", "downloads/file.txt", undefined),
+    ).rejects.toBeInstanceOf(AppError);
   });
 });

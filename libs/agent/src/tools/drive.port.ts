@@ -30,4 +30,21 @@ export interface DrivePort {
     },
     signal: AbortSignal,
   ): Promise<string>;
+  /** 创建公开分享链接（HITL 确认）。返回 JSON 字符串。 */
+  createShare(
+    args: {
+      nodeId: string;
+      expiresInDays?: number | null;
+      password?: string;
+      sessionId: string;
+      toolCallId: string;
+    },
+    signal: AbortSignal,
+  ): Promise<string>;
+  /** 通过公开分享链接下载文件到 workspace。返回 JSON 字符串。 */
+  fetchShare(
+    token: string,
+    destPath: string,
+    password: string | undefined,
+  ): Promise<string>;
 }

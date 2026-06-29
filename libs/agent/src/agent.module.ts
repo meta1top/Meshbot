@@ -44,6 +44,8 @@ import { DriveMkdirTool } from "./tools/builtins/drive-mkdir.tool";
 import { DriveUploadTool } from "./tools/builtins/drive-upload.tool";
 import { DriveDownloadTool } from "./tools/builtins/drive-download.tool";
 import { DriveShareTool } from "./tools/builtins/drive-share.tool";
+import { DriveCreateShareTool } from "./tools/builtins/drive-create-share.tool";
+import { DriveFetchShareTool } from "./tools/builtins/drive-fetch-share.tool";
 import { SkillPublishTool } from "./tools/builtins/skill-publish.tool";
 import { SkillSearchMarketTool } from "./tools/builtins/skill-search-market.tool";
 import { SkillUninstallTool } from "./tools/builtins/skill-uninstall.tool";
@@ -92,6 +94,8 @@ import { SkillUninstallTool } from "./tools/builtins/skill-uninstall.tool";
     DriveUploadTool,
     DriveDownloadTool,
     DriveShareTool,
+    DriveCreateShareTool,
+    DriveFetchShareTool,
     MemoryService,
     MemoryCoreWriteTool,
     MemoryAddTool,

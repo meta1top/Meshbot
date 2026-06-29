@@ -2,6 +2,7 @@ import { AccountContextService, MeshbotConfigService } from "@meshbot/agent";
 import { AppError } from "@meshbot/common";
 import { Injectable } from "@nestjs/common";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import fs from "node:fs/promises";
 import path from "node:path";
 
 import type { DrivePort } from "@meshbot/agent";
@@ -209,6 +210,74 @@ export class DriveToolService implements DrivePort {
       shareWith: args.shareWith,
       permission: args.permission,
     });
+  }
+
+  /**
+   * 创建节点公开分享链接（HITL 确认）。
+   * 超时/中断/取消 fail-safe 返回 {status:"timeout"/"interrupted"/"cancelled"}。
+   */
+  async createShare(
+    args: {
+      nodeId: string;
+      expiresInDays?: number | null;
+      password?: string;
+      sessionId: string;
+      toolCallId: string;
+    },
+    signal: AbortSignal,
+  ): Promise<string> {
+    const key = ConfirmationService.key(
+      this.account.getOrThrow(),
+      args.sessionId,
+      args.toolCallId,
+    );
+    const outcome = await this.confirmation.waitForDecision(
+      key,
+      signal,
+      120_000,
+    );
+    if (outcome === "timeout") return JSON.stringify({ status: "timeout" });
+    if (outcome === "aborted") return JSON.stringify({ status: "interrupted" });
+    if (outcome.action === "cancel")
+      return JSON.stringify({ status: "cancelled" });
+    const res = await this.gateway.createShareLink(args.nodeId, {
+      expiresInDays: args.expiresInDays ?? null,
+      password: args.password,
+    });
+    return JSON.stringify({ status: "shared", ...(res as object) });
+  }
+
+  /**
+   * 通过公开分享链接下载文件到 workspace。
+   * 越界 destPath 返回 Error 字符串；下载失败抛出 AppError(DRIVE_SHARE_FETCH_FAILED)。
+   */
+  async fetchShare(
+    token: string,
+    destPath: string,
+    password: string | undefined,
+  ): Promise<string> {
+    const dir = this.config.getWorkspaceDir();
+    const abs = resolveFilePath(destPath, dir);
+    if (abs !== dir && !abs.startsWith(dir + path.sep)) {
+      return `Error: path is outside the workspace: ${destPath}`;
+    }
+    try {
+      const { url } = (await this.gateway.downloadShare(token, {
+        password,
+      })) as { url: string };
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`download ${res.status}`);
+      const buf = Buffer.from(await res.arrayBuffer());
+      await fs.mkdir(path.dirname(abs), { recursive: true });
+      await fs.writeFile(abs, buf);
+      return JSON.stringify({
+        status: "downloaded",
+        path: path.relative(dir, abs),
+      });
+    } catch (e) {
+      if (e instanceof AppError) throw e;
+      throw new AppError(AgentErrorCode.DRIVE_SHARE_FETCH_FAILED);
+    }
   }
 
   /**

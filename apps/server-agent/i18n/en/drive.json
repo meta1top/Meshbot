@@ -1,5 +1,6 @@
 {
   "uploadFailed": "Drive file upload failed",
   "downloadFailed": "Drive file download failed",
-  "shareTargetInvalid": "Share target user is invalid"
+  "shareTargetInvalid": "Share target user is invalid",
+  "shareFetchFailed": "Failed to download shared file"
 }
