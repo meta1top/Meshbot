@@ -9,15 +9,21 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@meshbot/design";
+import { useSetAtom } from "jotai";
 import { File, Folder, Loader2, MoreHorizontal } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import {
+  assistantPanelOpenAtom,
+  assistantPanelTypeAtom,
+  previewArtifactAtom,
+} from "@/atoms/assistant-panel";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { DriveMoveModal } from "@/components/drive/drive-move-modal";
 import { DriveShareModal } from "@/components/drive/drive-share-modal";
 import type { DriveNode } from "@/rest/drive";
-import { useDeleteNode, useRenameNode } from "@/rest/drive";
+import { getFileUrl, useDeleteNode, useRenameNode } from "@/rest/drive";
 
 /**
  * 将字节数格式化为可读字符串。
@@ -209,6 +215,10 @@ function FileListRow({
   const isOwner = node.permission === "owner";
   const canEdit = node.permission === "owner" || node.permission === "editor";
 
+  const setPreviewArtifact = useSetAtom(previewArtifactAtom);
+  const setPanelType = useSetAtom(assistantPanelTypeAtom);
+  const setPanelOpen = useSetAtom(assistantPanelOpenAtom);
+
   const deleteMutation = useDeleteNode(parentId);
 
   const [renameOpen, setRenameOpen] = useState(false);
@@ -223,6 +233,23 @@ function FileListRow({
     } else {
       onPreview(node);
     }
+  }
+
+  /** 拿 presigned URL 后打开 dock 预览。 */
+  async function handlePreview() {
+    const { url } = await getFileUrl(node.id);
+    setPreviewArtifact({ url, name: node.name });
+    setPanelType("preview");
+    setPanelOpen(true);
+  }
+
+  /** 拿 presigned URL 后触发浏览器下载。 */
+  async function handleDownload() {
+    const { url } = await getFileUrl(node.id);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = node.name;
+    a.click();
   }
 
   async function handleDeleteConfirm() {
@@ -329,8 +356,17 @@ function FileListRow({
                 {t("menuShare")}
               </DropdownMenuItem>
             )}
-            {/* 下载 / 预览：全部权限可见（Task 6 接入） */}
-            <DropdownMenuItem disabled>{t("menuDownload")}</DropdownMenuItem>
+            {/* 下载 / 预览：仅文件可用，所有权限可见 */}
+            {!isFolder && (
+              <>
+                <DropdownMenuItem onSelect={() => void handlePreview()}>
+                  {t("menuPreview")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void handleDownload()}>
+                  {t("menuDownload")}
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

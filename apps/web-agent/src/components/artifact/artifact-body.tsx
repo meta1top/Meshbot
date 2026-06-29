@@ -12,38 +12,59 @@ const PdfView = dynamic(() => import("./pdf-view").then((m) => m.PdfView), {
 });
 
 /**
- * 经 apiClient（带 Authorization token）拉产物内容。serving 端点走全局 JWT header
- * 鉴权，iframe/img 直连不带 token 会 401，故所有类型都经 apiClient：
+ * 拉取产物内容，支持两种来源：
+ * - path 源（产物）：经 apiClient 带 Authorization token，避免 iframe/img 直连 401
+ * - url 源（网盘 presigned）：裸 fetch，presigned URL 自带凭证，不需要 apiClient token
  * 二进制（html/pdf/image）→ blob ObjectURL；文本（markdown/text）→ string。
  */
-function useArtifactContent(path: string): {
+function useArtifactContent(
+  path: string | undefined,
+  url: string | undefined,
+  name: string | undefined,
+): {
   blobUrl: string | null;
   text: string | null;
   err: boolean;
 } {
-  const kind = artifactKind(path);
+  // 类型判定：path 源用 path，url 源用 name，都没有则 binary
+  const kindTarget = path ?? name ?? "";
+  const kind = artifactKind(kindTarget);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [text, setText] = useState<string | null>(null);
   const [err, setErr] = useState(false);
 
   useEffect(() => {
     if (kind === "binary") return;
+    // 两种来源都没有时不拉取
+    if (!path && !url) return;
     let cancelled = false;
     let obj: string | null = null;
     setBlobUrl(null);
     setText(null);
     setErr(false);
     const isText = kind === "markdown" || kind === "text";
-    apiClient
-      .get<string | Blob>(artifactRawUrl(path), {
-        responseType: isText ? "text" : "blob",
-      })
-      .then((res: { data: string | Blob }) => {
+
+    const fetchContent: Promise<string | Blob> = url
+      ? // 网盘 presigned：裸 fetch，presigned URL 自带凭证
+        fetch(url).then((r): Promise<string | Blob> => {
+          if (!r.ok) throw new Error(`fetch failed: ${r.status}`);
+          return isText ? r.text() : r.blob();
+        })
+      : // 产物源：apiClient 带 Authorization token（path 在此分支必然有值）
+        apiClient
+          .get<string | Blob>(artifactRawUrl(path ?? ""), {
+            responseType: isText ? "text" : "blob",
+          })
+          .then((res: { data: string | Blob }) => res.data);
+
+    fetchContent
+      .then((data: string | Blob) => {
         if (cancelled) return;
         if (isText) {
-          setText(typeof res.data === "string" ? res.data : String(res.data));
+          setText(typeof data === "string" ? data : String(data));
         } else {
-          obj = URL.createObjectURL(res.data as Blob);
+          // cancelled 检查在 createObjectURL 前，防止泄漏
+          obj = URL.createObjectURL(data as Blob);
           setBlobUrl(obj);
         }
       })
@@ -54,25 +75,45 @@ function useArtifactContent(path: string): {
       cancelled = true;
       if (obj) URL.revokeObjectURL(obj);
     };
-  }, [path, kind]);
+    // name 不直接用于 effect 内部（只影响 kind，kind 已在依赖中）
+  }, [path, url, kind]);
 
   return { blobUrl, text, err };
 }
 
-/** 下载产物：apiClient 取 blob（带 token）→ a.download 触发 → 释放 ObjectURL。 */
-export async function downloadArtifact(
-  path: string,
-  name: string,
-): Promise<void> {
-  const res = await apiClient.get(artifactRawUrl(path, { download: true }), {
-    responseType: "blob",
-  });
-  const url = URL.createObjectURL(res.data as Blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(url);
+/**
+ * 下载产物，支持两种来源：
+ * - url 源（网盘 presigned）：直接设 a.href=url + a.download=name（presigned 自带凭证）
+ * - path 源（产物）：apiClient 取 blob（带 token）→ a.download
+ */
+export async function downloadArtifact(opts: {
+  path?: string;
+  url?: string;
+  name?: string;
+}): Promise<void> {
+  const { path, url, name } = opts;
+  const filename = name ?? path?.split("/").pop() ?? "file";
+
+  if (url) {
+    // presigned 直链下载，无需 apiClient
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    return;
+  }
+
+  if (path) {
+    const res = await apiClient.get(artifactRawUrl(path, { download: true }), {
+      responseType: "blob",
+    });
+    const blobUrl = URL.createObjectURL(res.data as Blob);
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(blobUrl);
+  }
 }
 
 function Loading() {
@@ -83,10 +124,24 @@ function Loading() {
   );
 }
 
-/** 按类型分发渲染产物内容（preview 面板与全屏共用）。 */
-export function ArtifactBody({ path }: { path: string }) {
-  const kind = artifactKind(path);
-  const { blobUrl, text, err } = useArtifactContent(path);
+/**
+ * 按类型分发渲染产物内容（preview 面板与全屏共用）。
+ * 支持两种来源：
+ * - path 源：server-agent 产物，经 apiClient 带 token 拉取
+ * - url + name 源：网盘 presigned，裸 fetch 自带凭证
+ */
+export function ArtifactBody({
+  path,
+  url,
+  name,
+}: {
+  path?: string;
+  url?: string;
+  name?: string;
+}) {
+  const kindTarget = path ?? name ?? "";
+  const kind = artifactKind(kindTarget);
+  const { blobUrl, text, err } = useArtifactContent(path, url, name);
 
   if (err) {
     return (

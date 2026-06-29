@@ -22,8 +22,14 @@ export function ArtifactPreviewPanel() {
   if (!artifact) {
     return null;
   }
-  const title = artifact.title ?? artifact.path.split("/").pop() ?? "预览";
-  const PreviewIcon = artifactIcon(artifact.path);
+  // 标题：优先 title，其次 name（网盘源），其次 path 末段（产物源）
+  const title =
+    artifact.title ??
+    artifact.name ??
+    artifact.path?.split("/").pop() ??
+    "预览";
+  // 图标：path 源用 path，网盘源用 name，都没有则空串（fallback）
+  const PreviewIcon = artifactIcon(artifact.path ?? artifact.name ?? "");
 
   return (
     <div className="flex h-full w-full flex-col">
@@ -34,7 +40,13 @@ export function ArtifactPreviewPanel() {
         <DockTabs />
         <button
           type="button"
-          onClick={() => void downloadArtifact(artifact.path, title)}
+          onClick={() =>
+            void downloadArtifact({
+              path: artifact.path,
+              url: artifact.url,
+              name: title,
+            })
+          }
           title="下载"
           className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-black/5 hover:text-foreground"
         >
@@ -69,11 +81,18 @@ export function ArtifactPreviewPanel() {
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
-        <ArtifactBody path={artifact.path} />
+        {/* 透传两源：path 源或 url+name 源，ArtifactBody 内部分支处理 */}
+        <ArtifactBody
+          path={artifact.path}
+          url={artifact.url}
+          name={artifact.name}
+        />
       </div>
       {full && (
         <ArtifactFullscreen
           path={artifact.path}
+          url={artifact.url}
+          name={artifact.name}
           title={title}
           onClose={() => setFull(false)}
         />

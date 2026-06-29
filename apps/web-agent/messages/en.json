@@ -698,7 +698,8 @@
     "menuMove": "Move to…",
     "menuDelete": "Delete",
     "menuShare": "Share",
-    "menuDownload": "Download (coming soon)",
+    "menuPreview": "Preview",
+    "menuDownload": "Download",
     "renameTitle": "Rename",
     "renamePlaceholder": "Enter new name",
     "renameConfirm": "Rename",
@@ -784,5 +785,6 @@
   "shareRestore": "",
   "shareRemove": "",
   "shareAddTitle": "",
-  "shareConfirm": ""
+  "shareConfirm": "",
+  "menuPreview": ""
 }

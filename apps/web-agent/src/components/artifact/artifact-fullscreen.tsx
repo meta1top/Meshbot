@@ -7,13 +7,17 @@ import { createPortal } from "react-dom";
 import { artifactFullscreenAtom } from "@/atoms/assistant-panel";
 import { ArtifactBody } from "./artifact-body";
 
-/** 产物全屏预览（覆盖整屏，Esc / 点关闭退出）。 */
+/** 产物全屏预览（覆盖整屏，Esc / 点关闭退出）。支持 path 源（产物）和 url+name 源（网盘）。 */
 export function ArtifactFullscreen({
   path,
+  url,
+  name,
   title,
   onClose,
 }: {
-  path: string;
+  path?: string;
+  url?: string;
+  name?: string;
   title: string;
   onClose: () => void;
 }) {
@@ -49,7 +53,7 @@ export function ArtifactFullscreen({
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
-        <ArtifactBody path={path} />
+        <ArtifactBody path={path} url={url} name={name} />
       </div>
     </div>,
     document.body,

@@ -698,7 +698,8 @@
     "menuMove": "移动到…",
     "menuDelete": "删除",
     "menuShare": "共享",
-    "menuDownload": "下载（即将上线）",
+    "menuPreview": "预览",
+    "menuDownload": "下载",
     "renameTitle": "重命名",
     "renamePlaceholder": "输入新名称",
     "renameConfirm": "重命名",
@@ -784,5 +785,6 @@
   "shareRestore": "",
   "shareRemove": "",
   "shareAddTitle": "",
-  "shareConfirm": ""
+  "shareConfirm": "",
+  "menuPreview": ""
 }

@@ -36,9 +36,17 @@ export const assistantPanelTypeAtom = atom<"assistant" | "preview">(
   "assistant",
 );
 
-/** 当前预览的产物（相对 workspace 路径 + 标题）。 */
+/** 当前预览的产物。两种来源互斥：
+ * - 产物源：`path`（server-agent workspace 相对路径，经 apiClient 带 token 拉取）
+ * - 网盘源：`url`（presigned URL，裸 fetch 自带凭证）+ `name`（文件名，用于类型判断和下载名）
+ */
 export interface PreviewArtifact {
-  path: string;
+  /** server-agent 产物相对路径（apiClient 带 token）。 */
+  path?: string;
+  /** 网盘 presigned URL（裸 fetch，自带凭证，不带 apiClient token）。 */
+  url?: string;
+  /** 文件名（presigned 源用它判类型 + 下载名）。 */
+  name?: string;
   title?: string;
 }
 export const previewArtifactAtom = atom<PreviewArtifact | null>(null);
