@@ -76,4 +76,10 @@ export const MainErrorCode = defineErrorCode({
   DRIVE_INVALID_MOVE: { code: 2016, message: "drive.invalidMove" },
   DRIVE_NAME_CONFLICT: { code: 2017, message: "drive.nameConflict" },
   DRIVE_NOT_READY: { code: 2018, message: "drive.notReady" },
+  DRIVE_SHARE_NOT_FOUND: { code: 2019, message: "drive.shareNotFound" },
+  DRIVE_SHARE_EXPIRED: { code: 2020, message: "drive.shareExpired" },
+  DRIVE_SHARE_PASSWORD_INVALID: {
+    code: 2021,
+    message: "drive.sharePasswordInvalid",
+  },
 });

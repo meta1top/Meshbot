@@ -10,6 +10,7 @@ import { Message } from "./entities/message.entity";
 import { Organization } from "./entities/organization.entity";
 import { CloudNode } from "./entities/cloud-node.entity";
 import { CloudNodeGrant } from "./entities/cloud-node-grant.entity";
+import { CloudShareLink } from "./entities/cloud-share-link.entity";
 import { SkillPackage } from "./entities/skill-package.entity";
 import { SkillVersion } from "./entities/skill-version.entity";
 import {
@@ -24,6 +25,7 @@ import { OrgService } from "./services/org.service";
 import { CloudNodeService } from "./services/cloud-node.service";
 import { CloudNodeGrantService } from "./services/cloud-node-grant.service";
 import { CloudDriveService } from "./services/cloud-drive.service";
+import { CloudShareLinkService } from "./services/cloud-share-link.service";
 import { PresenceService } from "./services/presence.service";
 import { SkillMarketService } from "./services/skill-market.service";
 import { SkillPackageService } from "./services/skill-package.service";
@@ -35,7 +37,8 @@ import { UserService } from "./services/user.service";
  * Membership→MembershipService / Invitation→InvitationService /
  * Conversation+ConversationMember→ConversationService / Message→MessageService /
  * SkillPackage+SkillVersion→SkillPackageService（SkillMarketService 编排）/
- * CloudNode→CloudNodeService / CloudNodeGrant→CloudNodeGrantService。
+ * CloudNode→CloudNodeService / CloudNodeGrant→CloudNodeGrantService /
+ * CloudShareLink→CloudShareLinkService。
  *
  * `forRoot(invitation)` 注入邀请配置切片（过期天数），由 server-main 的
  * AppConfig.invitation 提供。
@@ -71,6 +74,7 @@ export class MainModule {
           SkillVersion,
           CloudNode,
           CloudNodeGrant,
+          CloudShareLink,
         ]),
       ],
       providers: [
@@ -86,6 +90,7 @@ export class MainModule {
         CloudNodeService,
         CloudNodeGrantService,
         CloudDriveService,
+        CloudShareLinkService,
         { provide: INVITATION_CONFIG, useValue: invitation },
       ],
       exports: [
@@ -101,6 +106,7 @@ export class MainModule {
         CloudNodeService,
         CloudNodeGrantService,
         CloudDriveService,
+        CloudShareLinkService,
       ],
     };
   }
