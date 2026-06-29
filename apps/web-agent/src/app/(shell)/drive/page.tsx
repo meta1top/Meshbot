@@ -1,9 +1,10 @@
 "use client";
 
 import { Button } from "@meshbot/design";
-import { FolderPlus, Upload } from "lucide-react";
+import { FolderPlus, Loader2, Upload } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   type BreadcrumbEntry,
   DriveBreadcrumb,
@@ -11,10 +12,117 @@ import {
 import { DriveFileList } from "@/components/drive/drive-file-list";
 import { DriveUploadArea } from "@/components/drive/drive-upload-area";
 import { ToolPage } from "@/components/layouts/tool-page";
-import { type DriveNode, useDriveNodes, useDriveShared } from "@/rest/drive";
+import {
+  type DriveNode,
+  useCreateFolder,
+  useDriveNodes,
+  useDriveShared,
+} from "@/rest/drive";
 
 /** 当前 tab：「我的文件」或「共享给我的」。 */
 type DriveTab = "mine" | "shared";
+
+/** 新建文件夹小弹窗。 */
+function NewFolderDialog({
+  open,
+  parentId,
+  onClose,
+  onDone,
+}: {
+  open: boolean;
+  parentId: string | null;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const t = useTranslations("drive");
+  const createFolder = useCreateFolder(parentId);
+  const [value, setValue] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  // 打开时重置输入框并聚焦
+  useEffect(() => {
+    if (open) {
+      setValue("");
+      setError(null);
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  }, [open]);
+
+  // Esc 关闭
+  useEffect(() => {
+    if (!open || createFolder.isPending) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, createFolder.isPending, onClose]);
+
+  if (!open || typeof document === "undefined") return null;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    setError(null);
+    try {
+      await createFolder.mutateAsync(trimmed);
+      onDone();
+    } catch {
+      setError(t("newFolderError"));
+    }
+  }
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <form
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("newFolderTitle")}
+        className="flex w-full max-w-[360px] flex-col gap-3 rounded-lg border border-border bg-background p-5 shadow-xl"
+        onSubmit={handleSubmit}
+      >
+        <div className="text-[15px] font-semibold text-foreground">
+          {t("newFolderTitle")}
+        </div>
+        <input
+          ref={inputRef}
+          type="text"
+          className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          placeholder={t("newFolderPlaceholder")}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          disabled={createFolder.isPending}
+        />
+        {error && <p className="text-[12px] text-destructive">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onClose}
+            disabled={createFolder.isPending}
+          >
+            {t("newFolderCancel")}
+          </Button>
+          <Button
+            type="submit"
+            variant="default"
+            size="sm"
+            disabled={createFolder.isPending || !value.trim()}
+          >
+            {createFolder.isPending && (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            )}
+            {t("newFolderConfirm")}
+          </Button>
+        </div>
+      </form>
+    </div>,
+    document.body,
+  );
+}
 
 /** 「我的文件」tab 内容区。 */
 function MineContent({
@@ -42,6 +150,7 @@ function MineContent({
       <DriveFileList
         nodes={nodes}
         loading={isLoading}
+        parentId={parentId}
         onEnterFolder={onEnterFolder}
         onPreview={handlePreview}
       />
@@ -67,6 +176,7 @@ function SharedContent() {
     <DriveFileList
       nodes={nodes}
       loading={isLoading}
+      parentId={null}
       onEnterFolder={handleEnterFolder}
       onPreview={handlePreview}
     />
@@ -87,6 +197,12 @@ export default function DrivePage() {
 
   /** 上传 input 的 ref，由顶部「上传」按钮触发 click。 */
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
+
+  /** 新建文件夹弹窗开关。 */
+  const [newFolderOpen, setNewFolderOpen] = useState(false);
+
+  /** 当前目录 id。 */
+  const currentParentId = pathStack.at(-1)?.id ?? null;
 
   /** 进入文件夹，将节点压栈。 */
   const handleEnterFolder = useCallback((node: DriveNode) => {
@@ -149,8 +265,13 @@ export default function DrivePage() {
               <Upload className="h-4 w-4" />
               {t("upload")}
             </Button>
-            {/* Task 4 接入：新建文件夹 */}
-            <Button variant="ghost" size="sm" className="gap-1.5" disabled>
+            {/* 新建文件夹弹窗 */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setNewFolderOpen(true)}
+            >
               <FolderPlus className="h-4 w-4" />
               {t("newFolder")}
             </Button>
@@ -168,6 +289,14 @@ export default function DrivePage() {
       ) : (
         <SharedContent />
       )}
+
+      {/* 新建文件夹弹窗（挂在页面级，避免被 MineContent 卸载影响） */}
+      <NewFolderDialog
+        open={newFolderOpen}
+        parentId={currentParentId}
+        onClose={() => setNewFolderOpen(false)}
+        onDone={() => setNewFolderOpen(false)}
+      />
     </ToolPage>
   );
 }
