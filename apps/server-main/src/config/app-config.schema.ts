@@ -86,6 +86,8 @@ export const AppConfigSchema = z.object({
   email: EmailConfigSchema.optional(),
   invitation: InvitationConfigSchema.default({ expiresDays: 7 }),
   assets: AssetsConfigSchema.default({}),
+  /** web-main 前端基础 URL，用于拼分享链接。默认指向本地开发端口。 */
+  webMainBase: z.string().url().default("http://localhost:3002"),
 });
 
 export type AppConfig = z.infer<typeof AppConfigSchema>;

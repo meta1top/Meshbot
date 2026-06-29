@@ -37,8 +37,15 @@ export const SetGrantsSchema = z.object({
   grants: z.array(GrantSchema),
 });
 
+/** 创建公开分享链接（可选过期天数 + 访问密码）。 */
+export const CreateShareLinkSchema = z.object({
+  expiresInDays: z.number().int().positive().nullable().optional(),
+  password: z.string().min(1).optional(),
+});
+
 export type CreateFolderInput = z.infer<typeof CreateFolderSchema>;
 export type RequestUploadInput = z.infer<typeof RequestUploadSchema>;
 export type CompleteUploadInput = z.infer<typeof CompleteUploadSchema>;
 export type RenameOrMoveInput = z.infer<typeof RenameOrMoveSchema>;
 export type SetGrantsInput = z.infer<typeof SetGrantsSchema>;
+export type CreateShareLinkInput = z.infer<typeof CreateShareLinkSchema>;

@@ -18,6 +18,8 @@ import {
   CreateInvitationSchema,
   type CreateOrgInput,
   CreateOrgSchema,
+  type CreateShareLinkInput,
+  CreateShareLinkSchema,
   type LoginInput,
   LoginSchema,
   type RegisterUserInput,
@@ -106,3 +108,9 @@ export interface RenameOrMoveDto extends RenameOrMoveInput {}
 // biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
 export class SetGrantsDto extends createI18nZodDto(SetGrantsSchema) {}
 export interface SetGrantsDto extends SetGrantsInput {}
+
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
+export class CreateShareLinkDto extends createI18nZodDto(
+  CreateShareLinkSchema,
+) {}
+export interface CreateShareLinkDto extends CreateShareLinkInput {}

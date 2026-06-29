@@ -11,6 +11,7 @@ export * from "./entities/skill-package.entity";
 export * from "./entities/skill-version.entity";
 export * from "./entities/cloud-node.entity";
 export * from "./entities/cloud-node-grant.entity";
+export * from "./entities/cloud-share-link.entity";
 export { MainErrorCode } from "./errors/main.error-codes";
 export { MainModule } from "./main.module";
 export {
@@ -35,3 +36,4 @@ export {
   CloudDriveService,
   type NodeView,
 } from "./services/cloud-drive.service";
+export { CloudShareLinkService } from "./services/cloud-share-link.service";
