@@ -19,3 +19,13 @@ export interface AssetStat {
   size: number;
   contentType?: string;
 }
+
+/** 下载签名 URL 的响应头覆盖：让浏览器正确预览（而非按 octet-stream 下载）并带上文件名。 */
+export interface SignedUrlOptions {
+  /** 覆盖响应 Content-Type，使浏览器/iframe 正确识别类型并内联预览。 */
+  contentType?: string;
+  /** 文件名，用于 Content-Disposition 的 filename（支持中文）。 */
+  fileName?: string;
+  /** inline=内联预览（默认）/ attachment=强制下载。 */
+  disposition?: "inline" | "attachment";
+}

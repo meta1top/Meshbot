@@ -302,7 +302,11 @@ describe("CloudDriveService", () => {
 
     const result = await svc.getDownloadUrl(viewerCtx, "n1");
 
-    expect(assetSvc.getSignedUrl).toHaveBeenCalledWith("drive/org1/n1", 3600);
+    expect(assetSvc.getSignedUrl).toHaveBeenCalledWith("drive/org1/n1", 3600, {
+      contentType: "application/octet-stream",
+      fileName: "root",
+      disposition: "inline",
+    });
     expect(result.url).toBe("https://minio/signed-url");
     expect(result.ttl).toBe(3600);
   });

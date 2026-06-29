@@ -109,7 +109,11 @@ export class CloudShareLinkService {
   async signDownload(
     node: CloudNode,
   ): Promise<{ url: string; name: string; mime: string }> {
-    const url = await this.assets.getSignedUrl(node.assetKey ?? "", SHARE_TTL);
+    const url = await this.assets.getSignedUrl(node.assetKey ?? "", SHARE_TTL, {
+      contentType: node.mime ?? undefined,
+      fileName: node.name,
+      disposition: "inline",
+    });
     return { url, name: node.name, mime: node.mime ?? "" };
   }
 

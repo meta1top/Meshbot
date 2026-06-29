@@ -258,6 +258,11 @@ export class CloudDriveService {
     const url = await this.assets.getSignedUrl(
       n.assetKey ?? "",
       DRIVE_UPLOAD_TTL,
+      {
+        contentType: n.mime ?? undefined,
+        fileName: n.name,
+        disposition: "inline",
+      },
     );
     return { url, ttl: DRIVE_UPLOAD_TTL };
   }

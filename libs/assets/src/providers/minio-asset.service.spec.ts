@@ -86,6 +86,24 @@ describe("MinioAssetService", () => {
     );
   });
 
+  it("getSignedUrl 带 opts 时通过 response-content-* 覆盖响应头（预览 + 中文文件名）", async () => {
+    mockClient.presignedGetObject.mockResolvedValue("http://signed");
+    await svc.getSignedUrl("k", 600, {
+      contentType: "application/pdf",
+      fileName: "报告.pdf",
+      disposition: "inline",
+    });
+    expect(mockClient.presignedGetObject).toHaveBeenCalledWith(
+      "meshbot",
+      "k",
+      600,
+      {
+        "response-content-type": "application/pdf",
+        "response-content-disposition": `inline; filename*=UTF-8''${encodeURIComponent("报告.pdf")}`,
+      },
+    );
+  });
+
   it("ensureBucket：不存在则 makeBucket", async () => {
     mockClient.bucketExists.mockResolvedValue(false);
     mockClient.makeBucket.mockResolvedValue(undefined);

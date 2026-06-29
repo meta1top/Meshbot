@@ -368,7 +368,11 @@ describe("CloudShareLinkService", () => {
 
       const result = await service.signDownload(node);
 
-      expect(assetSvc.getSignedUrl).toHaveBeenCalledWith("bucket/key", 3600);
+      expect(assetSvc.getSignedUrl).toHaveBeenCalledWith("bucket/key", 3600, {
+        contentType: "text/plain",
+        fileName: "test.txt",
+        disposition: "inline",
+      });
       expect(result).toEqual({
         url: "https://example.com/signed",
         name: "test.txt",
