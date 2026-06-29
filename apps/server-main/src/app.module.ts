@@ -50,6 +50,7 @@ import { DriveController } from "./rest/drive.controller";
 import { DriveShareLinkController } from "./rest/drive-share-link.controller";
 import { ImController } from "./rest/im.controller";
 import { OrgController } from "./rest/org.controller";
+import { PublicShareController } from "./rest/public-share.controller";
 import { SkillController } from "./rest/skill.controller";
 import { HealthGateway } from "./ws/health.gateway";
 import { ImGateway } from "./ws/im.gateway";
@@ -202,6 +203,7 @@ export class AppModule {
         OrgController,
         ImController,
         SkillController,
+        PublicShareController,
       ],
       providers: [
         { provide: REDIS_CLIENT, useValue: redis },

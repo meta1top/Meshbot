@@ -43,9 +43,15 @@ export const CreateShareLinkSchema = z.object({
   password: z.string().min(1).optional(),
 });
 
+/** 匿名下载时提交密码（无密码链接可省略）。 */
+export const ShareDownloadSchema = z.object({
+  password: z.string().optional(),
+});
+
 export type CreateFolderInput = z.infer<typeof CreateFolderSchema>;
 export type RequestUploadInput = z.infer<typeof RequestUploadSchema>;
 export type CompleteUploadInput = z.infer<typeof CompleteUploadSchema>;
 export type RenameOrMoveInput = z.infer<typeof RenameOrMoveSchema>;
 export type SetGrantsInput = z.infer<typeof SetGrantsSchema>;
 export type CreateShareLinkInput = z.infer<typeof CreateShareLinkSchema>;
+export type ShareDownloadInput = z.infer<typeof ShareDownloadSchema>;

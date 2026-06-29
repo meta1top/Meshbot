@@ -30,6 +30,8 @@ import {
   RequestUploadSchema,
   type SetGrantsInput,
   SetGrantsSchema,
+  type ShareDownloadInput,
+  ShareDownloadSchema,
   type SwitchOrgInput,
   SwitchOrgSchema,
 } from "@meshbot/types-main";
@@ -114,3 +116,7 @@ export class CreateShareLinkDto extends createI18nZodDto(
   CreateShareLinkSchema,
 ) {}
 export interface CreateShareLinkDto extends CreateShareLinkInput {}
+
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
+export class ShareDownloadDto extends createI18nZodDto(ShareDownloadSchema) {}
+export interface ShareDownloadDto extends ShareDownloadInput {}
