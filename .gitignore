@@ -8,6 +8,11 @@ out/
 *.tsbuildinfo
 # Next.js 自动生成，随版本/dev 运行重写，不纳入版本控制
 next-env.d.ts
+# libs/* 是纯 TS 包，src/ 下不该有 .js/.d.ts；挡 tsc 单文件误 emit 的就地编译产物（曾导致 desktop tsc 冲突）
+libs/**/src/**/*.js
+libs/**/src/**/*.js.map
+libs/**/src/**/*.d.ts
+libs/**/src/**/*.d.ts.map
 
 # turbo
 .turbo/
