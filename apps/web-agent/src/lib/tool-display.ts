@@ -28,6 +28,11 @@ const TOOL_LABELS: Record<string, string> = {
   present_file: "呈现文件",
   todo_write: "更新待办",
   write_file: "写入文件",
+  drive_list: "列网盘目录",
+  drive_mkdir: "新建网盘文件夹",
+  drive_upload: "上传到网盘",
+  drive_download: "从网盘下载",
+  drive_share: "共享网盘文件",
 };
 
 /**

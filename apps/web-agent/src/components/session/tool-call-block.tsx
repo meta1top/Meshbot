@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import { sanitizeMeshbotPaths, toolDisplayName } from "@/lib/tool-display";
 import { ArtifactFileCard } from "./artifact-file-card";
 import { AskQuestionCard } from "./ask-question-card";
+import { DriveShareCard } from "./drive-share-card";
 import { ImSendConfirmCard } from "./im-send-confirm-card";
 import type { ToolCallView } from "./message-list";
 import { TodoList } from "./todo-list";
@@ -45,6 +46,9 @@ export function ToolCallBlock({
   }
   if (tool.name === "present_file" && tool.status !== "streaming") {
     return <ArtifactFileCard tool={tool} />;
+  }
+  if (tool.name === "drive_share" && tool.status !== "streaming") {
+    return <DriveShareCard tool={tool} sessionId={sessionId} />;
   }
   if (tool.name === "todo_write" && tool.status !== "streaming") {
     const todos = ((tool.args ?? {}) as { todos?: TodoItem[] }).todos ?? [];
