@@ -46,6 +46,14 @@ jobs:
 
       - name: Package (${{ matrix.pkg }})
         run: pnpm run ${{ matrix.pkg }}
+        env:
+          # 证书（.p12 base64）+ 密码：electron-builder 读 CSC_LINK / CSC_KEY_PASSWORD 做签名。
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          # 公证（notarize: true 时由 @electron/notarize 读这三个）。
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Stage distributables (exclude unpacked */MeshBot.app etc.)
         shell: bash
