@@ -3,7 +3,8 @@ import { homedir } from "node:os";
 import path from "node:path";
 
 export interface CliConfig {
-  port: number;
+  /** 监听端口；undefined = 交给 server-agent 自动探测（偏好 7727） */
+  port?: number;
   dataDir: string;
   serverAgentPath: string | null;
   logLevel: "debug" | "info" | "warn" | "error";
@@ -11,7 +12,6 @@ export interface CliConfig {
 }
 
 const DEFAULT_CONFIG: CliConfig = {
-  port: 3100,
   dataDir: path.join(homedir(), ".meshbot"),
   serverAgentPath: null,
   logLevel: "info",

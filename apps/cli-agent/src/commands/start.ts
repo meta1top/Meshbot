@@ -5,7 +5,10 @@ export function registerStartCommand(program: Command): void {
   program
     .command("start")
     .description("Start the Agent service")
-    .option("-p, --port <number>", "Port to listen on", "3100")
+    .option(
+      "-p, --port <number>",
+      "Port to listen on (default: auto-detect 7727)",
+    )
     .option("-d, --data-dir <path>", "Data directory")
     .option("--daemon", "Run in background")
     .action(async (options) => {
