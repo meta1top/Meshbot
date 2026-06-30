@@ -276,6 +276,9 @@ export class ConversationService {
    * markRead 静默失败、lastReadAt 永远写不进（曾导致未读永不清零）。create()+save()
    * 才会触发 @BeforeInsert（与 persistDmInTx 同）。单表写，无需 @Transactional。
    * 公开频道首次已读时该成员行可能不存在，故走 insert 分支创建。
+   *
+   * tx-check: ignore —— 两处 memberRepo.save 位于 if/else 互斥分支，任一执行路径只
+   * 写一次且同一张表，非跨表写入；围栏只数文本调用点，故此处为误报，显式豁免。
    */
   async markRead(conversationId: string, userId: string): Promise<Date> {
     const now = new Date();
