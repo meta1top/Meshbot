@@ -30,6 +30,7 @@ COPY libs/common/package.json      ./libs/common/
 COPY libs/main/package.json        ./libs/main/
 COPY libs/types/package.json       ./libs/types/
 COPY libs/types-main/package.json  ./libs/types-main/
+COPY libs/assets/package.json      ./libs/assets/
 
 RUN pnpm install --frozen-lockfile --ignore-scripts
 
@@ -40,11 +41,13 @@ COPY libs/common      ./libs/common
 COPY libs/main        ./libs/main
 COPY libs/types       ./libs/types
 COPY libs/types-main  ./libs/types-main
+COPY libs/assets      ./libs/assets
 COPY apps/server-main ./apps/server-main
 
 RUN pnpm --filter @meshbot/types build \
  && pnpm --filter @meshbot/common build \
  && pnpm --filter @meshbot/types-main build \
+ && pnpm --filter @meshbot/assets build \
  && pnpm --filter @meshbot/main build \
  && pnpm --filter @meshbot/server-main build
 
@@ -62,7 +65,8 @@ RUN cp -r /repo/apps/server-main/dist /out/dist \
  && cp -r /repo/libs/common/dist      /out/node_modules/@meshbot/common/dist \
  && cp -r /repo/libs/main/dist        /out/node_modules/@meshbot/main/dist \
  && cp -r /repo/libs/types/dist       /out/node_modules/@meshbot/types/dist \
- && cp -r /repo/libs/types-main/dist  /out/node_modules/@meshbot/types-main/dist
+ && cp -r /repo/libs/types-main/dist  /out/node_modules/@meshbot/types-main/dist \
+ && cp -r /repo/libs/assets/dist      /out/node_modules/@meshbot/assets/dist
 
 # ============ Stage 3: runtime ============================================
 FROM node:22-alpine AS runtime
