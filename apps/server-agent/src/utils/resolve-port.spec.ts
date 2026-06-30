@@ -25,9 +25,12 @@ describe("findAvailablePort", () => {
   it("偏好端口被占用时跳到下一个空闲端口", async () => {
     const probe = await listen(0, "127.0.0.1");
     const occupied = (probe.address() as net.AddressInfo).port;
-    const got = await findAvailablePort(occupied, "127.0.0.1", 50);
-    expect(got).toBeGreaterThan(occupied);
-    await close(probe);
+    try {
+      const got = await findAvailablePort(occupied, "127.0.0.1", 50);
+      expect(got).toBeGreaterThan(occupied);
+    } finally {
+      await close(probe);
+    }
   });
 });
 

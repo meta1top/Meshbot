@@ -20,7 +20,13 @@ function osAssignedPort(host: string): Promise<number> {
     srv.once("error", reject);
     srv.listen(0, host, () => {
       const addr = srv.address();
-      const port = typeof addr === "object" && addr ? addr.port : 0;
+      const port = typeof addr === "object" && addr ? addr.port : null;
+      if (!port) {
+        srv.close(() =>
+          reject(new Error("osAssignedPort: 无法获取分配的端口")),
+        );
+        return;
+      }
       srv.close(() => resolve(port));
     });
   });
