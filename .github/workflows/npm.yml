@@ -1,15 +1,20 @@
-name: Release
+name: npm (changesets publish)
 
+# changesets 版本发布 + npm 发包 + 打 tag（cli-agent / server-agent 公共包，desktop 私有只打 tag）。
+# 当前暂不启用自动发布：改为手动触发（Actions 页 "Run workflow"）。
+# 要恢复"合并到 main 自动发版"，把下面换回：
+#   on:
+#     push:
+#       branches: [main]
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
   pull-requests: write
 
 concurrency:
-  group: release
+  group: npm
   cancel-in-progress: false
 
 jobs:
