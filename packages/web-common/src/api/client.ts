@@ -89,6 +89,13 @@ export function unwrapEnvelope(body: unknown): unknown {
   return body;
 }
 
+/**
+ * 创建带 token 注入 + envelope 解包 + 401 处理的 axios 实例。
+ *
+ * 面向浏览器环境：默认 baseURL 由 `resolveBaseURL()` 求值（dev 变量 / 同源 origin /
+ * 空串）。模块级 `apiClient` 单例在首次 import 时固化 baseURL —— 当前 web-agent 为纯
+ * 静态导出（无 SSR 运行时），浏览器端首次求值时 origin 已确定，无需重算。
+ */
 export function createApiClient(baseURL?: string): AxiosInstance {
   const client = axios.create({
     baseURL: baseURL ?? resolveBaseURL(),
