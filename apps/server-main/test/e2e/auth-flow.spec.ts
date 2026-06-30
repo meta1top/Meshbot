@@ -10,6 +10,7 @@ import {
   ResponseInterceptor,
   traceIdMiddleware,
 } from "@meshbot/common";
+import { AssetsModule } from "@meshbot/assets";
 import { MainModule } from "@meshbot/main";
 import type { INestApplication } from "@nestjs/common";
 import { APP_GUARD, Reflector } from "@nestjs/core";
@@ -130,6 +131,19 @@ describe.each<[Mode]>([
         JwtModule.register({
           secret: "e2e-test-secret",
           signOptions: { expiresIn: "1h" },
+        }),
+        // MainModule 的 SkillMarketService 依赖全局 AssetsModule 的 AssetService；
+        // 本 e2e 不测资产，仅为满足 DI（minio 不可达由 onModuleInit 兜底告警）。
+        AssetsModule.forRoot({
+          provider: "minio",
+          minio: {
+            endPoint: "localhost",
+            port: 9000,
+            useSSL: false,
+            accessKey: "x",
+            secretKey: "x",
+            bucket: "test",
+          },
         }),
         MainModule.forRoot({ expiresDays: 7 }),
       ],
