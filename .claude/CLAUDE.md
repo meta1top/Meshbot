@@ -113,7 +113,7 @@ packages/
 - 数据库列名 snake_case（项目配置 `SnakeNamingStrategy`）
 - 公开方法包含中文 JSDoc
 - 禁止在 `if` 前一行放置注释（Biome 格式化会破坏结构）
-- 不新建 PRD 文档，设计决策记在对话或 commit 中
+- 不新建产品需求 / PRD 文档；设计决策记在对话或 commit 中。superpowers 流程产物（brainstorm 设计 spec、实施 plan）可写入 `docs/superpowers/`，属流程附件、不算 PRD
 
 ## 开发工作流
 
