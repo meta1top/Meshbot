@@ -62,11 +62,10 @@ RUN pnpm --filter @meshbot/types build \
 RUN pnpm --filter @meshbot/server-main deploy \
       --prod --legacy /out
 
-# 单独 copy dist、i18n 与 conf（deploy 不带源码 build 产物，只带 deps；
-# conf/application.yml 是无 Nacos 时的 YAML 兜底配置源）
+# 单独 copy dist 与 i18n（deploy 不带源码 build 产物，只带 deps）。
+# 配置走 Nacos（NACOS_* env 引导），不再随镜像内置 conf/application.yml，故不拷 conf。
 RUN cp -r /repo/apps/server-main/dist /out/dist \
  && cp -r /repo/apps/server-main/i18n /out/i18n \
- && cp -r /repo/apps/server-main/conf /out/conf \
  && cp -r /repo/libs/common/dist      /out/node_modules/@meshbot/common/dist \
  && cp -r /repo/libs/main/dist        /out/node_modules/@meshbot/main/dist \
  && cp -r /repo/libs/types/dist       /out/node_modules/@meshbot/types/dist \
