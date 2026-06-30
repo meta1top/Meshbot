@@ -24,8 +24,9 @@ jobs:
           # mac arm64 → dmg arm64
           - os: macos-14
             pkg: pkg:app
-          # mac x64 → dmg x64（独立 runner，原生模块在原生 arch 上 rebuild 最稳）
-          - os: macos-13
+          # mac x64 → dmg x64（独立 Intel runner，原生模块在原生 arch 上 rebuild 最稳）
+          # macos-13 已于 2025-12 被 GitHub 退役，换用标准层 Intel runner macos-15-intel
+          - os: macos-15-intel
             pkg: pkg:app
 
     runs-on: ${{ matrix.os }}
