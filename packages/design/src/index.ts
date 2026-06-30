@@ -81,6 +81,14 @@ export {
   SelectValue as UiSelectValue,
 } from "./components/ui/select";
 export {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "./components/ui/table";
+export {
   Tooltip,
   TooltipContent,
   TooltipProvider,

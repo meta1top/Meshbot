@@ -15,7 +15,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       <UiButton
         ref={ref}
         className={cn(
-          "h-10 rounded-md px-4 text-[14px] font-semibold tracking-[0.01em] transition-[filter,box-shadow,background-color] duration-150 ease-out focus-visible:ring-2 focus-visible:ring-ring/35 focus-visible:ring-offset-0 active:brightness-95",
+          "rounded-md text-[13px] font-semibold tracking-[0.01em] transition-[filter,box-shadow,background-color] duration-150 ease-out focus-visible:ring-2 focus-visible:ring-ring/35 focus-visible:ring-offset-0 active:brightness-95",
           className,
         )}
         {...props}
