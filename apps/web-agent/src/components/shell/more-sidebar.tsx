@@ -1,9 +1,9 @@
 "use client";
 
-import { cn } from "@meshbot/design";
 import { BarChart3, Clock } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { SidebarNavItem } from "@/components/shell/sidebar-nav-item";
 
 /**
  * 「更多」区左侧子导航（Slack 左对齐）：使用情况 + 定时任务。
@@ -38,20 +38,13 @@ export function MoreSidebar() {
       </div>
       <nav className="flex flex-col gap-0.5 px-2 py-2">
         {items.map((it) => (
-          <button
+          <SidebarNavItem
             key={it.key}
-            type="button"
+            icon={it.icon}
+            label={it.label}
+            active={it.active}
             onClick={() => router.push(it.href)}
-            className={cn(
-              "flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] transition-colors",
-              it.active
-                ? "bg-(--shell-accent) text-white"
-                : "text-white/75 hover:bg-white/12",
-            )}
-          >
-            {it.icon}
-            {it.label}
-          </button>
+          />
         ))}
       </nav>
     </div>

@@ -15,6 +15,8 @@ interface ToolPageProps {
   sidebar?: ReactNode | null;
   /** 透传滚动容器 ref（与 PageShell 一致）。 */
   scrollContainerRef?: RefObject<HTMLDivElement | null>;
+  /** 覆盖内容包裹层默认内边距（透传 PageShell.contentClassName）。 */
+  contentClassName?: string;
   /**
    * 内容体：直接渲染进 PageShell 既有的「全宽 + 标准内边距」包裹层。
    * 禁止再套 mx-auto、max-w-N、额外 p-N（重复内边距 + 多宽度的来源）；
@@ -36,12 +38,14 @@ export function ToolPage({
   tabs,
   sidebar,
   scrollContainerRef,
+  contentClassName,
   children,
 }: ToolPageProps) {
   return (
     <PageShell
       sidebar={sidebar}
       scrollContainerRef={scrollContainerRef}
+      contentClassName={contentClassName}
       header={<PageHeader title={title} actions={actions} tabs={tabs} />}
     >
       {children}

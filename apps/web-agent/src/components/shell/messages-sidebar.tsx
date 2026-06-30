@@ -13,6 +13,7 @@ import {
 } from "@/atoms/im";
 import { sessionsAtom, sessionsStatusAtom } from "@/atoms/sessions";
 import { loadSidebarAtom } from "@/atoms/sidebar";
+import { SidebarNavItem } from "@/components/shell/sidebar-nav-item";
 import { SidebarSection } from "@/components/shell/sidebar-section";
 import { SidebarSkeleton } from "@/components/shell/sidebar-skeleton";
 import { SessionListItem } from "@/components/sidebar/session-list-item";
@@ -45,9 +46,6 @@ export function MessagesSidebar() {
   const channels = conversations.filter((c) => c.type === "channel");
   const dms = conversations.filter((c) => c.type === "dm");
 
-  const rowBase =
-    "flex h-7 w-full items-center gap-2 rounded-md px-2 text-[13px] transition-colors";
-
   return (
     <div className="flex h-full flex-col bg-(--shell-sidebar) text-white">
       {/* Header */}
@@ -77,31 +75,26 @@ export function MessagesSidebar() {
                   c.id === currentConvId &&
                   searchParams.get("kind") !== "assistant";
                 return (
-                  <button
+                  <SidebarNavItem
                     key={c.id}
-                    type="button"
+                    active={active}
                     onClick={() => router.push(`/messages?id=${c.id}`)}
-                    className={cn(
-                      rowBase,
-                      active
-                        ? "bg-(--shell-accent) text-white"
-                        : "text-white/80 hover:bg-white/12",
-                    )}
-                  >
-                    {c.visibility === "private" ? (
-                      <Lock className="h-3.5 w-3.5 shrink-0 opacity-70" />
-                    ) : (
-                      <Hash className="h-3.5 w-3.5 shrink-0 opacity-70" />
-                    )}
-                    <span className="min-w-0 flex-1 truncate text-left">
-                      {c.name}
-                    </span>
-                    {c.unreadCount > 0 && (
-                      <span className="shrink-0 rounded-full bg-(--shell-accent) px-1.5 py-0.5 text-[10px] font-bold leading-none">
-                        {c.unreadCount > 99 ? "99+" : c.unreadCount}
-                      </span>
-                    )}
-                  </button>
+                    icon={
+                      c.visibility === "private" ? (
+                        <Lock className="opacity-70" />
+                      ) : (
+                        <Hash className="opacity-70" />
+                      )
+                    }
+                    label={c.name}
+                    trailing={
+                      c.unreadCount > 0 ? (
+                        <span className="shrink-0 rounded-full bg-(--shell-accent) px-1.5 py-0.5 text-[10px] font-bold leading-none">
+                          {c.unreadCount > 99 ? "99+" : c.unreadCount}
+                        </span>
+                      ) : undefined
+                    }
+                  />
                 );
               })}
             </SidebarSection>
@@ -116,32 +109,27 @@ export function MessagesSidebar() {
                 const peerId = c.peer?.userId ?? "";
                 const online = peerId !== "" && (presence[peerId] ?? false);
                 return (
-                  <button
+                  <SidebarNavItem
                     key={c.id}
-                    type="button"
+                    active={active}
                     onClick={() => router.push(`/messages?id=${c.id}`)}
-                    className={cn(
-                      rowBase,
-                      active
-                        ? "bg-(--shell-accent) text-white"
-                        : "text-white/80 hover:bg-white/12",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "h-2.5 w-2.5 shrink-0 rounded-full",
-                        online ? "bg-green-400" : "bg-white/30",
-                      )}
-                    />
-                    <span className="min-w-0 flex-1 truncate text-left">
-                      {c.peer?.displayName ?? ""}
-                    </span>
-                    {c.unreadCount > 0 && (
-                      <span className="shrink-0 rounded-full bg-(--shell-accent) px-1.5 py-0.5 text-[10px] font-bold leading-none">
-                        {c.unreadCount > 99 ? "99+" : c.unreadCount}
-                      </span>
-                    )}
-                  </button>
+                    icon={
+                      <span
+                        className={cn(
+                          "h-2.5 w-2.5 shrink-0 rounded-full",
+                          online ? "bg-green-400" : "bg-white/30",
+                        )}
+                      />
+                    }
+                    label={c.peer?.displayName ?? ""}
+                    trailing={
+                      c.unreadCount > 0 ? (
+                        <span className="shrink-0 rounded-full bg-(--shell-accent) px-1.5 py-0.5 text-[10px] font-bold leading-none">
+                          {c.unreadCount > 99 ? "99+" : c.unreadCount}
+                        </span>
+                      ) : undefined
+                    }
+                  />
                 );
               })}
             </SidebarSection>

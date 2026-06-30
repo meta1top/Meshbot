@@ -20,8 +20,8 @@ interface PageHeaderProps {
 export function PageHeader({ title, actions, tabs }: PageHeaderProps) {
   return (
     <div className="shrink-0 border-b border-border bg-(--shell-content)">
-      <div className="flex min-h-[52px] items-center justify-between gap-3 px-4 py-2.5 lg:px-6">
-        <h1 className="min-w-0 truncate text-lg font-semibold text-foreground">
+      <div className="flex h-11 items-center justify-between gap-3 px-4 lg:px-6">
+        <h1 className="min-w-0 truncate text-[15px] font-semibold text-foreground">
           {title}
         </h1>
         {actions && (

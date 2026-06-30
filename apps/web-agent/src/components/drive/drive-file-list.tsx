@@ -8,9 +8,21 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@meshbot/design";
 import { useSetAtom } from "jotai";
-import { File, Folder, Loader2, MoreHorizontal } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Folder,
+  Loader2,
+  MoreHorizontal,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -23,6 +35,8 @@ import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { DriveMoveModal } from "@/components/drive/drive-move-modal";
 import { DriveShareLinkModal } from "@/components/drive/drive-share-link-modal";
 import { DriveShareModal } from "@/components/drive/drive-share-modal";
+import { driveFileIcon } from "@/lib/drive-file-icon";
+import { type SortDir, type SortKey, sortNodes } from "@/lib/sort-nodes";
 import type { DriveNode } from "@/rest/drive";
 import { getFileUrl, useDeleteNode, useRenameNode } from "@/rest/drive";
 
@@ -74,19 +88,31 @@ interface DriveFileListProps {
 /** 列表骨架占位行。 */
 function FileListSkeleton() {
   return (
-    <div className="flex flex-col" aria-hidden>
-      {[0, 1, 2, 3, 4].map((i) => (
-        <div
-          key={i}
-          className="flex items-center gap-3 border-b border-border/40 px-3 py-2.5 last:border-0"
-        >
-          <div className="h-4 w-4 animate-pulse rounded bg-foreground/10 shrink-0" />
-          <div className="h-3.5 flex-1 animate-pulse rounded bg-foreground/10" />
-          <div className="h-3 w-12 animate-pulse rounded bg-foreground/10" />
-          <div className="h-3 w-20 animate-pulse rounded bg-foreground/10" />
-          <div className="h-5 w-5 animate-pulse rounded bg-foreground/10 shrink-0" />
-        </div>
-      ))}
+    <div
+      className="overflow-hidden rounded-md border border-border"
+      aria-hidden
+    >
+      <Table>
+        <TableBody>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <TableRow key={i}>
+              <TableCell>
+                <div className="flex items-center gap-2">
+                  <div className="h-4 w-4 shrink-0 animate-pulse rounded bg-foreground/10" />
+                  <div className="h-3.5 w-40 animate-pulse rounded bg-foreground/10" />
+                </div>
+              </TableCell>
+              <TableCell className="w-24 text-right">
+                <div className="ml-auto h-3 w-12 animate-pulse rounded bg-foreground/10" />
+              </TableCell>
+              <TableCell className="w-32 text-right">
+                <div className="ml-auto h-3 w-20 animate-pulse rounded bg-foreground/10" />
+              </TableCell>
+              <TableCell className="w-10" />
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </div>
   );
 }
@@ -268,14 +294,12 @@ function FileListRow({
     }
   }
 
+  const { Icon, colorClass } = driveFileIcon(node.name, node.type);
+
   return (
     <>
-      <div
-        role="row"
-        className={cn(
-          "group flex items-center gap-3 border-b border-border/40 px-3 py-2.5 last:border-0 transition-colors",
-          "hover:bg-muted/50 cursor-pointer select-none",
-        )}
+      <TableRow
+        className="group cursor-pointer select-none"
         onClick={handleRowClick}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
@@ -286,102 +310,102 @@ function FileListRow({
         tabIndex={0}
         aria-label={node.name}
       >
-        {/* 类型图标 */}
-        {isFolder ? (
-          <Folder className="h-4 w-4 shrink-0 text-amber-500" />
-        ) : (
-          <File className="h-4 w-4 shrink-0 text-muted-foreground" />
-        )}
-
-        {/* 名称 */}
-        <span
-          className={cn(
-            "flex-1 truncate text-sm",
-            isFolder ? "font-medium" : "text-foreground",
-          )}
-          title={node.name}
-        >
-          {node.name}
-        </span>
+        {/* 图标 + 名称 */}
+        <TableCell className="max-w-0">
+          <div className="flex min-w-0 items-center gap-2">
+            <Icon className={cn("h-4 w-4 shrink-0", colorClass)} />
+            <span
+              className={cn("truncate", isFolder && "font-medium")}
+              title={node.name}
+            >
+              {node.name}
+            </span>
+          </div>
+        </TableCell>
 
         {/* 大小 */}
-        <span className="w-16 text-right text-xs text-muted-foreground shrink-0">
+        <TableCell className="w-24 text-right text-[12px] text-muted-foreground">
           {isFolder ? "—" : formatBytes(node.sizeBytes)}
-        </span>
+        </TableCell>
 
         {/* 修改时间 */}
-        <span className="w-20 text-right text-xs text-muted-foreground shrink-0">
+        <TableCell className="w-32 text-right text-[12px] text-muted-foreground">
           {formatDate(node.updatedAt)}
-        </span>
+        </TableCell>
 
         {/* 操作菜单：按 permission 显隐菜单项 */}
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            asChild
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-          >
-            <button
-              type="button"
-              className={cn(
-                "shrink-0 rounded p-0.5 transition-opacity",
-                "opacity-0 group-hover:opacity-100 focus:opacity-100",
-                "hover:bg-muted text-muted-foreground",
-              )}
-              aria-label="更多操作"
+        <TableCell className="w-10 text-right">
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              asChild
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
             >
-              <MoreHorizontal className="h-4 w-4" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-            {/* editor / owner 才能重命名、移动、删除；只读模式下隐藏 */}
-            {canEdit && !readOnly && (
-              <>
-                <DropdownMenuItem onSelect={() => setRenameOpen(true)}>
-                  {t("menuRename")}
+              <button
+                type="button"
+                className={cn(
+                  "shrink-0 rounded p-0.5 transition-opacity",
+                  "opacity-0 group-hover:opacity-100 focus:opacity-100",
+                  "hover:bg-muted text-muted-foreground",
+                )}
+                aria-label="更多操作"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* editor / owner 才能重命名、移动、删除；只读模式下隐藏 */}
+              {canEdit && !readOnly && (
+                <>
+                  <DropdownMenuItem onSelect={() => setRenameOpen(true)}>
+                    {t("menuRename")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setMoveOpen(true)}>
+                    {t("menuMove")}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      setDeleteError(null);
+                      setDeleteOpen(true);
+                    }}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    {t("menuDelete")}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
+              {/* 共享仅 owner 可见；只读模式下隐藏 */}
+              {isOwner && !readOnly && (
+                <DropdownMenuItem onSelect={() => setShareOpen(true)}>
+                  {t("menuShare")}
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setMoveOpen(true)}>
-                  {t("menuMove")}
+              )}
+              {/* 公开链接仅 owner 且 file 行可见；只读模式下隐藏 */}
+              {isOwner && !readOnly && !isFolder && (
+                <DropdownMenuItem onSelect={() => setShareLinkOpen(true)}>
+                  {t("menuShareLink")}
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onSelect={() => {
-                    setDeleteError(null);
-                    setDeleteOpen(true);
-                  }}
-                  className="text-destructive focus:text-destructive"
-                >
-                  {t("menuDelete")}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-              </>
-            )}
-            {/* 共享仅 owner 可见；只读模式下隐藏 */}
-            {isOwner && !readOnly && (
-              <DropdownMenuItem onSelect={() => setShareOpen(true)}>
-                {t("menuShare")}
-              </DropdownMenuItem>
-            )}
-            {/* 公开链接仅 owner 且 file 行可见；只读模式下隐藏 */}
-            {isOwner && !readOnly && !isFolder && (
-              <DropdownMenuItem onSelect={() => setShareLinkOpen(true)}>
-                {t("menuShareLink")}
-              </DropdownMenuItem>
-            )}
-            {/* 下载 / 预览：仅文件可用，所有权限可见 */}
-            {!isFolder && (
-              <>
-                <DropdownMenuItem onSelect={() => void handlePreview()}>
-                  {t("menuPreview")}
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => void handleDownload()}>
-                  {t("menuDownload")}
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+              )}
+              {/* 下载 / 预览：仅文件可用，所有权限可见 */}
+              {!isFolder && (
+                <>
+                  <DropdownMenuItem onSelect={() => void handlePreview()}>
+                    {t("menuPreview")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => void handleDownload()}>
+                    {t("menuDownload")}
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </TableCell>
+      </TableRow>
 
       {/* 重命名弹窗 */}
       <RenameDialog
@@ -445,6 +469,40 @@ function FileListRow({
   );
 }
 
+/** 可排序列头按钮：标题 + 当前排序方向箭头（右对齐列箭头在左）。 */
+function SortHead({
+  label,
+  active,
+  dir,
+  align,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  dir: SortDir;
+  align?: "right";
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center gap-1 transition-colors hover:text-foreground",
+        align === "right" && "flex-row-reverse",
+      )}
+    >
+      {label}
+      {active &&
+        (dir === "asc" ? (
+          <ArrowUp className="h-3 w-3" />
+        ) : (
+          <ArrowDown className="h-3 w-3" />
+        ))}
+    </button>
+  );
+}
+
 /**
  * 网盘文件列表：展示节点列表，支持进入文件夹与文件预览。
  * loading 时显示骨架占位；空列表显示空态提示。
@@ -458,6 +516,17 @@ export function DriveFileList({
   className,
 }: DriveFileListProps) {
   const t = useTranslations("drive");
+  const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
 
   if (loading) {
     return <FileListSkeleton />;
@@ -472,34 +541,59 @@ export function DriveFileList({
     );
   }
 
+  const sorted = sortNodes(nodes, sortKey, sortDir);
+
   return (
     <div
       className={cn(
-        "rounded-lg border border-border overflow-hidden",
+        "overflow-hidden rounded-md border border-border",
         className,
       )}
-      role="table"
-      aria-label={t("fileListLabel")}
     >
-      {/* 表头 */}
-      <div className="flex items-center gap-3 border-b border-border bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground">
-        <span className="w-4 shrink-0" />
-        <span className="flex-1">{t("colName")}</span>
-        <span className="w-16 text-right shrink-0">{t("colSize")}</span>
-        <span className="w-20 text-right shrink-0">{t("colModified")}</span>
-        <span className="w-5 shrink-0" />
-      </div>
-
-      {/* 文件/文件夹行列表 */}
-      {nodes.map((node) => (
-        <FileListRow
-          key={node.id}
-          node={node}
-          parentId={parentId}
-          onEnterFolder={onEnterFolder}
-          readOnly={readOnly}
-        />
-      ))}
+      <Table aria-label={t("fileListLabel")}>
+        <TableHeader>
+          <TableRow className="bg-muted/30 hover:bg-muted/30">
+            <TableHead>
+              <SortHead
+                label={t("colName")}
+                active={sortKey === "name"}
+                dir={sortDir}
+                onClick={() => toggleSort("name")}
+              />
+            </TableHead>
+            <TableHead className="w-24 text-right">
+              <SortHead
+                label={t("colSize")}
+                active={sortKey === "size"}
+                dir={sortDir}
+                align="right"
+                onClick={() => toggleSort("size")}
+              />
+            </TableHead>
+            <TableHead className="w-32 text-right">
+              <SortHead
+                label={t("colModified")}
+                active={sortKey === "modified"}
+                dir={sortDir}
+                align="right"
+                onClick={() => toggleSort("modified")}
+              />
+            </TableHead>
+            <TableHead className="w-10" />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {sorted.map((node) => (
+            <FileListRow
+              key={node.id}
+              node={node}
+              parentId={parentId}
+              onEnterFolder={onEnterFolder}
+              readOnly={readOnly}
+            />
+          ))}
+        </TableBody>
+      </Table>
     </div>
   );
 }

@@ -15,7 +15,7 @@ export function SessionHeader({ sessionId }: { sessionId: string }) {
         {/* 标题前助手标识（与侧栏会话项同款 Sparkles，统一视觉） */}
         <Sparkles className="h-4 w-4 shrink-0 text-(--shell-accent)" />
         {session ? (
-          <span className="truncate text-[13px] font-semibold text-foreground">
+          <span className="truncate text-[15px] font-semibold text-foreground">
             {session.title}
           </span>
         ) : (

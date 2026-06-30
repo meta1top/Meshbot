@@ -432,7 +432,7 @@ export function ImConversationHeader() {
             title={online ? t("online") : undefined}
           />
         )}
-        <span className="truncate text-[13px] font-semibold text-foreground">
+        <span className="truncate text-[15px] font-semibold text-foreground">
           {name}
         </span>
         {isPrivateChannel && (

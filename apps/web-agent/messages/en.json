@@ -134,7 +134,7 @@
       "assistant": "Assistant",
       "skills": "Skills",
       "more": "More",
-      "drive": "Drive"
+      "drive": "Files"
     },
     "search": {
       "placeholder": "Search meshbot"
@@ -679,7 +679,7 @@
   "sourceGithub": "",
   "orgSwitchFailed": "",
   "drive": {
-    "title": "Drive",
+    "title": "Files",
     "rootLabel": "My Drive",
     "tabMine": "My Files",
     "tabShared": "Shared with Me",

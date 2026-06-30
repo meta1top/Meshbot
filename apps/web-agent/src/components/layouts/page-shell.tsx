@@ -15,6 +15,8 @@ interface PageShellProps {
   /** 暴露滚动容器 ref（分页锚定等 page 内部用）。 */
   scrollContainerRef?: RefObject<HTMLDivElement | null>;
   className?: string;
+  /** 覆盖内容包裹层默认内边距（p-4 lg:px-6）；文件浏览器式贴边页传 "p-0"。 */
+  contentClassName?: string;
   children: ReactNode;
 }
 
@@ -27,6 +29,7 @@ export function PageShell({
   header,
   scrollContainerRef,
   className,
+  contentClassName,
   children,
 }: PageShellProps) {
   const t = useTranslations("appShell");
@@ -49,7 +52,7 @@ export function PageShell({
         <aside
           ref={sidebarRef}
           className={cn(
-            "z-40 flex flex-col w-[260px] shrink-0 overflow-hidden bg-(--shell-sidebar) transition-transform duration-200",
+            "z-40 flex flex-col w-[240px] shrink-0 overflow-hidden bg-(--shell-sidebar) transition-transform duration-200",
             "absolute top-0 bottom-1.5 left-0 rounded-(--shell-radius) shadow-2xl",
             sidebarDrawerOpen ? "translate-x-0" : "-translate-x-full",
             "md:static md:z-auto md:w-[240px] md:translate-x-0 md:rounded-r-none md:shadow-none md:transition-none",
@@ -74,7 +77,12 @@ export function PageShell({
             className,
           )}
         >
-          <div className="flex w-full flex-1 flex-col p-4 lg:px-6">
+          <div
+            className={cn(
+              "flex w-full flex-1 flex-col",
+              contentClassName ?? "p-4 lg:px-6",
+            )}
+          >
             {children}
           </div>
         </div>

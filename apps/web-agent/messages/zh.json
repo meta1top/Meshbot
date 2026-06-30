@@ -134,7 +134,7 @@
       "assistant": "助手",
       "skills": "技能",
       "more": "更多",
-      "drive": "云端文件"
+      "drive": "文件"
     },
     "search": {
       "placeholder": "搜索 meshbot"
@@ -679,7 +679,7 @@
   "sourceGithub": "",
   "orgSwitchFailed": "",
   "drive": {
-    "title": "网盘",
+    "title": "文件",
     "rootLabel": "我的网盘",
     "tabMine": "我的文件",
     "tabShared": "共享给我的",

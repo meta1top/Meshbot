@@ -10,6 +10,7 @@ import {
   DriveBreadcrumb,
 } from "@/components/drive/drive-breadcrumb";
 import { DriveFileList } from "@/components/drive/drive-file-list";
+import { DriveSidebar } from "@/components/drive/drive-sidebar";
 import { DriveUploadArea } from "@/components/drive/drive-upload-area";
 import { ToolPage } from "@/components/layouts/tool-page";
 import {
@@ -140,13 +141,16 @@ function MineContent({
   const { data: nodes = [], isLoading } = useDriveNodes(parentId);
 
   return (
-    <div className="flex flex-col gap-3">
-      <DriveBreadcrumb pathStack={pathStack} onJump={onJump} />
+    <div className="flex flex-col">
+      <div className="border-b border-border px-4 py-2">
+        <DriveBreadcrumb pathStack={pathStack} onJump={onJump} />
+      </div>
       <DriveFileList
         nodes={nodes}
         loading={isLoading}
         parentId={parentId}
         onEnterFolder={onEnterFolder}
+        className="rounded-none border-0"
       />
       {/* 上传区：提供拖拽蒙层 + 进度浮窗，input ref 由父层上传按钮触发 */}
       <DriveUploadArea parentId={parentId} inputRef={uploadInputRef} />
@@ -169,6 +173,7 @@ function SharedContent() {
       parentId={null}
       onEnterFolder={handleEnterFolder}
       readOnly={true}
+      className="rounded-none border-0"
     />
   );
 }
@@ -215,33 +220,9 @@ export default function DrivePage() {
 
   return (
     <ToolPage
-      title={t("title")}
-      tabs={
-        <div className="flex gap-1">
-          <button
-            type="button"
-            onClick={() => handleTabChange("mine")}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              isMine
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {t("tabMine")}
-          </button>
-          <button
-            type="button"
-            onClick={() => handleTabChange("shared")}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              !isMine
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {t("tabShared")}
-          </button>
-        </div>
-      }
+      title={isMine ? t("tabMine") : t("tabShared")}
+      contentClassName="p-0"
+      sidebar={<DriveSidebar activeTab={tab} onSelect={handleTabChange} />}
       actions={
         isMine ? (
           <div className="flex items-center gap-2">
