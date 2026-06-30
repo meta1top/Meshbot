@@ -23,8 +23,10 @@ FROM node:22-alpine AS deps
 RUN corepack enable
 WORKDIR /repo
 
-# 只 copy lockfile + workspace 元数据 + 各 package.json，最大化 layer 缓存
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+# 只 copy lockfile + workspace 元数据 + 各 package.json，最大化 layer 缓存。
+# .pnpmfile.cjs 必须一并 copy：lockfile 记录其 pnpmfileChecksum，缺它会导致
+# frozen install 报 ERR_PNPM_LOCKFILE_CONFIG_MISMATCH。
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .pnpmfile.cjs ./
 COPY apps/server-main/package.json ./apps/server-main/
 COPY libs/common/package.json      ./libs/common/
 COPY libs/main/package.json        ./libs/main/

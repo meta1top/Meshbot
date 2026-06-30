@@ -18,7 +18,9 @@ RUN apk add --no-cache python3 make g++ libc6-compat \
  && corepack enable
 WORKDIR /repo
 
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+# .pnpmfile.cjs 必须一并 copy：lockfile 记录其 pnpmfileChecksum，缺它会导致
+# frozen install 报 ERR_PNPM_LOCKFILE_CONFIG_MISMATCH。
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .pnpmfile.cjs ./
 COPY apps/server-agent/package.json ./apps/server-agent/
 COPY libs/common/package.json       ./libs/common/
 COPY libs/agent/package.json        ./libs/agent/
