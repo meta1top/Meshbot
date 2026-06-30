@@ -18,12 +18,15 @@ RUN apk add --no-cache python3 make g++ libc6-compat \
  && corepack enable
 WORKDIR /repo
 
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+# .pnpmfile.cjs 必须一并 copy：lockfile 记录其 pnpmfileChecksum，缺它会导致
+# frozen install 报 ERR_PNPM_LOCKFILE_CONFIG_MISMATCH。
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .pnpmfile.cjs ./
 COPY apps/server-agent/package.json ./apps/server-agent/
 COPY libs/common/package.json       ./libs/common/
 COPY libs/agent/package.json        ./libs/agent/
 COPY libs/types/package.json        ./libs/types/
 COPY libs/types-agent/package.json  ./libs/types-agent/
+COPY libs/assets/package.json       ./libs/assets/
 
 RUN pnpm install --frozen-lockfile
 
@@ -34,11 +37,13 @@ COPY libs/common       ./libs/common
 COPY libs/agent        ./libs/agent
 COPY libs/types        ./libs/types
 COPY libs/types-agent  ./libs/types-agent
+COPY libs/assets       ./libs/assets
 COPY apps/server-agent ./apps/server-agent
 
 RUN pnpm --filter @meshbot/types build \
  && pnpm --filter @meshbot/common build \
  && pnpm --filter @meshbot/types-agent build \
+ && pnpm --filter @meshbot/assets build \
  && pnpm --filter @meshbot/agent build \
  && pnpm --filter @meshbot/server-agent build
 
@@ -52,7 +57,8 @@ RUN cp -r /repo/apps/server-agent/dist /out/dist \
  && cp -r /repo/libs/common/dist       /out/node_modules/@meshbot/common/dist \
  && cp -r /repo/libs/agent/dist        /out/node_modules/@meshbot/agent/dist \
  && cp -r /repo/libs/types/dist        /out/node_modules/@meshbot/types/dist \
- && cp -r /repo/libs/types-agent/dist  /out/node_modules/@meshbot/types-agent/dist
+ && cp -r /repo/libs/types-agent/dist  /out/node_modules/@meshbot/types-agent/dist \
+ && cp -r /repo/libs/assets/dist       /out/node_modules/@meshbot/assets/dist
 
 # ============ Stage 3: runtime ============================================
 FROM node:22-alpine AS runtime

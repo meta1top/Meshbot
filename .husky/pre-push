@@ -1,0 +1,23 @@
+#!/bin/sh
+set -e
+
+# pre-push：推送前的最后一道本地门禁，跑 CI 里"快的那一半"静态检查，
+# 把红代码挡在 main 之外。慢的 test / build 留给 CI（带 service 容器）。
+#
+# 为什么不复用 pre-commit：pre-commit 的 lint-staged 只查"本次提交涉及的文件"，
+# 像"工具升级后某个老文件变红"这类回归它查不到（这正是本次 14 个 lint error
+# 溜进 main 的原因）。这里跑全仓 `pnpm lint`，才能堵住这个洞。
+
+echo "[pre-push] 1/4 全仓 biome lint..."
+pnpm lint
+
+echo "[pre-push] 2/4 typecheck..."
+pnpm typecheck
+
+echo "[pre-push] 3/4 静态围栏（strict，与 CI 一致）..."
+pnpm check:strict
+
+echo "[pre-push] 4/4 i18n key 对齐..."
+pnpm sync:locales -- --check
+
+echo "[pre-push] ✓ 全部通过，开始推送"

@@ -8,6 +8,7 @@ import {
   WsExceptionFilter,
   traceIdMiddleware,
 } from "@meshbot/common";
+import { AssetsModule } from "@meshbot/assets";
 import { MainModule, REDIS_CLIENT } from "@meshbot/main";
 import { IM_WS_EVENTS, IM_WS_NAMESPACE } from "@meshbot/types";
 import type { ConversationSummary, PresenceState } from "@meshbot/types";
@@ -126,6 +127,19 @@ describe("server-main IM e2e", () => {
         }),
         TestEmailModule,
         EventEmitterModule.forRoot(),
+        // MainModule 的 SkillMarketService 依赖全局 AssetsModule 的 AssetService；
+        // 本 e2e 不测资产，仅为满足 DI（minio 不可达由 onModuleInit 兜底告警）。
+        AssetsModule.forRoot({
+          provider: "minio",
+          minio: {
+            endPoint: "localhost",
+            port: 9000,
+            useSSL: false,
+            accessKey: "x",
+            secretKey: "x",
+            bucket: "test",
+          },
+        }),
         MainModule.forRoot({ expiresDays: 7 }),
       ],
       controllers: [AuthController, OrgController, ImController],
@@ -454,6 +468,9 @@ describe("server-main IM e2e", () => {
       // A 连接
       const sockA = connectIm(tokenA);
       await waitForEvent(sockA, "connect");
+      // presence 上线已改为事件驱动：生产中 server-agent 连上即 emit im.presence_set，
+      // gateway 据此 setOnline 并向 org 房间广播。测试显式补发一次，触发对 B 的上线广播。
+      sockA.emit(IM_WS_EVENTS.presenceSet, { online: true });
 
       try {
         // B 收到 A 上线通知

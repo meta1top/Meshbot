@@ -45,6 +45,9 @@ jobs:
     env:
       DATABASE_URL: postgresql://meshbot:meshbot@localhost:5432/meshbot_main
       REDIS_URL: redis://localhost:6379
+      # 配了 REDIS_URL 后 snowflake 多副本守卫会 fail-fast 要求显式 nodeId；
+      # CI runner 是单节点，显式声明 0 满足守卫（否则 server-agent 单测全炸）。
+      MESHBOT_NODE_ID: 0
       # JWT_SECRET 由测试代码本地 mock，无需 GitHub secret
       NODE_ENV: test
 
@@ -89,7 +92,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [server-main, server-agent]
+        # server-agent 不是发布物（生产形态是 Electron 内嵌 server，Docker 仅用于
+        # 本地/调试），无需在 CI smoke 其镜像；只 smoke 真正容器化部署的 server-main。
+        target: [server-main]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3

@@ -8,6 +8,7 @@ import {
   WsExceptionFilter,
   traceIdMiddleware,
 } from "@meshbot/common";
+import { AssetsModule } from "@meshbot/assets";
 import { MainModule, REDIS_CLIENT } from "@meshbot/main";
 import type { ChannelMember, ConversationSummary } from "@meshbot/types";
 import type { INestApplication } from "@nestjs/common";
@@ -101,6 +102,19 @@ describe("server-main 私有频道 e2e", () => {
         }),
         TestEmailModule,
         EventEmitterModule.forRoot(),
+        // MainModule 的 SkillMarketService 依赖全局 AssetsModule 的 AssetService；
+        // 本 e2e 不测资产，仅为满足 DI（minio 不可达由 onModuleInit 兜底告警）。
+        AssetsModule.forRoot({
+          provider: "minio",
+          minio: {
+            endPoint: "localhost",
+            port: 9000,
+            useSSL: false,
+            accessKey: "x",
+            secretKey: "x",
+            bucket: "test",
+          },
+        }),
         MainModule.forRoot({ expiresDays: 7 }),
       ],
       controllers: [AuthController, OrgController, ImController],
