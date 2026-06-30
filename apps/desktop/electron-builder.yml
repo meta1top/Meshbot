@@ -43,6 +43,14 @@ mac:
   target:
     - dmg
   artifactName: ${productName}-${version}-${arch}.${ext}
+  # 代码签名 + 公证（Developer ID Application）。证书经 CSC_LINK/CSC_KEY_PASSWORD env
+  # 注入；公证经 APPLE_ID/APPLE_APP_SPECIFIC_PASSWORD/APPLE_TEAM_ID env（notarize: true）。
+  # 这些 env 缺失时 electron-builder 自动跳过签名/公证（本地 dir 构建不受影响）。
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  notarize: true
 win:
   icon: build/icon.ico
   target:

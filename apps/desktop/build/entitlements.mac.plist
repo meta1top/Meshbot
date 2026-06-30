@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Electron/V8 JIT 必需 -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <!-- 本应用 fork 内置 server-agent 子进程 + 加载 better-sqlite3/bcrypt 原生模块，
+       关闭库校验，否则 hardened runtime 下会拒绝加载这些 .node -->
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+  <!-- 子进程用 ELECTRON_RUN_AS_NODE 等环境变量启动 -->
+  <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+  <true/>
+</dict>
+</plist>

@@ -62,7 +62,16 @@ fs.mkdirSync(buildDest, { recursive: true });
 for (const icon of ["icon.icns", "icon.ico", "icon.png"]) {
   fs.copyFileSync(path.join(buildSrc, icon), path.join(buildDest, icon));
 }
-console.log("[stage] copied build/ icons -> release-stage/build");
+// mac 签名/公证用的 hardened runtime entitlements（electron-builder.yml 的
+// entitlements 路径相对 projectDir=release-stage，故须拷进 release-stage/build）。
+const entitlements = "entitlements.mac.plist";
+if (fs.existsSync(path.join(buildSrc, entitlements))) {
+  fs.copyFileSync(
+    path.join(buildSrc, entitlements),
+    path.join(buildDest, entitlements),
+  );
+}
+console.log("[stage] copied build/ resources -> release-stage/build");
 
 // electron 是 devDependency，--prod deploy 不会装进 release-stage/node_modules；
 // electron-builder 需要一个「固定」的 electron 版本号去下载对应二进制（package.json
