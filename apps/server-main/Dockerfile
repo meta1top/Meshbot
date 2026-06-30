@@ -51,11 +51,14 @@ RUN pnpm --filter @meshbot/types build \
  && pnpm --filter @meshbot/main build \
  && pnpm --filter @meshbot/server-main build
 
-# 用 pnpm deploy 提取 server-main 的 prod 闭包到 /out
-# --legacy 保留 node_modules/.pnpm 软链结构；--no-optional 不带 typeorm 等
-# peer / optional 拉进来的其它 db 驱动（如 better-sqlite3、@swc/core 等）
+# 用 pnpm deploy 提取 server-main 的 prod 闭包到 /out。
+# --legacy 保留 node_modules/.pnpm 软链结构。
+# 注意：不能加 --no-optional —— 它会触发 pnpm deploy bug（被排除的 optional 依赖
+# @pkgjs/parseargs / class-transformer 仍被引用 → ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY）。
+# typeorm 的无关 native 驱动（better-sqlite3 等）已在根 .pnpmfile.cjs 里从其 optional
+# peer 声明中剥离，故不加 --no-optional 也不会被拉进本镜像。
 RUN pnpm --filter @meshbot/server-main deploy \
-      --prod --legacy --no-optional /out
+      --prod --legacy /out
 
 # 单独 copy dist、i18n 与 conf（deploy 不带源码 build 产物，只带 deps；
 # conf/application.yml 是无 Nacos 时的 YAML 兜底配置源）
