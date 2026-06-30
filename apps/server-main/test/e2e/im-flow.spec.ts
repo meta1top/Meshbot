@@ -345,15 +345,21 @@ describe("server-main IM e2e", () => {
         senderId: string;
       }>(sockB, IM_WS_EVENTS.message);
 
-      // A 发消息
-      sockA.emit(IM_WS_EVENTS.send, {
-        conversationId,
-        content: "hello from A",
-      });
-
-      const received = await messagePromise;
-      expect(received.content).toBe("hello from A");
-      expect(received.conversationId).toBe(conversationId);
+      // A 发消息：周期性重发直到 B 收到。B 的 onAuthedConnect 异步 join conv 房间，
+      // 可能晚于 connect 事件；重发规避此房间加入竞态（CI 并行负载下 flaky 主因）。
+      const resendMessage = setInterval(() => {
+        sockA.emit(IM_WS_EVENTS.send, {
+          conversationId,
+          content: "hello from A",
+        });
+      }, 250);
+      try {
+        const received = await messagePromise;
+        expect(received.content).toBe("hello from A");
+        expect(received.conversationId).toBe(conversationId);
+      } finally {
+        clearInterval(resendMessage);
+      }
     } finally {
       sockA.disconnect();
       sockB.disconnect();
@@ -468,13 +474,17 @@ describe("server-main IM e2e", () => {
       // A 连接
       const sockA = connectIm(tokenA);
       await waitForEvent(sockA, "connect");
-      // presence 上线已改为事件驱动：生产中 server-agent 连上即 emit im.presence_set，
-      // gateway 据此 setOnline 并向 org 房间广播。测试显式补发一次，触发对 B 的上线广播。
-      sockA.emit(IM_WS_EVENTS.presenceSet, { online: true });
+      // presence 上线事件驱动（presence_set）：生产中 server-agent 连上即上报。B 的
+      // onAuthedConnect 异步 join org 房间、可能晚于其 connect；周期性重发 presence_set
+      // 直到 B 收到上线，规避此房间加入竞态（CI 并行负载下 flaky 主因）。
+      const resendPresence = setInterval(() => {
+        sockA.emit(IM_WS_EVENTS.presenceSet, { online: true });
+      }, 250);
 
       try {
         // B 收到 A 上线通知
         const onlineEvent = await Promise.race([onlinePromise, onlineTimeout]);
+        clearInterval(resendPresence);
         expect(onlineEvent.userId).toBe(userIdA);
         expect(onlineEvent.online).toBe(true);
 
@@ -504,6 +514,7 @@ describe("server-main IM e2e", () => {
         expect(offlineEvent.userId).toBe(userIdA);
         expect(offlineEvent.online).toBe(false);
       } finally {
+        clearInterval(resendPresence);
         if (sockA.connected) sockA.disconnect();
       }
     } finally {
