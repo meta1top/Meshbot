@@ -50,4 +50,13 @@ describe("port-file", () => {
       pid: 7,
     });
   });
+
+  it("readPortInfo 损坏 JSON 返回 null", () => {
+    writeFileSync(path.join(dir, "agent.port"), "{ invalid json");
+    expect(readPortInfo(dir)).toBeNull();
+  });
+
+  it("waitForPortFile 超时抛错", async () => {
+    await expect(waitForPortFile(dir, 300)).rejects.toThrow("超时");
+  });
 });
