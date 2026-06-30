@@ -59,20 +59,24 @@ export async function startAgentRuntime(): Promise<{ port: number }> {
   });
 
   const portPromise = new Promise<number>((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error("agent 未在超时内上报监听端口")),
-      READINESS_TIMEOUT_MS,
-    );
-    child?.on("message", (msg: unknown) => {
+    const proc = child;
+    let timer: ReturnType<typeof setTimeout>;
+    const handler = (msg: unknown) => {
       if (
         msg &&
         typeof msg === "object" &&
         (msg as { type?: string }).type === "meshbot:listening"
       ) {
         clearTimeout(timer);
+        proc?.off("message", handler);
         resolve((msg as { port: number }).port);
       }
-    });
+    };
+    timer = setTimeout(() => {
+      proc?.off("message", handler);
+      reject(new Error("agent 未在超时内上报监听端口"));
+    }, READINESS_TIMEOUT_MS);
+    proc?.on("message", handler);
   });
 
   const port = await Promise.race([portPromise, exitPromise]);
