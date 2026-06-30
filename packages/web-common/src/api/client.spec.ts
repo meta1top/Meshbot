@@ -3,6 +3,7 @@ import {
   clearAccessToken,
   getAccessToken,
   getActiveAccountId,
+  getBrowserApiBaseUrl,
   listAccounts,
   removeAccount,
   setActiveAccount,
@@ -214,5 +215,46 @@ describe("多账号 token store", () => {
     expect(getAccessToken()).toBe("tok-2");
     setActiveAccount("u1");
     expect(getAccessToken()).toBe("tok-1");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getBrowserApiBaseUrl 同源 / 开发解析单测
+// 测试环境为 node（无 jsdom），手动 stub globalThis.window 与 NEXT_PUBLIC 变量。
+// ---------------------------------------------------------------------------
+describe("getBrowserApiBaseUrl（同源 / 开发解析）", () => {
+  const origWindow = globalThis.window;
+  const origEnv = process.env.NEXT_PUBLIC_SERVER_AGENT_URL;
+
+  afterEach(() => {
+    // biome-ignore lint/suspicious/noExplicitAny: test stub
+    (globalThis as any).window = origWindow;
+    if (origEnv === undefined) delete process.env.NEXT_PUBLIC_SERVER_AGENT_URL;
+    else process.env.NEXT_PUBLIC_SERVER_AGENT_URL = origEnv;
+  });
+
+  it("设置 NEXT_PUBLIC_SERVER_AGENT_URL（开发）时优先返回该地址", () => {
+    process.env.NEXT_PUBLIC_SERVER_AGENT_URL = "http://localhost:7727";
+    // biome-ignore lint/suspicious/noExplicitAny: test stub
+    (globalThis as any).window = {
+      location: { origin: "http://127.0.0.1:9999" },
+    };
+    expect(getBrowserApiBaseUrl()).toBe("http://localhost:7727");
+  });
+
+  it("无 dev 变量、有 window 时返回当前页面 origin（同源）", () => {
+    delete process.env.NEXT_PUBLIC_SERVER_AGENT_URL;
+    // biome-ignore lint/suspicious/noExplicitAny: test stub
+    (globalThis as any).window = {
+      location: { origin: "http://127.0.0.1:7727" },
+    };
+    expect(getBrowserApiBaseUrl()).toBe("http://127.0.0.1:7727");
+  });
+
+  it("无 dev 变量、无 window（SSR）时返回空串", () => {
+    delete process.env.NEXT_PUBLIC_SERVER_AGENT_URL;
+    // biome-ignore lint/suspicious/noExplicitAny: test stub
+    (globalThis as any).window = undefined;
+    expect(getBrowserApiBaseUrl()).toBe("");
   });
 });

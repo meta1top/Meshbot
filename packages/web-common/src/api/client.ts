@@ -8,17 +8,22 @@ const TOKEN_KEY = "meshbot_access_token";
 /** 多账号 store 的 localStorage key。值为 JSON 序列化的 AccountsStore。 */
 const ACCOUNTS_KEY = "meshbot_accounts";
 
-const DEFAULT_API_URL = "http://127.0.0.1:3100";
-
+/**
+ * 解析后端（server-agent）基址。
+ *
+ * - 开发：web-agent 跑在独立 Next dev server，与 server-agent 跨端口，
+ *   通过构建期变量 `NEXT_PUBLIC_SERVER_AGENT_URL` 显式指向后端。
+ * - 生产：前端由 server-agent 同源伺服（静态导出不带该变量），用当前页面
+ *   `window.location.origin`，API / WS 全部相对到伺服源——后端端口随便变都成立。
+ * - SSR / 构建期（无 window 且无 dev 变量）：返回空串（静态导出下不会发起真实请求）。
+ */
 function resolveBaseURL(): string {
-  if (typeof window === "undefined") return DEFAULT_API_URL;
-  const { protocol, hostname } = window.location;
-  if (protocol === "http:" || protocol === "https:") {
-    const apiHost =
-      hostname === "localhost" || hostname === "[::1]" ? "127.0.0.1" : hostname;
-    return `${protocol}//${apiHost}:3100`;
+  const devUrl = process.env.NEXT_PUBLIC_SERVER_AGENT_URL;
+  if (devUrl) return devUrl;
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return window.location.origin;
   }
-  return DEFAULT_API_URL;
+  return "";
 }
 
 export function getBrowserApiBaseUrl(): string {
