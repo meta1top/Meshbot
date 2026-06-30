@@ -11,6 +11,12 @@ const nextConfig: NextConfig = {
     "@meshbot/types-agent",
   ],
   allowedDevOrigins: ["127.0.0.1", "localhost"],
+  env: isDev
+    ? {
+        NEXT_PUBLIC_SERVER_AGENT_URL:
+          process.env.NEXT_PUBLIC_SERVER_AGENT_URL ?? "http://localhost:7727",
+      }
+    : {},
 } as NextConfig;
 
 export default nextConfig;
