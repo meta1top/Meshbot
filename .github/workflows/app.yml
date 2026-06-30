@@ -1,16 +1,18 @@
-name: Package desktop
+name: App (desktop · mac)
 
-# 触发器：changesets 发布后 release.yml 会推 `@meshbot/desktop@<version>` tag
-# （desktop 是 private 包，changeset publish 不自动打 tag，由 release.yml 手工补）。
-# 旧 `app@*` 短 tag 保留作为兼容路径，方便仍需手工发版的临时场景。
+# 触发方式：
+# - workflow_dispatch：Actions 页手动 "Run workflow"（当前主用方式，npm 发布暂未启用）。
+# - tag push：启用 npm 发布（npm.yml）后会推 `@meshbot/desktop@<version>` tag 自动触发；
+#   旧 `app@*` 短 tag 保留作兼容。
 on:
+  workflow_dispatch:
   push:
     tags:
       - "@meshbot/desktop@*"
       - "app@*"
 
 concurrency:
-  group: package-desktop-${{ github.ref }}
+  group: app-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -25,10 +27,6 @@ jobs:
           # mac x64 → dmg x64（独立 runner，原生模块在原生 arch 上 rebuild 最稳）
           - os: macos-13
             pkg: pkg:app
-          - os: ubuntu-latest
-            pkg: pkg:app
-          - os: windows-latest
-            pkg: pkg:app
 
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
@@ -42,15 +40,6 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-
-      - name: Install Linux build deps
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            python3 \
-            libarchive-tools
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

@@ -1,9 +1,9 @@
 name: CI
 
+# main 已设分支保护（必须走 PR 合并），合并前 PR 已跑过 CI，故只在 PR 触发；
+# 不再在 push main 时重复跑（省一半冗余 run）。
 on:
   pull_request:
-    branches: [main]
-  push:
     branches: [main]
 
 concurrency:
@@ -87,7 +87,6 @@ jobs:
     name: docker build (${{ matrix.target }})
     runs-on: ubuntu-latest
     needs: ci
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     timeout-minutes: 15
     strategy:
       fail-fast: false
