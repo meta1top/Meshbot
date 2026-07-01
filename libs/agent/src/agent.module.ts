@@ -49,6 +49,7 @@ import { DriveFetchShareTool } from "./tools/builtins/drive-fetch-share.tool";
 import { SkillPublishTool } from "./tools/builtins/skill-publish.tool";
 import { SkillSearchMarketTool } from "./tools/builtins/skill-search-market.tool";
 import { SkillUninstallTool } from "./tools/builtins/skill-uninstall.tool";
+import { DispatchSubagentTool } from "./tools/builtins/dispatch-subagent.tool";
 
 @Module({
   // EventEmitterModule.forRoot() 在 app 层（apps/server-agent app.module）也调；
@@ -89,6 +90,7 @@ import { SkillUninstallTool } from "./tools/builtins/skill-uninstall.tool";
     ImListMembersTool,
     ImSendMessageTool,
     AskQuestionTool,
+    DispatchSubagentTool,
     DriveListTool,
     DriveMkdirTool,
     DriveUploadTool,
