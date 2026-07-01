@@ -625,7 +625,7 @@ describe("SessionService", () => {
 
     it("listAllSorted 不含 subagent 会话", async () => {
       const parent = await service.createSession({ content: "父" });
-      await service.createSubSession({
+      const { subSessionId } = await service.createSubSession({
         parentSessionId: parent.sessionId,
         parentToolCallId: "tc",
         task: "子",
@@ -633,9 +633,7 @@ describe("SessionService", () => {
       const all = await service.listAllSorted();
       const ids = all.map((s) => s.id);
       expect(ids).toContain(parent.sessionId);
-      // subagent 不应出现在 listAllSorted 结果中
-      const subIds = ids.filter((id) => id !== parent.sessionId);
-      expect(subIds).toHaveLength(0);
+      expect(ids).not.toContain(subSessionId);
     });
   });
 
