@@ -78,19 +78,20 @@ export function createToolsNode(
     // messageId 取自携带 tool_calls 的那条 AIMessage —— 同轮内多 tool_call 共享。
     const messageId = last?.id ?? "";
 
-    const results: ToolMessage[] = [];
-    for (const call of toolCalls) {
+    /** 执行单个 tool_call，返回对应 ToolMessage（保留所有事件与截断语义）。 */
+    const runOne = async (call: {
+      id?: string;
+      name: string;
+      args: unknown;
+    }): Promise<ToolMessage> => {
       const toolCallId = call.id ?? "";
       const tool = registry.get(call.name);
       if (!tool) {
-        results.push(
-          new ToolMessage({
-            tool_call_id: toolCallId,
-            name: call.name,
-            content: `Error: unknown tool ${call.name}`,
-          }),
-        );
-        continue;
+        return new ToolMessage({
+          tool_call_id: toolCallId,
+          name: call.name,
+          content: `Error: unknown tool ${call.name}`,
+        });
       }
       const ctx: ToolContext = {
         sessionId,
@@ -128,14 +129,15 @@ export function createToolsNode(
         resultPreview: content.slice(0, RESULT_PREVIEW_LIMIT),
         content,
       });
-      results.push(
-        new ToolMessage({
-          tool_call_id: toolCallId,
-          name: call.name,
-          content: llmContent,
-        }),
-      );
-    }
+      return new ToolMessage({
+        tool_call_id: toolCallId,
+        name: call.name,
+        content: llmContent,
+      });
+    };
+    // 同轮 tool_calls 并发执行（相互独立）；Promise.all 保持数组顺序 = tool_calls 顺序，
+    // 保证每个 tool_call → 对应 ToolMessage 配对与顺序不乱。
+    const results = await Promise.all(toolCalls.map(runOne));
     return { messages: results };
   };
 }
