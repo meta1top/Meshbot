@@ -228,6 +228,17 @@ export class GraphRunner {
   }
 
   /**
+   * 按 opts.subAgent 标志选取图：子会话用子图，普通会话用主图。
+   *
+   * msgIdMap（resolveMessageId / deleteMsgIds）全局共享，不随图切换，故不在此处理。
+   */
+  private pickGraph(opts?: { subAgent?: boolean }) {
+    return opts?.subAgent
+      ? this.accountGraphProvider.subAgentGraph().graph
+      : this.accountGraphProvider.accountGraph().graph;
+  }
+
+  /**
    * 向会话发送一批消息并逐 token 流式产出 assistant 回复。
    *
    * 每条入参构造一条带显式 id 的 HumanMessage（id = 调用方的 PendingMessage.id），
@@ -236,19 +247,22 @@ export class GraphRunner {
    * 透传 signal 支持中断。
    *
    * @param inputs 至少一条 —— 调用方保证非空批次。
+   * @param opts.subAgent 为 true 时用子图（排除 dispatch 工具）。
    */
   async *streamMessage(
     threadId: ThreadId,
     inputs: { id: string; content: string }[],
     signal?: AbortSignal,
+    opts?: { subAgent?: boolean },
   ): AsyncGenerator<StreamChunk> {
-    yield* this.streamMessageImpl(threadId, inputs, signal);
+    yield* this.streamMessageImpl(threadId, inputs, signal, opts);
   }
 
   private async *streamMessageImpl(
     threadId: ThreadId,
     inputs: { id: string; content: string }[],
     signal?: AbortSignal,
+    opts?: { subAgent?: boolean },
   ): AsyncGenerator<StreamChunk> {
     this.promptService.reloadIfChanged();
     const systemPrompt = [
@@ -259,11 +273,9 @@ export class GraphRunner {
       .filter(Boolean)
       .join("\n\n");
     await this.threadState.sanitizeOrphanToolCalls(threadId);
-    const state = await this.accountGraphProvider
-      .accountGraph()
-      .graph.getState({
-        configurable: { thread_id: threadId },
-      });
+    const state = await this.pickGraph(opts).getState({
+      configurable: { thread_id: threadId },
+    });
     const hasHistory =
       Array.isArray((state.values as GraphState)?.messages) &&
       (state.values as GraphState).messages.length > 0;
@@ -288,7 +300,12 @@ export class GraphRunner {
     for (const input of inputs) {
       yield { kind: "human", messageId: input.id };
     }
-    yield* this.runGraphStream(threadId, { messages: inputMessages }, signal);
+    yield* this.runGraphStream(
+      threadId,
+      { messages: inputMessages },
+      signal,
+      opts,
+    );
   }
 
   /**
@@ -300,10 +317,13 @@ export class GraphRunner {
    * 传 `{ messages: [] }` 而非 `null`：已完成的图没有 pending task，
    * `stream(null)` 会原地返回不重跑；给一个空 messages 输入（concat reducer
    * 对空数组无副作用，不新增 user 消息）才会触发 START → supervisor 重新跑一轮。
+   *
+   * @param opts.subAgent 为 true 时用子图（与 streamMessage 保持一致）。
    */
   async *resumeStream(
     threadId: ThreadId,
     signal?: AbortSignal,
+    opts?: { subAgent?: boolean },
   ): AsyncGenerator<StreamChunk> {
     await this.threadState.sanitizeOrphanToolCalls(threadId);
     yield* this.runGraphStream(
@@ -315,6 +335,7 @@ export class GraphRunner {
         ],
       },
       signal,
+      opts,
     );
   }
 
@@ -332,19 +353,18 @@ export class GraphRunner {
     threadId: ThreadId,
     input: { messages: BaseMessage[] },
     signal?: AbortSignal,
+    opts?: { subAgent?: boolean },
   ): AsyncGenerator<StreamChunk> {
     const timing = process.env.MESHBOT_GRAPH_TIMING !== "0";
     const startedAt = Date.now();
-    const stream = await this.accountGraphProvider
-      .accountGraph()
-      .graph.stream(input, {
-        configurable: { thread_id: threadId },
-        streamMode: ["messages", "updates"] as const,
-        signal,
-        // LangGraph 默认 recursionLimit=25，长会话 + 频繁 tool 调用容易撞墙
-        // （报 GraphRecursionError）。可通过 MESHBOT_GRAPH_RECURSION_LIMIT 调整。
-        recursionLimit: resolveRecursionLimit(),
-      });
+    const stream = await this.pickGraph(opts).stream(input, {
+      configurable: { thread_id: threadId },
+      streamMode: ["messages", "updates"] as const,
+      signal,
+      // LangGraph 默认 recursionLimit=25，长会话 + 频繁 tool 调用容易撞墙
+      // （报 GraphRecursionError）。可通过 MESHBOT_GRAPH_RECURSION_LIMIT 调整。
+      recursionLimit: resolveRecursionLimit(),
+    });
     const initMs = Date.now() - startedAt;
     if (timing) {
       console.log(`[graph timing] thread=${threadId} stream-init=${initMs}ms`);
