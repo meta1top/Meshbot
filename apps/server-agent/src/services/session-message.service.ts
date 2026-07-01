@@ -342,6 +342,20 @@ export class SessionMessageService {
     return { total, byDate, byHour };
   }
 
+  /** 取某会话末条 assistant 消息内容；无则 null。供子 Agent 回传 output 用。 */
+  async findLastAssistant(
+    sessionId: string,
+  ): Promise<{ content: string } | null> {
+    const row = await this.repo
+      .scopedQueryBuilder("m")
+      .andWhere("m.session_id = :sessionId", { sessionId })
+      .andWhere("m.role = :role", { role: "assistant" })
+      .orderBy("m.seq", "DESC")
+      .limit(1)
+      .getOne();
+    return row ? { content: row.content } : null;
+  }
+
   /**
    * 设置 assistant 消息反馈。feedback=null 清空。
    * 校验 messageId 属于 sessionId（否则 NotFound）。metadata 单表 update。

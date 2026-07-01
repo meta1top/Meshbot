@@ -606,6 +606,39 @@ describe("SessionService", () => {
     });
   });
 
+  describe("createSubSession", () => {
+    it("createSubSession 建 subagent 会话并带 parent 关联 + 首条 pending", async () => {
+      const parent = await service.createSession({ content: "父任务" });
+      const { subSessionId } = await service.createSubSession({
+        parentSessionId: parent.sessionId,
+        parentToolCallId: "tc-1",
+        task: "子任务内容",
+        description: "子任务",
+      });
+      const sub = await service.findOrNull(subSessionId);
+      expect(sub?.kind).toBe("subagent");
+      expect(sub?.parentSessionId).toBe(parent.sessionId);
+      expect(sub?.parentToolCallId).toBe("tc-1");
+      const pend = await service.listActivePending(subSessionId);
+      expect(pend.map((p) => p.content)).toContain("子任务内容");
+    });
+
+    it("listAllSorted 不含 subagent 会话", async () => {
+      const parent = await service.createSession({ content: "父" });
+      await service.createSubSession({
+        parentSessionId: parent.sessionId,
+        parentToolCallId: "tc",
+        task: "子",
+      });
+      const all = await service.listAllSorted();
+      const ids = all.map((s) => s.id);
+      expect(ids).toContain(parent.sessionId);
+      // subagent 不应出现在 listAllSorted 结果中
+      const subIds = ids.filter((id) => id !== parent.sessionId);
+      expect(subIds).toHaveLength(0);
+    });
+  });
+
   describe("quick sessions", () => {
     it("createSession(kind='quick') 建的会话不出现在 listAllSorted()", async () => {
       await service.createSession({ content: "临时问题", kind: "quick" });

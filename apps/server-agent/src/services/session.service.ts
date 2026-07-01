@@ -101,6 +101,45 @@ export class SessionService {
   }
 
   /**
+   * 建子 Agent 子会话：Session(kind:"subagent" + parent 关联, running) + 首条 pending(task)。
+   * 跨两表写入，@Transactional 包裹。须在父 run 账号上下文内调用（作用域仓库自动盖 cloudUserId）。
+   */
+  async createSubSession(input: {
+    parentSessionId: string;
+    parentToolCallId: string;
+    task: string;
+    description?: string;
+  }): Promise<{ subSessionId: string }> {
+    return this.createSubSessionInTx(input);
+  }
+
+  @Transactional()
+  private async createSubSessionInTx(input: {
+    parentSessionId: string;
+    parentToolCallId: string;
+    task: string;
+    description?: string;
+  }): Promise<{ subSessionId: string }> {
+    const title = (input.description ?? stripLlmuse(input.task)).slice(
+      0,
+      TITLE_MAX,
+    );
+    const saved = (await this.sessionRepo.save({
+      title,
+      status: "running" as const,
+      kind: "subagent" as const,
+      parentSessionId: input.parentSessionId,
+      parentToolCallId: input.parentToolCallId,
+    })) as Session;
+    await this.pendingRepo.save({
+      sessionId: saved.id,
+      content: input.task,
+      status: "pending" as const,
+    });
+    return { subSessionId: saved.id };
+  }
+
+  /**
    * 向已存在会话追加一条 pending 消息。messageId 由调用方生成（前端 UUID）：
    * 让前端乐观插入 user 气泡时就拿到最终 id，避免 run.human 早于 200 返回时
    * 找不到目标气泡。单表写入，无需事务。
