@@ -3,7 +3,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 
-const AGENT_PORT = 3100;
+const PROD_CLOUD_URL = "https://api.meshbot.app";
 const READINESS_TIMEOUT_MS = 30_000;
 const POLL_INTERVAL_MS = 500;
 const HEALTH_PATH = "/api/health";
@@ -13,25 +13,28 @@ let intentionalStop = false;
 
 /**
  * 启动内置 server-agent 子进程（仅 packaged 模式调用；dev 由开发者自行起服务）。
- * - 复用 Electron 自带 Node 运行时（fork 默认 ELECTRON_RUN_AS_NODE），
- *   打包产物的原生模块（better-sqlite3 等）已由 electron-builder 按 Electron ABI 重建
- * - MESHBOT_HOME 显式注入 ~/.meshbot，确保跨平台一致
- * - 等待 /api/health 200 后才 resolve，UI 不会拿到空后端
+ * - 复用 Electron 自带 Node 运行时（fork 默认 ELECTRON_RUN_AS_NODE）
+ * - 不锁 MESHBOT_PORT → server-agent 自动偏好 7727、占用则探测
+ * - 注入 MESHBOT_WEB_AGENT_DIR（打包好的前端），server-agent 同源伺服 UI
+ * - 注入 MESHBOT_CLOUD_URL 默认生产云端（显式设置则不覆盖）
+ * - 监听 IPC `meshbot:listening` 拿实际端口，再过一次 health 确认 HTTP 就绪
  * - 子进程侧在 IPC 断开时自退（见 server-agent main.ts），壳崩溃不留孤儿
  */
-export async function startAgentRuntime(): Promise<void> {
-  if (child) return;
+export async function startAgentRuntime(): Promise<{ port: number }> {
+  if (child) throw new Error("agent runtime already started");
 
   const entry = require.resolve("@meshbot/server-agent");
   const meshbotHome = path.join(os.homedir(), ".meshbot");
+  const webAgentDir = path.join(__dirname, "web-agent");
 
   intentionalStop = false;
   child = fork(entry, [], {
     env: {
       ...process.env,
       NODE_ENV: "production",
-      MESHBOT_PORT: String(AGENT_PORT),
       MESHBOT_HOME: meshbotHome,
+      MESHBOT_WEB_AGENT_DIR: webAgentDir,
+      MESHBOT_CLOUD_URL: process.env.MESHBOT_CLOUD_URL ?? PROD_CLOUD_URL,
     },
     stdio: ["ignore", "pipe", "pipe", "ipc"],
   });
@@ -55,10 +58,30 @@ export async function startAgentRuntime(): Promise<void> {
     });
   });
 
-  await Promise.race([
-    waitForReady(AGENT_PORT, READINESS_TIMEOUT_MS),
-    exitPromise,
-  ]);
+  const portPromise = new Promise<number>((resolve, reject) => {
+    const proc = child;
+    let timer: ReturnType<typeof setTimeout>;
+    const handler = (msg: unknown) => {
+      if (
+        msg &&
+        typeof msg === "object" &&
+        (msg as { type?: string }).type === "meshbot:listening"
+      ) {
+        clearTimeout(timer);
+        proc?.off("message", handler);
+        resolve((msg as { port: number }).port);
+      }
+    };
+    timer = setTimeout(() => {
+      proc?.off("message", handler);
+      reject(new Error("agent 未在超时内上报监听端口"));
+    }, READINESS_TIMEOUT_MS);
+    proc?.on("message", handler);
+  });
+
+  const port = await Promise.race([portPromise, exitPromise]);
+  await Promise.race([waitForReady(port, READINESS_TIMEOUT_MS), exitPromise]);
+  return { port };
 }
 
 export function stopAgentRuntime(): void {

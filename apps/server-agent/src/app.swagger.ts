@@ -4,7 +4,7 @@ import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 /**
  * Phase 5 Track C4：本地 Agent Swagger UI（dev only）。
  *
- * 访问：`http://localhost:3100/api/docs`
+ * 访问：`http://localhost:7727/api/docs`（端口自动探测，默认 7727）
  *
  * 包含 Bearer JWT 安全方案（id = "jwt"，与本地 JwtStrategy 名称对齐）。
  */

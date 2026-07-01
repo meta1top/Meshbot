@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { resolveCloudUrl } from "./cloud-url.js";
 import { readConfig } from "./config.js";
 import { log } from "./logger.js";
 import {
@@ -11,6 +12,7 @@ import {
   isProcessRunning,
   writePid,
 } from "./pid-file.js";
+import { clearPortFile, readPortInfo, waitForPortFile } from "./port-file.js";
 
 export interface StartOptions {
   port?: number;
@@ -49,31 +51,36 @@ async function pollHttpReady(url: string, timeoutMs: number): Promise<void> {
 export async function startAgent(options: StartOptions = {}): Promise<void> {
   const runningPid = getRunningPid();
   if (runningPid !== null) {
-    const config = readConfig();
+    const cfg = readConfig();
+    const info = readPortInfo(cfg.dataDir);
+    const portStr = info ? String(info.port) : "unknown";
     console.log(
-      `Agent already running on port ${config.port} (PID: ${runningPid})`,
+      `Agent already running on port ${portStr} (PID: ${runningPid})`,
     );
     return;
   }
 
   const config = readConfig();
-  const port = options.port ?? config.port;
+  const explicitPort = options.port ?? config.port;
   const dataDir = options.dataDir ?? config.dataDir;
   const serverAgentRoot = resolveServerAgentPath();
   const serverAgentMain = getServerAgentMainPath();
 
   log(
     "cli",
-    `Starting server-agent: ${serverAgentMain} (port=${port}, dataDir=${dataDir})`,
+    `Starting server-agent: ${serverAgentMain} (port=${explicitPort ?? "auto"}, dataDir=${dataDir})`,
   );
+
+  clearPortFile(dataDir);
 
   const child = spawn("node", [serverAgentMain], {
     cwd: serverAgentRoot,
     stdio: options.daemon ? "ignore" : "inherit",
     env: {
       ...process.env,
-      MESHBOT_PORT: String(port),
-      MESHBOT_DATA_DIR: dataDir,
+      MESHBOT_HOME: dataDir,
+      MESHBOT_CLOUD_URL: resolveCloudUrl(),
+      ...(explicitPort ? { MESHBOT_PORT: String(explicitPort) } : {}),
     },
     detached: options.daemon ?? false,
   });
@@ -87,10 +94,10 @@ export async function startAgent(options: StartOptions = {}): Promise<void> {
     child.unref();
   }
 
-  const healthUrl = `http://127.0.0.1:${port}/api/setup-status`;
   try {
-    await pollHttpReady(healthUrl, 30000);
-    console.log(`Agent started on http://0.0.0.0:${port}`);
+    const { port } = await waitForPortFile(dataDir, 30000);
+    await pollHttpReady(`http://127.0.0.1:${port}/api/setup-status`, 30000);
+    console.log(`Agent started on http://127.0.0.1:${port}`);
   } catch (err) {
     clearPid();
     if (child.kill) child.kill();
@@ -147,14 +154,20 @@ export async function getAgentStatus(): Promise<void> {
   }
 
   const config = readConfig();
-  const healthUrl = `http://127.0.0.1:${config.port}/api/setup-status`;
+  const info = readPortInfo(config.dataDir);
+  if (!info) {
+    console.log(`Status: running (PID: ${pid})`);
+    console.log(`Health: unreachable（未找到 agent.port）`);
+    return;
+  }
 
+  const healthUrl = `http://127.0.0.1:${info.port}/api/setup-status`;
   try {
     const res = await fetch(healthUrl);
     const data = (await res.json()) as { initialized?: boolean };
     console.log(`Status: running`);
     console.log(`PID: ${pid}`);
-    console.log(`Port: ${config.port}`);
+    console.log(`Port: ${info.port}`);
     console.log(`Data dir: ${config.dataDir}`);
     console.log(`Health: OK`);
     console.log(`Setup: ${data.initialized ? "initialized" : "needs setup"}`);

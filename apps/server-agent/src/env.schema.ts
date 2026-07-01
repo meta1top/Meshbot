@@ -10,8 +10,8 @@ export const EnvSchema = z.object({
     .enum(["development", "production", "test"])
     .default("development"),
 
-  /** server-agent HTTP 端口，默认 3100 */
-  MESHBOT_PORT: z.coerce.number().int().min(1).max(65535).default(3100),
+  /** server-agent HTTP 端口；未设置时由 resolvePort 偏好 7727 自动探测 */
+  MESHBOT_PORT: z.coerce.number().int().min(1).max(65535).optional(),
 
   /**
    * meshbot 本地数据目录。默认 `~/.meshbot/`。

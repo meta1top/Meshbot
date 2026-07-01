@@ -11,6 +11,8 @@ import { I18nService } from "nestjs-i18n";
 import { AppModule } from "./app.module";
 import { setupSwagger } from "./app.swagger";
 import { resolveMeshbotDir } from "./utils/meshbot-dir";
+import { reportPort } from "./utils/report-port";
+import { resolvePort } from "./utils/resolve-port";
 
 async function bootstrap() {
   // 被桌面壳 fork（带 IPC 通道）时：父进程退出/崩溃导致 IPC 断开 → 自退，
@@ -41,8 +43,8 @@ async function bootstrap() {
 
   mkdirSync(path.join(meshbotDir, "logs"), { recursive: true });
 
-  const port = Number(process.env.MESHBOT_PORT ?? 3100);
   const host = "0.0.0.0";
+  const port = await resolvePort(host);
 
   const app = await NestFactory.create(AppModule);
 
@@ -69,6 +71,7 @@ async function bootstrap() {
   }
 
   await app.listen(port, host);
+  reportPort(meshbotDir, port);
   console.log(`Agent running on http://${host}:${port}`);
 }
 bootstrap();
