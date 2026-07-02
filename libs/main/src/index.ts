@@ -29,6 +29,7 @@ export {
   DeviceService,
   hashDeviceToken,
 } from "./services/device.service";
+export { EmailVerificationService } from "./services/email-verification.service";
 export {
   type AcceptResult,
   InvitationService,

@@ -11,7 +11,7 @@ import {
   traceIdMiddleware,
 } from "@meshbot/common";
 import { AssetsModule } from "@meshbot/assets";
-import { MainModule } from "@meshbot/main";
+import { MainModule, UserService } from "@meshbot/main";
 import type { INestApplication } from "@nestjs/common";
 import { APP_GUARD, Reflector } from "@nestjs/core";
 import { JwtModule } from "@nestjs/jwt";
@@ -94,6 +94,7 @@ describe.each<[Mode]>([
   let app: INestApplication;
   let dbCtx: TestDbContext | null = null;
   let skipReason: string | null = null;
+  let userService: UserService;
   const providerRef: ProviderRef = {};
 
   beforeAll(async () => {
@@ -167,6 +168,7 @@ describe.each<[Mode]>([
     app.useGlobalInterceptors(new ResponseInterceptor(reflector));
     app.useGlobalFilters(new ErrorsFilter(i18n));
     await app.init();
+    userService = app.get(UserService);
   }, 30_000);
 
   afterAll(async () => {
@@ -206,6 +208,9 @@ describe.each<[Mode]>([
       displayName: ALICE.displayName,
     });
     expect(res.body.data.user.id).toBeTruthy();
+    // 过渡处理：verify-email REST 端点由 Task 7 提供，e2e 先直接经 UserService
+    // 标记邮箱已验证，以便后续 login 用例通过 Task 5 新增的未验证拦截。
+    await userService.markEmailVerified(res.body.data.user.id);
   });
 
   it("POST /auth/register — 同 email 二次注册业务错误（200 + AppError envelope）", async () => {
@@ -243,6 +248,29 @@ describe.each<[Mode]>([
       success: false,
       code: 2002, // MainErrorCode.AUTH_INVALID_CREDENTIALS
       message: "Invalid email or password",
+    });
+  });
+
+  it("POST /auth/login — 邮箱未验证业务错误（200 + AppError code 2022）", async () => {
+    if (maybeSkip()) return;
+    const unverified = {
+      email: `dora-${mode}@test.io`,
+      password: "dorapass1",
+      displayName: "Dora",
+    };
+    const registerRes = await request(app.getHttpServer())
+      .post("/api/auth/register")
+      .send(unverified);
+    expect(registerRes.status).toBe(201);
+    // 故意不调用 userService.markEmailVerified，模拟真实未验证用户
+
+    const res = await request(app.getHttpServer())
+      .post("/api/auth/login")
+      .send({ email: unverified.email, password: unverified.password });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      success: false,
+      code: 2022, // MainErrorCode.AUTH_EMAIL_NOT_VERIFIED
     });
   });
 

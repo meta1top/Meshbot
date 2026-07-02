@@ -24,6 +24,7 @@ import {
 import { ConversationService } from "./services/conversation.service";
 import { DeviceAuthService } from "./services/device-auth.service";
 import { DeviceService } from "./services/device.service";
+import { EmailVerificationService } from "./services/email-verification.service";
 import { InvitationService } from "./services/invitation.service";
 import { MembershipService } from "./services/membership.service";
 import { MessageService } from "./services/message.service";
@@ -105,6 +106,7 @@ export class MainModule {
         ConversationService,
         DeviceAuthService,
         DeviceService,
+        EmailVerificationService,
         PresenceService,
         SkillPackageService,
         SkillMarketService,
@@ -125,6 +127,7 @@ export class MainModule {
         ConversationService,
         DeviceAuthService,
         DeviceService,
+        EmailVerificationService,
         PresenceService,
         SkillPackageService,
         SkillMarketService,

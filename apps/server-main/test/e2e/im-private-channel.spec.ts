@@ -56,8 +56,12 @@ const TEST_APP_CONFIG = {
 /** 捕获邀请邮件 token。 */
 class CaptureEmailSender implements EmailSender {
   last: { to: string; mail: InvitationMail } | null = null;
+  lastVerification: { to: string; code: string } | null = null;
   async sendInvitation(to: string, mail: InvitationMail): Promise<void> {
     this.last = { to, mail };
+  }
+  async sendVerificationCode(to: string, code: string): Promise<void> {
+    this.lastVerification = { to, code };
   }
 }
 

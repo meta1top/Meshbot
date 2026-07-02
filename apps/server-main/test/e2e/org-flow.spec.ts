@@ -48,11 +48,15 @@ const TEST_APP_CONFIG = {
   jwt: { secret: "e2e-test-secret", expires: "1h" },
 } as AppConfig;
 
-/** 测试用 EmailSender：捕获最后一次邀请，供断言邀请码。 */
+/** 测试用 EmailSender：捕获最后一次邀请 / 验证码，供断言。 */
 class CaptureEmailSender implements EmailSender {
   last: { to: string; mail: InvitationMail } | null = null;
+  lastVerification: { to: string; code: string } | null = null;
   async sendInvitation(to: string, mail: InvitationMail): Promise<void> {
     this.last = { to, mail };
+  }
+  async sendVerificationCode(to: string, code: string): Promise<void> {
+    this.lastVerification = { to, code };
   }
 }
 
@@ -212,6 +216,13 @@ describe("server-main org e2e", () => {
       .set("Authorization", `Bearer ${bobToken}`);
     expect(bobProfile.body.data.activeOrg.id).toBe(orgId);
     expect(bobProfile.body.data.memberships).toHaveLength(1);
+
+    // 接受邀请视同邮箱已验证（邀请邮件即邮箱所有权证明）
+    const bobRow = await dbCtx?.ds.query(
+      `SELECT email_verified_at FROM app_user WHERE email = $1`,
+      ["bob@org.io"],
+    );
+    expect(bobRow?.[0]?.email_verified_at).not.toBeNull();
   });
 
   it("非 owner 邀请 → ORG_FORBIDDEN（403 + code 2004）", async () => {
