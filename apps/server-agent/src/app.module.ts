@@ -32,6 +32,7 @@ import { CronJobModule } from "./cron-job.module";
 import { ImContextModule } from "./im-context.module";
 import { ImModule } from "./im.module";
 import { AskQuestionModule } from "./ask-question.module";
+import { DispatchSubagentModule } from "./dispatch-subagent.module";
 import { DriveToolModule } from "./drive-tool.module";
 import { ImSendModule } from "./im-send.module";
 import { QuickAssistantModule } from "./quick-assistant.module";
@@ -135,6 +136,7 @@ const meshbotDir = resolveMeshbotDir();
     DriveToolModule,
     SkillModule,
     QuickAssistantModule,
+    DispatchSubagentModule,
     StaticModule.forRoot(),
   ],
   controllers: [
