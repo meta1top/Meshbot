@@ -37,6 +37,12 @@ export {
 export { MembershipService } from "./services/membership.service";
 export { MessageService } from "./services/message.service";
 export { OrgService } from "./services/org.service";
+export {
+  type AgentModelConfig,
+  type OrgModelConfigInput,
+  type OrgModelConfigView,
+  OrgModelConfigService,
+} from "./services/org-model-config.service";
 export { PresenceService } from "./services/presence.service";
 export { SkillMarketService } from "./services/skill-market.service";
 export { SkillPackageService } from "./services/skill-package.service";

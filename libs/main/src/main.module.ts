@@ -29,6 +29,7 @@ import { InvitationService } from "./services/invitation.service";
 import { MembershipService } from "./services/membership.service";
 import { MessageService } from "./services/message.service";
 import { OrgService } from "./services/org.service";
+import { OrgModelConfigService } from "./services/org-model-config.service";
 import { CloudNodeService } from "./services/cloud-node.service";
 import { CloudNodeGrantService } from "./services/cloud-node-grant.service";
 import { CloudDriveService } from "./services/cloud-drive.service";
@@ -100,6 +101,7 @@ export class MainModule {
       providers: [
         UserService,
         OrgService,
+        OrgModelConfigService,
         MembershipService,
         InvitationService,
         MessageService,
@@ -121,6 +123,7 @@ export class MainModule {
       exports: [
         UserService,
         OrgService,
+        OrgModelConfigService,
         MembershipService,
         InvitationService,
         MessageService,
