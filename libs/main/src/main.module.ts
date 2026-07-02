@@ -22,6 +22,7 @@ import {
   INVITATION_CONFIG,
 } from "./services/invitation.config";
 import { ConversationService } from "./services/conversation.service";
+import { DeviceAuthService } from "./services/device-auth.service";
 import { DeviceService } from "./services/device.service";
 import { InvitationService } from "./services/invitation.service";
 import { MembershipService } from "./services/membership.service";
@@ -102,6 +103,7 @@ export class MainModule {
         InvitationService,
         MessageService,
         ConversationService,
+        DeviceAuthService,
         DeviceService,
         PresenceService,
         SkillPackageService,
@@ -121,6 +123,7 @@ export class MainModule {
         InvitationService,
         MessageService,
         ConversationService,
+        DeviceAuthService,
         DeviceService,
         PresenceService,
         SkillPackageService,

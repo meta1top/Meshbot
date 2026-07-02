@@ -23,6 +23,7 @@ export {
   INVITATION_CONFIG,
 } from "./services/invitation.config";
 export { ConversationService } from "./services/conversation.service";
+export { DeviceAuthService } from "./services/device-auth.service";
 export {
   DEVICE_TOKEN_PREFIX,
   DeviceService,
