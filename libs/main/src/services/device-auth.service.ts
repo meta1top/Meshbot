@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { AppError } from "@meshbot/common";
+import { AppError, WithLock } from "@meshbot/common";
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import type { Repository } from "typeorm";
@@ -60,7 +60,9 @@ export class DeviceAuthService {
    * 用户批准授权：生成一次性 userCode。
    *
    * 非 pending 状态抛出 DEVICE_AUTH_REQUEST_INVALID。
+   * 按 requestId 加锁：防并发批准互相覆盖 userCode。
    */
+  @WithLock({ key: "device-auth:approve:#{0}", waitTimeout: 5000 })
   async approve(
     requestId: string,
     userId: string,
@@ -87,8 +89,12 @@ export class DeviceAuthService {
    *    - 不匹配累计失败次数，达 5 次后作废
    * 4. 校验通过置 consumed，返回批准人
    *
+   * 按 requestId 加锁：防同一请求并发兑换双双通过 approved 检查铸出两个
+   * device token（"consumed 不可重复兑换"不变量）。
+   *
    * tx-check: ignore — 三处 update 分属互斥分支(verifier 不匹配/userCode 错误/成功兑换)，每次执行只有一处单表写。
    */
+  @WithLock({ key: "device-auth:exchange:#{0.requestId}", waitTimeout: 5000 })
   async exchange(input: {
     requestId: string;
     userCode: string;
