@@ -4,10 +4,14 @@ import { type DynamicModule, Module } from "@nestjs/common";
 import { AppUser } from "./entities/app-user.entity";
 import { Conversation } from "./entities/conversation.entity";
 import { ConversationMember } from "./entities/conversation-member.entity";
+import { Device } from "./entities/device.entity";
+import { DeviceAuthRequest } from "./entities/device-auth-request.entity";
+import { EmailVerification } from "./entities/email-verification.entity";
 import { Invitation } from "./entities/invitation.entity";
 import { Membership } from "./entities/membership.entity";
 import { Message } from "./entities/message.entity";
 import { Organization } from "./entities/organization.entity";
+import { OrgModelConfig } from "./entities/org-model-config.entity";
 import { CloudNode } from "./entities/cloud-node.entity";
 import { CloudNodeGrant } from "./entities/cloud-node-grant.entity";
 import { CloudShareLink } from "./entities/cloud-share-link.entity";
@@ -75,6 +79,10 @@ export class MainModule {
           CloudNode,
           CloudNodeGrant,
           CloudShareLink,
+          Device,
+          DeviceAuthRequest,
+          EmailVerification,
+          OrgModelConfig,
         ]),
       ],
       providers: [
