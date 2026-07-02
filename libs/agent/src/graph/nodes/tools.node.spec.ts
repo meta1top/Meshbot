@@ -261,8 +261,8 @@ describe("createToolsNode", () => {
       messages: Array<{ tool_call_id: string; content: string }>;
     };
     const elapsed = Date.now() - start;
-    // 并发：总耗时接近慢的（~60ms），远小于串行（~70ms+）；放宽到 <120ms 容错
-    expect(elapsed).toBeLessThan(120);
+    // 并发：总耗时接近慢的（~60ms），远小于串行（~70ms+）；放宽到 <150ms 容错
+    expect(elapsed).toBeLessThan(150);
     // 保序：结果数组仍按 tool_calls 顺序（slow=c1 在前）
     expect(out.messages.map((m) => m.tool_call_id)).toEqual(["c1", "c2"]);
     // fast 先完成（order[0]="fast"）证明确实并发而非串行

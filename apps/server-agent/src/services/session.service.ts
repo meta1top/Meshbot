@@ -293,6 +293,21 @@ export class SessionService {
     await this.pendingRepo.update({ id: In(ids) }, { status: "failed" });
   }
 
+  /**
+   * 会话下是否存在 failed 状态的 pending 消息。
+   *
+   * `RunnerService.kickAndWait` 会吞掉 `runOnce` 抛出的错误（log + break 后
+   * 正常 resolve），调用方拿不到异常；但失败的批次已被 `markFailed` 落成
+   * failed 状态，据此可判定该 session 的最近一次 run 是否失败。
+   * 供 `DispatchSubagentService` 判断子会话 run 结果——单表读，无需事务。
+   */
+  async hasFailedPending(sessionId: string): Promise<boolean> {
+    const count = await this.pendingRepo.count({
+      where: { sessionId, status: "failed" },
+    });
+    return count > 0;
+  }
+
   /** 把一批消息标记为 processed，写 processed_at。 */
   async markProcessed(ids: string[]): Promise<void> {
     if (ids.length === 0) return;

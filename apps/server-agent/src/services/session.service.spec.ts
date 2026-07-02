@@ -249,6 +249,14 @@ describe("SessionService", () => {
     expect(active.some((m) => m.status === "failed")).toBe(true);
   });
 
+  it("hasFailedPending 在存在 failed 消息时返回 true，否则 false", async () => {
+    const { sessionId } = await service.createSession({ content: "m1" });
+    expect(await service.hasFailedPending(sessionId)).toBe(false);
+    const claimed = await service.claimPending(sessionId);
+    await service.markFailed(claimed.map((m) => m.id));
+    expect(await service.hasFailedPending(sessionId)).toBe(true);
+  });
+
   it("listActivePendingWithHistory 标注 inHistory（已入 session_messages 为 true）", async () => {
     const { sessionId } = await service.createSession({ content: "m1" });
     const claimed = await service.claimPending(sessionId);
