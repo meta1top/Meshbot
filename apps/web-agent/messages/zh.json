@@ -263,6 +263,14 @@
       "rowExpand": "查看摘要",
       "rowCollapse": "收起",
       "toastError": "压缩失败：{message}"
+    },
+    "subagent": {
+      "fallbackTitle": "子任务",
+      "starting": "启动中…",
+      "running": "运行中",
+      "done": "已完成",
+      "error": "失败",
+      "aborted": "已中止"
     }
   },
   "newMessage": {
@@ -826,5 +834,6 @@
   "shareLinkExpire30": "",
   "shareLinkExpireNever": "",
   "shareLinkPasswordPlaceholder": "",
-  "shareLinkCreate": ""
+  "shareLinkCreate": "",
+  "fallbackTitle": ""
 }
