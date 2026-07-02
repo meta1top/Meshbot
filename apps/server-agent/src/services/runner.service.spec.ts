@@ -19,6 +19,10 @@ function fakeSessionService() {
     async findOwner(_sessionId: string): Promise<string | null> {
       return OWNER;
     },
+    /** 按 id 查 session：测试默认都是主 Agent 会话（kind: "user"），非子 Agent。 */
+    async findOrNull(sessionId: string) {
+      return { id: sessionId, kind: "user" as const };
+    },
     get claimPendingCalls() {
       return claimPendingCalls;
     },

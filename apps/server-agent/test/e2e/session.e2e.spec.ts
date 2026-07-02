@@ -4,6 +4,8 @@ import {
   AgentModule,
   ASK_QUESTION_PORT,
   type AskQuestionPort,
+  DISPATCH_SUBAGENT_PORT,
+  type DispatchSubagentPort,
   DRIVE_PORT,
   type DrivePort,
   IM_CONTEXT_PORT,
@@ -124,6 +126,21 @@ const STUB_SCHEDULE_TOOLS_PORT: ScheduleToolsPort = {
 })
 class StubAgentToolPortsModule {}
 
+/** 桩：本 e2e 不测派子 Agent，仅提供 @Global DISPATCH_SUBAGENT_PORT 让
+ *  AgentModule 里的 dispatch_subagent 工具可解析。 */
+const STUB_DISPATCH_SUBAGENT_PORT: DispatchSubagentPort = {
+  dispatch: async () => "{}",
+};
+
+@Global()
+@Module({
+  providers: [
+    { provide: DISPATCH_SUBAGENT_PORT, useValue: STUB_DISPATCH_SUBAGENT_PORT },
+  ],
+  exports: [DISPATCH_SUBAGENT_PORT],
+})
+class StubDispatchSubagentModule {}
+
 describe("Session e2e", () => {
   let app: INestApplication;
   // v3：会话端点全部账号作用域，请求必须带本地 JWT（sub = cloudUserId），
@@ -167,6 +184,7 @@ describe("Session e2e", () => {
         CronJobModule,
         StubSkillToolsModule,
         StubAgentToolPortsModule,
+        StubDispatchSubagentModule,
         AgentModule,
       ],
       controllers: [SessionController],
