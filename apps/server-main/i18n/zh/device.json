@@ -1,0 +1,5 @@
+{
+  "notFound": "设备不存在",
+  "authRequestInvalid": "授权请求无效",
+  "authRequestExpired": "授权请求已过期"
+}

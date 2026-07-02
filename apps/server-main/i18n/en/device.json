@@ -1,0 +1,5 @@
+{
+  "notFound": "Device not found",
+  "authRequestInvalid": "Authorization request is invalid",
+  "authRequestExpired": "Authorization request has expired"
+}

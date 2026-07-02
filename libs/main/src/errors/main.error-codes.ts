@@ -82,4 +82,34 @@ export const MainErrorCode = defineErrorCode({
     code: 2021,
     message: "drive.sharePasswordInvalid",
   },
+  AUTH_EMAIL_NOT_VERIFIED: {
+    code: 2022,
+    message: "auth.emailNotVerified",
+  },
+  AUTH_VERIFICATION_INVALID: {
+    code: 2023,
+    message: "auth.verificationInvalid",
+  },
+  AUTH_VERIFICATION_COOLDOWN: {
+    code: 2024,
+    message: "auth.verificationCooldown",
+  },
+  DEVICE_AUTH_REQUEST_INVALID: {
+    code: 2025,
+    message: "device.authRequestInvalid",
+  },
+  DEVICE_AUTH_EXPIRED: {
+    code: 2026,
+    message: "device.authRequestExpired",
+  },
+  DEVICE_TOKEN_INVALID: {
+    code: 2027,
+    message: "auth.deviceTokenInvalid",
+    httpStatus: 401,
+  },
+  DEVICE_NOT_FOUND: {
+    code: 2028,
+    message: "device.notFound",
+    httpStatus: 404,
+  },
 });

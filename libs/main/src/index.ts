@@ -24,6 +24,11 @@ export {
 } from "./services/invitation.config";
 export { ConversationService } from "./services/conversation.service";
 export {
+  DEVICE_TOKEN_PREFIX,
+  DeviceService,
+  hashDeviceToken,
+} from "./services/device.service";
+export {
   type AcceptResult,
   InvitationService,
 } from "./services/invitation.service";
