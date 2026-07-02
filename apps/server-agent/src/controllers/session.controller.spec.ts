@@ -37,7 +37,10 @@ describe("SessionController.history byMessage（id==langgraphId 回归）", () =
       durationMs: 5,
     };
     const controller = new SessionController(
-      { findSessionOrFail: async () => {} } as unknown as SessionService,
+      {
+        findSessionOrFail: async () => {},
+        listChildren: async () => [],
+      } as unknown as SessionService,
       { getInflight: () => null } as unknown as RunnerService,
       {
         listByMessageIds: async () => [call],
@@ -54,5 +57,57 @@ describe("SessionController.history byMessage（id==langgraphId 回归）", () =
     const res = await controller.history("s1", { limit: "10" });
     expect(res.byMessage[SID]).toBeDefined();
     expect(res.byMessage[SID]?.totalTokens).toBe(12);
+  });
+});
+
+describe("SessionController.history 嵌套卡 subSessionId 关联", () => {
+  it("dispatch 工具条目带出子会话 id；其他工具与无子会话的不带", async () => {
+    const MID = "900000000000000200";
+    const assistantRow = {
+      id: MID,
+      langgraphId: null,
+      role: "assistant",
+      content: "",
+      reasoning: null,
+      toolCalls: JSON.stringify([
+        {
+          id: "tc-dispatch",
+          name: "dispatch_subagent",
+          args: { task: "调研" },
+        },
+        { id: "tc-bash", name: "bash", args: { command: "ls" } },
+      ]),
+      toolCallId: null,
+      metadata: null,
+      seq: 1,
+      createdAt: new Date(),
+    };
+    const controller = new SessionController(
+      {
+        findSessionOrFail: async () => {},
+        listChildren: async () => [
+          { id: "901000000000000001", parentToolCallId: "tc-dispatch" },
+        ],
+      } as unknown as SessionService,
+      { getInflight: () => null } as unknown as RunnerService,
+      {
+        listByMessageIds: async () => [],
+        getSessionTotals: async () => null,
+      } as unknown as LlmCallService,
+      {
+        listPage: async () => ({ messages: [assistantRow], hasMore: false }),
+      } as unknown as SessionMessageService,
+      {} as unknown as SessionTitleService,
+      undefined as never,
+      undefined as never,
+    );
+    const res = await controller.history("s1", { limit: "10" });
+    const tcs = res.messages[0]?.toolCalls ?? [];
+    expect(tcs.find((t) => t.toolCallId === "tc-dispatch")?.subSessionId).toBe(
+      "901000000000000001",
+    );
+    expect(
+      tcs.find((t) => t.toolCallId === "tc-bash")?.subSessionId,
+    ).toBeUndefined();
   });
 });
