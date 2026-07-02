@@ -1,5 +1,5 @@
 import { AppError, CommonErrorCode } from "@meshbot/common";
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import type { Repository } from "typeorm";
 import { OrgModelConfig } from "../entities/org-model-config.entity";
@@ -41,6 +41,8 @@ export interface AgentModelConfig {
 /** 组织级模型配置归属 Service;写侧仅 owner(controller 断言),apiKey 加密存储 */
 @Injectable()
 export class OrgModelConfigService {
+  private readonly logger = new Logger(OrgModelConfigService.name);
+
   constructor(
     @InjectRepository(OrgModelConfig)
     private readonly configRepo: Repository<OrgModelConfig>,
@@ -126,6 +128,9 @@ export class OrgModelConfigService {
       try {
         return this.crypto.decrypt(r.apiKeyEnc).slice(-4);
       } catch {
+        this.logger.warn(
+          `模型配置 ${r.id}(org ${r.orgId})apiKey 解密失败,可能密钥轮换或数据损坏`,
+        );
         return "????";
       }
     })();

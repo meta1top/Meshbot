@@ -1,3 +1,4 @@
+import { CommonErrorCode } from "@meshbot/common";
 import { SecretCryptoService } from "./secret-crypto.service";
 import { OrgModelConfigService } from "./org-model-config.service";
 import type { OrgModelConfig } from "../entities/org-model-config.entity";
@@ -56,6 +57,18 @@ describe("OrgModelConfigService", () => {
     expect(admin[0].apiKeyMasked).toBe("****1234");
     const agent = await svc.listForAgent("o1");
     expect(agent[0].apiKey).toBe("sk-abcd1234");
+  });
+
+  it("create 缺 apiKey 抛 VALIDATION_FAILED", async () => {
+    const rows: OrgModelConfig[] = [];
+    const svc = new OrgModelConfigService(makeRepo(rows) as never, crypto);
+    await expect(
+      svc.create("o1", { ...input, apiKey: undefined }),
+    ).rejects.toMatchObject({
+      name: "AppError",
+      errorCode: CommonErrorCode.VALIDATION_FAILED,
+    });
+    expect(rows).toHaveLength(0);
   });
 
   it("update 不传 apiKey 时保留旧密钥", async () => {
