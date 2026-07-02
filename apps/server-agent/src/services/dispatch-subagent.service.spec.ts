@@ -45,6 +45,7 @@ describe("DispatchSubagentService.dispatch（前台）", () => {
         sessionId: "parent",
         toolCallId: "tc",
         subSessionId: "sub-1",
+        description: "查X",
       }),
     );
     expect(JSON.parse(out)).toEqual({
@@ -62,6 +63,19 @@ describe("DispatchSubagentService.dispatch（前台）", () => {
       new AbortController().signal,
     );
     expect(JSON.parse(out).status).toBe("error");
+    expect(sessions.createSubSession).not.toHaveBeenCalled();
+  });
+
+  it("父会话不存在时返回 error，不建子会话", async () => {
+    const { svc, sessions } = make();
+    sessions.findOrNull.mockResolvedValue(null);
+    const out = await svc.dispatch(
+      { parentSessionId: "ghost", parentToolCallId: "tc", task: "t" },
+      new AbortController().signal,
+    );
+    const parsed = JSON.parse(out);
+    expect(parsed.status).toBe("error");
+    expect(parsed.output).toContain("父会话不存在");
     expect(sessions.createSubSession).not.toHaveBeenCalled();
   });
 

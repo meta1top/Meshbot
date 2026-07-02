@@ -1,5 +1,4 @@
 import {
-  DISPATCH_SUBAGENT_PORT,
   type DispatchSubagentPort,
   AccountContextService,
 } from "@meshbot/agent";
@@ -27,7 +26,7 @@ class Semaphore {
     this.active++;
   }
   release(): void {
-    this.active--;
+    if (this.active > 0) this.active--;
     const next = this.queue.shift();
     if (next) next();
   }
@@ -83,13 +82,15 @@ export class DispatchSubagentService implements DispatchSubagentPort {
         output: "",
       });
     }
-    // 一层：父会话本身是 subagent 时拒绝派发。
+    // 一层：父会话不存在或本身是 subagent 时拒绝派发。
     const parent = await this.sessions.findOrNull(params.parentSessionId);
-    if (parent?.kind === "subagent") {
+    if (!parent || parent.kind === "subagent") {
       return JSON.stringify({
         subSessionId: "",
         status: "error",
-        output: "子 Agent 不能再派子 Agent（仅支持一层）。",
+        output: !parent
+          ? "父会话不存在。"
+          : "子 Agent 不能再派子 Agent（仅支持一层）。",
       });
     }
 
@@ -142,6 +143,3 @@ export class DispatchSubagentService implements DispatchSubagentPort {
     }
   }
 }
-
-// 端口 token 重导出供 module 使用（避免 module 直接依赖 @meshbot/agent 内部路径）。
-export { DISPATCH_SUBAGENT_PORT };
