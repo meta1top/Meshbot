@@ -18,7 +18,7 @@ import { ModelResolver } from "./model-resolver.service";
  */
 @Injectable()
 export class AccountGraphProvider {
-  /** 按账号缓存的 {graph, checkpointer}：checkpointer 指向该账号 accounts/<id>/agent.db。 */
+  /** 按账号缓存的主图 {graph, checkpointer}：checkpointer 指向该账号 accounts/<id>/agent.db。 */
   private readonly graphsByAccount = new Map<
     string,
     {
@@ -26,6 +26,15 @@ export class AccountGraphProvider {
       checkpointer: ReturnType<typeof createSqliteCheckpointer>;
     }
   >();
+
+  /** 子 Agent 子图（排除 dispatch_subagent），按账号缓存，共用同账号 checkpointer。 */
+  private readonly subGraphsByAccount = new Map<
+    string,
+    { graph: ReturnType<typeof buildSupervisorGraph> }
+  >();
+
+  /** 排除集：子 Agent 不绑定 dispatch 工具，天然不能再派（一层）。 */
+  private static readonly SUBAGENT_EXCLUDE = new Set(["dispatch_subagent"]);
 
   /** 模型生成的 AIMessage UUID -> 我方雪花。node 与 runGraphStream 共享，保证一致。 */
   private readonly msgIdMap = new Map<string, string>();
@@ -76,6 +85,30 @@ export class AccountGraphProvider {
       );
       entry = { graph, checkpointer };
       this.graphsByAccount.set(acct, entry);
+    }
+    return entry;
+  }
+
+  /**
+   * 解析当前账号的子图（复用 accountGraph 的 checkpointer；首次建、之后缓存）。
+   *
+   * 子 Agent 用去掉 dispatch_subagent 的子图运行，天然不能再派（一层嵌套上限）。
+   */
+  subAgentGraph(): { graph: ReturnType<typeof buildSupervisorGraph> } {
+    const acct = this.account.getOrThrow();
+    let entry = this.subGraphsByAccount.get(acct);
+    if (!entry) {
+      const { checkpointer } = this.accountGraph();
+      const graph = buildSupervisorGraph(
+        checkpointer,
+        this.modelResolver.provider(),
+        this.toolRegistry,
+        this.eventEmitter,
+        this.resolveMessageId,
+        AccountGraphProvider.SUBAGENT_EXCLUDE,
+      );
+      entry = { graph };
+      this.subGraphsByAccount.set(acct, entry);
     }
     return entry;
   }

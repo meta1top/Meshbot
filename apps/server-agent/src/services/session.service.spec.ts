@@ -249,6 +249,14 @@ describe("SessionService", () => {
     expect(active.some((m) => m.status === "failed")).toBe(true);
   });
 
+  it("hasFailedPending 在存在 failed 消息时返回 true，否则 false", async () => {
+    const { sessionId } = await service.createSession({ content: "m1" });
+    expect(await service.hasFailedPending(sessionId)).toBe(false);
+    const claimed = await service.claimPending(sessionId);
+    await service.markFailed(claimed.map((m) => m.id));
+    expect(await service.hasFailedPending(sessionId)).toBe(true);
+  });
+
   it("listActivePendingWithHistory 标注 inHistory（已入 session_messages 为 true）", async () => {
     const { sessionId } = await service.createSession({ content: "m1" });
     const claimed = await service.claimPending(sessionId);
@@ -603,6 +611,37 @@ describe("SessionService", () => {
       await expect(
         service.regenerateAfter(sessionId, `a1-${sessionId}`),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe("createSubSession", () => {
+    it("createSubSession 建 subagent 会话并带 parent 关联 + 首条 pending", async () => {
+      const parent = await service.createSession({ content: "父任务" });
+      const { subSessionId } = await service.createSubSession({
+        parentSessionId: parent.sessionId,
+        parentToolCallId: "tc-1",
+        task: "子任务内容",
+        description: "子任务",
+      });
+      const sub = await service.findOrNull(subSessionId);
+      expect(sub?.kind).toBe("subagent");
+      expect(sub?.parentSessionId).toBe(parent.sessionId);
+      expect(sub?.parentToolCallId).toBe("tc-1");
+      const pend = await service.listActivePending(subSessionId);
+      expect(pend.map((p) => p.content)).toContain("子任务内容");
+    });
+
+    it("listAllSorted 不含 subagent 会话", async () => {
+      const parent = await service.createSession({ content: "父" });
+      const { subSessionId } = await service.createSubSession({
+        parentSessionId: parent.sessionId,
+        parentToolCallId: "tc",
+        task: "子",
+      });
+      const all = await service.listAllSorted();
+      const ids = all.map((s) => s.id);
+      expect(ids).toContain(parent.sessionId);
+      expect(ids).not.toContain(subSessionId);
     });
   });
 

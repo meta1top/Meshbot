@@ -101,6 +101,45 @@ export class SessionService {
   }
 
   /**
+   * 建子 Agent 子会话：Session(kind:"subagent" + parent 关联, running) + 首条 pending(task)。
+   * 跨两表写入，@Transactional 包裹。须在父 run 账号上下文内调用（作用域仓库自动盖 cloudUserId）。
+   */
+  async createSubSession(input: {
+    parentSessionId: string;
+    parentToolCallId: string;
+    task: string;
+    description?: string;
+  }): Promise<{ subSessionId: string }> {
+    return this.createSubSessionInTx(input);
+  }
+
+  @Transactional()
+  private async createSubSessionInTx(input: {
+    parentSessionId: string;
+    parentToolCallId: string;
+    task: string;
+    description?: string;
+  }): Promise<{ subSessionId: string }> {
+    const title = (input.description ?? stripLlmuse(input.task)).slice(
+      0,
+      TITLE_MAX,
+    );
+    const saved = (await this.sessionRepo.save({
+      title,
+      status: "running" as const,
+      kind: "subagent" as const,
+      parentSessionId: input.parentSessionId,
+      parentToolCallId: input.parentToolCallId,
+    })) as Session;
+    await this.pendingRepo.save({
+      sessionId: saved.id,
+      content: input.task,
+      status: "pending" as const,
+    });
+    return { subSessionId: saved.id };
+  }
+
+  /**
    * 向已存在会话追加一条 pending 消息。messageId 由调用方生成（前端 UUID）：
    * 让前端乐观插入 user 气泡时就拿到最终 id，避免 run.human 早于 200 返回时
    * 找不到目标气泡。单表写入，无需事务。
@@ -252,6 +291,21 @@ export class SessionService {
   async markFailed(ids: string[]): Promise<void> {
     if (ids.length === 0) return;
     await this.pendingRepo.update({ id: In(ids) }, { status: "failed" });
+  }
+
+  /**
+   * 会话下是否存在 failed 状态的 pending 消息。
+   *
+   * `RunnerService.kickAndWait` 会吞掉 `runOnce` 抛出的错误（log + break 后
+   * 正常 resolve），调用方拿不到异常；但失败的批次已被 `markFailed` 落成
+   * failed 状态，据此可判定该 session 的最近一次 run 是否失败。
+   * 供 `DispatchSubagentService` 判断子会话 run 结果——单表读，无需事务。
+   */
+  async hasFailedPending(sessionId: string): Promise<boolean> {
+    const count = await this.pendingRepo.count({
+      where: { sessionId, status: "failed" },
+    });
+    return count > 0;
   }
 
   /** 把一批消息标记为 processed，写 processed_at。 */

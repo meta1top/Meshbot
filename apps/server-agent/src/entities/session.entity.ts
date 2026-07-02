@@ -21,7 +21,13 @@ export class Session extends SnowflakeBaseEntity {
   titleGenerated!: boolean;
 
   @Column({ type: "varchar", default: "user" })
-  kind!: "user" | "quick";
+  kind!: "user" | "quick" | "subagent";
+
+  @Column({ name: "parent_session_id", type: "text", nullable: true })
+  parentSessionId!: string | null;
+
+  @Column({ name: "parent_tool_call_id", type: "text", nullable: true })
+  parentToolCallId!: string | null;
 
   @CreateDateColumn({ name: "created_at" })
   createdAt!: Date;

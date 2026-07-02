@@ -443,9 +443,13 @@ export class RunnerService implements OnModuleInit {
   ): Promise<void> {
     let firstHumanLogged = false;
     let firstChunkLogged = false;
+    const session = await this.sessions.findOrNull(sessionId);
+    const subAgent = session?.kind === "subagent";
     const stream = resume
-      ? this.graphRunner.resumeStream(sessionId, run.abort.signal)
-      : this.graphRunner.streamMessage(sessionId, batch, run.abort.signal);
+      ? this.graphRunner.resumeStream(sessionId, run.abort.signal, { subAgent })
+      : this.graphRunner.streamMessage(sessionId, batch, run.abort.signal, {
+          subAgent,
+        });
     for await (const event of stream) {
       if (event.kind === "human") {
         if (!firstHumanLogged) {

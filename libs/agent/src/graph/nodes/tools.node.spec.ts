@@ -220,6 +220,55 @@ describe("createToolsNode", () => {
     expect(tool.lastCtx.emitter).toBe(emitter);
   });
 
+  it("同轮多个 tool_calls 并发执行且结果保序", async () => {
+    const order: string[] = [];
+    const registry = {
+      get: (name: string) => ({
+        name,
+        description: "",
+        schema: { parse: (a: unknown) => a },
+        execute: async () => {
+          const delay = name === "slow" ? 60 : 10;
+          await new Promise((r) => setTimeout(r, delay));
+          order.push(name);
+          return `${name}-result`;
+        },
+      }),
+    } as unknown as import("../../tools/tool-registry").ToolRegistry;
+    const emitter = {
+      emit: () => true,
+    } as unknown as import("@nestjs/event-emitter").EventEmitter2;
+    const node = createToolsNode(registry, emitter);
+    const state = {
+      messages: [
+        {
+          id: "m1",
+          tool_calls: [
+            { id: "c1", name: "slow", args: {} },
+            { id: "c2", name: "fast", args: {} },
+          ],
+        } as never,
+      ],
+    };
+    const start = Date.now();
+    const out = (await node(
+      state as never,
+      {
+        configurable: { thread_id: "s1" },
+        signal: new AbortController().signal,
+      } as never,
+    )) as unknown as {
+      messages: Array<{ tool_call_id: string; content: string }>;
+    };
+    const elapsed = Date.now() - start;
+    // 并发：总耗时接近慢的（~60ms），远小于串行（~70ms+）；放宽到 <150ms 容错
+    expect(elapsed).toBeLessThan(150);
+    // 保序：结果数组仍按 tool_calls 顺序（slow=c1 在前）
+    expect(out.messages.map((m) => m.tool_call_id)).toEqual(["c1", "c2"]);
+    // fast 先完成（order[0]="fast"）证明确实并发而非串行
+    expect(order[0]).toBe("fast");
+  });
+
   it("多 session 并发跑同一个 GraphService 也不串台（修 ctxRef 单例 bug 的回归用例）", async () => {
     // 共享同一个 toolsNode（对应 GraphService 单例）—— 同时跑两份带不同 sessionId
     // 的 graph.stream，验证 tool 事件 / ctx 都按本次 config 隔离，互不覆盖。

@@ -409,6 +409,30 @@ describe("SessionMessageService", () => {
     expect(got.size).toBe(0);
   });
 
+  describe("findLastAssistant", () => {
+    it("用例 A：多条消息含 assistant 时返回末条 assistant 的 content", async () => {
+      const sessionId = randomUUID();
+      await seed(sessionId, [
+        { role: "user", content: "第一条用户消息", offsetMs: 0 },
+        { role: "assistant", content: "第一条助手回复", offsetMs: 1 },
+        { role: "user", content: "第二条用户消息", offsetMs: 2 },
+        { role: "assistant", content: "第二条助手回复（末条）", offsetMs: 3 },
+      ]);
+      const result = await service.findLastAssistant(sessionId);
+      expect(result).not.toBeNull();
+      expect(result?.content).toBe("第二条助手回复（末条）");
+    });
+
+    it("用例 B：会话无 assistant 消息时返回 null", async () => {
+      const sessionId = randomUUID();
+      await seed(sessionId, [
+        { role: "user", content: "只有用户消息", offsetMs: 0 },
+      ]);
+      const result = await service.findLastAssistant(sessionId);
+      expect(result).toBeNull();
+    });
+  });
+
   it("deleteBySession 删该会话全部消息", async () => {
     await service.recordUser({ id: "u1", sessionId: "s1", content: "a" });
     await service.recordUser({ id: "u2", sessionId: "s2", content: "b" });

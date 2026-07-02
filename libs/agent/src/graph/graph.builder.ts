@@ -1,4 +1,5 @@
 import { type BaseMessage, RemoveMessage } from "@langchain/core/messages";
+import type { StructuredToolInterface } from "@langchain/core/tools";
 import { END, START, StateGraph } from "@langchain/langgraph";
 import type { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import type { EventEmitter2 } from "@nestjs/event-emitter";
@@ -11,6 +12,15 @@ import { createToolsNode } from "./nodes/tools.node";
 
 export interface GraphState {
   messages: BaseMessage[];
+}
+
+/** 按名字过滤 bindable 工具列表（子 Agent 用来排除 dispatch_subagent，实现一层嵌套）。 */
+export function filterBindable(
+  tools: StructuredToolInterface[],
+  excludeToolNames?: ReadonlySet<string>,
+): StructuredToolInterface[] {
+  if (!excludeToolNames || excludeToolNames.size === 0) return tools;
+  return tools.filter((t) => !excludeToolNames.has(t.name));
 }
 
 /**
@@ -72,10 +82,11 @@ export function buildSupervisorGraph(
   registry: ToolRegistry,
   emitter: EventEmitter2,
   resolveMessageId: (modelId: string) => string,
+  excludeToolNames?: ReadonlySet<string>,
 ) {
   const supervisor = createSupervisorNode(
     modelProvider,
-    () => registry.asLangChainBindable(),
+    () => filterBindable(registry.asLangChainBindable(), excludeToolNames),
     resolveMessageId,
   );
   const tools = createToolsNode(registry, emitter);

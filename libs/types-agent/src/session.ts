@@ -396,6 +396,18 @@ export const RunToolCallEndEventSchema = z.object({
 });
 export type RunToolCallEndEvent = z.infer<typeof RunToolCallEndEventSchema>;
 
+/** 子 Agent 派发关联事件：让前端把父消息里某个 dispatch 工具卡认领到子会话。 */
+export interface RunSubagentSpawnedEvent {
+  /** 父会话 id（事件按此路由到父房间）。 */
+  sessionId: string;
+  /** 父会话里那次 dispatch 工具调用的 toolCallId。 */
+  toolCallId: string;
+  /** 子会话 id（前端据此订阅嵌套流）。 */
+  subSessionId: string;
+  /** 子任务短标题。 */
+  description: string;
+}
+
 /** socket: run.compaction_start —— 压缩开始通知。 */
 export const RunCompactionStartEventSchema = z.object({
   sessionId: z.string(),
@@ -482,4 +494,5 @@ export const SESSION_WS_EVENTS = {
   runCompactionStart: "run.compaction_start",
   runCompactionDone: "run.compaction_done",
   runCompactionError: "run.compaction_error",
+  runSubagentSpawned: "run.subagent_spawned",
 } as const;

@@ -20,6 +20,7 @@ export {
   type UserInfo,
 } from "./auth";
 export * from "./confirm";
+export * from "./dispatch-subagent";
 export * from "./drive-tools";
 export * from "./im-tools";
 export * from "./llmuse";
