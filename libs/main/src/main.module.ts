@@ -31,9 +31,14 @@ import { CloudNodeGrantService } from "./services/cloud-node-grant.service";
 import { CloudDriveService } from "./services/cloud-drive.service";
 import { CloudShareLinkService } from "./services/cloud-share-link.service";
 import { PresenceService } from "./services/presence.service";
+import {
+  type SecurityConfig,
+  SecretCryptoService,
+} from "./services/secret-crypto.service";
 import { SkillMarketService } from "./services/skill-market.service";
 import { SkillPackageService } from "./services/skill-package.service";
 import { UserService } from "./services/user.service";
+import { SECURITY_CONFIG } from "./tokens";
 
 /**
  * server-main 业务模块。Entity → Service 一对一归属（check:repo）：
@@ -44,8 +49,9 @@ import { UserService } from "./services/user.service";
  * CloudNode→CloudNodeService / CloudNodeGrant→CloudNodeGrantService /
  * CloudShareLink→CloudShareLinkService。
  *
- * `forRoot(invitation)` 注入邀请配置切片（过期天数），由 server-main 的
- * AppConfig.invitation 提供。
+ * `forRoot(invitation, security)` 注入邀请配置切片（过期天数）与加密配置切片
+ * （对称密钥，供 `SecretCryptoService` 使用），分别由 server-main 的
+ * AppConfig.invitation / AppConfig.security 提供。
  *
  * 约定（静态围栏强制）：
  * - 跨表写动作走 `@Transactional()`，跨 Service 写动作通过被调 Service 的方法（不注 Repository）
@@ -62,7 +68,10 @@ import { UserService } from "./services/user.service";
 @Module({})
 // biome-ignore lint/complexity/noStaticOnlyClass: NestJS DynamicModule 模式要求 class + 静态 forRoot
 export class MainModule {
-  static forRoot(invitation: AppConfigInvitation): DynamicModule {
+  static forRoot(
+    invitation: AppConfigInvitation,
+    security: SecurityConfig,
+  ): DynamicModule {
     return {
       module: MainModule,
       imports: [
@@ -99,7 +108,9 @@ export class MainModule {
         CloudNodeGrantService,
         CloudDriveService,
         CloudShareLinkService,
+        SecretCryptoService,
         { provide: INVITATION_CONFIG, useValue: invitation },
+        { provide: SECURITY_CONFIG, useValue: security },
       ],
       exports: [
         UserService,
@@ -115,6 +126,7 @@ export class MainModule {
         CloudNodeGrantService,
         CloudDriveService,
         CloudShareLinkService,
+        SecretCryptoService,
       ],
     };
   }

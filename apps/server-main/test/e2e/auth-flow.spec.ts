@@ -145,7 +145,10 @@ describe.each<[Mode]>([
             bucket: "test",
           },
         }),
-        MainModule.forRoot({ expiresDays: 7 }),
+        MainModule.forRoot(
+          { expiresDays: 7 },
+          { encryptionKey: "e2e-encryption-key-0123456789abcdef" },
+        ),
       ],
       controllers: [AuthController],
       providers: [

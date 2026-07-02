@@ -1,5 +1,5 @@
 export * from "./dto";
-export { REDIS_CLIENT } from "./tokens";
+export { REDIS_CLIENT, SECURITY_CONFIG } from "./tokens";
 export * from "./entities/app-user.entity";
 export * from "./entities/conversation.entity";
 export * from "./entities/conversation-member.entity";
@@ -41,3 +41,7 @@ export {
   type NodeView,
 } from "./services/cloud-drive.service";
 export { CloudShareLinkService } from "./services/cloud-share-link.service";
+export {
+  type SecurityConfig,
+  SecretCryptoService,
+} from "./services/secret-crypto.service";

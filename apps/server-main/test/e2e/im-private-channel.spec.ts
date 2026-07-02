@@ -115,7 +115,10 @@ describe("server-main 私有频道 e2e", () => {
             bucket: "test",
           },
         }),
-        MainModule.forRoot({ expiresDays: 7 }),
+        MainModule.forRoot(
+          { expiresDays: 7 },
+          { encryptionKey: "e2e-encryption-key-0123456789abcdef" },
+        ),
       ],
       controllers: [AuthController, OrgController, ImController],
       providers: [

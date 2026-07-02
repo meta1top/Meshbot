@@ -111,7 +111,10 @@ describe("server-main skill marketplace e2e", () => {
           signOptions: { expiresIn: "1h" },
         }),
         AssetsModule.forRoot(DUMMY_MINIO),
-        MainModule.forRoot({ expiresDays: 7 }),
+        MainModule.forRoot(
+          { expiresDays: 7 },
+          { encryptionKey: "e2e-encryption-key-0123456789abcdef" },
+        ),
       ],
       controllers: [AuthController, SkillController],
       providers: [

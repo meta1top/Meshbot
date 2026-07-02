@@ -191,7 +191,7 @@ export class AppModule {
         // 结构化健康检查（DB + Redis 分组上报）
         TerminusModule,
         EmailModule,
-        MainModule.forRoot(config.invitation),
+        MainModule.forRoot(config.invitation, config.security),
         EventEmitterModule.forRoot(),
         AssetsModule.forRoot({ provider: "minio", minio: config.assets.minio }),
       ],
