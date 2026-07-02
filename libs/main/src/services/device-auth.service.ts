@@ -86,6 +86,8 @@ export class DeviceAuthService {
    * 3. 校验 userCode
    *    - 不匹配累计失败次数，达 5 次后作废
    * 4. 校验通过置 consumed，返回批准人
+   *
+   * tx-check: ignore — 三处 update 分属互斥分支(verifier 不匹配/userCode 错误/成功兑换)，每次执行只有一处单表写。
    */
   async exchange(input: {
     requestId: string;
