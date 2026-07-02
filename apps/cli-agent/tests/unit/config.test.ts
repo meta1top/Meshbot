@@ -25,7 +25,7 @@ describe("config", () => {
 
   it("returns default config when file does not exist", () => {
     const config = readConfig();
-    expect(config.port).toBe(3100);
+    expect(config.port).toBeUndefined();
     expect(config.logLevel).toBe("info");
   });
 

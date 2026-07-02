@@ -2,7 +2,6 @@ import path from "node:path";
 import { app, BrowserWindow, dialog, nativeImage } from "electron";
 import { startAgentRuntime, stopAgentRuntime } from "./agent-runtime";
 import { registerIpcHandlers } from "./ipc-handlers";
-import { startStaticServer } from "./static-server";
 
 const APP_NAME = "Meshbot";
 const DEV_AGENT_URL = "http://localhost:3001";
@@ -14,8 +13,6 @@ const DEV_AGENT_URL = "http://localhost:3001";
 app.setName(APP_NAME);
 
 let mainWindow: BrowserWindow | null = null;
-let staticServer: { server: import("node:http").Server; port: number } | null =
-  null;
 
 function createWindow(agentUrl: string) {
   const win = new BrowserWindow({
@@ -51,13 +48,10 @@ async function getAgentUrl(): Promise<string> {
     return process.env.MESHBOT_DESKTOP_DEV_URL ?? DEV_AGENT_URL;
   }
 
-  // packaged：server-agent 与 web-agent 都在 app 内 —— 先把内置 server-agent
-  // fork 起来并等就绪，再起静态 UI server 加载打包好的 html
-  await startAgentRuntime();
-
-  const webAgentPath = path.join(__dirname, "web-agent");
-  staticServer = await startStaticServer(webAgentPath);
-  return `http://127.0.0.1:${staticServer.port}`;
+  // packaged：fork 内置 server-agent（自检端口 + 同源伺服打包好的 web-agent），
+  // 窗口直接加载它的端口，前端走同源相对地址
+  const { port } = await startAgentRuntime();
+  return `http://127.0.0.1:${port}`;
 }
 
 app.whenReady().then(async () => {
@@ -88,8 +82,6 @@ app.whenReady().then(async () => {
 });
 
 app.on("window-all-closed", () => {
-  staticServer?.server.close();
-  staticServer = null;
   if (process.platform !== "darwin") {
     stopAgentRuntime();
     app.quit();
