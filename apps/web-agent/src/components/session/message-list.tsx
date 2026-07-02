@@ -29,6 +29,8 @@ export interface ToolCallView {
   progress?: string;
   /** 最终结果（end 后；历史读取也填这里）。 */
   result?: string;
+  /** dispatch_subagent 专用：已认领的子会话 id（spawned 事件 / history 附带）。 */
+  subSessionId?: string;
   /** streaming = LLM 仍在流式生成本工具的参数（尚未开始执行）。 */
   status: "streaming" | "running" | "ok" | "error";
 }
