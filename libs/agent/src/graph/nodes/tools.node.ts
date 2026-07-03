@@ -28,7 +28,7 @@ const RESULT_PREVIEW_LIMIT = 200;
 const TOOL_RESULT_LLM_LIMIT = 32_000;
 
 /** 截断给 LLM 的 tool 结果：保留开头（含 MCP 的 "Took a screenshot" 之类文字说明）+ 提示。 */
-function capForLlm(content: string): string {
+export function capForLlm(content: string): string {
   if (content.length <= TOOL_RESULT_LLM_LIMIT) return content;
   return `${content.slice(0, 2000)}\n\n[工具结果过长，共 ${content.length} 字符，为节省上下文已截断；完整结果保存在会话历史中，可让用户在前端查看]`;
 }

@@ -3,8 +3,12 @@ import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { Injectable, Optional } from "@nestjs/common";
 import { AccountContextService } from "../account/account-context.service";
 import { MeshbotConfigService } from "../config/meshbot-config.service";
-import { readActiveModelConfig } from "../config/model-config.reader";
+import {
+  readActiveModelConfig,
+  readModelConfigById,
+} from "../config/model-config.reader";
 import { createChatModel } from "./llm.factory";
+import { ModelRunContext } from "./model-run-context";
 import type { ModelProvider } from "./nodes/supervisor.node";
 
 /**
@@ -24,6 +28,7 @@ export class ModelResolver {
   constructor(
     private readonly config: MeshbotConfigService,
     private readonly account: AccountContextService,
+    private readonly runCtx: ModelRunContext,
     @Optional() overrideProvider?: ModelProvider,
     @Optional() overrideMeta?: { providerType: string; model: string },
   ) {
@@ -39,25 +44,34 @@ export class ModelResolver {
     return this.overrideProvider ?? (() => this.resolveModel());
   }
 
-  /** 返回当前活跃模型的 providerType/model meta（resolveModel 调用后刷新）。 */
+  /** 当前 run 的模型 meta（run 上下文优先；无上下文回落共享字段——title 等旁路径）。 */
   getMeta(): { providerType: string; model: string } {
-    return this.modelMeta;
+    return this.runCtx.getMeta() ?? this.modelMeta;
   }
 
   /**
-   * 按当前 agent.db 的启用 ModelConfig 构造 chat model。
+   * 按当前 agent.db 的启用 ModelConfig（或 run 上下文指定的覆盖 ModelConfig）
+   * 构造 chat model。
    *
    * 命中缓存直接返回；key 把可能影响行为的字段都拼上，配置变化自动 miss。
    */
   async resolveModel(): Promise<BaseChatModel> {
-    const cfg = readActiveModelConfig(
-      this.config.getDatabasePath(),
-      this.account.getOrThrow(),
-    );
+    const dbPath = this.config.getDatabasePath();
+    const acct = this.account.getOrThrow();
+    const overrideId = this.runCtx.getOverrideId();
+    const cfg = overrideId
+      ? readModelConfigById(dbPath, acct, overrideId)
+      : readActiveModelConfig(dbPath, acct);
     if (!cfg) {
-      throw new Error("当前账号没有启用的模型配置，请先在设置中配置模型");
+      throw new Error(
+        overrideId
+          ? `指定的模型配置不存在：${overrideId}（可能已被删除）`
+          : "当前账号没有启用的模型配置，请先在设置中配置模型",
+      );
     }
-    this.modelMeta = { providerType: cfg.providerType, model: cfg.model };
+    const meta = { providerType: cfg.providerType, model: cfg.model };
+    this.modelMeta = meta;
+    this.runCtx.setMeta(meta);
     const key = `${cfg.providerType}|${cfg.model}|${cfg.baseUrl ?? ""}|${cfg.apiKey ?? ""}`;
     const cached = this.modelCache.get(key);
     if (cached) return cached;

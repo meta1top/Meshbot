@@ -1,4 +1,4 @@
-import { AccountContextService } from "@meshbot/agent";
+import { AccountContextService, ModelRunContext } from "@meshbot/agent";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { SESSION_WS_EVENTS } from "@meshbot/types-agent";
 import type { PendingMessage } from "../entities/pending-message.entity";
@@ -20,8 +20,12 @@ function fakeSessionService() {
       return OWNER;
     },
     /** 按 id 查 session：测试默认都是主 Agent 会话（kind: "user"），非子 Agent。 */
-    async findOrNull(sessionId: string) {
-      return { id: sessionId, kind: "user" as const };
+    async findOrNull(sessionId: string): Promise<{
+      id: string;
+      kind: "user" | "subagent";
+      modelConfigId?: string | null;
+    }> {
+      return { id: sessionId, kind: "user" };
     },
     get claimPendingCalls() {
       return claimPendingCalls;
@@ -205,6 +209,7 @@ describe("RunnerService", () => {
       fakeCompactor() as never,
       fakeModelConfig() as never,
       new AccountContextService(),
+      new ModelRunContext(),
     );
     await runner.kickAndWait("s1");
     expect(
@@ -234,6 +239,7 @@ describe("RunnerService", () => {
       fakeCompactor() as never,
       fakeModelConfig() as never,
       new AccountContextService(),
+      new ModelRunContext(),
     );
     await runner.kickAndWait("s1");
     expect(sess.store).toHaveLength(2);
@@ -254,6 +260,7 @@ describe("RunnerService", () => {
       fakeCompactor() as never,
       fakeModelConfig() as never,
       new AccountContextService(),
+      new ModelRunContext(),
     );
     // 第一轮：消费 first，循环排空退出
     await runner.kickAndWait("s1");
@@ -282,6 +289,7 @@ describe("RunnerService", () => {
       fakeCompactor() as never,
       fakeModelConfig() as never,
       new AccountContextService(),
+      new ModelRunContext(),
     );
     await runner.kickAndWait("s1");
     expect(errs).toHaveLength(1);
@@ -305,6 +313,7 @@ describe("RunnerService", () => {
       fakeCompactor() as never,
       fakeModelConfig() as never,
       new AccountContextService(),
+      new ModelRunContext(),
     );
     await runner.kickRetryAndWait("s1");
     expect(sess.store[0].status).toBe("processed");
@@ -326,6 +335,7 @@ describe("RunnerService", () => {
       fakeCompactor() as never,
       fakeModelConfig() as never,
       new AccountContextService(),
+      new ModelRunContext(),
     );
     emitter.on("run.chunk", () => {
       snapshotDuringRun = runner.getInflight("s1");
@@ -388,6 +398,7 @@ describe("RunnerService", () => {
       fakeCompactor() as never,
       fakeModelConfig() as never,
       new AccountContextService(),
+      new ModelRunContext(),
     );
     const runPromise = runner.kickAndWait("s1");
     await reached;
@@ -424,6 +435,7 @@ describe("RunnerService", () => {
       fakeCompactor() as never,
       fakeModelConfig() as never,
       new AccountContextService(),
+      new ModelRunContext(),
     );
     emitter.on("run.chunk", () => runner.interrupt("s1"));
     await runner.kickAndWait("s1");
@@ -451,6 +463,7 @@ describe("RunnerService", () => {
       fakeCompactor() as never,
       fakeModelConfig() as never,
       new AccountContextService(),
+      new ModelRunContext(),
     );
     await runner.onModuleInit();
     expect(rolledBack).toBe(3);
@@ -472,6 +485,7 @@ describe("RunnerService", () => {
       fakeCompactor() as never,
       fakeModelConfig() as never,
       new AccountContextService(),
+      new ModelRunContext(),
     );
     await runner.kickAndWait("s1");
     expect(llmCalls.records).toHaveLength(1);
@@ -506,6 +520,7 @@ describe("RunnerService", () => {
       fakeCompactor() as never,
       fakeModelConfig() as never,
       new AccountContextService(),
+      new ModelRunContext(),
     );
     await runner.kickResumeAndWait("s1");
     expect(events).toContain("run.done");
@@ -536,6 +551,7 @@ describe("RunnerService", () => {
       fakeCompactor() as never,
       fakeModelConfig() as never,
       account,
+      new ModelRunContext(),
     );
     // 入口处（account.run 之外）无上下文，证明上下文是 runner 显式建的而非外泄。
     expect(account.get()).toBeNull();
@@ -566,9 +582,48 @@ describe("RunnerService", () => {
       fakeCompactor() as never,
       fakeModelConfig() as never,
       account,
+      new ModelRunContext(),
     );
     await runner.kickAndWait("orphan");
     expect(claimed).toBe(false);
+  });
+
+  it("consumeRunStream 全程运行在 ModelRunContext 内且带 session 的 modelConfigId", async () => {
+    const sess = fakeSessionService();
+    sess.findOrNull = async (sessionId: string) => ({
+      id: sessionId,
+      kind: "subagent" as const,
+      modelConfigId: "mc-9",
+    });
+    const runCtx = new ModelRunContext();
+    // graphRunner.streamMessage 的 mock 在被迭代时读取 runCtx.getOverrideId()
+    const seen: Array<string | null> = [];
+    const graph = {
+      async *streamMessage() {
+        seen.push(runCtx.getOverrideId());
+        yield {
+          kind: "assistant_done",
+          messageId: "m1",
+          content: "hi",
+          reasoning: "",
+          toolCalls: null,
+        };
+      },
+    };
+    sess.enqueue("s1", "hi");
+    const runner = new RunnerService(
+      sess as never,
+      graph as never,
+      new EventEmitter2(),
+      fakeLlmCallService() as never,
+      fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
+      new AccountContextService(),
+      runCtx,
+    );
+    await runner.kickAndWait("s1");
+    expect(seen).toEqual(["mc-9"]);
   });
 });
 
@@ -638,6 +693,7 @@ describe("RunnerService context compaction integration", () => {
       compactor as never,
       fakeModelConfig() as never,
       new AccountContextService(),
+      new ModelRunContext(),
     );
     await runner.kickAndWait("s1");
     expect(compactor.compactCalls).toHaveLength(1);
@@ -661,6 +717,7 @@ describe("RunnerService context compaction integration", () => {
       compactor as never,
       fakeModelConfig() as never,
       new AccountContextService(),
+      new ModelRunContext(),
     );
     await runner.kickAndWait("s1");
     expect(compactor.compactCalls).toHaveLength(0);
@@ -689,6 +746,7 @@ describe("RunnerService context compaction integration", () => {
       compactor as never,
       fakeModelConfig() as never,
       new AccountContextService(),
+      new ModelRunContext(),
     );
     await runner.kickAndWait("s1");
     expect(streamSpy).not.toHaveBeenCalled();
@@ -713,6 +771,7 @@ describe("RunnerService context compaction integration", () => {
       compactor as never,
       fakeModelConfig() as never,
       new AccountContextService(),
+      new ModelRunContext(),
     );
     await runner.kickAndWait("s1");
     expect(compactor.compactCalls).toHaveLength(1);
@@ -740,6 +799,7 @@ describe("RunnerService context compaction integration", () => {
       compactor as never,
       fakeModelConfig() as never,
       new AccountContextService(),
+      new ModelRunContext(),
     );
     await runner.kickAndWait("s1");
     expect(compactor.compactCalls).toHaveLength(0); // 兜底未触发
@@ -768,6 +828,7 @@ describe("RunnerService context compaction integration", () => {
       compactor as never,
       fakeModelConfig() as never,
       new AccountContextService(),
+      new ModelRunContext(),
     );
     await runner.kickAndWait("s1");
     // 兜底压缩被调一次（force=true, ctx-exceeded）

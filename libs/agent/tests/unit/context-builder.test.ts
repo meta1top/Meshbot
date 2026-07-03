@@ -11,6 +11,7 @@ import { AccountGraphProvider } from "../../src/graph/account-graph.provider";
 import { ContextBuilder } from "../../src/graph/context-builder.js";
 import { GraphRunner } from "../../src/graph/graph-runner.service.js";
 import { ModelResolver } from "../../src/graph/model-resolver.service.js";
+import { ModelRunContext } from "../../src/graph/model-run-context.js";
 import { ThreadStateService } from "../../src/graph/thread-state.service.js";
 import type { RuntimeContextPort } from "../../src/graph/runtime-context.port";
 import { MEMORY_GUIDE } from "../../src/memory/memory-guide";
@@ -57,6 +58,7 @@ function makeServices(opts: {
   const modelResolver = new ModelResolver(
     opts.configService,
     opts.account,
+    new ModelRunContext(),
     () => Promise.resolve(opts.fakeModel as never),
     { providerType: "fake", model: "fake-model" },
   );

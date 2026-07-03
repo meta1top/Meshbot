@@ -7,6 +7,7 @@ import { AccountGraphProvider } from "./graph/account-graph.provider";
 import { ContextBuilder } from "./graph/context-builder";
 import { GraphRunner } from "./graph/graph-runner.service";
 import { ModelResolver } from "./graph/model-resolver.service";
+import { ModelRunContext } from "./graph/model-run-context";
 import { ThreadStateService } from "./graph/thread-state.service";
 import { PromptService } from "./prompt/prompt.service";
 import { McpService } from "./mcp/mcp.service";
@@ -106,6 +107,7 @@ import { DispatchSubagentTool } from "./tools/builtins/dispatch-subagent.tool";
     McpService,
     PromptService,
     ModelResolver,
+    ModelRunContext,
     AccountGraphProvider,
     ContextBuilder,
     ThreadStateService,
@@ -114,6 +116,7 @@ import { DispatchSubagentTool } from "./tools/builtins/dispatch-subagent.tool";
   exports: [
     GraphRunner,
     ModelResolver,
+    ModelRunContext,
     ThreadStateService,
     PromptService,
     ToolRegistry,

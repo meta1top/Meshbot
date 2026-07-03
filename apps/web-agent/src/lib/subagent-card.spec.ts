@@ -1,9 +1,15 @@
 import {
   claimSubagentOnTimeline,
+  countToolCalls,
+  deriveLiveAction,
+  firstLineOf,
+  formatElapsed,
+  isBackgroundDispatch,
   isSubagentOpen,
   resolveSubagentStatus,
   resolveSubSessionId,
   type SubagentCollapse,
+  settleSubagentOnTimeline,
   subagentTitle,
   toggleSubagentOpen,
 } from "./subagent-card";
@@ -98,6 +104,52 @@ describe("折叠状态机", () => {
   });
 });
 
+describe("resolveSubagentStatus 后台 running 态", () => {
+  it("结果 JSON status=running 且子流在跑：入口 childRunning 早退 → running", () => {
+    expect(
+      resolveSubagentStatus(
+        { status: "ok", result: '{"status":"running"}' },
+        true,
+      ),
+    ).toBe("running");
+  });
+  it("结果 JSON status=running 但子流已停：settled 间隙按 done 兜底", () => {
+    expect(
+      resolveSubagentStatus(
+        { status: "ok", result: '{"status":"running"}' },
+        false,
+      ),
+    ).toBe("done");
+  });
+});
+
+describe("settleSubagentOnTimeline", () => {
+  const timeline: Array<{
+    id: string;
+    toolCalls?: Array<{ toolCallId: string; result?: string }>;
+  }> = [
+    {
+      id: "m1",
+      toolCalls: [{ toolCallId: "tc-1", result: '{"status":"running"}' }],
+    },
+    { id: "m2" },
+  ];
+  it("按 toolCallId 重写 result，其余不动", () => {
+    const next = settleSubagentOnTimeline(
+      timeline,
+      "tc-1",
+      '{"status":"aborted","output":""}',
+    );
+    expect(next[0].toolCalls?.[0].result).toBe(
+      '{"status":"aborted","output":""}',
+    );
+    expect(next[1]).toBe(timeline[1]);
+  });
+  it("未命中返回原数组引用", () => {
+    expect(settleSubagentOnTimeline(timeline, "tc-404", "{}")).toBe(timeline);
+  });
+});
+
 describe("claimSubagentOnTimeline", () => {
   // 显式标注可选 subSessionId，否则字面量推断出的类型上访问该字段会 TS2339
   const timeline: Array<{
@@ -115,5 +167,140 @@ describe("claimSubagentOnTimeline", () => {
   });
   it("未命中返回原数组引用（不触发重渲染）", () => {
     expect(claimSubagentOnTimeline(timeline, "tc-404", "sub-9")).toBe(timeline);
+  });
+});
+
+describe("deriveLiveAction", () => {
+  const msgs = (
+    ...m: Array<{
+      role?: string;
+      content?: string;
+      toolCalls?: Array<{ name: string; args?: unknown; status: string }>;
+    }>
+  ) =>
+    m.map((x) => ({
+      role: x.role ?? "assistant",
+      content: x.content ?? "",
+      toolCalls: x.toolCalls,
+    }));
+
+  it("优先取最后一个 running/streaming 工具（含 args 摘要）", () => {
+    const r = deriveLiveAction(
+      msgs(
+        {
+          toolCalls: [{ name: "bash", args: { command: "ls" }, status: "ok" }],
+        },
+        { content: "中间文本" },
+        {
+          toolCalls: [
+            {
+              name: "read_file",
+              args: { file_path: "a.md" },
+              status: "running",
+            },
+          ],
+        },
+      ),
+    );
+    expect(r).toEqual({
+      kind: "tool",
+      name: "read_file",
+      argsSummary: 'file_path: "a.md"',
+    });
+  });
+  it("streaming 工具同样命中；args 缺省摘要为空串", () => {
+    const r = deriveLiveAction(
+      msgs({ toolCalls: [{ name: "bash", status: "streaming" }] }),
+    );
+    expect(r).toEqual({ kind: "tool", name: "bash", argsSummary: "" });
+  });
+  it("无进行中工具 → 最后一条非空 assistant 正文的末行截断", () => {
+    const r = deriveLiveAction(
+      msgs(
+        {
+          content:
+            "第一行\n对比三家的定价页后，主要差异在按席位与按用量两种模式",
+        },
+        { role: "user", content: "无视我" },
+      ),
+    );
+    expect(r).toEqual({
+      kind: "text",
+      text: "对比三家的定价页后，主要差异在按席位与按用量两种模式",
+    });
+  });
+  it("末行超 80 字符截断加省略号", () => {
+    const long = "a".repeat(100);
+    const r = deriveLiveAction(msgs({ content: long }));
+    expect(r).toEqual({ kind: "text", text: `${"a".repeat(80)}…` });
+  });
+  it("既无工具也无正文 → null", () => {
+    expect(deriveLiveAction(msgs({ content: "" }))).toBeNull();
+    expect(deriveLiveAction([])).toBeNull();
+  });
+  it("args 摘要多键拼接并整体截断 40 字符", () => {
+    const r = deriveLiveAction(
+      msgs({
+        toolCalls: [
+          {
+            name: "bash",
+            args: {
+              command: "sleep 10 && echo 一段很长很长很长很长很长很长的命令",
+              timeout: 5,
+            },
+            status: "running",
+          },
+        ],
+      }),
+    );
+    expect(r?.kind).toBe("tool");
+    if (r?.kind === "tool") {
+      expect(r.argsSummary.length).toBeLessThanOrEqual(41); // 40 + 省略号
+      expect(r.argsSummary.startsWith('command: "sleep 10')).toBe(true);
+    }
+  });
+});
+
+describe("firstLineOf", () => {
+  it("取首个非空行并截断", () => {
+    expect(firstLineOf("\n\n后台任务完成！Fri Jul 3\n第二行")).toBe(
+      "后台任务完成！Fri Jul 3",
+    );
+    expect(firstLineOf("b".repeat(90))).toBe(`${"b".repeat(80)}…`);
+    expect(firstLineOf("", 80)).toBe("");
+  });
+});
+
+describe("countToolCalls / formatElapsed / isBackgroundDispatch", () => {
+  it("countToolCalls 汇总 assistant 消息的工具数", () => {
+    expect(
+      countToolCalls([
+        {
+          role: "assistant",
+          content: "",
+          toolCalls: [
+            { name: "a", status: "ok" },
+            { name: "b", status: "ok" },
+          ],
+        },
+        { role: "user", content: "x" },
+        {
+          role: "assistant",
+          content: "y",
+          toolCalls: [{ name: "c", status: "running" }],
+        },
+      ]),
+    ).toBe(3);
+  });
+  it("formatElapsed 三档格式", () => {
+    expect(formatElapsed(23_000)).toBe("0:23");
+    expect(formatElapsed(725_000)).toBe("12:05");
+    expect(formatElapsed(3_753_000)).toBe("1:02:33");
+  });
+  it("isBackgroundDispatch 只认 args.background === true", () => {
+    expect(isBackgroundDispatch({ background: true, task: "t" })).toBe(true);
+    expect(isBackgroundDispatch({ task: "t" })).toBe(false);
+    expect(isBackgroundDispatch(undefined)).toBe(false);
+    expect(isBackgroundDispatch({ background: "true" })).toBe(false);
   });
 });

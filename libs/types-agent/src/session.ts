@@ -414,6 +414,20 @@ export interface RunSubagentSpawnedEvent {
   description: string;
 }
 
+/** 子 Agent 了结事件：后台子任务终态回传，前端把 dispatch 卡更新为终态。 */
+export interface RunSubagentSettledEvent {
+  /** 父会话 id（事件按此路由到父房间）。 */
+  sessionId: string;
+  /** 父会话里那次 dispatch 工具调用的 toolCallId。 */
+  toolCallId: string;
+  /** 子会话 id。 */
+  subSessionId: string;
+  /** 子 run 终态。 */
+  status: "done" | "error" | "aborted";
+  /** 终态输出（已截断），与重写后的工具结果 JSON 一致。 */
+  output: string;
+}
+
 /** socket: run.compaction_start —— 压缩开始通知。 */
 export const RunCompactionStartEventSchema = z.object({
   sessionId: z.string(),
@@ -501,4 +515,5 @@ export const SESSION_WS_EVENTS = {
   runCompactionDone: "run.compaction_done",
   runCompactionError: "run.compaction_error",
   runSubagentSpawned: "run.subagent_spawned",
+  runSubagentSettled: "run.subagent_settled",
 } as const;

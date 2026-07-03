@@ -109,6 +109,8 @@ export class SessionService {
     parentToolCallId: string;
     task: string;
     description?: string;
+    background?: boolean;
+    modelConfigId?: string | null;
   }): Promise<{ subSessionId: string }> {
     return this.createSubSessionInTx(input);
   }
@@ -119,6 +121,8 @@ export class SessionService {
     parentToolCallId: string;
     task: string;
     description?: string;
+    background?: boolean;
+    modelConfigId?: string | null;
   }): Promise<{ subSessionId: string }> {
     const title = (input.description ?? stripLlmuse(input.task)).slice(
       0,
@@ -130,6 +134,8 @@ export class SessionService {
       kind: "subagent" as const,
       parentSessionId: input.parentSessionId,
       parentToolCallId: input.parentToolCallId,
+      background: input.background ? 1 : 0,
+      modelConfigId: input.modelConfigId ?? null,
     })) as Session;
     await this.pendingRepo.save({
       sessionId: saved.id,
@@ -210,6 +216,39 @@ export class SessionService {
     return this.sessionRepo.find({
       where: { parentSessionId },
       select: { id: true, parentToolCallId: true },
+    });
+  }
+
+  /** 置/清「待了结后台子任务」标记（播报完成置 0）。 */
+  async setBackground(sessionId: string, value: boolean): Promise<void> {
+    await this.sessionRepo.update(
+      { id: sessionId },
+      { background: value ? 1 : 0 },
+    );
+  }
+
+  /**
+   * 系统级扫描：所有账号的「待了结后台子任务」（kind=subagent 且 background=1）。
+   * 仅供进程启动恢复用——boot 时无账号上下文，须 unscoped 反查后逐个建上下文处理。
+   */
+  listPendingBackgroundSubagentsUnscoped(): Promise<
+    Array<
+      Pick<
+        Session,
+        "id" | "parentSessionId" | "parentToolCallId" | "title" | "cloudUserId"
+      >
+    >
+  > {
+    // scope-check: allow-unscoped
+    return this.sessionRepo.unscoped().find({
+      where: { kind: "subagent", background: 1 },
+      select: {
+        id: true,
+        parentSessionId: true,
+        parentToolCallId: true,
+        title: true,
+        cloudUserId: true,
+      },
     });
   }
 
