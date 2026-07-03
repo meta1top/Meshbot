@@ -61,5 +61,10 @@ export type CreateChannelInput = z.infer<typeof CreateChannelSchema>;
 export const CreateDmSchema = z.object({ userId: z.string() });
 export type CreateDmInput = z.infer<typeof CreateDmSchema>;
 
+export const CreateAgentDmSchema = z.object({
+  deviceId: z.string().min(1, { message: "validation.required" }),
+});
+export type CreateAgentDmInput = z.infer<typeof CreateAgentDmSchema>;
+
 export const AddChannelMemberSchema = z.object({ userId: z.string() });
 export type AddChannelMemberInput = z.infer<typeof AddChannelMemberSchema>;

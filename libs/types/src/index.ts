@@ -40,6 +40,8 @@ export {
   type ChannelMember,
   type ConversationSummary,
   type ConversationType,
+  type CreateAgentDmInput,
+  CreateAgentDmSchema,
   type CreateChannelInput,
   CreateChannelSchema,
   type CreateDmInput,
