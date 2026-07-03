@@ -162,8 +162,16 @@ function AuthorizeFlow() {
     setApproveError(null);
     try {
       const result = await approveMutation.mutateAsync(requestId);
-      // 先落 sessionStorage 再触发重定向 effect——重定向失败返回后仍能恢复展示授权码
-      window.sessionStorage.setItem(codeStorageKey(requestId), result.userCode);
+      // 先落 sessionStorage 再触发重定向 effect——重定向失败返回后仍能恢复展示授权码。
+      // best-effort：sessionStorage 不可用（隐私模式/配额满）不应影响主流程，静默忽略。
+      try {
+        window.sessionStorage.setItem(
+          codeStorageKey(requestId),
+          result.userCode,
+        );
+      } catch {
+        // 忽略——授权码兜底缓存写入失败不影响本次批准结果的展示
+      }
       setApproveResult(result);
     } catch (err) {
       setApproveError(
