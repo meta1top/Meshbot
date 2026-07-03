@@ -510,15 +510,27 @@ importers:
 
   apps/web-main:
     dependencies:
+      '@hookform/resolvers':
+        specifier: ^5
+        version: 5.2.2(react-hook-form@7.75.0(react@19.2.5))
       '@meshbot/design':
         specifier: workspace:*
         version: link:../../packages/design
       '@meshbot/types':
         specifier: workspace:*
         version: link:../../libs/types
+      '@meshbot/types-main':
+        specifier: workspace:*
+        version: link:../../libs/types-main
       '@meshbot/web-common':
         specifier: workspace:*
         version: link:../../packages/web-common
+      '@tanstack/react-query':
+        specifier: ^5.100.9
+        version: 5.100.9(react@19.2.5)
+      axios:
+        specifier: ^1.16.0
+        version: 1.16.0
       next:
         specifier: ^16.2.4
         version: 16.2.4(@babel/core@7.29.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -531,9 +543,15 @@ importers:
       react-dom:
         specifier: ^19
         version: 19.2.5(react@19.2.5)
+      react-hook-form:
+        specifier: ^7
+        version: 7.75.0(react@19.2.5)
       tw-animate-css:
         specifier: ^1
         version: 1.4.0
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
     devDependencies:
       '@tailwindcss/postcss':
         specifier: ^4

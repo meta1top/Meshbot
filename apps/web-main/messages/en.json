@@ -2,6 +2,8 @@
   "common": {
     "appTitle": "meshbot Cloud",
     "switchToLightTheme": "Switch to light theme",
-    "switchToDarkTheme": "Switch to dark theme"
-  }
+    "switchToDarkTheme": "Switch to dark theme",
+    "loading": "Loading…"
+  },
+  "loading": ""
 }
