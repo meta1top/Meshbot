@@ -30,6 +30,7 @@ import {
 import request from "supertest";
 import { io as createClient, type Socket } from "socket.io-client";
 
+import { emitUntilEvent, waitForEvent } from "../setup/ws-test-utils";
 import { JwtAuthGuard } from "../../src/auth/jwt-auth.guard";
 import { JwtMainStrategy } from "../../src/auth/jwt.strategy";
 import { type AppConfig, APP_CONFIG } from "../../src/config/app-config.schema";
@@ -70,28 +71,6 @@ const captureSender = new CaptureEmailSender();
   exports: [EMAIL_SENDER],
 })
 class TestEmailModule {}
-
-/**
- * 等待 socket 收一条事件；超时 fail。
- */
-function waitForEvent<T = unknown>(
-  socket: Socket,
-  event: string,
-  timeoutMs = 4_000,
-): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      socket.off(event);
-      reject(
-        new Error(`[im-e2e] event "${event}" timeout after ${timeoutMs}ms`),
-      );
-    }, timeoutMs);
-    socket.once(event, (payload: T) => {
-      clearTimeout(timer);
-      resolve(payload);
-    });
-  });
-}
 
 describe("server-main IM e2e", () => {
   let app: INestApplication;
@@ -347,19 +326,14 @@ describe("server-main IM e2e", () => {
 
       // A 发消息：周期性重发直到 B 收到。B 的 onAuthedConnect 异步 join conv 房间，
       // 可能晚于 connect 事件；重发规避此房间加入竞态（CI 并行负载下 flaky 主因）。
-      const resendMessage = setInterval(() => {
-        sockA.emit(IM_WS_EVENTS.send, {
-          conversationId,
-          content: "hello from A",
-        });
-      }, 250);
-      try {
-        const received = await messagePromise;
-        expect(received.content).toBe("hello from A");
-        expect(received.conversationId).toBe(conversationId);
-      } finally {
-        clearInterval(resendMessage);
-      }
+      const received = await emitUntilEvent(
+        sockA,
+        IM_WS_EVENTS.send,
+        { conversationId, content: "hello from A" },
+        messagePromise,
+      );
+      expect(received.content).toBe("hello from A");
+      expect(received.conversationId).toBe(conversationId);
     } finally {
       sockA.disconnect();
       sockB.disconnect();
@@ -474,17 +448,17 @@ describe("server-main IM e2e", () => {
       // A 连接
       const sockA = connectIm(tokenA);
       await waitForEvent(sockA, "connect");
-      // presence 上线事件驱动（presence_set）：生产中 server-agent 连上即上报。B 的
-      // onAuthedConnect 异步 join org 房间、可能晚于其 connect；周期性重发 presence_set
-      // 直到 B 收到上线，规避此房间加入竞态（CI 并行负载下 flaky 主因）。
-      const resendPresence = setInterval(() => {
-        sockA.emit(IM_WS_EVENTS.presenceSet, { online: true });
-      }, 250);
 
       try {
-        // B 收到 A 上线通知
-        const onlineEvent = await Promise.race([onlinePromise, onlineTimeout]);
-        clearInterval(resendPresence);
+        // presence 上线事件驱动（presence_set）：生产中 server-agent 连上即上报。B 的
+        // onAuthedConnect 异步 join org 房间、可能晚于其 connect；周期性重发 presence_set
+        // 直到 B 收到上线，规避此房间加入竞态（CI 并行负载下 flaky 主因）。
+        const onlineEvent = await emitUntilEvent(
+          sockA,
+          IM_WS_EVENTS.presenceSet,
+          { online: true },
+          Promise.race([onlinePromise, onlineTimeout]),
+        );
         expect(onlineEvent.userId).toBe(userIdA);
         expect(onlineEvent.online).toBe(true);
 
@@ -514,7 +488,6 @@ describe("server-main IM e2e", () => {
         expect(offlineEvent.userId).toBe(userIdA);
         expect(offlineEvent.online).toBe(false);
       } finally {
-        clearInterval(resendPresence);
         if (sockA.connected) sockA.disconnect();
       }
     } finally {
