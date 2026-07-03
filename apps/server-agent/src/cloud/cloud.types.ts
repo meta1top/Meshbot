@@ -1,10 +1,3 @@
-/** 云端 server-main 返回的认证响应 data 部分。 */
-export interface CloudAuthData {
-  token: string;
-  expiresIn: string;
-  user: { id: string; email: string; displayName: string };
-}
-
 /** 云端 profile data 部分。 */
 export interface CloudProfileData {
   user: { id: string; email: string; displayName: string } | null;

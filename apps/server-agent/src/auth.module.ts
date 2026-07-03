@@ -15,6 +15,7 @@ import { CloudIdentity } from "./entities/cloud-identity.entity";
 import { CloudAuthService } from "./services/cloud-auth.service";
 import { CloudIdentityService } from "./services/cloud-identity.service";
 import { CloudOrgService } from "./services/cloud-org.service";
+import { DeviceAuthorizeService } from "./services/device-authorize.service";
 import { DriveGatewayService } from "./services/drive-gateway.service";
 import { JWT_SECRET, JwtStrategy } from "./strategies/jwt.strategy";
 
@@ -32,6 +33,7 @@ import { JWT_SECRET, JwtStrategy } from "./strategies/jwt.strategy";
     CloudIdentityService,
     CloudAuthService,
     CloudOrgService,
+    DeviceAuthorizeService,
     DriveGatewayService,
     JwtStrategy,
     {

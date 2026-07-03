@@ -1,27 +1,12 @@
 import { AccountContextService } from "@meshbot/agent";
 import { AppError } from "@meshbot/common";
 import { Injectable } from "@nestjs/common";
-import { JwtService } from "@nestjs/jwt";
 
 import { AccountRuntimeRegistry } from "../account/account-runtime.registry";
 import { CloudClientService } from "../cloud/cloud-client.service";
-import type { CloudAuthData, CloudProfileData } from "../cloud/cloud.types";
+import type { CloudProfileData } from "../cloud/cloud.types";
 import { AgentErrorCode } from "../errors/agent.error-codes";
 import { CloudIdentityService } from "./cloud-identity.service";
-
-/** 本地 access_token 响应（与旧 LoginResponse 兼容，前端契约不变）。 */
-export interface LocalTokenResponse {
-  access_token: string;
-}
-
-interface Credentials {
-  email: string;
-  password: string;
-}
-
-interface RegisterInput extends Credentials {
-  displayName: string;
-}
 
 /** 本地 profile 视图（读身份镜像，不打云端）。 */
 export interface LocalProfile {
@@ -32,33 +17,18 @@ export interface LocalProfile {
 }
 
 /**
- * 云端认证编排（方案 A）：代理云端 register/login，写本地身份镜像，
- * 签发本地 JWT 给浏览器。云端 token 只存 cloud_identity，不下发浏览器。
+ * 云端认证编排：浏览器授权登录（DeviceAuthorizeService）落地后，
+ * 本 Service 只负责登出 / 组织切换 / profile 读取 —— 全部用设备 token
+ * （identity.deviceToken）代理云端调用，不再持有密码代理登录逻辑。
  */
 @Injectable()
 export class CloudAuthService {
   constructor(
     private readonly cloud: CloudClientService,
     private readonly identity: CloudIdentityService,
-    private readonly jwt: JwtService,
     private readonly account: AccountContextService,
     private readonly runtime: AccountRuntimeRegistry,
   ) {}
-
-  /** 代理云端注册，成功后写镜像、建账号运行时并签本地 JWT。 */
-  async register(input: RegisterInput): Promise<LocalTokenResponse> {
-    const auth = await this.cloud.post<CloudAuthData>(
-      "/api/auth/register",
-      input,
-    );
-    return this.afterCloudAuth(auth);
-  }
-
-  /** 代理云端登录，成功后写镜像、建账号运行时并签本地 JWT。 */
-  async login(input: Credentials): Promise<LocalTokenResponse> {
-    const auth = await this.cloud.post<CloudAuthData>("/api/auth/login", input);
-    return this.afterCloudAuth(auth);
-  }
 
   /**
    * 登出：拆账号运行时（卸 MCP/技能/提示词缓存/云连接），置 loggedIn=false。
@@ -72,50 +42,46 @@ export class CloudAuthService {
   }
 
   /**
-   * 切换当前账号的活跃组织：代理云端 switch-org 拿新 cloudToken，
-   * 重拉 profile 刷新组织镜像，更新 CloudIdentity。本地 access_token 不变
-   * （本地 JWT 的 sub=cloudUserId 不随 org 改变），前端刷 profile 即可。
+   * 切换当前账号的活跃组织：代理云端 `/api/devices/switch-org`（设备 token），
+   * 重拉 profile 刷新组织镜像。本地 access_token 不变（本地 JWT 的
+   * sub=cloudUserId 不随 org 改变），前端刷 profile 即可。
    */
   async switchOrg(orgId: string): Promise<LocalProfile> {
     const cloudUserId = this.account.getOrThrow();
     const id = await this.identity.get(cloudUserId);
-    if (!id?.cloudToken) {
+    if (!id?.deviceToken) {
       throw new AppError(AgentErrorCode.AUTH_UNAUTHORIZED);
     }
-    const auth = await this.cloud.post<CloudAuthData>(
-      "/api/auth/switch-org",
+    await this.cloud.post<{ ok: true }>(
+      "/api/devices/switch-org",
       { orgId },
-      id.cloudToken,
+      id.deviceToken,
     );
     const profile = await this.cloud.get<CloudProfileData>(
       "/api/auth/profile",
-      auth.token,
+      id.deviceToken,
     );
-    await this.identity.upsert({
-      cloudUserId: auth.user.id,
-      email: auth.user.email,
-      displayName: auth.user.displayName,
-      cloudToken: auth.token,
-      cloudTokenExpiresAt: computeExpiresAt(auth.expiresIn),
-      orgId: profile.activeOrg?.id ?? null,
-      orgName: profile.activeOrg?.name ?? null,
-      role: profile.activeOrg?.role ?? null,
-    });
+    await this.identity.updateActiveOrg(
+      cloudUserId,
+      profile.activeOrg?.id ?? null,
+      profile.activeOrg?.name ?? null,
+      profile.activeOrg?.role ?? null,
+    );
     return this.getProfile();
   }
 
   /**
-   * 镜像自愈：指定账号有 token 但无活跃组织时，从云端拉一次 profile 刷新组织镜像。
+   * 镜像自愈：指定账号有设备 token 但无活跃组织时，从云端拉一次 profile 刷新组织镜像。
    * 云端不可达 / 401 时静默失败（保持现状，由后续操作再触发）。
    * 由 Public 的 setup-status 路由调用（无账号上下文），cloudUserId 显式传入。
    */
   async trySyncActiveOrg(cloudUserId: string): Promise<void> {
     const id = await this.identity.get(cloudUserId);
-    if (!id?.cloudToken || id.orgId) return;
+    if (!id?.deviceToken || id.orgId) return;
     try {
       const profile = await this.cloud.get<CloudProfileData>(
         "/api/auth/profile",
-        id.cloudToken,
+        id.deviceToken,
       );
       if (profile.activeOrg) {
         await this.identity.updateActiveOrg(
@@ -143,42 +109,4 @@ export class CloudAuthService {
       org: id.orgId ? { id: id.orgId, name: id.orgName, role: id.role } : null,
     };
   }
-
-  /** 云端 auth 成功后：拉 profile、写镜像、签本地 JWT。 */
-  private async afterCloudAuth(
-    auth: CloudAuthData,
-  ): Promise<LocalTokenResponse> {
-    const profile = await this.cloud.get<CloudProfileData>(
-      "/api/auth/profile",
-      auth.token,
-    );
-    const expiresAtIso = computeExpiresAt(auth.expiresIn);
-    await this.identity.upsert({
-      cloudUserId: auth.user.id,
-      email: auth.user.email,
-      displayName: auth.user.displayName,
-      cloudToken: auth.token,
-      cloudTokenExpiresAt: expiresAtIso,
-      orgId: profile.activeOrg?.id ?? null,
-      orgName: profile.activeOrg?.name ?? null,
-      role: profile.activeOrg?.role ?? null,
-    });
-    await this.runtime.createRuntime(auth.user.id);
-    const access_token = this.jwt.sign({
-      sub: auth.user.id,
-      email: auth.user.email,
-    });
-    return { access_token };
-  }
-}
-
-/** 把云端 expiresIn（如 "7d" / "12h"）换算为 ISO 过期时间；无法解析返回 null。 */
-function computeExpiresAt(expiresIn: string): string | null {
-  const m = /^(\d+)([smhd])$/.exec(expiresIn);
-  if (!m) return null;
-  const n = Number(m[1]);
-  const unitMs = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 }[
-    m[2] as "s" | "m" | "h" | "d"
-  ];
-  return new Date(Date.now() + n * unitMs).toISOString();
 }

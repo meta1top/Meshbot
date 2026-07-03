@@ -70,4 +70,8 @@ export const AgentErrorCode = defineErrorCode({
     code: 3014,
     message: "drive.shareFetchFailed",
   },
+  AUTH_NO_PENDING_REQUEST: {
+    code: 3015,
+    message: "auth.noPendingRequest",
+  },
 });

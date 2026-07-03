@@ -18,7 +18,7 @@ export class DeviceTokenAndModelSource1780800000000
     );
   }
 
-  public async down(queryRunner: QueryRunner): Promise<void> {
+  public async down(_queryRunner: QueryRunner): Promise<void> {
     // SQLite 不支持 DROP COLUMN;保留列(与既有迁移一致)
   }
 }
