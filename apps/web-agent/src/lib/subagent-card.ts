@@ -138,3 +138,93 @@ export function settleSubagentOnTimeline<
   });
   return changed ? next : prev;
 }
+
+/** 子流消息的最小切片（展示派生用；结构化类型，避免 import 组件模块）。 */
+export interface SubagentStreamSlice {
+  role: string;
+  content: string;
+  toolCalls?: Array<{ name: string; args?: unknown; status: string }>;
+}
+
+/** 折叠态「当前动作行」：进行中工具 或 正文末行；两者皆无为 null。 */
+export type LiveAction =
+  | { kind: "tool"; name: string; argsSummary: string }
+  | { kind: "text"; text: string }
+  | null;
+
+/** args 浅层 k:v 单行摘要（字符串带引号，其余 String 化），整体截断 40 字符。 */
+function summarizeArgs(args: unknown): string {
+  if (!args || typeof args !== "object") return "";
+  const parts = Object.entries(args as Record<string, unknown>).map(([k, v]) =>
+    typeof v === "string" ? `${k}: "${v}"` : `${k}: ${String(v)}`,
+  );
+  const text = parts.join(", ");
+  return text.length > 40 ? `${text.slice(0, 40)}…` : text;
+}
+
+/**
+ * 派生折叠态「当前动作行」：从尾部找最后一个 running/streaming 工具调用
+ * （名称原样返回，组件侧走 toolDisplayName 汉化）；没有则取最后一条非空
+ * assistant 正文的末行（截 80）；两者皆无返回 null。
+ */
+export function deriveLiveAction(messages: SubagentStreamSlice[]): LiveAction {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const tcs = messages[i].toolCalls;
+    if (!tcs) continue;
+    for (let j = tcs.length - 1; j >= 0; j--) {
+      const tc = tcs[j];
+      if (tc.status === "running" || tc.status === "streaming") {
+        return {
+          kind: "tool",
+          name: tc.name,
+          argsSummary: summarizeArgs(tc.args),
+        };
+      }
+    }
+  }
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role !== "assistant" || !m.content) continue;
+    const lines = m.content.split("\n").filter((l) => l.trim() !== "");
+    const last = lines[lines.length - 1];
+    if (!last) continue;
+    return {
+      kind: "text",
+      text: last.length > 80 ? `${last.slice(0, 80)}…` : last,
+    };
+  }
+  return null;
+}
+
+/** 取首个非空行并按 max 截断（终态结果行用）。 */
+export function firstLineOf(text: string, max = 80): string {
+  const line = text.split("\n").find((l) => l.trim() !== "") ?? "";
+  return line.length > max ? `${line.slice(0, max)}…` : line;
+}
+
+/** 子流 assistant 消息的工具调用总数（meta 区计数）。 */
+export function countToolCalls(messages: SubagentStreamSlice[]): number {
+  return messages.reduce(
+    (n, m) => (m.role === "assistant" ? n + (m.toolCalls?.length ?? 0) : n),
+    0,
+  );
+}
+
+/** 毫秒 → 0:23 / 12:05 / 1:02:33（本地计时展示）。 */
+export function formatElapsed(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = String(s % 60).padStart(2, "0");
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${sec}`;
+  return `${m}:${sec}`;
+}
+
+/** 是否后台派发：只认工具 args.background === true（args 持久化，live/刷新皆可靠）。 */
+export function isBackgroundDispatch(args: unknown): boolean {
+  return (
+    !!args &&
+    typeof args === "object" &&
+    (args as { background?: unknown }).background === true
+  );
+}
