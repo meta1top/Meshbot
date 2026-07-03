@@ -10,7 +10,6 @@ import {
 import { AssetsModule } from "@meshbot/assets";
 import { MainModule } from "@meshbot/main";
 import type { INestApplication } from "@nestjs/common";
-import { Module } from "@nestjs/common";
 import { APP_GUARD, Reflector } from "@nestjs/core";
 import { JwtModule } from "@nestjs/jwt";
 import { PassportModule } from "@nestjs/passport";
@@ -28,13 +27,13 @@ import request from "supertest";
 import { JwtAuthGuard } from "../../src/auth/jwt-auth.guard";
 import { JwtMainStrategy } from "../../src/auth/jwt.strategy";
 import { type AppConfig, APP_CONFIG } from "../../src/config/app-config.schema";
-import {
-  EMAIL_SENDER,
-  type EmailSender,
-  type InvitationMail,
-} from "../../src/email/email-sender";
 import { AuthController } from "../../src/rest/auth.controller";
 import { OrgController } from "../../src/rest/org.controller";
+import {
+  buildCaptureEmailModule,
+  CaptureEmailSender,
+} from "../setup/capture-email-sender";
+import { registerAndVerify } from "../setup/register-and-verify";
 import {
   createTestDb,
   isPostgresReachable,
@@ -48,25 +47,8 @@ const TEST_APP_CONFIG = {
   jwt: { secret: "e2e-test-secret", expires: "1h" },
 } as AppConfig;
 
-/** 测试用 EmailSender：捕获最后一次邀请 / 验证码，供断言。 */
-class CaptureEmailSender implements EmailSender {
-  last: { to: string; mail: InvitationMail } | null = null;
-  lastVerification: { to: string; code: string } | null = null;
-  async sendInvitation(to: string, mail: InvitationMail): Promise<void> {
-    this.last = { to, mail };
-  }
-  async sendVerificationCode(to: string, code: string): Promise<void> {
-    this.lastVerification = { to, code };
-  }
-}
-
 const captureSender = new CaptureEmailSender();
-
-@Module({
-  providers: [{ provide: EMAIL_SENDER, useValue: captureSender }],
-  exports: [EMAIL_SENDER],
-})
-class TestEmailModule {}
+const TestEmailModule = buildCaptureEmailModule(captureSender);
 
 describe("server-main org e2e", () => {
   let app: INestApplication;
@@ -151,10 +133,7 @@ describe("server-main org e2e", () => {
   }
 
   async function registerAndToken(email: string): Promise<string> {
-    const res = await request(app.getHttpServer())
-      .post("/api/auth/register")
-      .send({ email, password: "password1", displayName: email.split("@")[0] });
-    return res.body.data.token as string;
+    return registerAndVerify(app, captureSender, email);
   }
 
   it("建组织 → 邀请 → 第二用户接受 → 成员列表含两人", async () => {

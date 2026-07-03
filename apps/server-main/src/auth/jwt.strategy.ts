@@ -11,6 +11,12 @@ export interface JwtMainPayload {
   email: string;
   /** 当前活跃组织 id；未加入任何组织时为 null */
   orgId: string | null;
+  /**
+   * 设备 token 身份才有的字段（Task 8 落地设备 token 识别后由对应 Strategy/Guard
+   * 填充）。当前 JwtMainStrategy 签发/校验的用户 JWT 恒为 undefined —— 依赖
+   * device token 身份的端点（如 `POST /devices/switch-org`）据此判断 403。
+   */
+  deviceId?: string;
 }
 
 /**

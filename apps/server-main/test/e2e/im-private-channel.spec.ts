@@ -12,7 +12,6 @@ import { AssetsModule } from "@meshbot/assets";
 import { MainModule, REDIS_CLIENT } from "@meshbot/main";
 import type { ChannelMember, ConversationSummary } from "@meshbot/types";
 import type { INestApplication } from "@nestjs/common";
-import { Module } from "@nestjs/common";
 import { EventEmitterModule } from "@nestjs/event-emitter";
 import { APP_GUARD, Reflector } from "@nestjs/core";
 import { JwtModule } from "@nestjs/jwt";
@@ -31,16 +30,16 @@ import request from "supertest";
 import { JwtAuthGuard } from "../../src/auth/jwt-auth.guard";
 import { JwtMainStrategy } from "../../src/auth/jwt.strategy";
 import { type AppConfig, APP_CONFIG } from "../../src/config/app-config.schema";
-import {
-  EMAIL_SENDER,
-  type EmailSender,
-  type InvitationMail,
-} from "../../src/email/email-sender";
 import { AuthController } from "../../src/rest/auth.controller";
 import { OrgController } from "../../src/rest/org.controller";
 import { ImController } from "../../src/rest/im.controller";
 import { HealthGateway } from "../../src/ws/health.gateway";
 import { ImGateway } from "../../src/ws/im.gateway";
+import {
+  buildCaptureEmailModule,
+  CaptureEmailSender,
+} from "../setup/capture-email-sender";
+import { registerAndVerify } from "../setup/register-and-verify";
 import {
   createTestDb,
   isPostgresReachable,
@@ -53,25 +52,8 @@ const TEST_APP_CONFIG = {
   jwt: { secret: "im-private-e2e-secret", expires: "1h" },
 } as AppConfig;
 
-/** 捕获邀请邮件 token。 */
-class CaptureEmailSender implements EmailSender {
-  last: { to: string; mail: InvitationMail } | null = null;
-  lastVerification: { to: string; code: string } | null = null;
-  async sendInvitation(to: string, mail: InvitationMail): Promise<void> {
-    this.last = { to, mail };
-  }
-  async sendVerificationCode(to: string, code: string): Promise<void> {
-    this.lastVerification = { to, code };
-  }
-}
-
 const captureSender = new CaptureEmailSender();
-
-@Module({
-  providers: [{ provide: EMAIL_SENDER, useValue: captureSender }],
-  exports: [EMAIL_SENDER],
-})
-class TestEmailModule {}
+const TestEmailModule = buildCaptureEmailModule(captureSender);
 
 describe("server-main 私有频道 e2e", () => {
   let app: INestApplication;
@@ -161,16 +143,15 @@ describe("server-main 私有频道 e2e", () => {
     return false;
   }
 
-  /** 注册用户并返回 JWT token。 */
+  /** 注册用户（register → verify-email 真端点流）并返回 JWT token。 */
   async function registerAndToken(email: string, suffix = ""): Promise<string> {
-    const res = await request(app.getHttpServer())
-      .post("/api/auth/register")
-      .send({
-        email,
-        password: "password1",
-        displayName: email.split("@")[0] + suffix,
-      });
-    return res.body.data.token as string;
+    return registerAndVerify(
+      app,
+      captureSender,
+      email,
+      "password1",
+      email.split("@")[0] + suffix,
+    );
   }
 
   /** 从 JWT token 中提取 userId（base64 decode middle segment）。server-main payload 用 userId。 */

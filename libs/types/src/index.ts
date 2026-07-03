@@ -5,6 +5,19 @@ export {
   PageRequestSchema,
 } from "./common/page.schema";
 export {
+  type DeviceAuthApproveInput,
+  DeviceAuthApproveSchema,
+  type DeviceAuthExchangeInput,
+  type DeviceAuthExchangeResult,
+  DeviceAuthExchangeSchema,
+  type DeviceAuthStartInput,
+  type DeviceAuthStartResult,
+  DeviceAuthStartSchema,
+  type DeviceSwitchOrgInput,
+  DeviceSwitchOrgSchema,
+  type DeviceView,
+} from "./device-auth/device-auth.schema";
+export {
   EVENTS_WS_NAMESPACE,
   type GlobalEventEnvelope,
   GlobalEventEnvelopeSchema,
@@ -38,3 +51,8 @@ export {
   ImSendSchema,
   type PresenceState,
 } from "./im/im.schema";
+export type {
+  AgentModelConfig,
+  OrgModelConfigInput,
+  OrgModelConfigView,
+} from "./model-config/model-config.types";

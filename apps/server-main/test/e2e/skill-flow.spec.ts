@@ -31,6 +31,11 @@ import { type AppConfig, APP_CONFIG } from "../../src/config/app-config.schema";
 import { AuthController } from "../../src/rest/auth.controller";
 import { SkillController } from "../../src/rest/skill.controller";
 import {
+  buildCaptureEmailModule,
+  CaptureEmailSender,
+} from "../setup/capture-email-sender";
+import { registerAndVerify } from "../setup/register-and-verify";
+import {
   createTestDb,
   isPostgresReachable,
   type TestDbContext,
@@ -40,6 +45,9 @@ const I18N_PATH = path.join(__dirname, "..", "..", "i18n");
 const TEST_APP_CONFIG = {
   jwt: { secret: "e2e-test-secret", expires: "1h" },
 } as AppConfig;
+
+const captureSender = new CaptureEmailSender();
+const TestEmailModule = buildCaptureEmailModule(captureSender);
 
 const DUMMY_MINIO = {
   provider: "minio" as const,
@@ -115,6 +123,7 @@ describe("server-main skill marketplace e2e", () => {
           { expiresDays: 7 },
           { encryptionKey: "e2e-encryption-key-0123456789abcdef" },
         ),
+        TestEmailModule,
       ],
       controllers: [AuthController, SkillController],
       providers: [
@@ -152,10 +161,7 @@ describe("server-main skill marketplace e2e", () => {
   }
 
   async function registerAndToken(email: string): Promise<string> {
-    const res = await request(app.getHttpServer())
-      .post("/api/auth/register")
-      .send({ email, password: "password1", displayName: email.split("@")[0] });
-    return res.body.data.token as string;
+    return registerAndVerify(app, captureSender, email);
   }
 
   function publishBody(slug: string, version: string) {

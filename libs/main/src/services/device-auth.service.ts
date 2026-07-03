@@ -79,7 +79,9 @@ export class DeviceAuthService {
   }
 
   /**
-   * 本地 Agent 兑换：校验 userCode + code_verifier，成功置 consumed 并返回批准人。
+   * 本地 Agent 兑换：校验 userCode + code_verifier，成功置 consumed 并返回批准人 +
+   * 原始设备信息（`start` 时提交的 deviceName/platform，随请求存储，兑换后直接带出，
+   * 免去调用方二次 `getForAuthorize` 查询 —— 避免 consumed 状态下二次查询的边界处理）。
    *
    * 验证流程：
    * 1. 检查请求不过期且状态为 approved
@@ -87,7 +89,7 @@ export class DeviceAuthService {
    *    - 不匹配立即作废请求（防提权尝试）
    * 3. 校验 userCode
    *    - 不匹配累计失败次数，达 5 次后作废
-   * 4. 校验通过置 consumed，返回批准人
+   * 4. 校验通过置 consumed，返回批准人 + 设备信息
    *
    * 按 requestId 加锁：防同一请求并发兑换双双通过 approved 检查铸出两个
    * device token（"consumed 不可重复兑换"不变量）。
@@ -99,7 +101,7 @@ export class DeviceAuthService {
     requestId: string;
     userCode: string;
     codeVerifier: string;
-  }): Promise<{ userId: string }> {
+  }): Promise<{ userId: string; deviceName: string; platform: string }> {
     const req = await this.findValid(input.requestId);
     if (req.status !== "approved" || !req.userId || !req.userCode) {
       throw new AppError(MainErrorCode.DEVICE_AUTH_REQUEST_INVALID);
@@ -119,7 +121,11 @@ export class DeviceAuthService {
       throw new AppError(MainErrorCode.DEVICE_AUTH_REQUEST_INVALID);
     }
     await this.requestRepo.update({ id: req.id }, { status: "consumed" });
-    return { userId: req.userId };
+    return {
+      userId: req.userId,
+      deviceName: req.deviceName,
+      platform: req.platform,
+    };
   }
 
   /**

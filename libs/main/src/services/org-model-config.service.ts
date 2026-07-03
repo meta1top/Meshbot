@@ -1,42 +1,14 @@
 import { AppError, CommonErrorCode } from "@meshbot/common";
+import type {
+  AgentModelConfig,
+  OrgModelConfigInput,
+  OrgModelConfigView,
+} from "@meshbot/types";
 import { Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import type { Repository } from "typeorm";
 import { OrgModelConfig } from "../entities/org-model-config.entity";
 import { SecretCryptoService } from "./secret-crypto.service";
-
-export interface OrgModelConfigInput {
-  name: string;
-  providerType: string;
-  model: string;
-  apiKey?: string;
-  baseUrl?: string;
-  contextWindow?: number;
-  enabled?: boolean;
-}
-export interface OrgModelConfigView {
-  id: string;
-  orgId: string;
-  name: string;
-  providerType: string;
-  model: string;
-  apiKeyMasked: string;
-  baseUrl: string;
-  contextWindow: number;
-  enabled: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}
-export interface AgentModelConfig {
-  id: string;
-  providerType: string;
-  name: string;
-  model: string;
-  apiKey: string;
-  baseUrl: string;
-  contextWindow: number;
-  enabled: boolean;
-}
 
 /** 组织级模型配置归属 Service;写侧仅 owner(controller 断言),apiKey 加密存储 */
 @Injectable()

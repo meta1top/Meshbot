@@ -14,10 +14,12 @@ import { Test } from "@nestjs/testing";
 
 import { JwtMainStrategy, type JwtMainPayload } from "../src/auth/jwt.strategy";
 import { APP_CONFIG } from "../src/config/app-config.schema";
+import { EMAIL_SENDER } from "../src/email/email-sender";
 import { AuthController } from "../src/rest/auth.controller";
 
 import { AppError } from "@meshbot/common";
 import {
+  EmailVerificationService,
   MainErrorCode,
   MembershipService,
   SwitchOrgDto,
@@ -93,20 +95,42 @@ describe("JwtMainStrategy.validate()", () => {
 // 2. AuthController 签 token 含 orgId
 // ──────────────────────────────────────────────
 describe("AuthController signResponse 签入 orgId", () => {
-  let usersMock: { registerUser: jest.Mock; loginUser: jest.Mock };
+  let usersMock: {
+    registerUser: jest.Mock;
+    loginUser: jest.Mock;
+    findByEmail: jest.Mock;
+    markEmailVerified: jest.Mock;
+  };
   let membershipsMock: { listOrgsForUser: jest.Mock };
+  let emailVerificationMock: { issueCode: jest.Mock; verifyCode: jest.Mock };
+  let emailSenderMock: {
+    sendInvitation: jest.Mock;
+    sendVerificationCode: jest.Mock;
+  };
 
   beforeEach(() => {
     usersMock = {
       registerUser: jest.fn(),
       loginUser: jest.fn(),
+      findByEmail: jest.fn(),
+      markEmailVerified: jest.fn().mockResolvedValue(undefined),
     };
     membershipsMock = {
       listOrgsForUser: jest.fn().mockResolvedValue([]),
     };
+    emailVerificationMock = {
+      issueCode: jest.fn().mockResolvedValue("123456"),
+      verifyCode: jest.fn().mockResolvedValue(undefined),
+    };
+    emailSenderMock = {
+      sendInvitation: jest.fn().mockResolvedValue(undefined),
+      sendVerificationCode: jest.fn().mockResolvedValue(undefined),
+    };
   });
 
-  it("register 返回的 token 含 orgId=null（用户未建组织）", async () => {
+  // register 改造后不再签 token（发验证码 + 返回 { needVerify: true }），
+  // 签 token 的职责转移到 verify-email —— 这里覆盖的是 verify-email 的编排。
+  it("verify-email 返回的 token 含 orgId=null（用户未建组织）", async () => {
     const fakeUser = {
       id: "u-100",
       email: "reg@test.io",
@@ -116,7 +140,7 @@ describe("AuthController signResponse 签入 orgId", () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    usersMock.registerUser.mockResolvedValue(fakeUser);
+    usersMock.findByEmail.mockResolvedValue(fakeUser);
 
     const moduleRef = await Test.createTestingModule({
       imports: [
@@ -131,6 +155,8 @@ describe("AuthController signResponse 签入 orgId", () => {
         { provide: APP_CONFIG, useValue: TEST_APP_CONFIG },
         { provide: UserService, useValue: usersMock },
         { provide: MembershipService, useValue: membershipsMock },
+        { provide: EmailVerificationService, useValue: emailVerificationMock },
+        { provide: EMAIL_SENDER, useValue: emailSenderMock },
         { provide: APP_GUARD, useClass: BypassAuthGuard },
         JwtMainStrategy,
       ],
@@ -139,13 +165,17 @@ describe("AuthController signResponse 签入 orgId", () => {
     const controller = moduleRef.get(AuthController);
     const jwtSvc = moduleRef.get(JwtService);
 
-    const result = await controller.register({
+    const result = await controller.verifyEmail({
       email: "reg@test.io",
-      password: "pw123456",
-      displayName: "Reg User",
-    } as Parameters<typeof controller.register>[0]);
+      code: "123456",
+    } as Parameters<typeof controller.verifyEmail>[0]);
     const decoded = jwtSvc.decode(result.token) as JwtMainPayload;
 
+    expect(emailVerificationMock.verifyCode).toHaveBeenCalledWith(
+      "reg@test.io",
+      "123456",
+    );
+    expect(usersMock.markEmailVerified).toHaveBeenCalledWith("u-100");
     expect(decoded.orgId).toBeNull();
     expect(decoded.userId).toBe("u-100");
     expect(decoded.email).toBe("reg@test.io");
@@ -176,6 +206,8 @@ describe("AuthController signResponse 签入 orgId", () => {
         { provide: APP_CONFIG, useValue: TEST_APP_CONFIG },
         { provide: UserService, useValue: usersMock },
         { provide: MembershipService, useValue: membershipsMock },
+        { provide: EmailVerificationService, useValue: emailVerificationMock },
+        { provide: EMAIL_SENDER, useValue: emailSenderMock },
         { provide: APP_GUARD, useClass: BypassAuthGuard },
         JwtMainStrategy,
       ],
@@ -250,6 +282,17 @@ describe("AuthController.switchOrg", () => {
         { provide: APP_CONFIG, useValue: TEST_APP_CONFIG },
         { provide: UserService, useValue: usersMock },
         { provide: MembershipService, useValue: membershipsMock },
+        {
+          provide: EmailVerificationService,
+          useValue: { issueCode: jest.fn(), verifyCode: jest.fn() },
+        },
+        {
+          provide: EMAIL_SENDER,
+          useValue: {
+            sendInvitation: jest.fn(),
+            sendVerificationCode: jest.fn(),
+          },
+        },
       ],
     }).compile();
 

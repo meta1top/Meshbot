@@ -53,6 +53,11 @@ export class UserService {
     return this.userRepo.findOne({ where: { id } });
   }
 
+  /** 按邮箱查找用户（供 verify-email / resend-code 编排使用）。 */
+  async findByEmail(email: string): Promise<AppUser | null> {
+    return this.userRepo.findOne({ where: { email } });
+  }
+
   /** 设置用户当前活跃组织（单表 update app_user.active_org_id）。调用方负责先校验成员资格。 */
   async setActiveOrg(userId: string, orgId: string): Promise<void> {
     await this.userRepo.update({ id: userId }, { activeOrgId: orgId });
