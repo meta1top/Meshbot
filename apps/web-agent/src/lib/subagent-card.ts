@@ -52,9 +52,10 @@ export function resolveSubagentStatus(
     try {
       const parsed = JSON.parse(tool.result) as { status?: unknown };
       if (parsed.status === "running") {
-        // 后台派发的立即返回态：真实状态由子流/settled 事件驱动；
-        // 子流已停但 settled 尚未到（毫秒级间隙）按 done 兜底。
-        return childRunning ? "running" : "done";
+        // 后台派发的立即返回态：子流在跑时入口的 childRunning 早退已返回
+        // "running"，能走到这里说明子流已停——settled 尚未到/行未重写的
+        // 毫秒级间隙按 done 兜底。
+        return "done";
       }
       if (
         parsed.status === "done" ||

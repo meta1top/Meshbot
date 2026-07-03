@@ -100,13 +100,15 @@ describe("折叠状态机", () => {
 });
 
 describe("resolveSubagentStatus 后台 running 态", () => {
-  it("结果 JSON status=running：子流在跑 → running；子流已停 → done（间隙兜底）", () => {
+  it("结果 JSON status=running 且子流在跑：入口 childRunning 早退 → running", () => {
     expect(
       resolveSubagentStatus(
         { status: "ok", result: '{"status":"running"}' },
         true,
       ),
     ).toBe("running");
+  });
+  it("结果 JSON status=running 但子流已停：settled 间隙按 done 兜底", () => {
     expect(
       resolveSubagentStatus(
         { status: "ok", result: '{"status":"running"}' },
