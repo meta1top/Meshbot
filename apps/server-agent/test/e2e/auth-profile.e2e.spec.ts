@@ -20,6 +20,7 @@ import { CloudIdentity } from "../../src/entities/cloud-identity.entity";
 import { JwtAuthGuard } from "../../src/guards/jwt-auth.guard";
 import { CloudAuthService } from "../../src/services/cloud-auth.service";
 import { CloudIdentityService } from "../../src/services/cloud-identity.service";
+import { CloudMetaService } from "../../src/services/cloud-meta.service";
 import { DeviceAuthorizeService } from "../../src/services/device-authorize.service";
 import { JWT_SECRET, JwtStrategy } from "../../src/strategies/jwt.strategy";
 
@@ -81,6 +82,7 @@ describe("Auth profile e2e（浏览器授权登录）", () => {
         CloudIdentityService,
         CloudAuthService,
         DeviceAuthorizeService,
+        CloudMetaService,
         JwtStrategy,
         // v3：profile 路由按账号读镜像，需账号上下文（拦截器在 JWT 守卫后注入 sub）
         AccountContextService,

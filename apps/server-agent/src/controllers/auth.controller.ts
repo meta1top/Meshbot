@@ -12,6 +12,7 @@ import {
 import { AuthorizeCompleteDto, AuthorizePollDto } from "../dto/auth.dto";
 import { Public } from "../guards/jwt-auth.guard";
 import { CloudAuthService } from "../services/cloud-auth.service";
+import { CloudMetaService } from "../services/cloud-meta.service";
 import { DeviceAuthorizeService } from "../services/device-authorize.service";
 
 /** 认证端点：浏览器授权登录编排 + 登出 / profile 读取。 */
@@ -20,6 +21,7 @@ export class AuthController {
   constructor(
     private readonly cloudAuth: CloudAuthService,
     private readonly deviceAuthorize: DeviceAuthorizeService,
+    private readonly cloudMeta: CloudMetaService,
   ) {}
 
   /** 发起浏览器授权登录：返回云端授权页 URL，前端负责打开浏览器。 */
@@ -61,6 +63,13 @@ export class AuthController {
   @HttpCode(200)
   pollAuthorize(@Body() dto: AuthorizePollDto) {
     return this.deviceAuthorize.poll(dto.requestId);
+  }
+
+  /** 云端 web-main 基础 URL（供前端拼注册页 / 组织后台跳转链接），代理并进程内缓存。 */
+  @Public()
+  @Get("cloud-web-url")
+  async cloudWebUrl(): Promise<{ webMainBase: string }> {
+    return { webMainBase: await this.cloudMeta.getWebMainBase() };
   }
 
   /** 登出：清云端身份镜像（本地 JWT 由前端自行丢弃）。 */

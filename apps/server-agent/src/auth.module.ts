@@ -14,6 +14,7 @@ import { DriveController } from "./controllers/drive.controller";
 import { CloudIdentity } from "./entities/cloud-identity.entity";
 import { CloudAuthService } from "./services/cloud-auth.service";
 import { CloudIdentityService } from "./services/cloud-identity.service";
+import { CloudMetaService } from "./services/cloud-meta.service";
 import { CloudOrgService } from "./services/cloud-org.service";
 import { buildUnauthorizedHandler } from "./services/cloud-unauthorized.handler";
 import { DeviceAuthorizeService } from "./services/device-authorize.service";
@@ -33,6 +34,7 @@ import { JWT_SECRET, JwtStrategy } from "./strategies/jwt.strategy";
   providers: [
     CloudIdentityService,
     CloudAuthService,
+    CloudMetaService,
     CloudOrgService,
     DeviceAuthorizeService,
     DriveGatewayService,

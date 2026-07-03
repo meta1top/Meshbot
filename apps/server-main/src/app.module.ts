@@ -52,6 +52,7 @@ import { DeviceController } from "./rest/device.controller";
 import { DriveController } from "./rest/drive.controller";
 import { DriveShareLinkController } from "./rest/drive-share-link.controller";
 import { ImController } from "./rest/im.controller";
+import { MetaController } from "./rest/meta.controller";
 import { OrgController } from "./rest/org.controller";
 import { OrgModelConfigController } from "./rest/org-model-config.controller";
 import { PublicShareController } from "./rest/public-share.controller";
@@ -201,6 +202,7 @@ export class AppModule {
       ],
       controllers: [
         HealthController,
+        MetaController,
         AuthController,
         DeviceAuthController,
         DeviceController,
