@@ -37,6 +37,7 @@ export function subagentTitle(args: unknown): string {
   return "";
 }
 
+/** 嵌套卡展示状态：运行中 / 成功 / 出错 / 被中止。 */
 export type SubagentStatus = "running" | "done" | "error" | "aborted";
 
 /**
@@ -69,6 +70,27 @@ export function resolveSubagentStatus(
     }
   }
   return tool.status === "error" ? "error" : "done";
+}
+
+/**
+ * 未认领（subSessionId 解析为 null）时的终局兜底：排队期 abort/父会话缺失，
+ * dispatch 会直接返回 `{subSessionId:"",status:"error"|"aborted",...}`——卡拿不到
+ * 子会话 id，走不到 resolveSubagentStatus，会永远停在「启动中」（脉动）。
+ * 从 tool.result 解析出终态（error/aborted）则返回，否则返回 null
+ * （真处于排队中/无结果，调用方兜底为 starting）。
+ */
+export function resolveUnclaimedStatus(tool: {
+  result?: string;
+}): SubagentStatus | null {
+  if (!tool.result) return null;
+  try {
+    const parsed = JSON.parse(tool.result) as { status?: unknown };
+    return parsed.status === "error" || parsed.status === "aborted"
+      ? parsed.status
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 /** 折叠状态：auto 跟随子 run（运行→展开、结束→收起）；用户点击后转 manual 不再自动。 */
@@ -152,14 +174,24 @@ export type LiveAction =
   | { kind: "text"; text: string }
   | null;
 
+/**
+ * 按 Unicode 代码点安全截断（`Array.from` 逐码点切分，不劈开代理对/emoji），
+ * 超出 max 时追加省略号；未超出原样返回。
+ */
+export function truncate(str: string, max: number): string {
+  const codePoints = Array.from(str);
+  return codePoints.length > max
+    ? `${codePoints.slice(0, max).join("")}…`
+    : str;
+}
+
 /** args 浅层 k:v 单行摘要（字符串带引号，其余 String 化），整体截断 40 字符。 */
 function summarizeArgs(args: unknown): string {
   if (!args || typeof args !== "object") return "";
   const parts = Object.entries(args as Record<string, unknown>).map(([k, v]) =>
     typeof v === "string" ? `${k}: "${v}"` : `${k}: ${String(v)}`,
   );
-  const text = parts.join(", ");
-  return text.length > 40 ? `${text.slice(0, 40)}…` : text;
+  return truncate(parts.join(", "), 40);
 }
 
 /**
@@ -190,7 +222,7 @@ export function deriveLiveAction(messages: SubagentStreamSlice[]): LiveAction {
     if (!last) continue;
     return {
       kind: "text",
-      text: last.length > 80 ? `${last.slice(0, 80)}…` : last,
+      text: truncate(last, 80),
     };
   }
   return null;
@@ -199,7 +231,7 @@ export function deriveLiveAction(messages: SubagentStreamSlice[]): LiveAction {
 /** 取首个非空行并按 max 截断（终态结果行用）。 */
 export function firstLineOf(text: string, max = 80): string {
   const line = text.split("\n").find((l) => l.trim() !== "") ?? "";
-  return line.length > max ? `${line.slice(0, max)}…` : line;
+  return truncate(line, max);
 }
 
 /** 子流 assistant 消息的工具调用总数（meta 区计数）。 */

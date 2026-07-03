@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type HistoryMessage,
   type RunChunkEvent,
   type RunDoneEvent,
   type RunErrorEvent,
@@ -36,6 +37,37 @@ import {
   settleSubagentOnTimeline,
 } from "@/lib/subagent-card";
 import { appendMessage, fetchHistory, fetchPending } from "@/rest/session";
+
+/**
+ * history 单条消息 → TimelineMessage 映射：首屏拉取与 loadMoreHistory 翻页
+ * 共用（曾经翻页只映射 id/role/content/reasoning，丢了 toolCalls——含
+ * dispatch_subagent 嵌套卡认领用的 subSessionId——与 feedback，导致上翻加载
+ * 出来的历史消息里工具卡/嵌套卡/反馈态全部消失）。
+ */
+function historyMessageToTimeline(m: HistoryMessage): TimelineMessage {
+  return {
+    id: m.id,
+    role: m.role,
+    content: m.content,
+    // 持久化的 reasoning 直接带入；设了 durationMs=0 让 UI 显示「已思考」
+    // 不显示动态秒数（实际生成时长信息没存）。reasoningStartedAt 不设。
+    ...(m.reasoning ? { reasoning: m.reasoning, reasoningDurationMs: 0 } : {}),
+    // 持久化的 tool calls：转 ToolCallView；progress 留空（流式过程没存）
+    ...(m.toolCalls && m.toolCalls.length > 0
+      ? {
+          toolCalls: m.toolCalls.map((tc) => ({
+            toolCallId: tc.toolCallId,
+            name: tc.name,
+            args: tc.args,
+            status: tc.status,
+            result: tc.result,
+            ...(tc.subSessionId ? { subSessionId: tc.subSessionId } : {}),
+          })),
+        }
+      : {}),
+    feedback: m.feedback ?? null,
+  };
+}
 
 export interface SessionStream {
   /** 全部消息（含 pending 队列）。 */
@@ -180,30 +212,9 @@ export function useSessionStream(
     void Promise.all([fetchHistory(sessionId), fetchPending(sessionId)])
       .then(([history, pending]) => {
         if (cancelled) return;
-        const initial: TimelineMessage[] = history.messages.map((m) => ({
-          id: m.id,
-          role: m.role,
-          content: m.content,
-          // 持久化的 reasoning 直接带入；设了 durationMs=0 让 UI 显示「已思考」
-          // 不显示动态秒数（实际生成时长信息没存）。reasoningStartedAt 不设。
-          ...(m.reasoning
-            ? { reasoning: m.reasoning, reasoningDurationMs: 0 }
-            : {}),
-          // 持久化的 tool calls：转 ToolCallView；progress 留空（流式过程没存）
-          ...(m.toolCalls && m.toolCalls.length > 0
-            ? {
-                toolCalls: m.toolCalls.map((tc) => ({
-                  toolCallId: tc.toolCallId,
-                  name: tc.name,
-                  args: tc.args,
-                  status: tc.status,
-                  result: tc.result,
-                  ...(tc.subSessionId ? { subSessionId: tc.subSessionId } : {}),
-                })),
-              }
-            : {}),
-          feedback: m.feedback ?? null,
-        }));
+        const initial: TimelineMessage[] = history.messages.map(
+          historyMessageToTimeline,
+        );
         const historyIds = new Set(history.messages.map((m) => m.id));
         if (history.inflight) {
           setRunning(history.inflight.status === "streaming");
@@ -776,14 +787,9 @@ export function useSessionStream(
     try {
       const res = await fetchHistory(sessionId, cursor);
       apply((prev) => {
-        const newMessages: TimelineMessage[] = res.messages.map((m) => ({
-          id: m.id,
-          role: m.role,
-          content: m.content,
-          ...(m.reasoning
-            ? { reasoning: m.reasoning, reasoningDurationMs: 0 }
-            : {}),
-        }));
+        const newMessages: TimelineMessage[] = res.messages.map(
+          historyMessageToTimeline,
+        );
         // 去重：socket 抢先到的或本地已有的不重复 prepend
         const existingIds = new Set(prev.map((m) => m.id));
         const fresh = newMessages.filter((m) => !existingIds.has(m.id));

@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@meshbot/design";
-import { ChevronDown, Square } from "lucide-react";
+import { Check, ChevronDown, Square, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { useSessionStream } from "@/hooks/use-session-stream";
@@ -14,6 +14,7 @@ import {
   isSubagentOpen,
   resolveSubagentStatus,
   resolveSubSessionId,
+  resolveUnclaimedStatus,
   type SubagentCollapse,
   subagentTitle,
   toggleSubagentOpen,
@@ -25,7 +26,7 @@ import { MessageList, type ToolCallView } from "./message-list";
 const CHIP_STYLES: Record<string, string> = {
   starting: "text-muted-foreground bg-muted",
   running: "text-primary bg-primary/10",
-  done: "text-[#3D8A4E] bg-[#3D8A4E]/10",
+  done: "text-emerald-700 dark:text-emerald-400 bg-emerald-600/10 dark:bg-emerald-400/10",
   error: "text-destructive bg-destructive/10",
   aborted: "text-muted-foreground bg-muted",
 };
@@ -33,7 +34,7 @@ const CHIP_STYLES: Record<string, string> = {
 const GLYPH_STYLES: Record<string, string> = {
   starting: "bg-primary/50",
   running: "bg-primary",
-  done: "bg-[#3D8A4E]",
+  done: "bg-emerald-600 dark:bg-emerald-500",
   error: "bg-destructive",
   aborted: "bg-muted-foreground/60",
 };
@@ -94,7 +95,7 @@ export function SubagentCard({ tool }: { tool: ToolCallView }) {
   const open = isSubagentOpen(collapse, childRunning);
   const status =
     subSessionId === null
-      ? ("starting" as const)
+      ? (resolveUnclaimedStatus(tool) ?? "starting")
       : resolveSubagentStatus(tool, sub.running);
   const active = status === "running" || status === "starting";
   const title = subagentTitle(tool.args) || t("fallbackTitle");
@@ -190,8 +191,8 @@ export function SubagentCard({ tool }: { tool: ToolCallView }) {
             {active && (
               <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse motion-reduce:animate-none" />
             )}
-            {status === "done" && "✓ "}
-            {status === "error" && "✗ "}
+            {status === "done" && <Check className="h-3 w-3" />}
+            {status === "error" && <X className="h-3 w-3" />}
             {t(status)}
           </span>
           {(toolCount > 0 || elapsedMs !== null) && (
@@ -240,7 +241,7 @@ export function SubagentCard({ tool }: { tool: ToolCallView }) {
           <span
             className={cn(
               "shrink-0",
-              status === "done" && "text-[#3D8A4E]",
+              status === "done" && "text-emerald-700 dark:text-emerald-400",
               status === "error" && "text-destructive",
             )}
           >
