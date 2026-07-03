@@ -14,6 +14,7 @@ import { type Socket, io } from "socket.io-client";
 
 import { AgentErrorCode } from "../errors/agent.error-codes";
 import { AUTH_EVENTS } from "../services/auth.events";
+import { IM_RELAY_EVENTS, type ImRelayConnectedEvent } from "./im-relay.events";
 import type { CloudIdentityService } from "../services/cloud-identity.service";
 
 /** socket.io-client 工厂函数类型（方便测试注入伪实现）。 */
@@ -116,6 +117,7 @@ export class ImRelayClientService implements OnModuleDestroy {
         IM_WS_EVENTS.conversationCreated,
         IM_WS_EVENTS.conversationRemoved,
         IM_WS_EVENTS.conversationRead,
+        IM_WS_EVENTS.agentInbound,
       ] as const) {
         socket.on(event, (payload: unknown) => {
           if (event === IM_WS_EVENTS.presence) {
@@ -148,6 +150,11 @@ export class ImRelayClientService implements OnModuleDestroy {
             online: true,
           } satisfies ImPresenceSetInput);
         }
+        this.account.run(cloudUserId, () => {
+          this.emitter.emit(IM_RELAY_EVENTS.connected, {
+            cloudUserId,
+          } satisfies ImRelayConnectedEvent);
+        });
       });
 
       // keepalive ping（无浏览器时不续期 TTL；unref 防止阻塞进程退出）

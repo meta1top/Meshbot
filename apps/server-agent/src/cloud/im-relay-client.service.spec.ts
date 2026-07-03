@@ -5,6 +5,7 @@ import type { ImReadInput, ImSendInput } from "@meshbot/types";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { AgentErrorCode } from "../errors/agent.error-codes";
 import { AUTH_EVENTS } from "../services/auth.events";
+import { IM_RELAY_EVENTS } from "./im-relay.events";
 import { ImRelayClientService } from "./im-relay-client.service";
 
 /** 伪 socket：实现 on/emit/disconnect/connected，内置 EventEmitter。 */
@@ -224,6 +225,22 @@ describe("ImRelayClientService", () => {
         IM_WS_EVENTS.conversationCreated,
         conv,
       );
+
+      svc.disconnect("u1");
+    });
+
+    it("agent.inbound 下行事件 → emitter.emit 被调用且在 account.run 上下文内", async () => {
+      const s1 = new FakeSocket();
+      const { svc, emitSpy } = makeService(
+        { u1: { deviceToken: "tok-u1", orgId: "org1" } },
+        { u1: s1 },
+      );
+
+      await svc.connect("u1");
+
+      const inbound = { type: "request", id: "req1", content: "test" };
+      s1.simulateServerEvent(IM_WS_EVENTS.agentInbound, inbound);
+      expect(emitSpy).toHaveBeenCalledWith(IM_WS_EVENTS.agentInbound, inbound);
 
       svc.disconnect("u1");
     });
@@ -635,6 +652,25 @@ describe("ImRelayClientService", () => {
       expect(
         s1.emitted.find(([ev]) => ev === IM_WS_EVENTS.presenceSet),
       ).toBeUndefined();
+
+      svc.disconnect("u1");
+    });
+
+    it("socket.on(connect) → emitter emit IM_RELAY_EVENTS.connected 事件", async () => {
+      const s1 = new FakeSocket();
+      const { svc, emitSpy } = makeService(
+        { u1: { deviceToken: "tok-u1", orgId: "org1" } },
+        { u1: s1 },
+      );
+
+      await svc.connect("u1");
+      s1.emitted.length = 0;
+
+      s1.simulateServerEvent("connect", undefined);
+
+      expect(emitSpy).toHaveBeenCalledWith(IM_RELAY_EVENTS.connected, {
+        cloudUserId: "u1",
+      });
 
       svc.disconnect("u1");
     });
