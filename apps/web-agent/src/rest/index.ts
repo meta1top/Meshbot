@@ -1,7 +1,6 @@
 export {
   useAuthStatus,
-  useLogin,
-  useRegister,
+  useCloudWebUrl,
 } from "./auth";
 
 export {

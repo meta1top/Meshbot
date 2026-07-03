@@ -1,21 +1,15 @@
 export * from "./ai";
 export * from "./ask-question";
 export {
+  type AuthorizeCodeInput,
   type AuthStatus,
-  type CreateOrgInput,
-  createOrgSchema,
+  authorizeCodeSchema,
   type InvitationInfo,
   type InviteMemberInput,
   inviteMemberSchema,
-  type JoinOrgInput,
-  joinOrgSchema,
-  type LoginInput,
   type LoginResponse,
-  loginSchema,
   type MemberInfo,
   type OrgInfo,
-  type RegisterInput,
-  registerSchema,
   type SetupStep,
   type UserInfo,
 } from "./auth";

@@ -6,25 +6,26 @@
   "login": {
     "title": "登录",
     "subtitle": "欢迎使用",
-    "email": "邮箱",
-    "emailPlaceholder": "you@example.com",
-    "password": "密码",
-    "forgotPassword": "忘记密码？",
-    "loginFailed": "登录失败，请重试",
-    "signIn": "登录",
-    "signingIn": "登录中...",
+    "browserLoginButton": "通过浏览器登录",
+    "starting": "正在打开浏览器...",
+    "startFailed": "发起授权失败，请重试",
+    "waitingText": "已在浏览器打开授权页…",
+    "waitingHint": "完成授权后将自动返回；如未自动打开，请检查浏览器弹窗拦截",
+    "cancel": "取消",
+    "timeoutMessage": "授权超时，请重试",
+    "manualToggle": "无法自动完成？手动输入授权码",
+    "manualLabel": "授权码",
+    "manualPlaceholder": "粘贴授权码",
+    "manualSubmit": "提交",
+    "manualSubmitting": "验证中...",
+    "manualFailed": "授权码无效或已过期",
     "noAccount": "没有账号？",
     "goRegister": "去注册",
     "brandTagline": "让团队与 AI 一起协作",
     "brandSubtitle": "本地 Agent + 云端协同，随时随地接管你的工作流。",
     "welcomeBack": "欢迎回到 meshbot",
     "validation": {
-      "passwordRequired": "请输入密码",
-      "emailInvalid": "邮箱格式不正确",
-      "passwordTooShort": "密码至少 8 位",
-      "passwordTooLong": "密码过长",
-      "displayNameRequired": "请输入显示名",
-      "displayNameTooLong": "显示名过长"
+      "codeRequired": "请输入授权码"
     }
   },
   "setup": {
@@ -826,5 +827,17 @@
   "shareLinkExpire30": "",
   "shareLinkExpireNever": "",
   "shareLinkPasswordPlaceholder": "",
-  "shareLinkCreate": ""
+  "shareLinkCreate": "",
+  "startFailed": "",
+  "manualFailed": "",
+  "waitingText": "",
+  "waitingHint": "",
+  "timeoutMessage": "",
+  "starting": "",
+  "browserLoginButton": "",
+  "manualToggle": "",
+  "manualLabel": "",
+  "manualPlaceholder": "",
+  "manualSubmitting": "",
+  "manualSubmit": ""
 }

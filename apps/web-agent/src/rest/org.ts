@@ -1,16 +1,8 @@
 "use client";
 
-import type {
-  CreateOrgInput,
-  InvitationInfo,
-  JoinOrgInput,
-  MemberInfo,
-  OrgInfo,
-} from "@meshbot/types-agent";
+import type { InvitationInfo, MemberInfo, OrgInfo } from "@meshbot/types-agent";
 import { apiClient } from "@meshbot/web-common";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { profileQueryKey } from "@/lib/profile-client";
-import { authStatusQueryKey } from "@/rest/auth";
 
 /** 我的组织列表查询 key。 */
 export const orgsQueryKey = ["org", "list"] as const;
@@ -25,21 +17,6 @@ export async function fetchOrgs(): Promise<OrgInfo[]> {
  */
 export async function switchOrg(orgId: string): Promise<void> {
   await apiClient.post("/api/orgs/switch", { orgId });
-}
-
-export async function createOrg(input: CreateOrgInput): Promise<OrgInfo> {
-  const { data } = await apiClient.post<OrgInfo>("/api/orgs", input);
-  return data;
-}
-
-export async function joinOrg(
-  input: JoinOrgInput,
-): Promise<{ orgId: string; orgName: string }> {
-  const { data } = await apiClient.post<{ orgId: string; orgName: string }>(
-    "/api/orgs/invitations/accept",
-    input,
-  );
-  return data;
 }
 
 export async function fetchMembers(orgId: string): Promise<MemberInfo[]> {
@@ -74,30 +51,6 @@ export function useOrgs() {
   return useQuery({
     queryKey: orgsQueryKey,
     queryFn: fetchOrgs,
-  });
-}
-
-export function useCreateOrg() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: createOrg,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: profileQueryKey });
-      qc.invalidateQueries({ queryKey: authStatusQueryKey });
-      qc.invalidateQueries({ queryKey: orgsQueryKey });
-    },
-  });
-}
-
-export function useJoinOrg() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: joinOrg,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: profileQueryKey });
-      qc.invalidateQueries({ queryKey: authStatusQueryKey });
-      qc.invalidateQueries({ queryKey: orgsQueryKey });
-    },
   });
 }
 

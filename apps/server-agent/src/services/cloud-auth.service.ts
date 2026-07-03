@@ -92,7 +92,7 @@ export class CloudAuthService {
         );
       }
     } catch {
-      // 自愈失败不阻塞 setup-status；保持 needs-org 由用户操作触发后续刷新
+      // 自愈失败不阻塞 setup-status；镜像组织信息保持缺省，等待后续调用再刷新
     }
   }
 

@@ -6,25 +6,26 @@
   "login": {
     "title": "Sign in",
     "subtitle": "Welcome",
-    "email": "Email",
-    "emailPlaceholder": "you@example.com",
-    "password": "Password",
-    "forgotPassword": "Forgot password?",
-    "loginFailed": "Login failed, please try again.",
-    "signIn": "Sign in",
-    "signingIn": "Signing in...",
+    "browserLoginButton": "Sign in with browser",
+    "starting": "Opening browser...",
+    "startFailed": "Failed to start authorization, please try again.",
+    "waitingText": "Authorization page opened in your browser…",
+    "waitingHint": "You'll return here automatically. If nothing opened, check your popup blocker.",
+    "cancel": "Cancel",
+    "timeoutMessage": "Authorization timed out, please try again.",
+    "manualToggle": "Can't finish automatically? Enter code manually",
+    "manualLabel": "Authorization code",
+    "manualPlaceholder": "Paste your authorization code",
+    "manualSubmit": "Submit",
+    "manualSubmitting": "Verifying...",
+    "manualFailed": "Invalid or expired authorization code",
     "noAccount": "No account?",
     "goRegister": "Sign up",
     "brandTagline": "Where your team and AI work together",
     "brandSubtitle": "Local agent + cloud collaboration — pick up your workflow anywhere.",
     "welcomeBack": "Welcome back to meshbot",
     "validation": {
-      "passwordRequired": "Please enter your password",
-      "emailInvalid": "Invalid email address",
-      "passwordTooShort": "Password must be at least 8 characters",
-      "passwordTooLong": "Password is too long",
-      "displayNameRequired": "Please enter your display name",
-      "displayNameTooLong": "Display name is too long"
+      "codeRequired": "Please enter the authorization code"
     }
   },
   "setup": {
@@ -826,5 +827,17 @@
   "shareLinkExpire30": "",
   "shareLinkExpireNever": "",
   "shareLinkPasswordPlaceholder": "",
-  "shareLinkCreate": ""
+  "shareLinkCreate": "",
+  "startFailed": "",
+  "manualFailed": "",
+  "waitingText": "",
+  "waitingHint": "",
+  "timeoutMessage": "",
+  "starting": "",
+  "browserLoginButton": "",
+  "manualToggle": "",
+  "manualLabel": "",
+  "manualPlaceholder": "",
+  "manualSubmitting": "",
+  "manualSubmit": ""
 }

@@ -90,33 +90,34 @@ describe("SetupController.getSetupStatus（Public 路由，无环境上下文）
     });
   });
 
-  it("needs-org：已登录但无 orgId → 返回 needs-org，不调用 hasEnabledModels", async () => {
-    const { controller, modelConfigService } = makeController({
+  it("无 orgId：已登录但无 orgId → 自愈同步后仍按 hasEnabledModels 判定（不再有 needs-org 分流）", async () => {
+    const { controller, modelConfigService, identityService } = makeController({
       loggedIn: [{ cloudUserId: "u1", deviceToken: "tok", orgId: null }],
       hasEnabledModels: false,
     });
 
     const result = await controller.getSetupStatus();
 
-    expect(result).toEqual({ step: "needs-org", needsSetup: true });
-    expect(modelConfigService.hasEnabledModels).not.toHaveBeenCalled();
+    expect(result).toEqual({ step: "needs-model", needsSetup: true });
+    expect(identityService.get).toHaveBeenCalledWith("u1");
+    expect(modelConfigService.hasEnabledModels).toHaveBeenCalled();
   });
 
   it("多账号：按 token 解出的活跃账号判定，而非 listLoggedIn()[0]", async () => {
-    // A 已 ready（listLoggedIn 首位），B 刚注册无 org。带 B 的 token → 应返回 B 的 needs-org，
-    // 而不是 A 的 ready —— 这正是导致「注册成功后没进创建组织页」的判定错位修复点。
+    // A 已 ready（listLoggedIn 首位），B 无 org 且无模型。带 B 的 token → 应返回 B 的
+    // needs-model，而不是 A 的 ready —— 这正是「按活跃账号而非首位判定」的修复点。
     const { controller, identityService } = makeController({
       loggedIn: [
         { cloudUserId: "A", deviceToken: "tokA", orgId: "orgA" },
         { cloudUserId: "B", deviceToken: "tokB", orgId: null },
       ],
-      hasEnabledModels: true,
+      hasEnabledModels: false,
       tokenUserId: "B",
     });
 
     const result = await controller.getSetupStatus("Bearer tokenB");
 
-    expect(result).toEqual({ step: "needs-org", needsSetup: true });
+    expect(result).toEqual({ step: "needs-model", needsSetup: true });
     expect(identityService.listLoggedIn).not.toHaveBeenCalled();
   });
 
