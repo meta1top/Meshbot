@@ -10,8 +10,18 @@ import { z } from "zod";
 export const dispatchSubagentSchema = z.object({
   task: z.string().min(1),
   description: z.string().optional(),
-  model: z.string().optional(),
-  background: z.boolean().default(false),
+  model: z
+    .string()
+    .optional()
+    .describe(
+      "Optional override for the sub-agent's model, by ModelConfig id or name. Defaults to the parent's active model.",
+    ),
+  background: z
+    .boolean()
+    .default(false)
+    .describe(
+      'If true, return immediately with {subSessionId,status:"running"} and announce completion back into this session later. If false (default), block until the sub-agent finishes and return its result.',
+    ),
 });
 
 export type DispatchSubagentInput = z.infer<typeof dispatchSubagentSchema>;
