@@ -23,6 +23,11 @@ function make(opts?: { account?: AccountLike }) {
       .fn()
       .mockResolvedValue({ messageId: "m1", queued: true }),
     listPendingBackgroundSubagentsUnscoped: jest.fn().mockResolvedValue([]),
+    // Task 3 新增：孤儿前台子会话 GC 扫描 + 了结动作——boot 恢复的新依赖，所有
+    // 既有用例都要有默认 mock，否则 onApplicationBootstrap 里新增的调用会报错。
+    listOrphanForegroundSubagentsUnscoped: jest.fn().mockResolvedValue([]),
+    markFailed: jest.fn().mockResolvedValue(undefined),
+    setStatus: jest.fn().mockResolvedValue(undefined),
   };
   const messages = {
     findLastAssistant: jest.fn().mockResolvedValue({ content: "子答案" }),
@@ -624,5 +629,250 @@ describe("DispatchSubagentService.onApplicationBootstrap（重启恢复）", () 
       .fn()
       .mockResolvedValue([]);
     await expect(svc.onApplicationBootstrap()).resolves.toBeUndefined();
+  });
+
+  it("两类扫描共存：background=1 走 settle，孤儿前台子会话只 markFailed+setStatus(idle)，互不干扰", async () => {
+    const { svc, sessions, runner } = make();
+    sessions.listPendingBackgroundSubagentsUnscoped = jest
+      .fn()
+      .mockResolvedValue([
+        {
+          id: "sub-bg",
+          parentSessionId: "p-bg",
+          parentToolCallId: "tc-bg",
+          title: "后台任务",
+          cloudUserId: "u1",
+        },
+      ]);
+    sessions.listOrphanForegroundSubagentsUnscoped = jest
+      .fn()
+      .mockResolvedValue([{ id: "sub-orphan", cloudUserId: "u2" }]);
+    sessions.listActivePending.mockImplementation(async (sessionId: string) => {
+      if (sessionId === "sub-orphan") {
+        return [
+          { id: "pm-1", sessionId: "sub-orphan", status: "pending" },
+          { id: "pm-2", sessionId: "sub-orphan", status: "processing" },
+        ];
+      }
+      return [];
+    });
+    const settleSpy = jest
+      .spyOn(svc, "settleBackground")
+      .mockResolvedValue(undefined);
+
+    await svc.onApplicationBootstrap();
+    await flush();
+
+    // background=1 那一行走 settleBackground
+    expect(settleSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ subSessionId: "sub-bg" }),
+    );
+    // 孤儿前台子会话只标记了结，不进 settleBackground、不 kick 父 run
+    expect(settleSpy).not.toHaveBeenCalledWith(
+      expect.objectContaining({ subSessionId: "sub-orphan" }),
+    );
+    expect(sessions.markFailed).toHaveBeenCalledWith(["pm-1", "pm-2"]);
+    expect(sessions.setStatus).toHaveBeenCalledWith("sub-orphan", "idle");
+    expect(runner.kick).not.toHaveBeenCalled();
+  });
+
+  it("孤儿扫描为空时零动作（不调用 markFailed/setStatus）", async () => {
+    const { svc, sessions } = make();
+    sessions.listPendingBackgroundSubagentsUnscoped = jest
+      .fn()
+      .mockResolvedValue([]);
+    sessions.listOrphanForegroundSubagentsUnscoped = jest
+      .fn()
+      .mockResolvedValue([]);
+    await svc.onApplicationBootstrap();
+    await flush();
+    expect(sessions.markFailed).not.toHaveBeenCalled();
+    expect(sessions.setStatus).not.toHaveBeenCalled();
+  });
+
+  // 较复杂的编排：3 个前台占位持有者把账号级信号量（SUBAGENT_MAX_CONCURRENCY=4）
+  // 占到只剩 1 个空位，boot 恢复同账号两行 background=1 竞争这最后 1 个槽位——
+  // 用真实 settleBackground（非 mock）+ kickAndWait deferred 验证第二行确实要等
+  // 第一行释放槽位才会调用 kickAndWait（即真正进入 settle）。
+  it("同账号两行排队：槽位不足时第二行等第一行释放才进入 settle", async () => {
+    const account = new AccountContextService();
+    const { svc, sessions, runner } = make({ account });
+    let subSeq = 0;
+    sessions.createSubSession.mockImplementation(async () => ({
+      subSessionId: `sub-${++subSeq}`,
+    }));
+    const holderReleasers: Array<() => void> = [];
+    const bootReleasers: Array<() => void> = [];
+    runner.kickAndWait.mockImplementation((subSessionId: string) => {
+      return new Promise<void>((resolve) => {
+        if (subSessionId.startsWith("boot-")) {
+          bootReleasers.push(resolve);
+        } else {
+          holderReleasers.push(resolve);
+        }
+      });
+    });
+
+    // 占满 3 个槽位（同账号 u1 的前台占位持有者），只留 1 个空位。
+    const holders = [0, 1, 2].map((i) =>
+      account.run("u1", () =>
+        svc.dispatch(
+          {
+            parentSessionId: "parent",
+            parentToolCallId: `h${i}`,
+            task: "t",
+            background: true,
+          },
+          new AbortController().signal,
+        ),
+      ),
+    );
+    await flush();
+    expect(sessions.createSubSession).toHaveBeenCalledTimes(3);
+
+    sessions.listPendingBackgroundSubagentsUnscoped = jest
+      .fn()
+      .mockResolvedValue([
+        {
+          id: "boot-1",
+          parentSessionId: "p1",
+          parentToolCallId: "tc-boot-1",
+          title: "任务甲",
+          cloudUserId: "u1",
+        },
+        {
+          id: "boot-2",
+          parentSessionId: "p2",
+          parentToolCallId: "tc-boot-2",
+          title: "任务乙",
+          cloudUserId: "u1",
+        },
+      ]);
+
+    await svc.onApplicationBootstrap();
+    await flush();
+
+    // 唯一的空位被 boot-1 占到，进入 settle（kickAndWait 已调用）；
+    // boot-2 排队等待，尚未进入 settle（kickAndWait 未调用）。
+    expect(bootReleasers).toHaveLength(1);
+
+    // 释放 boot-1 → settleBackground 走完 → release() 把槽位转交给排队的 boot-2
+    bootReleasers.shift()?.();
+    await flush();
+    expect(bootReleasers).toHaveLength(1);
+
+    // 清理：释放其余持有者，避免残留 unresolved promise
+    bootReleasers.forEach((r) => {
+      r();
+    });
+    holderReleasers.forEach((r) => {
+      r();
+    });
+    await flush();
+    await Promise.allSettled(holders);
+  });
+});
+
+describe("DispatchSubagentService.settleBackground — updateToolResult 重试", () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it("updateToolResult 首次返回 0 → 等 TOOL_RESULT_RETRY_DELAY_MS 后重试一次并命中", async () => {
+    jest.useFakeTimers();
+    const { svc, messages } = make();
+    messages.updateToolResult.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
+
+    const p = svc.settleBackground({
+      subSessionId: "sub-1",
+      parentSessionId: "parent",
+      parentToolCallId: "tc",
+      description: "任务",
+    });
+    // 驱动 settleBackground 内 `await new Promise((r) => setTimeout(r, 1000))`
+    // 这 1s 延迟（TOOL_RESULT_RETRY_DELAY_MS）；advanceTimersByTimeAsync 会在
+    // 每次推进之间排空微任务队列，让前置的 await 链先跑到 setTimeout 处。
+    await jest.advanceTimersByTimeAsync(1000);
+    await p;
+
+    expect(messages.updateToolResult).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("DispatchSubagentService.settleBackground — appendMessage 重试", () => {
+  it("appendMessage 第一次抛错、第二次成功 → 照常走完 kick/updateToolResult/emit/setBackground", async () => {
+    const { svc, sessions, messages, runner, emitter } = make();
+    sessions.appendMessage
+      .mockRejectedValueOnce(new Error("db 瞬时抖动"))
+      .mockResolvedValueOnce({ messageId: "m1", queued: true });
+
+    const out = await svc.dispatch(
+      {
+        parentSessionId: "parent",
+        parentToolCallId: "tc",
+        task: "t",
+        description: "重试任务",
+        background: true,
+      },
+      new AbortController().signal,
+    );
+    expect(JSON.parse(out).status).toBe("running");
+
+    await flush();
+
+    expect(sessions.appendMessage).toHaveBeenCalledTimes(2);
+    expect(runner.kick).toHaveBeenCalledWith("parent");
+    expect(messages.updateToolResult).toHaveBeenCalled();
+    expect(emitter.emit).toHaveBeenCalledWith(
+      "run.subagent_settled",
+      expect.objectContaining({ subSessionId: "sub-1", status: "done" }),
+    );
+    expect(sessions.setBackground).toHaveBeenCalledWith("sub-1", false);
+  });
+});
+
+describe("DispatchSubagentService.settleBackground — 播报文案", () => {
+  it("子任务失败态（error）播报文案含「失败」", async () => {
+    const { svc, sessions } = make();
+    sessions.listActivePending.mockResolvedValue([
+      { id: "p1", sessionId: "sub-1", status: "failed" },
+    ]);
+    await svc.dispatch(
+      {
+        parentSessionId: "parent",
+        parentToolCallId: "tc",
+        task: "t",
+        description: "失败任务",
+        background: true,
+      },
+      new AbortController().signal,
+    );
+    await flush();
+    expect(sessions.appendMessage).toHaveBeenCalledWith(
+      "parent",
+      expect.objectContaining({ content: expect.stringContaining("失败") }),
+    );
+  });
+
+  it("子任务中止态（aborted）播报文案含「已中止」", async () => {
+    const { svc, sessions } = make();
+    sessions.listActivePending.mockResolvedValue([
+      { id: "p1", sessionId: "sub-1", status: "processing" },
+    ]);
+    await svc.dispatch(
+      {
+        parentSessionId: "parent",
+        parentToolCallId: "tc",
+        task: "t",
+        description: "中止任务",
+        background: true,
+      },
+      new AbortController().signal,
+    );
+    await flush();
+    expect(sessions.appendMessage).toHaveBeenCalledWith(
+      "parent",
+      expect.objectContaining({ content: expect.stringContaining("已中止") }),
+    );
   });
 });

@@ -3,6 +3,7 @@ import { AccountContextService } from "@meshbot/agent";
 import { NotFoundException } from "@nestjs/common";
 import { DataSource } from "typeorm";
 import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
+import { Session } from "../entities/session.entity";
 import { SessionMessage } from "../entities/session-message.entity";
 import { SessionMessageService } from "./session-message.service";
 
@@ -42,7 +43,8 @@ describe("SessionMessageService", () => {
     ds = new DataSource({
       type: "better-sqlite3",
       database: ":memory:",
-      entities: [SessionMessage],
+      // activitySince 的 subagent 排除子查询要读 sessions 表，须一并注册。
+      entities: [SessionMessage, Session],
       synchronize: true,
     });
     await ds.initialize();
@@ -467,6 +469,31 @@ describe("SessionMessageService", () => {
   it("activitySince（since=null）统计本账号全部消息", async () => {
     await service.recordUser({ id: "u1", sessionId: "s1", content: "a" });
     await service.recordUser({ id: "u2", sessionId: "s1", content: "b" });
+    const stats = await service.activitySince(null);
+    expect(stats.total).toBe(2);
+    expect(stats.byDate.reduce((s, c) => s + c.count, 0)).toBe(2);
+    expect(stats.byHour.reduce((s, c) => s + c, 0)).toBe(2);
+  });
+
+  it("activitySince 排除 kind=subagent 会话下的消息（统计口径不计入子 Agent 活动）", async () => {
+    await service.recordUser({ id: "u1", sessionId: "s1", content: "a" });
+    await service.recordUser({ id: "u2", sessionId: "s1", content: "b" });
+    // 造一个 subagent 会话，往它底下也写两条消息——这两条不应计入统计
+    await ds.getRepository(Session).insert({
+      id: "sub-1",
+      cloudUserId: DEFAULT_USER,
+      title: "子任务",
+      kind: "subagent",
+      parentSessionId: "s1",
+      parentToolCallId: "tc-1",
+    });
+    await service.recordUser({ id: "u3", sessionId: "sub-1", content: "c" });
+    await service.recordAssistant({
+      id: "a1",
+      sessionId: "sub-1",
+      content: "d",
+      reasoning: null,
+    });
     const stats = await service.activitySince(null);
     expect(stats.total).toBe(2);
     expect(stats.byDate.reduce((s, c) => s + c.count, 0)).toBe(2);

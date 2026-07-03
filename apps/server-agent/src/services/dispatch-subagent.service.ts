@@ -353,25 +353,50 @@ export class DispatchSubagentService
    * 生命周期时机：Nest 保证 onApplicationBootstrap 晚于所有模块的
    * onModuleInit（含 RunnerService.onModuleInit 的 processing→pending 回滚），
    * 因此本方法扫到的 background=1 会话，其 pending 状态已经是回滚后的稳态。
+   *
+   * 紧接着扫描「孤儿前台子会话」（background=0 但仍有活跃 pending）：这类会话
+   * 的父 run 是同步等待，进程重启即意味着父上下文已死，无人会再消费其结果——
+   * 语义已拍板为只标记了结（markFailed + setStatus idle），不重跑，也不占
+   * 信号量（没有 run 要跑）。
    */
   async onApplicationBootstrap(): Promise<void> {
     const rows = await this.sessions.listPendingBackgroundSubagentsUnscoped();
-    if (rows.length === 0) return;
-    this.logger.log(`重启恢复：发现 ${rows.length} 个待了结后台子任务`);
-    for (const row of rows) {
-      if (!row.parentSessionId || !row.parentToolCallId) continue;
+    if (rows.length > 0) {
+      this.logger.log(`重启恢复：发现 ${rows.length} 个待了结后台子任务`);
+      for (const row of rows) {
+        if (!row.parentSessionId || !row.parentToolCallId) continue;
+        void this.account
+          .run(row.cloudUserId, async () => {
+            await this.semaphore().acquire();
+            await this.settleBackground({
+              subSessionId: row.id,
+              parentSessionId: row.parentSessionId as string,
+              parentToolCallId: row.parentToolCallId as string,
+              description: row.title ?? "后台任务",
+            });
+          })
+          .catch((err) =>
+            this.logger.warn(`重启恢复 settle 失败 sub=${row.id}`, err),
+          );
+      }
+    }
+
+    const orphanRows =
+      await this.sessions.listOrphanForegroundSubagentsUnscoped();
+    if (orphanRows.length === 0) return;
+    this.logger.log(`重启恢复：了结 ${orphanRows.length} 个孤儿前台子会话`);
+    for (const row of orphanRows) {
       void this.account
         .run(row.cloudUserId, async () => {
-          await this.semaphore().acquire();
-          await this.settleBackground({
-            subSessionId: row.id,
-            parentSessionId: row.parentSessionId as string,
-            parentToolCallId: row.parentToolCallId as string,
-            description: row.title ?? "后台任务",
-          });
+          const active = await this.sessions.listActivePending(row.id);
+          await this.sessions.markFailed(active.map((p) => p.id));
+          await this.sessions.setStatus(row.id, "idle");
         })
         .catch((err) =>
-          this.logger.warn(`重启恢复 settle 失败 sub=${row.id}`, err),
+          this.logger.warn(
+            `重启恢复 孤儿前台子会话了结失败 sub=${row.id}`,
+            err,
+          ),
         );
     }
   }

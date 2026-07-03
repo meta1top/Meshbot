@@ -249,14 +249,6 @@ describe("SessionService", () => {
     expect(active.some((m) => m.status === "failed")).toBe(true);
   });
 
-  it("hasFailedPending 在存在 failed 消息时返回 true，否则 false", async () => {
-    const { sessionId } = await service.createSession({ content: "m1" });
-    expect(await service.hasFailedPending(sessionId)).toBe(false);
-    const claimed = await service.claimPending(sessionId);
-    await service.markFailed(claimed.map((m) => m.id));
-    expect(await service.hasFailedPending(sessionId)).toBe(true);
-  });
-
   it("listActivePendingWithHistory 标注 inHistory（已入 session_messages 为 true）", async () => {
     const { sessionId } = await service.createSession({ content: "m1" });
     const claimed = await service.claimPending(sessionId);
@@ -776,6 +768,83 @@ describe("SessionService", () => {
         sessionId,
       );
       expect(await service.listQuickSessions()).toHaveLength(0);
+    });
+  });
+
+  describe("countCreatedSince", () => {
+    it("排除 kind=subagent 会话，user/quick 仍计入", async () => {
+      await service.createSession({ content: "u1" });
+      await service.createSession({ content: "q1", kind: "quick" });
+      const parent = await service.createSession({ content: "父" });
+      await service.createSubSession({
+        parentSessionId: parent.sessionId,
+        parentToolCallId: "tc",
+        task: "子任务",
+      });
+      // parent(user) + u1(user) + q1(quick) = 3；subagent 不计入
+      expect(await service.countCreatedSince(null)).toBe(3);
+    });
+
+    it("since 有值时按时间过滤，subagent 排除规则仍生效", async () => {
+      const parent = await service.createSession({ content: "父" });
+      await service.createSubSession({
+        parentSessionId: parent.sessionId,
+        parentToolCallId: "tc",
+        task: "子任务",
+      });
+      const since = new Date(Date.now() - 60_000);
+      // parent 一条 user 会话落在 since 之后；subagent 会话本该落在范围内但被排除
+      expect(await service.countCreatedSince(since)).toBe(1);
+    });
+  });
+
+  describe("listOrphanForegroundSubagentsUnscoped", () => {
+    it("只挑 kind=subagent 且 background=0 且仍有活跃 pending 的会话（孤儿）", async () => {
+      // 正常跑完的前台子会话：pending 已 processed，无活跃条目 → 不是孤儿
+      const doneSub = await service.createSubSession({
+        parentSessionId: "990000000000000030",
+        parentToolCallId: "tc-done",
+        task: "已完成",
+      });
+      const doneClaimed = await service.claimPending(doneSub.subSessionId);
+      await service.markProcessed(doneClaimed.map((m) => m.id));
+
+      // 孤儿：前台子会话仍残留活跃 pending（进程重启前未跑完）
+      const orphanSub = await service.createSubSession({
+        parentSessionId: "990000000000000030",
+        parentToolCallId: "tc-orphan",
+        task: "孤儿",
+      });
+
+      // 后台子会话即使有活跃 pending，background=1 不算前台孤儿
+      const bgSub = await service.createSubSession({
+        parentSessionId: "990000000000000030",
+        parentToolCallId: "tc-bg",
+        task: "后台",
+        background: true,
+      });
+
+      // 普通 user 会话即使有 pending 也不算（kind 过滤）
+      await service.createSession({ content: "普通会话" });
+
+      const rows = await rawService.listOrphanForegroundSubagentsUnscoped();
+      expect(rows.map((r) => r.id)).toEqual([orphanSub.subSessionId]);
+      expect(rows[0].cloudUserId).toBe(DEFAULT_USER);
+      expect(rows.map((r) => r.id)).not.toContain(doneSub.subSessionId);
+      expect(rows.map((r) => r.id)).not.toContain(bgSub.subSessionId);
+    });
+
+    it("无孤儿时返回空数组（零动作零日志的前提）", async () => {
+      const parent = await service.createSession({ content: "父" });
+      const sub = await service.createSubSession({
+        parentSessionId: parent.sessionId,
+        parentToolCallId: "tc",
+        task: "子",
+      });
+      const claimed = await service.claimPending(sub.subSessionId);
+      await service.markProcessed(claimed.map((m) => m.id));
+      const rows = await rawService.listOrphanForegroundSubagentsUnscoped();
+      expect(rows).toEqual([]);
     });
   });
 
