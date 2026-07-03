@@ -80,7 +80,7 @@ export class ImRelayClientService implements OnModuleDestroy {
   /**
    * 为指定账号建立到云端 `ws/im` 的持久连接。
    *
-   * 若该账号未登录（无 cloudToken）或无活跃 org（orgId 为 null）→ 跳过，不建连接。
+   * 若该账号未登录（无 deviceToken）或无活跃 org（orgId 为 null）→ 跳过，不建连接。
    * 已连接或正在建连时直接返回（幂等）。
    */
   async connect(cloudUserId: string): Promise<void> {
