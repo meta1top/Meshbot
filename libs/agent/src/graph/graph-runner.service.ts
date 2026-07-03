@@ -229,8 +229,6 @@ export class GraphRunner {
 
   /**
    * 按 opts.subAgent 标志选取图：子会话用子图，普通会话用主图。
-   *
-   * msgIdMap（resolveMessageId / deleteMsgIds）全局共享，不随图切换，故不在此处理。
    */
   private pickGraph(opts?: { subAgent?: boolean }) {
     return opts?.subAgent
@@ -382,6 +380,7 @@ export class GraphRunner {
     // 本轮事件对外用的雪花 id（= resolveMessageId(currentId)）。currentId 仅用于
     // 判轮切换；所有 yield 的 messageId 用 currentSid，与 checkpointer 写入的 id 收口一致。
     let currentSid: string | null = null;
+    // msgIdMap（resolveMessageId / deleteMsgIds）全局共享，不随图切换。
     // 本 run 见过的模型 UUID，run 结束时从 msgIdMap 清理，避免长进程累积。
     const seenModelIds = new Set<string>();
     let currentAcc: AIMessageChunk | undefined;

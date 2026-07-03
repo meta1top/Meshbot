@@ -8,7 +8,12 @@ import {
 import { Tool } from "../tool.decorator";
 import type { MeshbotTool, ToolContext } from "../tool.types";
 
-/** dispatch_subagent 工具入参（使用 schema input 类型，兼容 ZodDefault）。 */
+/**
+ * dispatch_subagent 工具入参（使用 schema input 类型，兼容 ZodDefault）。
+ *
+ * schema 的 background 有 `.default(false)`，input 类型让该字段可选、与 LLM 实际传参一致；
+ * infer 会要求必填。
+ */
 type DispatchSubagentArgs = z.input<typeof dispatchSubagentSchema>;
 
 @Injectable()
