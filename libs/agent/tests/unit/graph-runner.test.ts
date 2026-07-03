@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { AIMessageChunk } from "@langchain/core/messages";
+import { AIMessageChunk, ToolMessage } from "@langchain/core/messages";
 import { ChatGenerationChunk } from "@langchain/core/outputs";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -584,5 +584,203 @@ describe("GraphRunner system:ctx 刷新不累积", () => {
       typeof ctxMsgs[0].content === "string" ? ctxMsgs[0].content : "";
     expect(ctxContent).toContain("sessionId:");
     expect(ctxContent).toContain("cloudUserId:");
+  });
+});
+
+// ─── messages 流按 metadata.thread_id 过滤（子图冒泡防护） ────────────────────
+//
+// 背景：dispatch_subagent 在父图 tools 节点内部同步调用子图，LangGraph 的
+// streamMode:"messages" 走 callback 树采集 LLM token —— 子图的 token 事件会
+// 冒泡进父图的 stream。runGraphStream 消费时必须按 metadata.thread_id 过滤：
+// thread_id 存在且 ≠ 本次 threadId → 丢弃（不产出事件、不触发 flushRound）；
+// thread_id 缺失 → fail-open 保留（本图事件缺字段时不误杀）。
+// 写侧配套：graph.stream 调用处必须显式传 metadata:{thread_id}——LangGraph 的
+// ensureLangGraphConfig 只在 metadata 缺 thread_id 时才从 configurable 回填，
+// 子图在父节点 ALS 上下文内调用时会原样继承父的 metadata.thread_id，必须显式盖章。
+
+describe("GraphRunner messages 流按 metadata.thread_id 过滤", () => {
+  let testDir: string;
+  let ctx: AccountContextService;
+  let graphRunner: GraphRunner;
+
+  /** 用可控 parts 序列 stub 掉 pickGraph，直驱 runGraphStream 的消费逻辑。 */
+  function stubGraphStream(
+    runner: GraphRunner,
+    parts: Array<[string, unknown]>,
+    captured?: { config?: Record<string, unknown> },
+  ): void {
+    const fakeGraph = {
+      stream: async (_input: unknown, config: Record<string, unknown>) => {
+        if (captured) captured.config = config;
+        return (async function* () {
+          yield* parts;
+        })();
+      },
+      getState: async () => ({ values: { messages: [] } }),
+    };
+    (runner as unknown as { pickGraph: () => unknown }).pickGraph = () =>
+      fakeGraph;
+  }
+
+  /** 消费 resumeStream 收集全部事件（resumeStream 直达 runGraphStream，路径最短）。 */
+  // biome-ignore lint/suspicious/noExplicitAny: 测试装载事件
+  async function collect(threadId: string): Promise<any[]> {
+    // biome-ignore lint/suspicious/noExplicitAny: 测试装载事件
+    const events: any[] = [];
+    await ctx.run(TEST_ACCOUNT, async () => {
+      for await (const ev of graphRunner.resumeStream(threadId)) {
+        events.push(ev);
+      }
+    });
+    return events;
+  }
+
+  beforeEach(() => {
+    testDir = mkdtempSync(path.join(tmpdir(), "meshbot-thread-filter-test-"));
+    mkdirSync(path.join(testDir, "prompt"), { recursive: true });
+    const { ctx: c, configService, promptService } = makeTestServices(testDir);
+    ctx = c;
+    ({ graphRunner } = makeServices({
+      configService,
+      promptService,
+      account: ctx,
+      fakeModel: { stream: async () => (async function* () {})() },
+    }));
+  });
+
+  afterEach(() => {
+    rmSync(testDir, { recursive: true, force: true });
+  });
+
+  it("外来 thread_id 的 AIMessageChunk 被整体丢弃：无 chunk/assistant_done/usage", async () => {
+    const threadId = await graphRunner.startSession({ model: "fake" });
+    stubGraphStream(graphRunner, [
+      [
+        "messages",
+        [
+          new AIMessageChunk({
+            id: "foreign-1",
+            content: "泄",
+            usage_metadata: {
+              input_tokens: 6813,
+              output_tokens: 100,
+              total_tokens: 6913,
+            },
+          }),
+          { thread_id: "foreign-thread" },
+        ],
+      ],
+      [
+        "messages",
+        [
+          new AIMessageChunk({ id: "foreign-1", content: "漏" }),
+          { thread_id: "foreign-thread" },
+        ],
+      ],
+    ]);
+    const events = await collect(threadId);
+    expect(events.filter((e) => e.kind === "chunk")).toHaveLength(0);
+    expect(events.filter((e) => e.kind === "reasoning")).toHaveLength(0);
+    expect(events.filter((e) => e.kind === "tool_call_args")).toHaveLength(0);
+    expect(events.filter((e) => e.kind === "assistant_done")).toHaveLength(0);
+    expect(events.filter((e) => e.kind === "usage")).toHaveLength(0);
+  });
+
+  it("metadata.thread_id === 本次 threadId 的事件照常产出", async () => {
+    const threadId = await graphRunner.startSession({ model: "fake" });
+    stubGraphStream(graphRunner, [
+      [
+        "messages",
+        [
+          new AIMessageChunk({
+            id: "own-1",
+            content: "好",
+            usage_metadata: {
+              input_tokens: 10,
+              output_tokens: 2,
+              total_tokens: 12,
+            },
+          }),
+          { thread_id: threadId },
+        ],
+      ],
+    ]);
+    const events = await collect(threadId);
+    const chunks = events.filter((e) => e.kind === "chunk");
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0].delta).toBe("好");
+    expect(events.filter((e) => e.kind === "assistant_done")).toHaveLength(1);
+    expect(events.filter((e) => e.kind === "usage")).toHaveLength(1);
+  });
+
+  it("metadata 缺 thread_id 时 fail-open：事件照常产出", async () => {
+    const threadId = await graphRunner.startSession({ model: "fake" });
+    stubGraphStream(graphRunner, [
+      // metadata 为空对象
+      ["messages", [new AIMessageChunk({ id: "own-2", content: "a" }), {}]],
+      // metadata 干脆缺位
+      ["messages", [new AIMessageChunk({ id: "own-2", content: "b" })]],
+    ]);
+    const events = await collect(threadId);
+    const chunks = events.filter((e) => e.kind === "chunk");
+    expect(chunks.map((c) => c.delta)).toEqual(["a", "b"]);
+    const dones = events.filter((e) => e.kind === "assistant_done");
+    expect(dones).toHaveLength(1);
+    expect(dones[0].content).toBe("ab");
+  });
+
+  it("轮中出现外来 ToolMessage 不触发 backup-flush：本轮不被截断", async () => {
+    const threadId = await graphRunner.startSession({ model: "fake" });
+    stubGraphStream(graphRunner, [
+      [
+        "messages",
+        [
+          new AIMessageChunk({ id: "own-3", content: "a" }),
+          { thread_id: threadId },
+        ],
+      ],
+      // 外来（子图）ToolMessage 混进流中——过滤后不得触发 flushRound
+      [
+        "messages",
+        [
+          new ToolMessage({
+            tool_call_id: "foreign-tc",
+            name: "foreign_tool",
+            content: "foreign result",
+          }),
+          { thread_id: "foreign-thread" },
+        ],
+      ],
+      [
+        "messages",
+        [
+          new AIMessageChunk({ id: "own-3", content: "b" }),
+          { thread_id: threadId },
+        ],
+      ],
+    ]);
+    const events = await collect(threadId);
+    const dones = events.filter((e) => e.kind === "assistant_done");
+    // 未修复时：外来 ToolMessage 走 backup-flush → 本轮被切成两条 assistant_done（"a" / "b"）
+    expect(dones).toHaveLength(1);
+    expect(dones[0].content).toBe("ab");
+  });
+
+  it("写侧回归守卫：graph.stream 显式传 metadata.thread_id = 本次 threadId", async () => {
+    const threadId = await graphRunner.startSession({ model: "fake" });
+    const captured: { config?: Record<string, unknown> } = {};
+    stubGraphStream(graphRunner, [], captured);
+    await collect(threadId);
+    expect(captured.config).toBeTruthy();
+    const configurable = captured.config?.configurable as
+      | Record<string, unknown>
+      | undefined;
+    expect(configurable?.thread_id).toBe(threadId);
+    // 关键：metadata 也要显式盖章 —— 否则子图在父 tools 节点 ALS 上下文内调用时
+    // 会继承父的 metadata.thread_id（ensureLangGraphConfig 仅在缺失时回填）。
+    const metadata = captured.config?.metadata as
+      | Record<string, unknown>
+      | undefined;
+    expect(metadata?.thread_id).toBe(threadId);
   });
 });
