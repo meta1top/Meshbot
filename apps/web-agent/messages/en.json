@@ -263,6 +263,14 @@
       "rowExpand": "Show summary",
       "rowCollapse": "Hide",
       "toastError": "Compaction failed: {message}"
+    },
+    "subagent": {
+      "fallbackTitle": "Subtask",
+      "starting": "Starting…",
+      "running": "Running",
+      "done": "Done",
+      "error": "Failed",
+      "aborted": "Aborted"
     }
   },
   "newMessage": {
@@ -826,5 +834,6 @@
   "shareLinkExpire30": "",
   "shareLinkExpireNever": "",
   "shareLinkPasswordPlaceholder": "",
-  "shareLinkCreate": ""
+  "shareLinkCreate": "",
+  "fallbackTitle": ""
 }

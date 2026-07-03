@@ -15,6 +15,7 @@ import { DriveCreateShareCard } from "./drive-create-share-card";
 import { DriveShareCard } from "./drive-share-card";
 import { ImSendConfirmCard } from "./im-send-confirm-card";
 import type { ToolCallView } from "./message-list";
+import { SubagentCard } from "./subagent-card";
 import { TodoList } from "./todo-list";
 
 /**
@@ -64,6 +65,9 @@ export function ToolCallBlock({
         <TodoList todos={todos} />
       </div>
     );
+  }
+  if (tool.name === "dispatch_subagent" && tool.status !== "streaming") {
+    return <SubagentCard tool={tool} />;
   }
   const streaming = tool.status === "streaming";
   // streaming 阶段权威 args 还没到，用累积的 argsText 尽力部分解析。

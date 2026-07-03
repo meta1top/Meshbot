@@ -643,6 +643,33 @@ describe("SessionService", () => {
       expect(ids).toContain(parent.sessionId);
       expect(ids).not.toContain(subSessionId);
     });
+
+    it("listChildren 按父会话返回子会话 id + parentToolCallId；不含他父的子会话", async () => {
+      const parentId = "990000000000000001";
+      expect(await service.listChildren(parentId)).toEqual([]);
+      const a = await service.createSubSession({
+        parentSessionId: parentId,
+        parentToolCallId: "tc-1",
+        task: "任务A",
+      });
+      const b = await service.createSubSession({
+        parentSessionId: parentId,
+        parentToolCallId: "tc-2",
+        task: "任务B",
+      });
+      await service.createSubSession({
+        parentSessionId: "990000000000000002",
+        parentToolCallId: "tc-3",
+        task: "他父的任务",
+      });
+      const rows = await service.listChildren(parentId);
+      expect(new Map(rows.map((r) => [r.parentToolCallId, r.id]))).toEqual(
+        new Map([
+          ["tc-1", a.subSessionId],
+          ["tc-2", b.subSessionId],
+        ]),
+      );
+    });
   });
 
   describe("quick sessions", () => {

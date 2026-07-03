@@ -29,6 +29,8 @@ export interface ToolCallView {
   progress?: string;
   /** 最终结果（end 后；历史读取也填这里）。 */
   result?: string;
+  /** dispatch_subagent 专用：已认领的子会话 id（spawned 事件 / history 附带）。 */
+  subSessionId?: string;
   /** streaming = LLM 仍在流式生成本工具的参数（尚未开始执行）。 */
   status: "streaming" | "running" | "ok" | "error";
 }
@@ -83,6 +85,8 @@ interface MessageListProps {
   onRegenerateOptimisticCut: (messageId: string) => void;
   /** 按消息 ID 索引的单次 LLM 调用用量，仅 assistant 消息使用。 */
   usageByMessage?: Record<string, MessageUsage>;
+  /** 嵌套模式（子 Agent 卡内）：隐藏头像行/名字/重试/反馈/TodoPanel，仅保留内容与工具块。 */
+  nested?: boolean;
 }
 
 /**
@@ -100,6 +104,7 @@ export function MessageList({
   running,
   onRegenerateOptimisticCut,
   usageByMessage,
+  nested,
 }: MessageListProps) {
   const t = useTranslations("session");
   const user = useAtomValue(currentUserAtom);
@@ -108,7 +113,7 @@ export function MessageList({
   const assistantName = t("assistantName");
   return (
     <div className="flex flex-col gap-1 pb-6 pt-2">
-      <TodoPanel messages={messages} />
+      {!nested && <TodoPanel messages={messages} />}
       {messages
         .filter(
           (m) => !(m.role === "system" && m.metadata?.kind !== "compaction"),
@@ -129,19 +134,22 @@ export function MessageList({
               key={m.id}
               className="group relative -mx-2 flex gap-3 rounded px-2 py-1.5 hover:bg-muted/40"
             >
-              {m.role === "user" ? (
-                <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] bg-[#16a34a] text-[12px] font-semibold text-white">
-                  {userInitial}
-                </div>
-              ) : (
-                <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] bg-(--shell-accent) text-white">
-                  <Sparkles className="h-4 w-4" />
-                </div>
-              )}
+              {!nested &&
+                (m.role === "user" ? (
+                  <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] bg-[#16a34a] text-[12px] font-semibold text-white">
+                    {userInitial}
+                  </div>
+                ) : (
+                  <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] bg-(--shell-accent) text-white">
+                    <Sparkles className="h-4 w-4" />
+                  </div>
+                ))}
               <div className="flex min-w-0 flex-1 flex-col gap-2">
-                <div className="text-[13px] font-bold text-foreground">
-                  {m.role === "user" ? userName : assistantName}
-                </div>
+                {!nested && (
+                  <div className="text-[13px] font-bold text-foreground">
+                    {m.role === "user" ? userName : assistantName}
+                  </div>
+                )}
                 {m.role === "assistant" && m.reasoning ? (
                   <ReasoningBlock
                     text={m.reasoning}
@@ -190,16 +198,19 @@ export function MessageList({
                       ))}
                     </div>
                   )}
-                {m.role === "assistant" && m.content && !m.streaming && (
-                  <AssistantMessageActions
-                    sessionId={sessionId}
-                    messageId={m.id}
-                    content={m.content}
-                    usage={usageByMessage?.[m.id]}
-                    feedback={m.feedback}
-                  />
-                )}
-                {m.role === "user" && (
+                {!nested &&
+                  m.role === "assistant" &&
+                  m.content &&
+                  !m.streaming && (
+                    <AssistantMessageActions
+                      sessionId={sessionId}
+                      messageId={m.id}
+                      content={m.content}
+                      usage={usageByMessage?.[m.id]}
+                      feedback={m.feedback}
+                    />
+                  )}
+                {!nested && m.role === "user" && (
                   <UserMessageActions
                     sessionId={sessionId}
                     messageId={m.id}

@@ -97,6 +97,12 @@ export const HistoryToolCallSchema = z.object({
   args: z.unknown(),
   status: z.enum(["ok", "error", "running"]),
   result: z.string(),
+  /**
+   * dispatch_subagent 专用：该次调用派生的子会话 id。后端组装 history 时按
+   * parent_tool_call_id 反查带出，供前端嵌套卡在任意时刻（含子 run 进行中刷新）
+   * 认领。其他工具无此字段。
+   */
+  subSessionId: z.string().optional(),
 });
 export type HistoryToolCall = z.infer<typeof HistoryToolCallSchema>;
 

@@ -199,6 +199,20 @@ export class SessionService {
     return this.sessionRepo.findOneBy({ id: sessionId });
   }
 
+  /**
+   * 列出某父会话派生的全部子会话（id + 认领用的 parentToolCallId）。
+   * 供 history 组装嵌套卡关联：子 run 进行中工具结果未落库，前端刷新后唯有
+   * 此路能把 dispatch 工具卡认领到子会话。
+   */
+  listChildren(
+    parentSessionId: string,
+  ): Promise<Array<Pick<Session, "id" | "parentToolCallId">>> {
+    return this.sessionRepo.find({
+      where: { parentSessionId },
+      select: { id: true, parentToolCallId: true },
+    });
+  }
+
   /** 按 session 反查其归属账号（系统级，无账号上下文时用，如 runner/cron 建上下文）。 */
   async findOwner(sessionId: string): Promise<string | null> {
     // scope-check: allow-unscoped
