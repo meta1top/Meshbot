@@ -112,7 +112,7 @@ export function MessageList({
   const userInitial = userName.charAt(0).toUpperCase();
   const assistantName = t("assistantName");
   return (
-    <div className="flex flex-col gap-1 pb-6 pt-2">
+    <div className={cn("flex flex-col gap-1", nested ? "py-1" : "pb-6 pt-2")}>
       {!nested && <TodoPanel messages={messages} />}
       {messages
         .filter(
