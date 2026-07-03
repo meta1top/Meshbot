@@ -1,13 +1,10 @@
-import { resolveContextWindow } from "@meshbot/types-agent";
+import { Transactional } from "@meshbot/common";
+import type { AgentModelConfig } from "@meshbot/types";
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { ScopedRepository } from "../account/scoped-repository";
 import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
-import type {
-  CreateModelConfigDto,
-  UpdateModelConfigDto,
-} from "../dto/create-model-config.dto";
 import { ModelConfig } from "../entities/model-config.entity";
 
 /** ModelConfig 表的归属 Service —— 模型配置的数据层（按账号隔离）。 */
@@ -16,12 +13,21 @@ export class ModelConfigService {
   /** ModelConfig 账号作用域仓库（自动按当前账号过滤/盖章）。 */
   private readonly repo: ScopedRepository<ModelConfig>;
 
+  /**
+   * 裸 ModelConfig 仓库：仅供 @Transactional() 的 findDataSource 反射遍历 service
+   * 字段定位 DataSource（作用域仓库不是 Repository 实例，取不到 DataSource），
+   * 业务读写一律走 repo 作用域仓库。
+   */
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: findDataSource 反射读取
+  private readonly txAnchorRepo: Repository<ModelConfig>;
+
   constructor(
     @InjectRepository(ModelConfig)
     rawRepo: Repository<ModelConfig>,
     scopedFactory: ScopedRepositoryFactory,
   ) {
     this.repo = scopedFactory.create(rawRepo);
+    this.txAnchorRepo = rawRepo;
   }
 
   /** 列出当前账号所有已启用的 ModelConfig。 */
@@ -50,50 +56,41 @@ export class ModelConfigService {
     return entity;
   }
 
-  /** 创建并保存新 ModelConfig（自动盖上当前账号 cloudUserId）。 */
-  async create(dto: CreateModelConfigDto): Promise<ModelConfig> {
-    return this.repo.save({
-      providerType: dto.providerType,
-      name: dto.name,
-      model: dto.model,
-      apiKey: dto.apiKey,
-      baseUrl: dto.baseUrl ?? "",
-      enabled: true,
-      contextWindow: resolveContextWindow(dto.model, dto.contextWindow),
-    } as ModelConfig);
-  }
-
-  /**
-   * 更新策略（contextWindow 解析）：
-   * - dto.contextWindow 显式给值 → 直接覆盖
-   * - 未给但 dto.model 变了 → 按新 model 重新解析（spec 自动跟进）
-   * - 未给且 model 没变 → 保留原值（不动）
-   */
-  async update(id: string, dto: UpdateModelConfigDto): Promise<ModelConfig> {
-    const entity = await this.findOneOrFail(id);
-    const modelChanged = dto.model !== undefined && dto.model !== entity.model;
-    Object.assign(entity, dto);
-    if (dto.contextWindow !== undefined) {
-      entity.contextWindow = dto.contextWindow;
-    } else if (modelChanged) {
-      entity.contextWindow = resolveContextWindow(entity.model);
-    }
-    return this.repo.save(entity);
-  }
-
-  /**
-   * 删除指定 ModelConfig。
-   * 先通过作用域 findOneOrFail 验证归属（不属于当前账号则抛 NOT_FOUND），
-   * 再用作用域 delete 确保删除条件合并当前账号（防误删他账号行）。
-   */
-  async remove(id: string): Promise<void> {
-    await this.findOneOrFail(id);
-    await this.repo.delete({ id });
-  }
-
   /** 判断当前账号是否有已启用的 ModelConfig。 */
   async hasEnabledModels(): Promise<boolean> {
     const count = await this.repo.count({ where: { enabled: true } });
     return count > 0;
+  }
+
+  /**
+   * 整体替换当前账号的云端来源（source='cloud'）模型配置缓存行。
+   * 本地手工维护的 source='local' 行不受影响——本地模型配置写 REST 已下线，
+   * 云端组织模型配置是唯一的写入来源，登录/启动/定时同步调用本方法。
+   */
+  async replaceCloudConfigs(configs: AgentModelConfig[]): Promise<void> {
+    return this.persistCloudConfigs(configs);
+  }
+
+  /**
+   * 同表先删后插的跨行原子操作，挂 @Transactional 防同步中途崩溃留半态
+   * （删完旧 cloud 行、插新行插到一半失败，会导致该账号模型配置整体丢失）。
+   */
+  @Transactional()
+  private async persistCloudConfigs(
+    configs: AgentModelConfig[],
+  ): Promise<void> {
+    await this.repo.delete({ source: "cloud" });
+    for (const c of configs) {
+      await this.repo.save({
+        providerType: c.providerType,
+        name: c.name,
+        model: c.model,
+        apiKey: c.apiKey,
+        baseUrl: c.baseUrl,
+        enabled: c.enabled,
+        contextWindow: c.contextWindow,
+        source: "cloud",
+      } as ModelConfig);
+    }
   }
 }

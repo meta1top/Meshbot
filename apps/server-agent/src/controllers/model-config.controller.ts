@@ -1,18 +1,10 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  Patch,
-  Post,
-} from "@nestjs/common";
-import {
-  CreateModelConfigDto,
-  UpdateModelConfigDto,
-} from "../dto/create-model-config.dto";
+import { Controller, Get } from "@nestjs/common";
 import { ModelConfigService } from "../services/model-config.service";
 
+/**
+ * 模型配置只读接口——本地写 REST（create/update/delete）已下线，
+ * 写入唯一来源是 ModelConfigSyncService 从云端拉取组织模型配置整体替换。
+ */
 @Controller("api/model-configs")
 export class ModelConfigController {
   constructor(private readonly service: ModelConfigService) {}
@@ -20,20 +12,5 @@ export class ModelConfigController {
   @Get()
   findAll() {
     return this.service.findAllEnabled();
-  }
-
-  @Post()
-  create(@Body() dto: CreateModelConfigDto) {
-    return this.service.create(dto);
-  }
-
-  @Patch(":id")
-  update(@Param("id") id: string, @Body() dto: UpdateModelConfigDto) {
-    return this.service.update(id, dto);
-  }
-
-  @Delete(":id")
-  remove(@Param("id") id: string) {
-    return this.service.remove(id);
   }
 }

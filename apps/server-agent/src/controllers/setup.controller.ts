@@ -9,7 +9,12 @@ import { CloudAuthService } from "../services/cloud-auth.service";
 import { CloudIdentityService } from "../services/cloud-identity.service";
 import { ModelConfigService } from "../services/model-config.service";
 
-/** setup-status 四态：needs-login → needs-org → needs-model → ready。 */
+/**
+ * setup-status 四态：needs-login → needs-org → needs-model → ready。
+ * needs-model 判定不变（hasEnabledModels），但本地模型配置写 REST 已下线——
+ * needs-model 现在意味着该账号所属组织在云端未配置任何已启用模型（或云端同步尚未完成），
+ * 需要去云端组织后台配置，而非本地新增（前端文案 Task 20 跟进）。
+ */
 @Controller("api")
 export class SetupController {
   constructor(
