@@ -270,7 +270,8 @@
       "running": "Running",
       "done": "Done",
       "error": "Failed",
-      "aborted": "Aborted"
+      "aborted": "Aborted",
+      "stop": "Stop"
     }
   },
   "newMessage": {
@@ -835,5 +836,6 @@
   "shareLinkExpireNever": "",
   "shareLinkPasswordPlaceholder": "",
   "shareLinkCreate": "",
-  "fallbackTitle": ""
+  "fallbackTitle": "",
+  "stop": ""
 }

@@ -9,6 +9,7 @@ import {
   type RunReasoningChunkEvent,
   type RunReasoningDoneEvent,
   type RunSnapshotEvent,
+  type RunSubagentSettledEvent,
   type RunSubagentSpawnedEvent,
   type RunToolCallArgsDeltaEvent,
   type RunToolCallEndEvent,
@@ -30,7 +31,10 @@ import {
 import { updateSessionTitleAtom } from "@/atoms/sessions";
 import type { TimelineMessage } from "@/components/session/message-list";
 import { getSessionSocket } from "@/lib/socket";
-import { claimSubagentOnTimeline } from "@/lib/subagent-card";
+import {
+  claimSubagentOnTimeline,
+  settleSubagentOnTimeline,
+} from "@/lib/subagent-card";
 import { appendMessage, fetchHistory, fetchPending } from "@/rest/session";
 
 export interface SessionStream {
@@ -621,6 +625,20 @@ export function useSessionStream(
         claimSubagentOnTimeline(prev, e.toolCallId, e.subSessionId),
       );
     };
+    const onSubagentSettled = (e: RunSubagentSettledEvent) => {
+      if (e.sessionId !== sessionId) return;
+      apply((prev) =>
+        settleSubagentOnTimeline(
+          prev,
+          e.toolCallId,
+          JSON.stringify({
+            subSessionId: e.subSessionId,
+            status: e.status,
+            output: e.output,
+          }),
+        ),
+      );
+    };
 
     socket.on("connect", subscribe);
     if (socket.connected) subscribe();
@@ -639,6 +657,7 @@ export function useSessionStream(
     socket.on(SESSION_WS_EVENTS.runToolCallProgress, onToolProgress);
     socket.on(SESSION_WS_EVENTS.runToolCallEnd, onToolEnd);
     socket.on(SESSION_WS_EVENTS.runSubagentSpawned, onSubagentSpawned);
+    socket.on(SESSION_WS_EVENTS.runSubagentSettled, onSubagentSettled);
 
     // === Compaction 三事件 —— banner 状态 + 完成后触发 history 重新拉取 ===
     const onCompactionStart = (payload: {
@@ -689,6 +708,7 @@ export function useSessionStream(
       socket.off(SESSION_WS_EVENTS.runToolCallProgress, onToolProgress);
       socket.off(SESSION_WS_EVENTS.runToolCallEnd, onToolEnd);
       socket.off(SESSION_WS_EVENTS.runSubagentSpawned, onSubagentSpawned);
+      socket.off(SESSION_WS_EVENTS.runSubagentSettled, onSubagentSettled);
       socket.off(SESSION_WS_EVENTS.runCompactionStart, onCompactionStart);
       socket.off(SESSION_WS_EVENTS.runCompactionDone, onCompactionDone);
       socket.off(SESSION_WS_EVENTS.runCompactionError, onCompactionError);

@@ -270,7 +270,8 @@
       "running": "运行中",
       "done": "已完成",
       "error": "失败",
-      "aborted": "已中止"
+      "aborted": "已中止",
+      "stop": "停止"
     }
   },
   "newMessage": {
@@ -835,5 +836,6 @@
   "shareLinkExpireNever": "",
   "shareLinkPasswordPlaceholder": "",
   "shareLinkCreate": "",
-  "fallbackTitle": ""
+  "fallbackTitle": "",
+  "stop": ""
 }

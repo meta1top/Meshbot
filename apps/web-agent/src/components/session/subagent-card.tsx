@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@meshbot/design";
-import { ChevronDown, Loader2 } from "lucide-react";
+import { ChevronDown, Loader2, Square } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { useSessionStream } from "@/hooks/use-session-stream";
@@ -53,33 +53,47 @@ export function SubagentCard({ tool }: { tool: ToolCallView }) {
       : "bg-muted-foreground/40";
   return (
     <div className="flex w-full flex-col overflow-hidden rounded-[8px] border border-border">
-      <button
-        type="button"
-        onClick={() => setCollapse((s) => toggleSubagentOpen(s, childRunning))}
-        className="group flex w-full items-center gap-2 bg-muted/40 px-2.5 py-1.5 text-left text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-        aria-expanded={open}
-      >
-        <span
-          className={cn(
-            "inline-block h-2 w-2 shrink-0 rounded-full",
-            dotColor,
-            active && "animate-pulse",
+      <div className="flex w-full items-center">
+        <button
+          type="button"
+          onClick={() =>
+            setCollapse((s) => toggleSubagentOpen(s, childRunning))
+          }
+          className="group flex flex-1 min-w-0 items-center gap-2 bg-muted/40 px-2.5 py-1.5 text-left text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+          aria-expanded={open}
+        >
+          <span
+            className={cn(
+              "inline-block h-2 w-2 shrink-0 rounded-full",
+              dotColor,
+              active && "animate-pulse",
+            )}
+          />
+          <span className="min-w-0 truncate font-medium text-foreground">
+            {title}
+          </span>
+          <span className="shrink-0 text-muted-foreground/70">{t(status)}</span>
+          {active && (
+            <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary/70" />
           )}
-        />
-        <span className="min-w-0 truncate font-medium text-foreground">
-          {title}
-        </span>
-        <span className="shrink-0 text-muted-foreground/70">{t(status)}</span>
-        {active && (
-          <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary/70" />
+          <ChevronDown
+            className={cn(
+              "ml-auto h-3 w-3 shrink-0 transition-transform",
+              !open && "-rotate-90",
+            )}
+          />
+        </button>
+        {active && subSessionId && (
+          <button
+            type="button"
+            onClick={() => sub.interrupt()}
+            title={t("stop")}
+            className="shrink-0 px-2 py-1.5 text-muted-foreground hover:text-destructive"
+          >
+            <Square className="h-3 w-3" />
+          </button>
         )}
-        <ChevronDown
-          className={cn(
-            "ml-auto h-3 w-3 shrink-0 transition-transform",
-            !open && "-rotate-90",
-          )}
-        />
-      </button>
+      </div>
       {open && subSessionId && (
         <div
           ref={scrollRef}

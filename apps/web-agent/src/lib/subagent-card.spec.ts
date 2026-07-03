@@ -4,6 +4,7 @@ import {
   resolveSubagentStatus,
   resolveSubSessionId,
   type SubagentCollapse,
+  settleSubagentOnTimeline,
   subagentTitle,
   toggleSubagentOpen,
 } from "./subagent-card";
@@ -95,6 +96,50 @@ describe("折叠状态机", () => {
     expect(manual).toEqual({ mode: "manual", open: false });
     expect(isSubagentOpen(manual, false)).toBe(false);
     expect(isSubagentOpen(toggleSubagentOpen(manual, false), false)).toBe(true);
+  });
+});
+
+describe("resolveSubagentStatus 后台 running 态", () => {
+  it("结果 JSON status=running：子流在跑 → running；子流已停 → done（间隙兜底）", () => {
+    expect(
+      resolveSubagentStatus(
+        { status: "ok", result: '{"status":"running"}' },
+        true,
+      ),
+    ).toBe("running");
+    expect(
+      resolveSubagentStatus(
+        { status: "ok", result: '{"status":"running"}' },
+        false,
+      ),
+    ).toBe("done");
+  });
+});
+
+describe("settleSubagentOnTimeline", () => {
+  const timeline: Array<{
+    id: string;
+    toolCalls?: Array<{ toolCallId: string; result?: string }>;
+  }> = [
+    {
+      id: "m1",
+      toolCalls: [{ toolCallId: "tc-1", result: '{"status":"running"}' }],
+    },
+    { id: "m2" },
+  ];
+  it("按 toolCallId 重写 result，其余不动", () => {
+    const next = settleSubagentOnTimeline(
+      timeline,
+      "tc-1",
+      '{"status":"aborted","output":""}',
+    );
+    expect(next[0].toolCalls?.[0].result).toBe(
+      '{"status":"aborted","output":""}',
+    );
+    expect(next[1]).toBe(timeline[1]);
+  });
+  it("未命中返回原数组引用", () => {
+    expect(settleSubagentOnTimeline(timeline, "tc-404", "{}")).toBe(timeline);
   });
 });
 

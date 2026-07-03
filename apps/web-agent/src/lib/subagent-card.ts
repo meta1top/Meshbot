@@ -51,6 +51,11 @@ export function resolveSubagentStatus(
   if (tool.result) {
     try {
       const parsed = JSON.parse(tool.result) as { status?: unknown };
+      if (parsed.status === "running") {
+        // 后台派发的立即返回态：真实状态由子流/settled 事件驱动；
+        // 子流已停但 settled 尚未到（毫秒级间隙）按 done 兜底。
+        return childRunning ? "running" : "done";
+      }
       if (
         parsed.status === "done" ||
         parsed.status === "error" ||
@@ -105,6 +110,28 @@ export function claimSubagentOnTimeline<
       ...m,
       toolCalls: m.toolCalls.map((t) =>
         t.toolCallId === toolCallId ? { ...t, subSessionId } : t,
+      ),
+    } as T;
+  });
+  return changed ? next : prev;
+}
+
+/**
+ * 后台子任务终态打标：按 toolCallId 把工具条目的 result 重写为终局 JSON
+ * （消费 run.subagent_settled）。未命中返回原数组引用。
+ */
+export function settleSubagentOnTimeline<
+  T extends { toolCalls?: Array<{ toolCallId: string; result?: string }> },
+>(prev: T[], toolCallId: string, resultJson: string): T[] {
+  let changed = false;
+  const next = prev.map((m) => {
+    if (!m.toolCalls?.some((t) => t.toolCallId === toolCallId)) return m;
+    changed = true;
+    // 泛型展开覆写属性后 TS 无法证明仍是 T，运行时结构未变，安全收窄
+    return {
+      ...m,
+      toolCalls: m.toolCalls.map((t) =>
+        t.toolCallId === toolCallId ? { ...t, result: resultJson } : t,
       ),
     } as T;
   });
