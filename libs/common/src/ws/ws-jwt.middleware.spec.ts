@@ -69,4 +69,44 @@ describe("createWsJwtMiddleware", () => {
     mw(socket, next);
     expect(socket.data.user).toBe("auth-t");
   });
+
+  it("同步 verifier：next() 同步调用（server-agent gateway 兼容不变量）", () => {
+    const mw = createWsJwtMiddleware((t) => ({ sub: t }));
+    const socket = makeSocket({ auth: { token: "abc" } });
+    const next = jest.fn();
+    mw(socket, next);
+    // 断言点在 mw 返回后立即成立 —— 同步路径不得退化成微任务
+    expect(next).toHaveBeenCalledWith();
+    expect(socket.data.user).toEqual({ sub: "abc" });
+  });
+
+  it("async verifier resolve → socket.data.user 写入 payload 后 next()", async () => {
+    const mw = createWsJwtMiddleware(async (t) => ({ deviceId: "d1", t }));
+    const socket = makeSocket({ auth: { token: "mbd_x" } });
+    let resolveNext!: () => void;
+    const done = new Promise<void>((r) => {
+      resolveNext = r;
+    });
+    const next = jest.fn(() => resolveNext());
+    mw(socket, next);
+    await done;
+    expect(socket.data.user).toEqual({ deviceId: "d1", t: "mbd_x" });
+    expect(next).toHaveBeenCalledWith();
+  });
+
+  it("async verifier reject → 不阻断，user 未设", async () => {
+    const mw = createWsJwtMiddleware(async () => {
+      throw new Error("bad device token");
+    });
+    const socket = makeSocket({ auth: { token: "mbd_bad" } });
+    let resolveNext!: () => void;
+    const done = new Promise<void>((r) => {
+      resolveNext = r;
+    });
+    const next = jest.fn(() => resolveNext());
+    mw(socket, next);
+    await done;
+    expect(socket.data.user).toBeUndefined();
+    expect(next).toHaveBeenCalledWith(); // 无参数 = 放行
+  });
 });

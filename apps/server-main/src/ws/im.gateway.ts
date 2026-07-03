@@ -6,6 +6,8 @@ import {
 } from "@meshbot/common";
 import {
   ConversationService,
+  DEVICE_TOKEN_PREFIX,
+  DeviceService,
   MainErrorCode,
   MessageService,
   PresenceService,
@@ -69,12 +71,41 @@ export class ImGateway extends BaseWebSocketGateway {
     private readonly message: MessageService,
     private readonly presence: PresenceService,
     private readonly userService: UserService,
+    private readonly devices: DeviceService,
   ) {
     super();
   }
 
+  /**
+   * 双凭据握手校验（Task 8）：
+   * - `mbd_` 前缀（Agent device token）→ `DeviceService.verifyToken`（异步），
+   *   payload 为 `{ userId, orgId, deviceId }`（orgId 来自 device.orgId，无 email）
+   * - 其余走浏览器用户 JWT 同步 verify，行为不变
+   */
   protected jwtVerify(token: string): unknown {
+    if (token.startsWith(DEVICE_TOKEN_PREFIX)) {
+      return this.devices
+        .verifyToken(token)
+        .then((d) => ({ userId: d.userId, orgId: d.orgId, deviceId: d.id }));
+    }
     return this.jwt.verify(token);
+  }
+
+  /**
+   * 解析连接归属 orgId：
+   * - device 连接（payload 带 deviceId）→ 直接用握手 payload 的 orgId（device.orgId），
+   *   不查 activeOrgId（设备当前组织与用户浏览器活跃组织解耦）
+   * - 用户 JWT 连接 → 保持现状查 `userService.findById(...).activeOrgId`
+   */
+  private async resolveOrgId(client: Socket): Promise<string | undefined> {
+    const payload = client.data.user as {
+      userId: string;
+      orgId?: string | null;
+      deviceId?: string;
+    };
+    if (payload.deviceId) return payload.orgId ?? undefined;
+    const user = await this.userService.findById(payload.userId);
+    return user?.activeOrgId ?? undefined;
   }
 
   /**
@@ -91,7 +122,7 @@ export class ImGateway extends BaseWebSocketGateway {
 
   /**
    * 已鉴权连接后置逻辑：
-   * 1. 查 activeOrgId → 无 org 直接返回
+   * 1. 解析 orgId（device 连接用 payload.orgId，用户 JWT 查 activeOrgId）→ 无 org 直接返回
    * 2. 入 org 房间 + 全部可见 conv 房间
    * 3. 向本连接下发当前在线快照
    *
@@ -101,8 +132,7 @@ export class ImGateway extends BaseWebSocketGateway {
   private async onAuthedConnect(client: Socket): Promise<void> {
     try {
       const userId: string = client.data.user.userId;
-      const user = await this.userService.findById(userId);
-      const orgId = user?.activeOrgId;
+      const orgId = await this.resolveOrgId(client);
       if (!orgId) return;
 
       client.data.orgId = orgId;
@@ -235,8 +265,7 @@ export class ImGateway extends BaseWebSocketGateway {
     let orgId: string | undefined = client.data?.orgId;
     if (!orgId) {
       // presence_set 可能早于 onAuthedConnect 落定 orgId（relay 一连上就上报）；就地解析。
-      const user = await this.userService.findById(userId);
-      orgId = user?.activeOrgId ?? undefined;
+      orgId = await this.resolveOrgId(client);
       if (orgId) client.data.orgId = orgId;
     }
     if (!orgId) return;
