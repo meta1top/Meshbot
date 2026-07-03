@@ -697,6 +697,38 @@ describe("SessionService", () => {
       expect(row?.modelConfigId).toBeNull();
     });
 
+    it("并发 3 路 createSubSession（同一父会话）全部成功建出 3 个子会话——不因 SQLite 单连接并发 BEGIN 报错", async () => {
+      const parent = await service.createSession({ content: "父任务" });
+      const results = await Promise.allSettled([
+        service.createSubSession({
+          parentSessionId: parent.sessionId,
+          parentToolCallId: "tc-a",
+          task: "任务A",
+        }),
+        service.createSubSession({
+          parentSessionId: parent.sessionId,
+          parentToolCallId: "tc-b",
+          task: "任务B",
+        }),
+        service.createSubSession({
+          parentSessionId: parent.sessionId,
+          parentToolCallId: "tc-c",
+          task: "任务C",
+        }),
+      ]);
+      const rejected = results.filter(
+        (r): r is PromiseRejectedResult => r.status === "rejected",
+      );
+      expect(rejected).toHaveLength(0);
+      const fulfilled = results.filter(
+        (r): r is PromiseFulfilledResult<{ subSessionId: string }> =>
+          r.status === "fulfilled",
+      );
+      expect(fulfilled).toHaveLength(3);
+      const children = await service.listChildren(parent.sessionId);
+      expect(children).toHaveLength(3);
+    });
+
     it("listPendingBackgroundSubagentsUnscoped 只返回 background=1 的 subagent 会话（跨账号）", async () => {
       const a = await service.createSubSession({
         parentSessionId: "990000000000000010",

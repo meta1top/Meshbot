@@ -1,3 +1,4 @@
+export { runExclusive } from "./datasource-mutex";
 export {
   TransactionContext,
   type TransactionStore,
