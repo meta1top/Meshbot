@@ -219,6 +219,8 @@ describe("server-main 组织模型配置权限 e2e", () => {
     const configId = createRes.body.data.id as string;
     expect(createRes.body.data.apiKeyMasked).toBe("****1234");
     expect(createRes.body.data.apiKeyMasked).not.toContain("sk-secret-value");
+    // 锁死 raw apiKey 字段缺席（toMatchObject 是部分匹配，防未来序列化泄露明文）
+    expect(createRes.body.data.apiKey).toBeUndefined();
 
     // owner 列表：打码
     const listRes = await request(app.getHttpServer())
@@ -226,6 +228,7 @@ describe("server-main 组织模型配置权限 e2e", () => {
       .set("Authorization", `Bearer ${ownerToken}`);
     expect(listRes.body.data).toHaveLength(1);
     expect(listRes.body.data[0].apiKeyMasked).toBe("****1234");
+    expect(listRes.body.data[0].apiKey).toBeUndefined();
 
     // 成员 POST 被 403 ORG_FORBIDDEN
     const forbiddenRes = await request(app.getHttpServer())

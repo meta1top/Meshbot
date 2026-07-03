@@ -9,7 +9,7 @@ import {
   traceIdMiddleware,
 } from "@meshbot/common";
 import { AssetsModule } from "@meshbot/assets";
-import { MainModule } from "@meshbot/main";
+import { MainErrorCode, MainModule } from "@meshbot/main";
 import type { INestApplication } from "@nestjs/common";
 import { APP_GUARD, Reflector } from "@nestjs/core";
 import { JwtModule } from "@nestjs/jwt";
@@ -183,7 +183,7 @@ describe("server-main 设备授权全流程 e2e", () => {
     expect(startRes.body).toMatchObject({ success: true });
     const requestId = startRes.body.data.requestId as string;
     expect(startRes.body.data.verifyUrl).toBe(
-      `http://web-main.test/authorize?request=${requestId}`,
+      `${TEST_APP_CONFIG.webMainBase}/authorize?request=${requestId}`,
     );
 
     // 4. 授权确认页读取请求信息（需登录）
@@ -240,6 +240,7 @@ describe("server-main 设备授权全流程 e2e", () => {
       .post("/api/orgs")
       .set("Authorization", `Bearer ${aliceToken}`)
       .send({ name: "DeviceOrg2" });
+    expect(org2Res.body).toMatchObject({ success: true });
     const org2Id = org2Res.body.data.id as string;
 
     const switchRes = await request(app.getHttpServer())
@@ -265,6 +266,9 @@ describe("server-main 设备授权全流程 e2e", () => {
       .set("Authorization", `Bearer ${deviceToken}`);
     expect(profileAfterRevoke.status).toBe(401);
     expect(profileAfterRevoke.body.success).toBe(false);
+    expect(profileAfterRevoke.body.code).toBe(
+      MainErrorCode.DEVICE_TOKEN_INVALID.code,
+    );
   });
 
   it("负面：错误 userCode 兑换 5 次后正确码也失效", async () => {
