@@ -112,9 +112,9 @@ export class CloudOrgService {
 
   private async token(): Promise<string> {
     const id = await this.identity.get(this.account.getOrThrow());
-    if (!id?.cloudToken) {
+    if (!id?.deviceToken) {
       throw new AppError(AgentErrorCode.AUTH_UNAUTHORIZED);
     }
-    return id.cloudToken;
+    return id.deviceToken;
   }
 }

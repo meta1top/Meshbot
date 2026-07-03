@@ -13,6 +13,7 @@ import { EventEmitter2 } from "@nestjs/event-emitter";
 import { type Socket, io } from "socket.io-client";
 
 import { AgentErrorCode } from "../errors/agent.error-codes";
+import { AUTH_EVENTS } from "../services/auth.events";
 import type { CloudIdentityService } from "../services/cloud-identity.service";
 
 /** socket.io-client 工厂函数类型（方便测试注入伪实现）。 */
@@ -30,13 +31,14 @@ const PING_INTERVAL_MS = 20_000;
 /**
  * 云端 IM WebSocket 中继客户端（v3 账号化）。
  *
- * 每个已登录账号持有自己的独立云连接（各自的 cloudToken），指向 server-main
+ * 每个已登录账号持有自己的独立云连接（各自的 deviceToken），指向 server-main
  * `ws/im`，将所有下行 IM 事件转发到本地 EventEmitter2 总线——Agent 监听钩子。
  *
  * - `connect(cloudUserId)`：读该账号 cloud_identity；无 token 或无活跃 org → 静默跳过；幂等。
  * - `disconnect(cloudUserId)`：登出 / 强制断开时调用；幂等。
  * - `send()` / `read()`：上行消息（按账号）；未连接时 send 抛 IM_NOT_CONNECTED。
- * - 401 等认证失败（`connect_error`）→ 拆该账号 socket + 置该账号 loggedOut。
+ * - 401 等认证失败（`connect_error`）→ 拆该账号 socket + 置该账号 loggedOut + 发
+ *   `AUTH_EVENTS.reauthRequired`（供 EventsGateway 转发前端提示重新授权）。
  * - keepalive：连接后每 ~20s 发一次 `im.ping`，刷新服务端 presence TTL。
  *
  * 连接由运行时注册表 / 登录驱动（无 onModuleInit；boot 不自动建连）。
@@ -88,7 +90,7 @@ export class ImRelayClientService implements OnModuleDestroy {
     this.connecting.add(cloudUserId);
     try {
       const identity = await this.cloudIdentityService.get(cloudUserId);
-      if (!identity?.cloudToken || !identity.orgId) {
+      if (!identity?.deviceToken || !identity.orgId) {
         return;
       }
 
@@ -100,7 +102,7 @@ export class ImRelayClientService implements OnModuleDestroy {
       const url = `${baseUrl}/${IM_WS_NAMESPACE}`;
 
       const socket = this.ioFactory(url, {
-        auth: { token: identity.cloudToken },
+        auth: { token: identity.deviceToken },
         transports: ["websocket"],
         reconnection: true,
         reconnectionDelay: 1000,
@@ -125,12 +127,16 @@ export class ImRelayClientService implements OnModuleDestroy {
         });
       }
 
-      // connect_error：认证失败 → 拆该账号 socket 防僵尸/重连风暴，再置该账号 loggedOut
+      // connect_error：认证失败 → 拆该账号 socket 防僵尸/重连风暴，置该账号 loggedOut，
+      // 并发重授权事件（account.run 包裹，供 EventsGateway 路由到该账号 acct 房间）。
       socket.on("connect_error", (err: Error) => {
         const msg = err?.message?.toLowerCase() ?? "";
         if (msg.includes("unauthorized")) {
           this.disconnect(cloudUserId);
           void this.cloudIdentityService.setLoggedOut(cloudUserId);
+          this.account.run(cloudUserId, () => {
+            this.emitter.emit(AUTH_EVENTS.reauthRequired, { cloudUserId });
+          });
         }
       });
 

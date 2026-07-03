@@ -15,6 +15,7 @@ import { CloudIdentity } from "./entities/cloud-identity.entity";
 import { CloudAuthService } from "./services/cloud-auth.service";
 import { CloudIdentityService } from "./services/cloud-identity.service";
 import { CloudOrgService } from "./services/cloud-org.service";
+import { AUTH_EVENTS } from "./services/auth.events";
 import { DeviceAuthorizeService } from "./services/device-authorize.service";
 import { DriveGatewayService } from "./services/drive-gateway.service";
 import { JWT_SECRET, JwtStrategy } from "./strategies/jwt.strategy";
@@ -38,18 +39,28 @@ import { JWT_SECRET, JwtStrategy } from "./strategies/jwt.strategy";
     JwtStrategy,
     {
       provide: CloudClientService,
-      inject: [ConfigService, CloudIdentityService, AccountContextService],
+      inject: [
+        ConfigService,
+        CloudIdentityService,
+        AccountContextService,
+        EventEmitter2,
+      ],
       useFactory: (
         config: ConfigService,
         identity: CloudIdentityService,
         account: AccountContextService,
+        emitter: EventEmitter2,
       ) => {
         const client = new CloudClientService(config);
-        // 云端 401（token 失效）→ 标记当前账号已登出 → setup-status 落回 needs-login。
-        // 401 发生在请求的账号上下文内；无上下文（后台路径）时跳过。
+        // 云端 401（token 失效）→ 标记当前账号已登出 → setup-status 落回 needs-login，
+        // 并发重授权事件（推 ws/events 提示前端）。401 发生在请求的账号上下文内；
+        // 无上下文（后台路径）时跳过。
         client.setUnauthorizedHandler(() => {
           const id = account.get();
-          if (id) void identity.setLoggedOut(id);
+          if (id) {
+            void identity.setLoggedOut(id);
+            emitter.emit(AUTH_EVENTS.reauthRequired, { cloudUserId: id });
+          }
         });
         return client;
       },

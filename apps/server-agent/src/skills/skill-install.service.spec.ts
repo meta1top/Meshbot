@@ -96,7 +96,7 @@ function makeCloud(postResult: unknown = {}) {
 
 function makeIdentity(token = "tok-test") {
   return {
-    get: jest.fn().mockResolvedValue({ cloudToken: token }),
+    get: jest.fn().mockResolvedValue({ deviceToken: token }),
   };
 }
 

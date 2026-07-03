@@ -18,6 +18,7 @@ export {
   type DeviceView,
 } from "./device-auth/device-auth.schema";
 export {
+  AUTH_WS_EVENTS,
   EVENTS_WS_NAMESPACE,
   type GlobalEventEnvelope,
   GlobalEventEnvelopeSchema,

@@ -9,13 +9,13 @@ import { DriveGatewayService } from "./drive-gateway.service";
 describe("DriveGatewayService", () => {
   const TOKEN = "cloud-jwt-abc";
 
-  /** 构造带 cloudToken 的 identity mock */
-  function makeIdentity(cloudToken: string | null = TOKEN) {
+  /** 构造带 deviceToken 的 identity mock */
+  function makeIdentity(deviceToken: string | null = TOKEN) {
     return {
       get: jest
         .fn()
         .mockResolvedValue(
-          cloudToken != null ? { cloudToken } : { cloudToken: null },
+          deviceToken != null ? { deviceToken } : { deviceToken: null },
         ),
     };
   }
@@ -203,7 +203,7 @@ describe("DriveGatewayService", () => {
     });
   });
 
-  describe("无 cloudToken → AUTH_UNAUTHORIZED", () => {
+  describe("无 deviceToken → AUTH_UNAUTHORIZED", () => {
     it("token 为 null 时 listNodes 抛 AUTH_UNAUTHORIZED", async () => {
       const cloud = makeCloud();
       const identity = makeIdentity(null);

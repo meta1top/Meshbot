@@ -11,7 +11,7 @@ describe("CloudOrgService", () => {
     cloud?: Partial<{ post: jest.Mock; get: jest.Mock; del: jest.Mock }>;
   }) {
     const identity = {
-      get: jest.fn().mockResolvedValue({ cloudToken: "ct-1" }),
+      get: jest.fn().mockResolvedValue({ deviceToken: "ct-1" }),
       updateActiveOrg: jest.fn().mockResolvedValue(undefined),
       ...opts.identity,
     };

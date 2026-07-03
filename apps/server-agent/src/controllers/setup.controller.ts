@@ -30,7 +30,7 @@ export class SetupController {
     let id: CloudIdentity | null = tokenUserId
       ? await this.identity.get(tokenUserId)
       : ((await this.identity.listLoggedIn())[0] ?? null);
-    if (!id?.cloudToken) {
+    if (!id?.deviceToken) {
       return { step: "needs-login", needsSetup: true };
     }
     if (!id.orgId) {

@@ -9,7 +9,7 @@ describe("SetupController.getSetupStatus（Public 路由，无环境上下文）
   const makeController = (opts: {
     loggedIn: Array<{
       cloudUserId: string;
-      cloudToken: string;
+      deviceToken: string;
       orgId: string | null;
     }>;
     hasEnabledModels: boolean;
@@ -66,7 +66,7 @@ describe("SetupController.getSetupStatus（Public 路由，无环境上下文）
 
   it("needs-model：已登录 + 有 org，但无启用模型 → 返回 needs-model，不抛 NO_ACCOUNT_CONTEXT", async () => {
     const { controller } = makeController({
-      loggedIn: [{ cloudUserId: "u1", cloudToken: "tok", orgId: "org1" }],
+      loggedIn: [{ cloudUserId: "u1", deviceToken: "tok", orgId: "org1" }],
       hasEnabledModels: false,
     });
 
@@ -80,7 +80,7 @@ describe("SetupController.getSetupStatus（Public 路由，无环境上下文）
 
   it("ready：已登录 + 有 org + 有启用模型 → 返回 ready，不抛 NO_ACCOUNT_CONTEXT", async () => {
     const { controller } = makeController({
-      loggedIn: [{ cloudUserId: "u1", cloudToken: "tok", orgId: "org1" }],
+      loggedIn: [{ cloudUserId: "u1", deviceToken: "tok", orgId: "org1" }],
       hasEnabledModels: true,
     });
 
@@ -92,7 +92,7 @@ describe("SetupController.getSetupStatus（Public 路由，无环境上下文）
 
   it("needs-org：已登录但无 orgId → 返回 needs-org，不调用 hasEnabledModels", async () => {
     const { controller, modelConfigService } = makeController({
-      loggedIn: [{ cloudUserId: "u1", cloudToken: "tok", orgId: null }],
+      loggedIn: [{ cloudUserId: "u1", deviceToken: "tok", orgId: null }],
       hasEnabledModels: false,
     });
 
@@ -107,8 +107,8 @@ describe("SetupController.getSetupStatus（Public 路由，无环境上下文）
     // 而不是 A 的 ready —— 这正是导致「注册成功后没进创建组织页」的判定错位修复点。
     const { controller, identityService } = makeController({
       loggedIn: [
-        { cloudUserId: "A", cloudToken: "tokA", orgId: "orgA" },
-        { cloudUserId: "B", cloudToken: "tokB", orgId: null },
+        { cloudUserId: "A", deviceToken: "tokA", orgId: "orgA" },
+        { cloudUserId: "B", deviceToken: "tokB", orgId: null },
       ],
       hasEnabledModels: true,
       tokenUserId: "B",
@@ -122,7 +122,7 @@ describe("SetupController.getSetupStatus（Public 路由，无环境上下文）
 
   it("token 无效 → 回退第一个已登录账号", async () => {
     const { controller, identityService } = makeController({
-      loggedIn: [{ cloudUserId: "A", cloudToken: "tokA", orgId: "orgA" }],
+      loggedIn: [{ cloudUserId: "A", deviceToken: "tokA", orgId: "orgA" }],
       hasEnabledModels: true,
       tokenUserId: null, // verify 抛错
     });

@@ -8,7 +8,7 @@ import { CloudIdentityService } from "./cloud-identity.service";
 
 /**
  * 网盘 gateway：纯 JSON 转发，将 server-agent 的网盘请求代理至
- * server-main `/api/drive/*`，使用当前账号的 cloudToken 鉴权。
+ * server-main `/api/drive/*`，使用当前账号的 deviceToken 鉴权。
  * presigned putUrl/url 等字段原样透传，不做二次处理。
  */
 @Injectable()
@@ -19,13 +19,13 @@ export class DriveGatewayService {
     private readonly account: AccountContextService,
   ) {}
 
-  /** 取当前账号 cloudToken；无则抛 AUTH_UNAUTHORIZED。 */
+  /** 取当前账号 deviceToken；无则抛 AUTH_UNAUTHORIZED。 */
   private async token(): Promise<string> {
     const id = await this.identity.get(this.account.getOrThrow());
-    if (!id?.cloudToken) {
+    if (!id?.deviceToken) {
       throw new AppError(AgentErrorCode.AUTH_UNAUTHORIZED);
     }
-    return id.cloudToken;
+    return id.deviceToken;
   }
 
   /** 列出节点（目录内容）；parentId=null 表示根目录。 */
@@ -105,7 +105,7 @@ export class DriveGatewayService {
     );
   }
 
-  /** 创建节点公开分享链接（需 cloudToken）。 */
+  /** 创建节点公开分享链接（需 deviceToken）。 */
   async createShareLink(nodeId: string, body: unknown): Promise<unknown> {
     return this.cloud.post(
       `/api/drive/nodes/${encodeURIComponent(nodeId)}/share-links`,
@@ -114,12 +114,12 @@ export class DriveGatewayService {
     );
   }
 
-  /** 匿名：解析分享 token（无需 cloudToken）。 */
+  /** 匿名：解析分享 token（无需 deviceToken）。 */
   async resolveShare(token: string): Promise<unknown> {
     return this.cloud.get(`/api/share/${encodeURIComponent(token)}`);
   }
 
-  /** 匿名：申请下载分享文件（无需 cloudToken）。 */
+  /** 匿名：申请下载分享文件（无需 deviceToken）。 */
   async downloadShare(token: string, body: unknown): Promise<unknown> {
     return this.cloud.post(
       `/api/share/${encodeURIComponent(token)}/download`,
