@@ -43,8 +43,10 @@ function LoginForm() {
         err instanceof ApiError &&
         err.code === AUTH_EMAIL_NOT_VERIFIED_CODE
       ) {
+        // 2022 分流去注册页续验证时透传 next —— 设备授权链（/authorize）靠它回跳。
+        const nextSuffix = next ? `&next=${encodeURIComponent(next)}` : "";
         router.push(
-          `/register?step=verify&email=${encodeURIComponent(values.email)}`,
+          `/register?step=verify&email=${encodeURIComponent(values.email)}${nextSuffix}`,
         );
         return;
       }

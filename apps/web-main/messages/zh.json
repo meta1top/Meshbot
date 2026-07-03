@@ -64,6 +64,60 @@
       "passwordNotMatch": "两次输入的密码不一致"
     }
   },
+  "authorize": {
+    "backToDesktop": "请回到 meshbot 桌面端重新发起登录。",
+    "requestMissing": {
+      "title": "链接不完整",
+      "description": "授权链接缺少请求参数，可能是复制不完整。"
+    },
+    "invalid": {
+      "title": "授权请求无效",
+      "description": "该授权请求不存在或已被处理。"
+    },
+    "expired": {
+      "title": "授权请求已过期",
+      "description": "授权请求超过 10 分钟有效期，已自动失效。"
+    },
+    "alreadyProcessed": {
+      "title": "请求已处理",
+      "description": "该授权请求已在其他页面被处理过。"
+    },
+    "denied": {
+      "title": "已拒绝授权",
+      "description": "你可以关闭此页面，该请求将在 10 分钟后自动失效。"
+    },
+    "confirm": {
+      "title": "设备请求接入",
+      "description": "设备 {deviceName}（{platform}）请求接入你的账号，当前组织：{orgName}",
+      "unknownPlatform": "未知平台",
+      "approve": "授权",
+      "approving": "授权中...",
+      "deny": "拒绝",
+      "approveFailed": "授权失败，请重试"
+    },
+    "approved": {
+      "title": "已授权",
+      "description": "若桌面端没有自动完成，请把此授权码粘贴到应用中。",
+      "copy": "复制",
+      "copied": "已复制"
+    },
+    "onboarding": {
+      "title": "先加入一个组织",
+      "description": "授权设备前，你需要先创建组织或接受邀请加入组织。",
+      "createTab": "创建组织",
+      "joinTab": "粘贴邀请码",
+      "orgName": "组织名称",
+      "orgNamePlaceholder": "请输入组织名称",
+      "create": "创建组织",
+      "creating": "创建中...",
+      "createFailed": "创建组织失败，请重试",
+      "inviteToken": "邀请码",
+      "inviteTokenPlaceholder": "粘贴收到的邀请码",
+      "join": "加入组织",
+      "joining": "加入中...",
+      "joinFailed": "加入组织失败，请检查邀请码"
+    }
+  },
   "loginFailed": "",
   "welcomeBack": "",
   "title": "",
@@ -97,5 +151,57 @@
   "resendIn": "",
   "resend": "",
   "brand": "",
-  "tagline": ""
+  "tagline": "",
+  "backToDesktop": "",
+  "approved": {
+    "copied": "",
+    "copy": "",
+    "title": "",
+    "description": ""
+  },
+  "confirm": {
+    "approveFailed": "",
+    "title": "",
+    "description": "",
+    "unknownPlatform": "",
+    "approving": "",
+    "approve": "",
+    "deny": ""
+  },
+  "requestMissing": {
+    "title": "",
+    "description": ""
+  },
+  "expired": {
+    "title": "",
+    "description": ""
+  },
+  "invalid": {
+    "title": "",
+    "description": ""
+  },
+  "denied": {
+    "title": "",
+    "description": ""
+  },
+  "alreadyProcessed": {
+    "title": "",
+    "description": ""
+  },
+  "onboarding": {
+    "createFailed": "",
+    "joinFailed": "",
+    "title": "",
+    "description": "",
+    "createTab": "",
+    "joinTab": "",
+    "orgName": "",
+    "orgNamePlaceholder": "",
+    "creating": "",
+    "create": "",
+    "inviteToken": "",
+    "inviteTokenPlaceholder": "",
+    "joining": "",
+    "join": ""
+  }
 }

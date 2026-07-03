@@ -64,6 +64,60 @@
       "passwordNotMatch": "The two passwords do not match"
     }
   },
+  "authorize": {
+    "backToDesktop": "Please go back to the meshbot desktop app and start the login again.",
+    "requestMissing": {
+      "title": "Incomplete link",
+      "description": "The authorization link is missing its request parameter — it may have been copied incompletely."
+    },
+    "invalid": {
+      "title": "Invalid authorization request",
+      "description": "This authorization request does not exist or has already been handled."
+    },
+    "expired": {
+      "title": "Authorization request expired",
+      "description": "The authorization request exceeded its 10-minute validity window and has expired."
+    },
+    "alreadyProcessed": {
+      "title": "Request already handled",
+      "description": "This authorization request was already handled on another page."
+    },
+    "denied": {
+      "title": "Authorization denied",
+      "description": "You can close this page. The request will expire automatically in 10 minutes."
+    },
+    "confirm": {
+      "title": "Device requesting access",
+      "description": "Device {deviceName} ({platform}) is requesting access to your account. Current organization: {orgName}",
+      "unknownPlatform": "Unknown platform",
+      "approve": "Approve",
+      "approving": "Approving...",
+      "deny": "Deny",
+      "approveFailed": "Approval failed, please try again"
+    },
+    "approved": {
+      "title": "Approved",
+      "description": "If the desktop app did not finish automatically, paste this code into the app.",
+      "copy": "Copy",
+      "copied": "Copied"
+    },
+    "onboarding": {
+      "title": "Join an organization first",
+      "description": "Before authorizing a device, create an organization or accept an invitation to join one.",
+      "createTab": "Create organization",
+      "joinTab": "Paste invitation code",
+      "orgName": "Organization name",
+      "orgNamePlaceholder": "Enter organization name",
+      "create": "Create organization",
+      "creating": "Creating...",
+      "createFailed": "Failed to create organization, please try again",
+      "inviteToken": "Invitation code",
+      "inviteTokenPlaceholder": "Paste the invitation code you received",
+      "join": "Join organization",
+      "joining": "Joining...",
+      "joinFailed": "Failed to join, please check the invitation code"
+    }
+  },
   "loginFailed": "",
   "welcomeBack": "",
   "title": "",
@@ -97,5 +151,57 @@
   "resendIn": "",
   "resend": "",
   "brand": "",
-  "tagline": ""
+  "tagline": "",
+  "backToDesktop": "",
+  "approved": {
+    "copied": "",
+    "copy": "",
+    "title": "",
+    "description": ""
+  },
+  "confirm": {
+    "approveFailed": "",
+    "title": "",
+    "description": "",
+    "unknownPlatform": "",
+    "approving": "",
+    "approve": "",
+    "deny": ""
+  },
+  "requestMissing": {
+    "title": "",
+    "description": ""
+  },
+  "expired": {
+    "title": "",
+    "description": ""
+  },
+  "invalid": {
+    "title": "",
+    "description": ""
+  },
+  "denied": {
+    "title": "",
+    "description": ""
+  },
+  "alreadyProcessed": {
+    "title": "",
+    "description": ""
+  },
+  "onboarding": {
+    "createFailed": "",
+    "joinFailed": "",
+    "title": "",
+    "description": "",
+    "createTab": "",
+    "joinTab": "",
+    "orgName": "",
+    "orgNamePlaceholder": "",
+    "creating": "",
+    "create": "",
+    "inviteToken": "",
+    "inviteTokenPlaceholder": "",
+    "joining": "",
+    "join": ""
+  }
 }
