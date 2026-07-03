@@ -271,7 +271,15 @@
       "done": "已完成",
       "error": "失败",
       "aborted": "已中止",
-      "stop": "停止"
+      "stop": "停止",
+      "backgroundTag": "后台",
+      "toolsCount": "{count} 工具",
+      "elapsed": "用时 {elapsed}",
+      "runningAction": "正在执行",
+      "streamFooterRunning": "子会话 · {count} 条消息 · 输出实时滴流中",
+      "streamFooterDone": "子会话 · {count} 条消息",
+      "abortedResult": "已手动停止；已完成部分保留在子会话中",
+      "errorResult": "子 Agent 运行失败，未产出结果"
     }
   },
   "newMessage": {
@@ -837,5 +845,13 @@
   "shareLinkPasswordPlaceholder": "",
   "shareLinkCreate": "",
   "fallbackTitle": "",
-  "stop": ""
+  "stop": "",
+  "backgroundTag": "",
+  "toolsCount": "",
+  "elapsed": "",
+  "runningAction": "",
+  "streamFooterRunning": "",
+  "streamFooterDone": "",
+  "abortedResult": "",
+  "errorResult": ""
 }

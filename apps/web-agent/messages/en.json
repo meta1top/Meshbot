@@ -271,7 +271,15 @@
       "done": "Done",
       "error": "Failed",
       "aborted": "Aborted",
-      "stop": "Stop"
+      "stop": "Stop",
+      "backgroundTag": "Background",
+      "toolsCount": "{count} tools",
+      "elapsed": "{elapsed} elapsed",
+      "runningAction": "Running",
+      "streamFooterRunning": "Sub-session · {count} messages · streaming live",
+      "streamFooterDone": "Sub-session · {count} messages",
+      "abortedResult": "Stopped manually; partial results remain in the sub-session",
+      "errorResult": "Sub-agent failed to produce a result"
     }
   },
   "newMessage": {
@@ -837,5 +845,13 @@
   "shareLinkPasswordPlaceholder": "",
   "shareLinkCreate": "",
   "fallbackTitle": "",
-  "stop": ""
+  "stop": "",
+  "backgroundTag": "",
+  "toolsCount": "",
+  "elapsed": "",
+  "runningAction": "",
+  "streamFooterRunning": "",
+  "streamFooterDone": "",
+  "abortedResult": "",
+  "errorResult": ""
 }
