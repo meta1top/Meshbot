@@ -1,5 +1,5 @@
 import path from "node:path";
-import { app, BrowserWindow, dialog, nativeImage } from "electron";
+import { app, BrowserWindow, dialog, nativeImage, shell } from "electron";
 import { startAgentRuntime, stopAgentRuntime } from "./agent-runtime";
 import { registerIpcHandlers } from "./ipc-handlers";
 
@@ -34,6 +34,18 @@ function createWindow(agentUrl: string) {
       contextIsolation: true,
       preload: path.join(__dirname, "preload.js"),
     },
+  });
+
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    // 比较 origin 而非 startsWith，规避 agentUrl 携带路径时的误判
+    const isExternal =
+      /^https?:\/\//.test(url) &&
+      new URL(url).origin !== new URL(agentUrl).origin;
+    if (isExternal) {
+      void shell.openExternal(url);
+      return { action: "deny" };
+    }
+    return { action: "allow" };
   });
 
   win.loadURL(agentUrl);
