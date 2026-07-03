@@ -29,6 +29,14 @@ export class Session extends SnowflakeBaseEntity {
   @Column({ name: "parent_tool_call_id", type: "text", nullable: true })
   parentToolCallId!: string | null;
 
+  /** 「有待了结的后台子任务」标记：建后台子会话置 1，播报完成置 0；兼作重启恢复扫描键。 */
+  @Column({ type: "integer", default: 0 })
+  background!: number;
+
+  /** per-run 模型覆盖：dispatch 解析成功的 ModelConfig id；非 subagent 会话恒 NULL。 */
+  @Column({ name: "model_config_id", type: "text", nullable: true })
+  modelConfigId!: string | null;
+
   @CreateDateColumn({ name: "created_at" })
   createdAt!: Date;
 

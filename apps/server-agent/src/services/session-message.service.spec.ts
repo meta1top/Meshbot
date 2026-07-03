@@ -433,6 +433,27 @@ describe("SessionMessageService", () => {
     });
   });
 
+  it("updateToolResult 按 toolCallId 重写 tool 行 content，返回受影响行数", async () => {
+    const sid = "990000000000000020";
+    await service.recordToolResult({
+      id: "tc-x",
+      sessionId: sid,
+      toolCallId: "tc-x",
+      content: '{"status":"running"}',
+      ok: true,
+    });
+    const n = await service.updateToolResult(
+      "tc-x",
+      '{"status":"done","output":"ok"}',
+    );
+    expect(n).toBe(1);
+    const row = await ds
+      .getRepository(SessionMessage)
+      .findOneBy({ toolCallId: "tc-x" });
+    expect(row?.content).toBe('{"status":"done","output":"ok"}');
+    expect(await service.updateToolResult("tc-404", "{}")).toBe(0);
+  });
+
   it("deleteBySession 删该会话全部消息", async () => {
     await service.recordUser({ id: "u1", sessionId: "s1", content: "a" });
     await service.recordUser({ id: "u2", sessionId: "s2", content: "b" });

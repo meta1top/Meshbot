@@ -177,6 +177,15 @@ export class SessionMessageService {
   }
 
   /**
+   * 按 toolCallId 重写 tool 行结果（后台子任务终态回写 UI 副本；不动 checkpointer，
+   * 父 LLM 上下文不受影响）。返回受影响行数——0 表示 tool 行尚未落库（调用方可重试）。
+   */
+  async updateToolResult(toolCallId: string, content: string): Promise<number> {
+    const r = await this.repo.update({ toolCallId, role: "tool" }, { content });
+    return r.affected ?? 0;
+  }
+
+  /**
    * 写一条 compaction 占位行（role=system，metadata 标 kind=compaction）。
    * 幂等：同 id 已存在直接返回。
    *

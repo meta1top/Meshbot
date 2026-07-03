@@ -670,6 +670,50 @@ describe("SessionService", () => {
         ]),
       );
     });
+
+    it("createSubSession 可写 background 与 modelConfigId；setBackground 可置回 0", async () => {
+      const { subSessionId } = await service.createSubSession({
+        parentSessionId: "990000000000000010",
+        parentToolCallId: "tc-bg",
+        task: "后台任务",
+        background: true,
+        modelConfigId: "mc-1",
+      });
+      const row = await service.findOrNull(subSessionId);
+      expect(row?.background).toBe(1);
+      expect(row?.modelConfigId).toBe("mc-1");
+      await service.setBackground(subSessionId, false);
+      expect((await service.findOrNull(subSessionId))?.background).toBe(0);
+    });
+
+    it("缺省 background=0、modelConfigId=null（前台不受影响）", async () => {
+      const { subSessionId } = await service.createSubSession({
+        parentSessionId: "990000000000000010",
+        parentToolCallId: "tc-fg",
+        task: "前台任务",
+      });
+      const row = await service.findOrNull(subSessionId);
+      expect(row?.background).toBe(0);
+      expect(row?.modelConfigId).toBeNull();
+    });
+
+    it("listPendingBackgroundSubagentsUnscoped 只返回 background=1 的 subagent 会话（跨账号）", async () => {
+      const a = await service.createSubSession({
+        parentSessionId: "990000000000000010",
+        parentToolCallId: "tc-1",
+        task: "A",
+        background: true,
+      });
+      await service.createSubSession({
+        parentSessionId: "990000000000000010",
+        parentToolCallId: "tc-2",
+        task: "B",
+      });
+      const rows = await rawService.listPendingBackgroundSubagentsUnscoped();
+      expect(rows.map((r) => r.id)).toContain(a.subSessionId);
+      expect(rows.every((r) => r.parentSessionId && r.cloudUserId)).toBe(true);
+      expect(rows.find((r) => r.parentToolCallId === "tc-2")).toBeUndefined();
+    });
   });
 
   describe("quick sessions", () => {
