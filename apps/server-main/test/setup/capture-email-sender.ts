@@ -13,6 +13,8 @@ import {
 export class CaptureEmailSender implements EmailSender {
   last: { to: string; mail: InvitationMail } | null = null;
   lastVerification: { to: string; code: string } | null = null;
+  /** 验证码邮件累计发送次数（断言"冷却期内不重复发信"用）。 */
+  verificationCount = 0;
 
   async sendInvitation(to: string, mail: InvitationMail): Promise<void> {
     this.last = { to, mail };
@@ -20,6 +22,7 @@ export class CaptureEmailSender implements EmailSender {
 
   async sendVerificationCode(to: string, code: string): Promise<void> {
     this.lastVerification = { to, code };
+    this.verificationCount += 1;
   }
 }
 

@@ -311,6 +311,28 @@ describe.each<[Mode]>([
     expect(captureSender.lastVerification).toBeNull();
   });
 
+  it("POST /auth/resend-code — 已注册邮箱冷却期内二连发同样静默 ok 且不重复发信（封堵枚举侧信道）", async () => {
+    if (maybeSkip()) return;
+    const email = `cooldown-${mode}@test.io`;
+    // 注册即发第一封验证码，随后 60s 内 resend 必然命中冷却
+    const registerRes = await request(app.getHttpServer())
+      .post("/api/auth/register")
+      .send({ email, password: "password1", displayName: "Cooldown" });
+    expect(registerRes.status).toBe(201);
+    const countAfterRegister = captureSender.verificationCount;
+
+    for (let i = 0; i < 2; i++) {
+      const res = await request(app.getHttpServer())
+        .post("/api/auth/resend-code")
+        .send({ email });
+      expect(res.status).toBe(200);
+      // 与未知邮箱的响应完全一致，双请求无法区分账号是否存在
+      expect(res.body).toMatchObject({ success: true, data: { ok: true } });
+    }
+    // 冷却期内没有真的重发邮件
+    expect(captureSender.verificationCount).toBe(countAfterRegister);
+  });
+
   it("POST /auth/register — 非法 DTO 中文报错走 i18n 翻译 + envelope", async () => {
     if (maybeSkip()) return;
     const res = await request(app.getHttpServer())

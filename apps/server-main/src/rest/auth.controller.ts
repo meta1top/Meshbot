@@ -87,7 +87,12 @@ export class AuthController {
     return this.signResponse(user);
   }
 
-  /** 重发验证码。邮箱不存在也静默返回 ok（防枚举）；冷却期内重复请求仍按 service 语义报错。 */
+  /**
+   * 重发验证码。邮箱不存在静默返回 ok（防枚举）；冷却期内重复请求同样静默
+   * ok 且不重复发信 —— 否则未知邮箱恒 ok、已注册邮箱二连发报 COOLDOWN，
+   * 双请求即可探测账号是否存在（枚举侧信道）。前端自带 60s 倒计时按钮，
+   * 不依赖冷却错误码。其他异常（发信失败等）照常上抛。
+   */
   @Public()
   @Throttle({ default: { limit: 3, ttl: 60_000 } })
   @Post("resend-code")
@@ -95,8 +100,15 @@ export class AuthController {
   async resendCode(@Body() dto: ResendCodeDto): Promise<{ ok: true }> {
     const user = await this.users.findByEmail(dto.email);
     if (user) {
-      const code = await this.emailVerification.issueCode(dto.email);
-      await this.email.sendVerificationCode(dto.email, code);
+      try {
+        const code = await this.emailVerification.issueCode(dto.email);
+        await this.email.sendVerificationCode(dto.email, code);
+      } catch (err) {
+        const isCooldown =
+          err instanceof AppError &&
+          err.errorCode === MainErrorCode.AUTH_VERIFICATION_COOLDOWN;
+        if (!isCooldown) throw err;
+      }
     }
     return { ok: true };
   }
