@@ -384,6 +384,7 @@ function main() {
 }
 
 // 仅作为 CLI 直接运行时执行 main()；被 spec import 时不触发（避免误跑整个仓库扫描）。
-if (require.main === module) {
+const isCliEntry = require.main === module;
+if (isCliEntry) {
   main();
 }
