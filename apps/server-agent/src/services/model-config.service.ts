@@ -96,4 +96,11 @@ export class ModelConfigService {
     const count = await this.repo.count({ where: { enabled: true } });
     return count > 0;
   }
+
+  /** 按 id 优先、name 次之查模型配置（dispatch model 覆盖用；含未启用）。查不到返回 null。 */
+  async findByIdOrName(idOrName: string): Promise<ModelConfig | null> {
+    const byId = await this.repo.findOneBy({ id: idOrName });
+    if (byId) return byId;
+    return this.repo.findOneBy({ name: idOrName });
+  }
 }
