@@ -15,3 +15,12 @@ export const GlobalEventEnvelopeSchema = z.object({
 });
 
 export type GlobalEventEnvelope = z.infer<typeof GlobalEventEnvelopeSchema>;
+
+/**
+ * 认证相关 WS 下行事件类型常量（ws/events 信封 `type` 字段取值）。
+ * `authorized`（登录完成）不下发 WS——前端靠轮询 setup-status 拿新 token，不靠 WS。
+ */
+export const AUTH_WS_EVENTS = {
+  /** 云端凭据吊销/401：该账号需要重新授权登录。 */
+  reauthRequired: "auth.reauth_required",
+} as const;

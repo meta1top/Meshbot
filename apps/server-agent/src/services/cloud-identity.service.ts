@@ -39,6 +39,7 @@ export class CloudIdentityService {
     email: string;
     displayName: string;
     cloudToken: string;
+    deviceToken?: string | null;
     cloudTokenExpiresAt: string | null;
     orgId: string | null;
     orgName: string | null;

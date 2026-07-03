@@ -1,49 +1,17 @@
 import { z } from "zod";
 
-/** 注册（云端身份）。密码规则与云端 RegisterUserSchema 一致。 */
-export const registerSchema = z.object({
-  email: z.string().email("login.validation.emailInvalid"),
-  password: z
-    .string()
-    .min(8, "login.validation.passwordTooShort")
-    .max(72, "login.validation.passwordTooLong"),
-  displayName: z
-    .string()
-    .min(1, "login.validation.displayNameRequired")
-    .max(64, "login.validation.displayNameTooLong"),
+/** 浏览器授权登录：手动粘贴授权码兜底表单（回调失败 / 无 loopback 场景）。 */
+export const authorizeCodeSchema = z.object({
+  code: z.string().min(1, "login.validation.codeRequired"),
 });
-export type RegisterInput = z.infer<typeof registerSchema>;
+export type AuthorizeCodeInput = z.infer<typeof authorizeCodeSchema>;
 
-/** 登录。 */
-export const loginSchema = z.object({
-  email: z.string().email("login.validation.emailInvalid"),
-  password: z.string().min(1, "login.validation.passwordRequired"),
-});
-export type LoginInput = z.infer<typeof loginSchema>;
-
-/** 创建组织。 */
-export const createOrgSchema = z.object({
-  name: z
-    .string()
-    .min(1, "setup.validation.orgNameRequired")
-    .max(64, "setup.validation.orgNameTooLong"),
-});
-export type CreateOrgInput = z.infer<typeof createOrgSchema>;
-
-/** 加入组织（粘贴邀请码）。 */
-export const joinOrgSchema = z.object({
-  token: z.string().min(1, "setup.validation.inviteCodeRequired"),
-});
-export type JoinOrgInput = z.infer<typeof joinOrgSchema>;
-
-/** 邀请成员（owner 输对方邮箱）。 */
-export const inviteMemberSchema = z.object({
-  email: z.string().email("orgSettings.validation.emailInvalid"),
-});
-export type InviteMemberInput = z.infer<typeof inviteMemberSchema>;
-
-/** setup-status 四态。 */
-export type SetupStep = "needs-login" | "needs-org" | "needs-model" | "ready";
+/**
+ * setup-status 三态：needs-login → needs-model → ready。
+ * 组织归属现由云端浏览器授权登录流程（web-main 注册/组织向导）保证，
+ * 本地不再有 needs-org 分流。
+ */
+export type SetupStep = "needs-login" | "needs-model" | "ready";
 
 export interface AuthStatus {
   step: SetupStep;
@@ -75,14 +43,4 @@ export interface MemberInfo {
   email: string;
   displayName: string;
   role: "owner" | "member";
-}
-
-/** 邀请摘要。 */
-export interface InvitationInfo {
-  id: string;
-  email: string;
-  status: "pending" | "accepted" | "revoked" | "expired";
-  token: string;
-  expiresAt: string;
-  createdAt: string;
 }

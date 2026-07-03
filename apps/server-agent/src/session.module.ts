@@ -13,6 +13,7 @@ import { Session } from "./entities/session.entity";
 import { SessionMessage } from "./entities/session-message.entity";
 import { LlmCallService } from "./services/llm-call.service";
 import { ModelConfigService } from "./services/model-config.service";
+import { ModelConfigSyncService } from "./services/model-config-sync.service";
 import { RunnerService } from "./services/runner.service";
 import { ScheduleExecutor } from "./services/schedule-executor.service";
 import { SessionMessageService } from "./services/session-message.service";
@@ -47,6 +48,7 @@ import { SessionGateway } from "./ws/session.gateway";
     SessionMessageService,
     SessionTitleService,
     ModelConfigService,
+    ModelConfigSyncService,
     StatsService,
     SuggestionService,
     ScheduleExecutor,

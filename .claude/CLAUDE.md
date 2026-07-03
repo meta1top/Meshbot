@@ -127,5 +127,5 @@ packages/
 
 | 应用 | 数据库 | 当前 Entity |
 |------|--------|-------------|
-| server-agent | `agent.db`（SQLite，`~/.meshbot/`，TypeORM 迁移管理） | `CloudIdentity` / `Setting` / `ModelConfig` / `Session` / `SessionMessage` / `LlmCall` / `PendingMessage` |
-| server-main | Postgres（SQL DDL 文件，DBA 手动执行） | `AppUser` / `Organization` / `Membership` / `Invitation`（云端身份 + 企业/组织；Phase 1） |
+| server-agent | `agent.db`（SQLite，`~/.meshbot/`，TypeORM 迁移管理） | `CloudIdentity`（含 `device_token` 列，浏览器授权换发的设备凭据）/ `Setting` / `ModelConfig`（含 `source` 列，`cloud` \| `local`，区分云端下发与本地配置）/ `Session` / `SessionMessage` / `LlmCall` / `PendingMessage` |
+| server-main | Postgres（SQL DDL 文件，DBA 手动执行） | `AppUser` / `Organization` / `Membership` / `Invitation`（云端身份 + 企业/组织；Phase 1）/ `Device` / `DeviceAuthRequest` / `EmailVerification` / `OrgModelConfig`（设备授权登录 + 邮箱验证码 + 组织级模型配置云端化；子项目 A） |

@@ -1,7 +1,5 @@
 "use client";
 
-import type { AuthStatus } from "@meshbot/types-agent";
-import { getAccessToken, getBrowserApiBaseUrl } from "@meshbot/web-common";
 import { useQuery } from "@tanstack/react-query";
 import { useAtomValue } from "jotai";
 import { usePathname, useRouter } from "next/navigation";
@@ -12,7 +10,7 @@ import { ModelSetupGate } from "@/components/model-setup-gate";
 import { ProfileUnauthorizedError } from "@/rest/auth";
 import { fetchModelConfigs } from "@/rest/model-config";
 
-/** 启动鉴权守卫：profile 优先判定，401 时拉 setup-status 分流。 */
+/** 启动鉴权守卫：profile 401（未登录）一律去 /login（浏览器授权登录）。 */
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -20,7 +18,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const [resolved, setResolved] = useState(false);
 
   const isAuthenticated = profile.isSuccess && profile.data != null;
-  const isPreLoginRoute = pathname === "/login" || pathname === "/register";
+  const isPreLoginRoute = pathname === "/login";
 
   const { data: modelConfigs, isPending: modelsPending } = useQuery({
     queryKey: ["model-configs"],
@@ -36,11 +34,8 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    let cancelled = false;
-
     if (profile.isSuccess && profile.data) {
-      // 已登录用户停留在 /login 无意义 → 回主页；但 /register 是多步向导，
-      // 注册后仍需停留配置模型，由向导自己控制离开
+      // 已登录用户停留在 /login 无意义 → 回主页
       if (pathname === "/login") {
         setResolved(false);
         router.replace("/");
@@ -54,49 +49,14 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       profile.error instanceof ProfileUnauthorizedError ||
       (profile.error as Error | null)?.name === "ProfileUnauthorizedError";
 
-    if (!isUnauthorized) {
-      setResolved(true);
+    if (isUnauthorized && pathname !== "/login") {
+      // 未登录一律去 /login（浏览器授权登录）；组织归属由云端流程保证，
+      // 模型未配置的判定统一交给登录后的 model-configs 守卫（ModelSetupGate）。
+      setResolved(false);
+      router.replace("/login");
       return;
     }
-
-    void fetchSetupStatus()
-      .then((setup) => {
-        if (cancelled) {
-          return;
-        }
-        const step = setup.step;
-        if (step === "needs-org") {
-          if (pathname !== "/register") {
-            setResolved(false);
-            router.replace("/register");
-            return;
-          }
-        } else if (step === "needs-login") {
-          // 默认进 /login 登录；允许停留 /register（新用户主动注册）
-          if (pathname !== "/login" && pathname !== "/register") {
-            setResolved(false);
-            router.replace("/login");
-            return;
-          }
-        } else if (pathname !== "/login" && pathname !== "/register") {
-          // needs-model / ready 但本地无 JWT → 默认去 /login 重新登录；
-          // 模型未配置的判定统一交给登录后的 model-configs 守卫（ModelSetupGate）
-          setResolved(false);
-          router.replace("/login");
-          return;
-        }
-        setResolved(true);
-      })
-      .catch(() => {
-        if (cancelled) {
-          return;
-        }
-        setResolved(true);
-      });
-
-    return () => {
-      cancelled = true;
-    };
+    setResolved(true);
   }, [profile.isPending, profile.isSuccess, profile.error, pathname, router]);
 
   if (profile.isPending || !resolved) {
@@ -111,25 +71,6 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   return <>{children}</>;
-}
-
-/** 拉 setup-status —— 仅在 profile 401 时用于分流。 */
-async function fetchSetupStatus(): Promise<AuthStatus> {
-  const base = getBrowserApiBaseUrl();
-  // 带上活跃账号 token —— 让服务端按当前账号判定 setup 状态（多账号下不能用
-  // 服务端的 listLoggedIn()[0] 猜，否则会拿到别的账号的状态）。
-  const token = getAccessToken();
-  const res = await fetch(`${base}/api/setup-status`, {
-    headers: {
-      Accept: "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  });
-  if (!res.ok) {
-    throw new Error(`setup-status failed: HTTP ${res.status}`);
-  }
-  const body = (await res.json()) as { data?: AuthStatus } & AuthStatus;
-  return (body.data ?? body) as AuthStatus;
 }
 
 function SplashScreen() {

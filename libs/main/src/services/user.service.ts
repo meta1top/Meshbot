@@ -44,6 +44,8 @@ export class UserService {
     if (!user) throw new AppError(MainErrorCode.AUTH_INVALID_CREDENTIALS);
     const ok = await bcrypt.compare(input.password, user.passwordHash);
     if (!ok) throw new AppError(MainErrorCode.AUTH_INVALID_CREDENTIALS);
+    if (!user.emailVerifiedAt)
+      throw new AppError(MainErrorCode.AUTH_EMAIL_NOT_VERIFIED);
     return user;
   }
 
@@ -51,8 +53,18 @@ export class UserService {
     return this.userRepo.findOne({ where: { id } });
   }
 
+  /** 按邮箱查找用户（供 verify-email / resend-code 编排使用）。 */
+  async findByEmail(email: string): Promise<AppUser | null> {
+    return this.userRepo.findOne({ where: { email } });
+  }
+
   /** 设置用户当前活跃组织（单表 update app_user.active_org_id）。调用方负责先校验成员资格。 */
   async setActiveOrg(userId: string, orgId: string): Promise<void> {
     await this.userRepo.update({ id: userId }, { activeOrgId: orgId });
+  }
+
+  /** 标记邮箱已验证（单表 update app_user.email_verified_at）。 */
+  async markEmailVerified(userId: string): Promise<void> {
+    await this.userRepo.update({ id: userId }, { emailVerifiedAt: new Date() });
   }
 }

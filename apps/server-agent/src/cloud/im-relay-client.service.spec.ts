@@ -4,6 +4,7 @@ import { IM_WS_EVENTS } from "@meshbot/types";
 import type { ImReadInput, ImSendInput } from "@meshbot/types";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { AgentErrorCode } from "../errors/agent.error-codes";
+import { AUTH_EVENTS } from "../services/auth.events";
 import { ImRelayClientService } from "./im-relay-client.service";
 
 /** 伪 socket：实现 on/emit/disconnect/connected，内置 EventEmitter。 */
@@ -29,7 +30,7 @@ class FakeSocket extends EventEmitter {
 }
 
 /** 单账号镜像（仅取连接相关字段）。 */
-type IdentityRow = { cloudToken: string; orgId: string | null } | null;
+type IdentityRow = { deviceToken: string; orgId: string | null } | null;
 
 /**
  * 构造被测服务的辅助函数（账号化）。
@@ -53,7 +54,7 @@ function makeService(
   const ioFactory = jest.fn(
     (_url: string, opts: { auth: { token: string } }): FakeSocket => {
       const cloudUserId = Object.keys(rows).find(
-        (id) => rows[id]?.cloudToken === opts.auth.token,
+        (id) => rows[id]?.deviceToken === opts.auth.token,
       );
       const socket = sockets[cloudUserId ?? ""];
       socket.connected = true;
@@ -81,7 +82,7 @@ describe("ImRelayClientService", () => {
     it("有 token + orgId → 用该账号 auth token 创建 socket", async () => {
       const s1 = new FakeSocket();
       const { svc, ioFactory } = makeService(
-        { u1: { cloudToken: "tok-u1", orgId: "org1" } },
+        { u1: { deviceToken: "tok-u1", orgId: "org1" } },
         { u1: s1 },
       );
 
@@ -104,8 +105,8 @@ describe("ImRelayClientService", () => {
       const s2 = new FakeSocket();
       const { svc, ioFactory } = makeService(
         {
-          u1: { cloudToken: "tok-u1", orgId: "org1" },
-          u2: { cloudToken: "tok-u2", orgId: "org2" },
+          u1: { deviceToken: "tok-u1", orgId: "org1" },
+          u2: { deviceToken: "tok-u2", orgId: "org2" },
         },
         { u1: s1, u2: s2 },
       );
@@ -128,7 +129,7 @@ describe("ImRelayClientService", () => {
       svc.disconnect("u2");
     });
 
-    it("无 cloudToken（未登录）→ 不创建 socket", async () => {
+    it("无 deviceToken（未登录）→ 不创建 socket", async () => {
       const { svc, ioFactory } = makeService({ u1: null }, {});
 
       await svc.connect("u1");
@@ -137,9 +138,9 @@ describe("ImRelayClientService", () => {
       expect(svc.isConnected("u1")).toBe(false);
     });
 
-    it("有 cloudToken 但 orgId 为 null → 不创建 socket", async () => {
+    it("有 deviceToken 但 orgId 为 null → 不创建 socket", async () => {
       const { svc, ioFactory } = makeService(
-        { u1: { cloudToken: "tok", orgId: null } },
+        { u1: { deviceToken: "tok", orgId: null } },
         {},
       );
 
@@ -152,7 +153,7 @@ describe("ImRelayClientService", () => {
     it("idempotent：同账号重复 connect → 只创建一个 socket", async () => {
       const s1 = new FakeSocket();
       const { svc, ioFactory } = makeService(
-        { u1: { cloudToken: "tok-u1", orgId: "org1" } },
+        { u1: { deviceToken: "tok-u1", orgId: "org1" } },
         { u1: s1 },
       );
 
@@ -172,7 +173,7 @@ describe("ImRelayClientService", () => {
           () =>
             new Promise((resolve) =>
               setTimeout(
-                () => resolve({ cloudToken: "tok-u1", orgId: "org1" }),
+                () => resolve({ deviceToken: "tok-u1", orgId: "org1" }),
                 0,
               ),
             ),
@@ -203,7 +204,7 @@ describe("ImRelayClientService", () => {
     it("inbound message/presence/conversationCreated → emitter.emit 被调用", async () => {
       const s1 = new FakeSocket();
       const { svc, emitSpy } = makeService(
-        { u1: { cloudToken: "tok-u1", orgId: "org1" } },
+        { u1: { deviceToken: "tok-u1", orgId: "org1" } },
         { u1: s1 },
       );
 
@@ -227,10 +228,10 @@ describe("ImRelayClientService", () => {
       svc.disconnect("u1");
     });
 
-    it("auth connect_error（unauthorized）→ disconnect + setLoggedOut(该账号)", async () => {
+    it("auth connect_error（unauthorized）→ disconnect + setLoggedOut(该账号) + emit reauthRequired", async () => {
       const s1 = new FakeSocket();
-      const { svc, cloudIdentityService } = makeService(
-        { u1: { cloudToken: "stale", orgId: "org1" } },
+      const { svc, cloudIdentityService, emitSpy } = makeService(
+        { u1: { deviceToken: "stale", orgId: "org1" } },
         { u1: s1 },
       );
 
@@ -243,15 +244,18 @@ describe("ImRelayClientService", () => {
       expect(s1.disconnected).toBe(true);
       expect(cloudIdentityService.setLoggedOut).toHaveBeenCalledTimes(1);
       expect(cloudIdentityService.setLoggedOut).toHaveBeenCalledWith("u1");
+      expect(emitSpy).toHaveBeenCalledWith(AUTH_EVENTS.reauthRequired, {
+        cloudUserId: "u1",
+      });
     });
 
     it("auth connect_error 只影响出错账号，不动其他账号", async () => {
       const s1 = new FakeSocket();
       const s2 = new FakeSocket();
-      const { svc, cloudIdentityService } = makeService(
+      const { svc, cloudIdentityService, emitSpy } = makeService(
         {
-          u1: { cloudToken: "stale", orgId: "org1" },
-          u2: { cloudToken: "tok-u2", orgId: "org2" },
+          u1: { deviceToken: "stale", orgId: "org1" },
+          u2: { deviceToken: "tok-u2", orgId: "org2" },
         },
         { u1: s1, u2: s2 },
       );
@@ -265,6 +269,12 @@ describe("ImRelayClientService", () => {
       expect(svc.isConnected("u2")).toBe(true);
       expect(cloudIdentityService.setLoggedOut).toHaveBeenCalledWith("u1");
       expect(cloudIdentityService.setLoggedOut).not.toHaveBeenCalledWith("u2");
+      expect(emitSpy).toHaveBeenCalledWith(AUTH_EVENTS.reauthRequired, {
+        cloudUserId: "u1",
+      });
+      expect(emitSpy).not.toHaveBeenCalledWith(AUTH_EVENTS.reauthRequired, {
+        cloudUserId: "u2",
+      });
 
       svc.disconnect("u2");
     });
@@ -272,7 +282,7 @@ describe("ImRelayClientService", () => {
     it("非 auth connect_error → 不调用 setLoggedOut", async () => {
       const s1 = new FakeSocket();
       const { svc, cloudIdentityService } = makeService(
-        { u1: { cloudToken: "tok-u1", orgId: "org1" } },
+        { u1: { deviceToken: "tok-u1", orgId: "org1" } },
         { u1: s1 },
       );
 
@@ -292,8 +302,8 @@ describe("ImRelayClientService", () => {
       const s2 = new FakeSocket();
       const { svc } = makeService(
         {
-          u1: { cloudToken: "tok-u1", orgId: "org1" },
-          u2: { cloudToken: "tok-u2", orgId: "org2" },
+          u1: { deviceToken: "tok-u1", orgId: "org1" },
+          u2: { deviceToken: "tok-u2", orgId: "org2" },
         },
         { u1: s1, u2: s2 },
       );
@@ -321,7 +331,7 @@ describe("ImRelayClientService", () => {
     it("connected → 用该账号 socket.emit(IM_WS_EVENTS.send, input)", async () => {
       const s1 = new FakeSocket();
       const { svc } = makeService(
-        { u1: { cloudToken: "tok-u1", orgId: "org1" } },
+        { u1: { deviceToken: "tok-u1", orgId: "org1" } },
         { u1: s1 },
       );
       await svc.connect("u1");
@@ -341,8 +351,8 @@ describe("ImRelayClientService", () => {
       const s2 = new FakeSocket();
       const { svc } = makeService(
         {
-          u1: { cloudToken: "tok-u1", orgId: "org1" },
-          u2: { cloudToken: "tok-u2", orgId: "org2" },
+          u1: { deviceToken: "tok-u1", orgId: "org1" },
+          u2: { deviceToken: "tok-u2", orgId: "org2" },
         },
         { u1: s1, u2: s2 },
       );
@@ -376,7 +386,7 @@ describe("ImRelayClientService", () => {
     it("connected → 该账号 socket.emit(IM_WS_EVENTS.read, input)", async () => {
       const s1 = new FakeSocket();
       const { svc } = makeService(
-        { u1: { cloudToken: "tok-u1", orgId: "org1" } },
+        { u1: { deviceToken: "tok-u1", orgId: "org1" } },
         { u1: s1 },
       );
       await svc.connect("u1");
@@ -404,7 +414,7 @@ describe("ImRelayClientService", () => {
     it("connect 后返回 true，disconnect 后返回 false", async () => {
       const s1 = new FakeSocket();
       const { svc } = makeService(
-        { u1: { cloudToken: "tok-u1", orgId: "org1" } },
+        { u1: { deviceToken: "tok-u1", orgId: "org1" } },
         { u1: s1 },
       );
       await svc.connect("u1");
@@ -426,8 +436,8 @@ describe("ImRelayClientService", () => {
       const s2 = new FakeSocket();
       const { svc } = makeService(
         {
-          u1: { cloudToken: "tok-u1", orgId: "org1" },
-          u2: { cloudToken: "tok-u2", orgId: "org2" },
+          u1: { deviceToken: "tok-u1", orgId: "org1" },
+          u2: { deviceToken: "tok-u2", orgId: "org2" },
         },
         { u1: s1, u2: s2 },
       );
@@ -452,7 +462,7 @@ describe("ImRelayClientService", () => {
     it("下行 im.presence 维护缓存：online 入、offline 出", async () => {
       const s1 = new FakeSocket();
       const { svc } = makeService(
-        { u1: { cloudToken: "tok-u1", orgId: "org1" } },
+        { u1: { deviceToken: "tok-u1", orgId: "org1" } },
         { u1: s1 },
       );
       await svc.connect("u1");
@@ -479,7 +489,7 @@ describe("ImRelayClientService", () => {
     it("disconnect 清空该账号缓存", async () => {
       const s1 = new FakeSocket();
       const { svc } = makeService(
-        { u1: { cloudToken: "tok-u1", orgId: "org1" } },
+        { u1: { deviceToken: "tok-u1", orgId: "org1" } },
         { u1: s1 },
       );
       await svc.connect("u1");
@@ -503,7 +513,7 @@ describe("ImRelayClientService", () => {
     it("setUiPresence(id, true)：connected → emit im.presence_set {online:true}", async () => {
       const s1 = new FakeSocket();
       const { svc } = makeService(
-        { u1: { cloudToken: "tok-u1", orgId: "org1" } },
+        { u1: { deviceToken: "tok-u1", orgId: "org1" } },
         { u1: s1 },
       );
       await svc.connect("u1");
@@ -525,7 +535,7 @@ describe("ImRelayClientService", () => {
     it("setUiPresence(id, false)：connected → emit im.presence_set {online:false}", async () => {
       const s1 = new FakeSocket();
       const { svc } = makeService(
-        { u1: { cloudToken: "tok-u1", orgId: "org1" } },
+        { u1: { deviceToken: "tok-u1", orgId: "org1" } },
         { u1: s1 },
       );
       await svc.connect("u1");
@@ -555,7 +565,7 @@ describe("ImRelayClientService", () => {
     it("无浏览器（未调 setUiPresence(true)）→ 推进 PING_INTERVAL_MS 不 emit ping", async () => {
       const s1 = new FakeSocket();
       const { svc } = makeService(
-        { u1: { cloudToken: "tok-u1", orgId: "org1" } },
+        { u1: { deviceToken: "tok-u1", orgId: "org1" } },
         { u1: s1 },
       );
       await svc.connect("u1");
@@ -573,7 +583,7 @@ describe("ImRelayClientService", () => {
     it("有浏览器（setUiPresence(true) 后）→ 推进 PING_INTERVAL_MS 会 emit ping", async () => {
       const s1 = new FakeSocket();
       const { svc } = makeService(
-        { u1: { cloudToken: "tok-u1", orgId: "org1" } },
+        { u1: { deviceToken: "tok-u1", orgId: "org1" } },
         { u1: s1 },
       );
       await svc.connect("u1");
@@ -592,7 +602,7 @@ describe("ImRelayClientService", () => {
     it("setUiPresence(true) 后 simulateServerEvent connect → 重发 im.presence_set {online:true}", async () => {
       const s1 = new FakeSocket();
       const { svc } = makeService(
-        { u1: { cloudToken: "tok-u1", orgId: "org1" } },
+        { u1: { deviceToken: "tok-u1", orgId: "org1" } },
         { u1: s1 },
       );
       await svc.connect("u1");
@@ -614,7 +624,7 @@ describe("ImRelayClientService", () => {
     it("无浏览器（未调 setUiPresence(true)）→ 重连不重发 presence_set", async () => {
       const s1 = new FakeSocket();
       const { svc } = makeService(
-        { u1: { cloudToken: "tok-u1", orgId: "org1" } },
+        { u1: { deviceToken: "tok-u1", orgId: "org1" } },
         { u1: s1 },
       );
       await svc.connect("u1");
@@ -642,7 +652,7 @@ describe("ImRelayClientService", () => {
       const cloudIdentityService = {
         get: jest
           .fn()
-          .mockResolvedValue({ cloudToken: "tok-u1", orgId: "org1" }),
+          .mockResolvedValue({ deviceToken: "tok-u1", orgId: "org1" }),
         setLoggedOut: jest.fn(),
       };
       const ioFactory = jest.fn((): FakeSocket => {

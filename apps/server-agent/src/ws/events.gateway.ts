@@ -6,6 +6,7 @@ import {
   WsExceptionFilter,
 } from "@meshbot/common";
 import {
+  AUTH_WS_EVENTS,
   EVENTS_WS_NAMESPACE,
   IM_WS_EVENTS,
   type ConversationSummary,
@@ -35,6 +36,7 @@ import {
 import type { Socket } from "socket.io";
 import { AccountContextService } from "@meshbot/agent";
 import { ImRelayClientService } from "../cloud/im-relay-client.service";
+import { AUTH_EVENTS } from "../services/auth.events";
 
 /**
  * 本地事件总线 WebSocket Gateway。端点：ws://<host>/ws/events
@@ -183,6 +185,18 @@ export class EventsGateway extends BaseWebSocketGateway {
   @OnEvent(QUICK_ASSISTANT_EVENTS.renamed)
   onQuickAssistantRenamed(payload: QuickAssistantRenamedEvent): void {
     this.emitEnvelope(QUICK_ASSISTANT_EVENTS.renamed, payload);
+  }
+
+  /**
+   * 本地：云端凭据吊销/401（relay connect_error unauthorized 或 CloudClient 401
+   * unauthorizedHandler）→ 信封投递给所属账号浏览器，提示重新授权登录。
+   *
+   * 发射方（ImRelayClientService / auth.module CloudClientService 工厂）已用
+   * `account.run(cloudUserId, ...)` 包裹 emit，故此处 emitEnvelope 能取到账号路由。
+   */
+  @OnEvent(AUTH_EVENTS.reauthRequired)
+  onReauthRequired(payload: { cloudUserId: string }): void {
+    this.emitEnvelope(AUTH_WS_EVENTS.reauthRequired, payload);
   }
 
   /**

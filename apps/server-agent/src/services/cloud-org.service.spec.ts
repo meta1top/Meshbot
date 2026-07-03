@@ -7,35 +7,22 @@ const USER = "u1";
 
 describe("CloudOrgService", () => {
   function build(opts: {
-    identity?: Partial<{ get: jest.Mock; updateActiveOrg: jest.Mock }>;
-    cloud?: Partial<{ post: jest.Mock; get: jest.Mock; del: jest.Mock }>;
+    identity?: Partial<{ get: jest.Mock }>;
+    cloud?: Partial<{ get: jest.Mock }>;
   }) {
     const identity = {
-      get: jest.fn().mockResolvedValue({ cloudToken: "ct-1" }),
-      updateActiveOrg: jest.fn().mockResolvedValue(undefined),
+      get: jest.fn().mockResolvedValue({ deviceToken: "ct-1" }),
       ...opts.identity,
     };
     const cloud = {
-      post: jest.fn(),
       get: jest.fn(),
-      del: jest.fn(),
       ...opts.cloud,
-    };
-    const imRelay = {
-      connect: jest.fn().mockResolvedValue(undefined),
-      disconnect: jest.fn(),
     };
     const account = new AccountContextService();
     return {
-      svc: new CloudOrgService(
-        cloud as never,
-        identity as never,
-        imRelay as never,
-        account,
-      ),
+      svc: new CloudOrgService(cloud as never, identity as never, account),
       identity,
       cloud,
-      imRelay,
       account,
     };
   }
@@ -51,41 +38,37 @@ describe("CloudOrgService", () => {
     );
   });
 
-  it("createOrg 成功后用响应直接写活跃组织镜像（owner），无 profile 往返", async () => {
-    const { svc, identity, cloud, account } = build({
+  it("listMembers 成功返回成员列表", async () => {
+    const { svc, cloud, account } = build({
       cloud: {
-        post: jest
+        get: jest
           .fn()
-          .mockResolvedValue({ id: "o1", name: "Acme", role: "owner" }),
-        get: jest.fn(),
+          .mockResolvedValue([
+            { id: "u1", email: "alice@example.com", role: "owner" },
+          ]),
       },
     });
-    const out = await account.run(USER, () => svc.createOrg("Acme"));
-    expect(out).toMatchObject({ id: "o1", name: "Acme" });
-    expect(identity.updateActiveOrg).toHaveBeenCalledWith(
-      USER,
-      "o1",
-      "Acme",
-      "owner",
-    );
-    expect(cloud.get).not.toHaveBeenCalled();
+    const out = await account.run(USER, () => svc.listMembers("o1"));
+    expect(out).toEqual([
+      { id: "u1", email: "alice@example.com", role: "owner" },
+    ]);
+    expect(cloud.get).toHaveBeenCalledWith("/api/orgs/o1/members", "ct-1");
   });
 
-  it("acceptInvitation 成功后写活跃组织镜像（member）", async () => {
-    const { svc, identity, account } = build({
+  it("listMine 成功返回我的组织列表", async () => {
+    const { svc, cloud, account } = build({
       cloud: {
-        post: jest.fn().mockResolvedValue({ orgId: "o2", orgName: "Beta" }),
+        get: jest.fn().mockResolvedValue([
+          { id: "o1", name: "Acme", role: "owner" },
+          { id: "o2", name: "Beta", role: "member" },
+        ]),
       },
     });
-    const out = await account.run(USER, () =>
-      svc.acceptInvitation("invite-token"),
-    );
-    expect(out).toEqual({ orgId: "o2", orgName: "Beta" });
-    expect(identity.updateActiveOrg).toHaveBeenCalledWith(
-      USER,
-      "o2",
-      "Beta",
-      "member",
-    );
+    const out = await account.run(USER, () => svc.listMine());
+    expect(out).toEqual([
+      { id: "o1", name: "Acme", role: "owner" },
+      { id: "o2", name: "Beta", role: "member" },
+    ]);
+    expect(cloud.get).toHaveBeenCalledWith("/api/orgs", "ct-1");
   });
 });

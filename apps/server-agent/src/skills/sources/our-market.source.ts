@@ -103,12 +103,12 @@ export class OurMarketSource implements SkillSourceAdapter {
     };
   }
 
-  /** 获取当前账号的 cloud token。 */
+  /** 获取当前账号的 device token。 */
   private async token(): Promise<string> {
     const id = await this.identity.get(this.account.getOrThrow());
-    if (!id?.cloudToken) {
+    if (!id?.deviceToken) {
       throw new AppError(AgentErrorCode.AUTH_UNAUTHORIZED);
     }
-    return id.cloudToken;
+    return id.deviceToken;
   }
 }

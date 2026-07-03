@@ -172,6 +172,11 @@ export class InvitationService {
       { id: userId, activeOrgId: IsNull() },
       { activeOrgId: invite.orgId },
     );
+    // 邀请邮件即邮箱所有权证明：接受邀请视同邮箱已验证
+    await appUserRepo.update(
+      { id: userId, emailVerifiedAt: IsNull() },
+      { emailVerifiedAt: new Date() },
+    );
 
     return { orgId: org.id, orgName: org.name };
   }

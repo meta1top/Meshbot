@@ -10,7 +10,6 @@ import {
 import { AssetsModule } from "@meshbot/assets";
 import { MainModule } from "@meshbot/main";
 import type { INestApplication } from "@nestjs/common";
-import { Module } from "@nestjs/common";
 import { APP_GUARD, Reflector } from "@nestjs/core";
 import { JwtModule } from "@nestjs/jwt";
 import { PassportModule } from "@nestjs/passport";
@@ -28,13 +27,13 @@ import request from "supertest";
 import { JwtAuthGuard } from "../../src/auth/jwt-auth.guard";
 import { JwtMainStrategy } from "../../src/auth/jwt.strategy";
 import { type AppConfig, APP_CONFIG } from "../../src/config/app-config.schema";
-import {
-  EMAIL_SENDER,
-  type EmailSender,
-  type InvitationMail,
-} from "../../src/email/email-sender";
 import { AuthController } from "../../src/rest/auth.controller";
 import { OrgController } from "../../src/rest/org.controller";
+import {
+  buildCaptureEmailModule,
+  CaptureEmailSender,
+} from "../setup/capture-email-sender";
+import { registerAndVerify } from "../setup/register-and-verify";
 import {
   createTestDb,
   isPostgresReachable,
@@ -48,21 +47,8 @@ const TEST_APP_CONFIG = {
   jwt: { secret: "e2e-test-secret", expires: "1h" },
 } as AppConfig;
 
-/** 测试用 EmailSender：捕获最后一次邀请，供断言邀请码。 */
-class CaptureEmailSender implements EmailSender {
-  last: { to: string; mail: InvitationMail } | null = null;
-  async sendInvitation(to: string, mail: InvitationMail): Promise<void> {
-    this.last = { to, mail };
-  }
-}
-
 const captureSender = new CaptureEmailSender();
-
-@Module({
-  providers: [{ provide: EMAIL_SENDER, useValue: captureSender }],
-  exports: [EMAIL_SENDER],
-})
-class TestEmailModule {}
+const TestEmailModule = buildCaptureEmailModule(captureSender);
 
 describe("server-main org e2e", () => {
   let app: INestApplication;
@@ -109,7 +95,10 @@ describe("server-main org e2e", () => {
             bucket: "test",
           },
         }),
-        MainModule.forRoot({ expiresDays: 7 }),
+        MainModule.forRoot(
+          { expiresDays: 7 },
+          { encryptionKey: "e2e-encryption-key-0123456789abcdef" },
+        ),
       ],
       controllers: [AuthController, OrgController],
       providers: [
@@ -144,10 +133,7 @@ describe("server-main org e2e", () => {
   }
 
   async function registerAndToken(email: string): Promise<string> {
-    const res = await request(app.getHttpServer())
-      .post("/api/auth/register")
-      .send({ email, password: "password1", displayName: email.split("@")[0] });
-    return res.body.data.token as string;
+    return registerAndVerify(app, captureSender, email);
   }
 
   it("建组织 → 邀请 → 第二用户接受 → 成员列表含两人", async () => {
@@ -209,6 +195,13 @@ describe("server-main org e2e", () => {
       .set("Authorization", `Bearer ${bobToken}`);
     expect(bobProfile.body.data.activeOrg.id).toBe(orgId);
     expect(bobProfile.body.data.memberships).toHaveLength(1);
+
+    // 接受邀请视同邮箱已验证（邀请邮件即邮箱所有权证明）
+    const bobRow = await dbCtx?.ds.query(
+      `SELECT email_verified_at FROM app_user WHERE email = $1`,
+      ["bob@org.io"],
+    );
+    expect(bobRow?.[0]?.email_verified_at).not.toBeNull();
   });
 
   it("非 owner 邀请 → ORG_FORBIDDEN（403 + code 2004）", async () => {

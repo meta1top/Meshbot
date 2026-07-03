@@ -30,7 +30,7 @@ import { BrandLogo } from "@/components/brand-logo";
 import { RailNavItem } from "@/components/shell/rail-nav-item";
 import { areaFromPath } from "@/lib/area-from-path";
 import { profileQueryKey } from "@/lib/profile-client";
-import { authStatusQueryKey, useLogout } from "@/rest/auth";
+import { useCloudWebUrl, useLogout } from "@/rest/auth";
 import { orgsQueryKey, switchOrg, useOrgs } from "@/rest/org";
 
 export { areaFromPath } from "@/lib/area-from-path";
@@ -46,6 +46,7 @@ export function WorkspaceRail() {
   const area = areaFromPath(pathname);
   const qc = useQueryClient();
   const { data: orgs } = useOrgs();
+  const cloudWebUrl = useCloudWebUrl();
   const [switching, setSwitching] = useState(false);
   // 用 ref 持切换锁，避免把 switching state 纳入 useCallback 依赖导致回调频繁重建
   const switchingRef = useRef(false);
@@ -56,7 +57,7 @@ export function WorkspaceRail() {
     router.replace("/login");
   }, [logoutMutation.mutateAsync, router]);
 
-  /** 切换活跃组织：调远端，成功后失效 profile/authStatus/org 相关查询。 */
+  /** 切换活跃组织：调远端，成功后失效 profile/org 相关查询。 */
   const handleSwitchOrg = useCallback(
     async (orgId: string) => {
       if (orgId === user?.org?.id || switchingRef.current) return;
@@ -65,7 +66,6 @@ export function WorkspaceRail() {
       try {
         await switchOrg(orgId);
         await qc.invalidateQueries({ queryKey: profileQueryKey });
-        await qc.invalidateQueries({ queryKey: authStatusQueryKey });
         await qc.invalidateQueries({ queryKey: ["org"] });
         await qc.invalidateQueries({ queryKey: ["members"] });
         await qc.invalidateQueries({ queryKey: orgsQueryKey });
@@ -169,7 +169,17 @@ export function WorkspaceRail() {
               <DropdownMenuSeparator />
             </>
           ) : null}
-          <DropdownMenuItem onClick={() => router.push("/settings/org")}>
+          <DropdownMenuItem
+            disabled={!cloudWebUrl.data}
+            onClick={() => {
+              if (!cloudWebUrl.data) return;
+              window.open(
+                `${cloudWebUrl.data.webMainBase}/settings/org`,
+                "_blank",
+                "noopener,noreferrer",
+              );
+            }}
+          >
             <Building2 className="mr-2 h-4 w-4" />
             {t("userMenu.org")}
           </DropdownMenuItem>

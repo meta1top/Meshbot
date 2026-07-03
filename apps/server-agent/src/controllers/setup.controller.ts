@@ -9,7 +9,13 @@ import { CloudAuthService } from "../services/cloud-auth.service";
 import { CloudIdentityService } from "../services/cloud-identity.service";
 import { ModelConfigService } from "../services/model-config.service";
 
-/** setup-status 四态：needs-login → needs-org → needs-model → ready。 */
+/**
+ * setup-status 三态：needs-login → needs-model → ready。
+ * 组织归属由云端浏览器授权登录流程保证，本地不再有 needs-org 分流。
+ * needs-model 判定不变（hasEnabledModels），但本地模型配置写 REST 已下线——
+ * needs-model 现在意味着该账号所属组织在云端未配置任何已启用模型（或云端同步尚未完成），
+ * 需要去云端组织后台配置，而非本地新增（前端文案 Task 20 跟进）。
+ */
 @Controller("api")
 export class SetupController {
   constructor(
@@ -30,16 +36,14 @@ export class SetupController {
     let id: CloudIdentity | null = tokenUserId
       ? await this.identity.get(tokenUserId)
       : ((await this.identity.listLoggedIn())[0] ?? null);
-    if (!id?.cloudToken) {
+    if (!id?.deviceToken) {
       return { step: "needs-login", needsSetup: true };
     }
     if (!id.orgId) {
-      // 自愈：异地接受邀请等导致镜像与云端漂移时，拉一次 profile 刷新后再判定
+      // 自愈：异地接受邀请等导致镜像与云端漂移时，拉一次 profile 刷新后再判定；
+      // 自愈失败（云端不可达等）兜底用原 id 继续，不阻塞 needs-model/ready 判定
       await this.cloudAuth.trySyncActiveOrg(id.cloudUserId);
-      id = await this.identity.get(id.cloudUserId);
-    }
-    if (!id?.orgId) {
-      return { step: "needs-org", needsSetup: true };
+      id = (await this.identity.get(id.cloudUserId)) ?? id;
     }
     const hasModels = await this.account.run(id.cloudUserId, () =>
       this.modelConfigService.hasEnabledModels(),

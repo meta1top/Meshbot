@@ -1,24 +1,75 @@
-import { Body, Controller, Get, Post } from "@nestjs/common";
+import { SkipResponseEnvelope } from "@meshbot/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  HttpCode,
+  Post,
+  Query,
+} from "@nestjs/common";
 
-import { LoginDto, RegisterDto } from "../dto/auth.dto";
+import { AuthorizeCompleteDto, AuthorizePollDto } from "../dto/auth.dto";
 import { Public } from "../guards/jwt-auth.guard";
 import { CloudAuthService } from "../services/cloud-auth.service";
+import { CloudMetaService } from "../services/cloud-meta.service";
+import { DeviceAuthorizeService } from "../services/device-authorize.service";
 
-/** 认证端点：代理云端 register/login，本地只签发 / 校验本地 JWT。 */
+/** 认证端点：浏览器授权登录编排 + 登出 / profile 读取。 */
 @Controller("api/auth")
 export class AuthController {
-  constructor(private readonly cloudAuth: CloudAuthService) {}
+  constructor(
+    private readonly cloudAuth: CloudAuthService,
+    private readonly deviceAuthorize: DeviceAuthorizeService,
+    private readonly cloudMeta: CloudMetaService,
+  ) {}
 
+  /** 发起浏览器授权登录：返回云端授权页 URL，前端负责打开浏览器。 */
   @Public()
-  @Post("register")
-  register(@Body() dto: RegisterDto) {
-    return this.cloudAuth.register(dto);
+  @Post("authorize/start")
+  @HttpCode(200)
+  startAuthorize() {
+    return this.deviceAuthorize.start();
   }
 
+  /** 浏览器授权回调（loopback 重定向）：兑换成功/失败均返回极简 HTML 提示页。 */
   @Public()
-  @Post("login")
-  login(@Body() dto: LoginDto) {
-    return this.cloudAuth.login(dto);
+  @Get("callback")
+  @SkipResponseEnvelope()
+  @Header("Content-Type", "text/html; charset=utf-8")
+  async callback(
+    @Query("request") requestId: string,
+    @Query("code") code: string,
+  ): Promise<string> {
+    try {
+      await this.deviceAuthorize.complete(requestId, code);
+      return "<!doctype html><meta charset='utf-8'><title>meshbot</title><p>授权成功，请关闭此页并返回 meshbot。</p>";
+    } catch {
+      return "<!doctype html><meta charset='utf-8'><title>meshbot</title><p>授权失败或已过期，请回到 meshbot 重试。</p>";
+    }
+  }
+
+  /** 手动粘贴授权码完成登录（回调失败 / 无 loopback 场景兜底）。 */
+  @Public()
+  @Post("authorize/complete")
+  @HttpCode(200)
+  completeAuthorize(@Body() dto: AuthorizeCompleteDto) {
+    return this.deviceAuthorize.completeByCode(dto.code);
+  }
+
+  /** 前端轮询取本地登录态（一次性）。 */
+  @Public()
+  @Post("authorize/poll")
+  @HttpCode(200)
+  pollAuthorize(@Body() dto: AuthorizePollDto) {
+    return this.deviceAuthorize.poll(dto.requestId);
+  }
+
+  /** 云端 web-main 基础 URL（供前端拼注册页 / 组织后台跳转链接），代理并进程内缓存。 */
+  @Public()
+  @Get("cloud-web-url")
+  async cloudWebUrl(): Promise<{ webMainBase: string }> {
+    return { webMainBase: await this.cloudMeta.getWebMainBase() };
   }
 
   /** 登出：清云端身份镜像（本地 JWT 由前端自行丢弃）。 */

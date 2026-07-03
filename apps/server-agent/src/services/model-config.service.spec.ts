@@ -1,5 +1,6 @@
 import { NotFoundException } from "@nestjs/common";
 import { AccountContextService } from "@meshbot/agent";
+import type { AgentModelConfig } from "@meshbot/types";
 import { DataSource } from "typeorm";
 import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
 import { ModelConfig } from "../entities/model-config.entity";
@@ -29,7 +30,7 @@ function wrapInAccount(
   });
 }
 
-/** 辅助函数：向 model_configs 表直接植入带 cloudUserId 的行（绕过 ALS）。 */
+/** 辅助函数：向 model_configs 表直接植入带 cloudUserId 的行（绕过 ALS，写 REST 下线后本地测试数据只能这样造）。 */
 async function seedModelConfig(
   ds: DataSource,
   overrides: {
@@ -41,6 +42,7 @@ async function seedModelConfig(
     baseUrl?: string;
     enabled?: boolean;
     contextWindow?: number;
+    source?: "cloud" | "local";
   },
 ): Promise<ModelConfig> {
   const repo = ds.getRepository(ModelConfig);
@@ -53,8 +55,26 @@ async function seedModelConfig(
     baseUrl: overrides.baseUrl ?? "",
     enabled: overrides.enabled ?? true,
     contextWindow: overrides.contextWindow ?? 128_000,
+    source: overrides.source ?? "local",
   });
   return repo.save(entity);
+}
+
+/** 造一条云端下发的 AgentModelConfig 样例。 */
+function agentModelConfig(
+  overrides: Partial<AgentModelConfig> = {},
+): AgentModelConfig {
+  return {
+    id: "cloud-cfg-1",
+    providerType: "openai",
+    name: "Cloud GPT-4o",
+    model: "gpt-4o",
+    apiKey: "sk-cloud",
+    baseUrl: "",
+    contextWindow: 128_000,
+    enabled: true,
+    ...overrides,
+  };
 }
 
 describe("ModelConfigService", () => {
@@ -86,49 +106,25 @@ describe("ModelConfigService", () => {
     await ds.destroy();
   });
 
-  it("create 落库一行并自动盖上 cloudUserId", async () => {
-    const created = await service.create({
-      providerType: "openai",
-      name: "GPT-4o",
-      model: "gpt-4o",
-      apiKey: "sk-test",
-    });
-    expect(created.id).toBeTruthy();
-    expect(created.cloudUserId).toBe(DEFAULT_USER);
-    expect(created.enabled).toBe(true);
-  });
-
   it("findAll 返回当前账号全部配置", async () => {
-    await service.create({
-      providerType: "openai",
-      name: "GPT-4o",
-      model: "gpt-4o",
-      apiKey: "sk-1",
-    });
-    await service.create({
+    await seedModelConfig(ds, { cloudUserId: DEFAULT_USER, name: "GPT-4o" });
+    await seedModelConfig(ds, {
+      cloudUserId: DEFAULT_USER,
       providerType: "deepseek",
       name: "DS Chat",
       model: "deepseek-chat",
-      apiKey: "sk-2",
     });
     const all = await service.findAll();
     expect(all).toHaveLength(2);
   });
 
   it("findAllEnabled 只返回 enabled=true 的配置", async () => {
-    await service.create({
-      providerType: "openai",
-      name: "Enabled",
-      model: "gpt-4o",
-      apiKey: "sk-1",
-    });
-    const created = await service.create({
-      providerType: "deepseek",
+    await seedModelConfig(ds, { cloudUserId: DEFAULT_USER, name: "Enabled" });
+    await seedModelConfig(ds, {
+      cloudUserId: DEFAULT_USER,
       name: "Disabled",
-      model: "deepseek-chat",
-      apiKey: "sk-2",
+      enabled: false,
     });
-    await service.update(created.id, { enabled: false });
     const enabled = await service.findAllEnabled();
     expect(enabled).toHaveLength(1);
     expect(enabled[0].name).toBe("Enabled");
@@ -137,22 +133,15 @@ describe("ModelConfigService", () => {
   it("findEnabled 返回第一条已启用配置；无则返 null", async () => {
     const none = await service.findEnabled();
     expect(none).toBeNull();
-    await service.create({
-      providerType: "openai",
-      name: "GPT-4o",
-      model: "gpt-4o",
-      apiKey: "sk-1",
-    });
+    await seedModelConfig(ds, { cloudUserId: DEFAULT_USER, name: "GPT-4o" });
     const found = await service.findEnabled();
     expect(found).not.toBeNull();
   });
 
   it("findOneOrFail 找到时返回实体", async () => {
-    const created = await service.create({
-      providerType: "openai",
+    const created = await seedModelConfig(ds, {
+      cloudUserId: DEFAULT_USER,
       name: "GPT-4o",
-      model: "gpt-4o",
-      apiKey: "sk-1",
     });
     const fetched = await service.findOneOrFail(created.id);
     expect(fetched.id).toBe(created.id);
@@ -164,61 +153,9 @@ describe("ModelConfigService", () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it("update 修改字段并保留 cloudUserId", async () => {
-    const created = await service.create({
-      providerType: "openai",
-      name: "GPT-4o",
-      model: "gpt-4o",
-      apiKey: "sk-1",
-    });
-    const updated = await service.update(created.id, {
-      name: "GPT-4o Updated",
-    });
-    expect(updated.name).toBe("GPT-4o Updated");
-    expect(updated.cloudUserId).toBe(DEFAULT_USER);
-  });
-
-  it("update：model 变更且未显式传 contextWindow → 重新解析 contextWindow", async () => {
-    const created = await service.create({
-      providerType: "openai",
-      name: "GPT-4o",
-      model: "gpt-4o",
-      apiKey: "sk-1",
-      contextWindow: 128_000,
-    });
-    // gpt-4o-mini 在 MODEL_SPECS 里有确定值或 fallback
-    const updated = await service.update(created.id, { model: "gpt-4o-mini" });
-    expect(updated.model).toBe("gpt-4o-mini");
-    // contextWindow 应被重新解析（不再是原值），仅验证它是一个正整数
-    expect(updated.contextWindow).toBeGreaterThan(0);
-  });
-
-  it("remove 删除存在的配置后 findAll 为空", async () => {
-    const created = await service.create({
-      providerType: "openai",
-      name: "GPT-4o",
-      model: "gpt-4o",
-      apiKey: "sk-1",
-    });
-    await service.remove(created.id);
-    const all = await service.findAll();
-    expect(all).toHaveLength(0);
-  });
-
-  it("remove 不存在 id 时抛 NotFoundException", async () => {
-    await expect(service.remove("nonexistent-id")).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
-  });
-
   it("hasEnabledModels 无配置返 false，有启用配置返 true", async () => {
     expect(await service.hasEnabledModels()).toBe(false);
-    await service.create({
-      providerType: "openai",
-      name: "GPT-4o",
-      model: "gpt-4o",
-      apiKey: "sk-1",
-    });
+    await seedModelConfig(ds, { cloudUserId: DEFAULT_USER, name: "GPT-4o" });
     expect(await service.hasEnabledModels()).toBe(true);
   });
 
@@ -228,22 +165,9 @@ describe("ModelConfigService", () => {
 
   describe("账号隔离（ScopedRepository）", () => {
     it("账号 A 的配置对账号 B 不可见（findAll）", async () => {
-      await ctx.run("u1", () =>
-        rawService.create({
-          providerType: "openai",
-          name: "A Config",
-          model: "gpt-4o",
-          apiKey: "sk-a",
-        }),
-      );
-      await ctx.run("u2", () =>
-        rawService.create({
-          providerType: "openai",
-          name: "B Config",
-          model: "gpt-4o",
-          apiKey: "sk-b",
-        }),
-      );
+      await seedModelConfig(ds, { cloudUserId: "u1", name: "A Config" });
+      await seedModelConfig(ds, { cloudUserId: "u2", name: "B Config" });
+
       const u1All = await ctx.run("u1", () => rawService.findAll());
       expect(u1All).toHaveLength(1);
       expect(u1All[0].name).toBe("A Config");
@@ -254,22 +178,9 @@ describe("ModelConfigService", () => {
     });
 
     it("账号 A 的配置对账号 B 不可见（findAllEnabled）", async () => {
-      await ctx.run("u1", () =>
-        rawService.create({
-          providerType: "openai",
-          name: "A Enabled",
-          model: "gpt-4o",
-          apiKey: "sk-a",
-        }),
-      );
-      await ctx.run("u2", () =>
-        rawService.create({
-          providerType: "openai",
-          name: "B Enabled",
-          model: "gpt-4o",
-          apiKey: "sk-b",
-        }),
-      );
+      await seedModelConfig(ds, { cloudUserId: "u1", name: "A Enabled" });
+      await seedModelConfig(ds, { cloudUserId: "u2", name: "B Enabled" });
+
       const u1Enabled = await ctx.run("u1", () => rawService.findAllEnabled());
       expect(u1Enabled).toHaveLength(1);
       expect(u1Enabled[0].name).toBe("A Enabled");
@@ -280,70 +191,19 @@ describe("ModelConfigService", () => {
     });
 
     it("账号 B 无法通过 findOneOrFail 读取账号 A 的配置（NOT_FOUND）", async () => {
-      const aConfig = await ctx.run("u1", () =>
-        rawService.create({
-          providerType: "openai",
-          name: "A Config",
-          model: "gpt-4o",
-          apiKey: "sk-a",
-        }),
-      );
+      const aConfig = await seedModelConfig(ds, {
+        cloudUserId: "u1",
+        name: "A Config",
+      });
       // 账号 B 试图读账号 A 的 id → 应抛 NotFoundException
       await expect(
         ctx.run("u2", () => rawService.findOneOrFail(aConfig.id)),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it("账号 B 无法 update 账号 A 的配置（NOT_FOUND）", async () => {
-      const aConfig = await ctx.run("u1", () =>
-        rawService.create({
-          providerType: "openai",
-          name: "A Config",
-          model: "gpt-4o",
-          apiKey: "sk-a",
-        }),
-      );
-      await expect(
-        ctx.run("u2", () => rawService.update(aConfig.id, { name: "Hacked" })),
-      ).rejects.toBeInstanceOf(NotFoundException);
-
-      // 验证数据未被篡改
-      const original = await ctx.run("u1", () =>
-        rawService.findOneOrFail(aConfig.id),
-      );
-      expect(original.name).toBe("A Config");
-    });
-
-    it("账号 B 无法 remove 账号 A 的配置（NOT_FOUND）", async () => {
-      const aConfig = await ctx.run("u1", () =>
-        rawService.create({
-          providerType: "openai",
-          name: "A Config",
-          model: "gpt-4o",
-          apiKey: "sk-a",
-        }),
-      );
-      await expect(
-        ctx.run("u2", () => rawService.remove(aConfig.id)),
-      ).rejects.toBeInstanceOf(NotFoundException);
-
-      // 验证数据仍存在
-      const stillThere = await ctx.run("u1", () =>
-        rawService.findOneOrFail(aConfig.id),
-      );
-      expect(stillThere.id).toBe(aConfig.id);
-    });
-
     it("hasEnabledModels 和 count 各账号独立统计", async () => {
       // u1 有一条启用配置，u2 没有
-      await ctx.run("u1", () =>
-        rawService.create({
-          providerType: "openai",
-          name: "A Config",
-          model: "gpt-4o",
-          apiKey: "sk-a",
-        }),
-      );
+      await seedModelConfig(ds, { cloudUserId: "u1", name: "A Config" });
       const u1Has = await ctx.run("u1", () => rawService.hasEnabledModels());
       expect(u1Has).toBe(true);
 
@@ -360,6 +220,74 @@ describe("ModelConfigService", () => {
 
       const u2All = await ctx.run("u2", () => rawService.findAll());
       expect(u2All.map((r) => r.name)).toEqual(["Seeded-B"]);
+    });
+  });
+
+  describe("replaceCloudConfigs（云端模型配置整体替换）", () => {
+    it("存量 source='local' 行不受影响，新 cloud 行落库", async () => {
+      await seedModelConfig(ds, {
+        cloudUserId: "u1",
+        name: "Local Kept",
+        source: "local",
+      });
+
+      await ctx.run("u1", () =>
+        rawService.replaceCloudConfigs([agentModelConfig({ name: "Cloud A" })]),
+      );
+
+      const all = await ctx.run("u1", () => rawService.findAll());
+      expect(all).toHaveLength(2);
+      const local = all.find((r) => r.source === "local");
+      const cloud = all.find((r) => r.source === "cloud");
+      expect(local?.name).toBe("Local Kept");
+      expect(cloud?.name).toBe("Cloud A");
+    });
+
+    it("旧 cloud 行被整体替换为新一批配置（不是增量合并）", async () => {
+      await seedModelConfig(ds, {
+        cloudUserId: "u1",
+        name: "Old Cloud",
+        source: "cloud",
+      });
+
+      await ctx.run("u1", () =>
+        rawService.replaceCloudConfigs([
+          agentModelConfig({ id: "cfg-1", name: "New Cloud 1" }),
+          agentModelConfig({
+            id: "cfg-2",
+            name: "New Cloud 2",
+            model: "deepseek-chat",
+          }),
+        ]),
+      );
+
+      const cloudRows = (
+        await ctx.run("u1", () => rawService.findAll())
+      ).filter((r) => r.source === "cloud");
+      expect(cloudRows).toHaveLength(2);
+      expect(cloudRows.map((r) => r.name).sort()).toEqual([
+        "New Cloud 1",
+        "New Cloud 2",
+      ]);
+      expect(cloudRows.some((r) => r.name === "Old Cloud")).toBe(false);
+    });
+
+    it("其他账号的行不受影响（作用域 delete 只删当前账号）", async () => {
+      await seedModelConfig(ds, {
+        cloudUserId: "u2",
+        name: "U2 Cloud",
+        source: "cloud",
+      });
+
+      await ctx.run("u1", () =>
+        rawService.replaceCloudConfigs([
+          agentModelConfig({ name: "U1 Cloud" }),
+        ]),
+      );
+
+      const u2All = await ctx.run("u2", () => rawService.findAll());
+      expect(u2All).toHaveLength(1);
+      expect(u2All[0].name).toBe("U2 Cloud");
     });
   });
 });

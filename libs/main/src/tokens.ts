@@ -7,3 +7,6 @@
 
 /** ioredis 实例（或 null）的注入 token，供 PresenceService 使用。 */
 export const REDIS_CLIENT = Symbol("REDIS_CLIENT");
+
+/** 加密配置（对称密钥）的注入 token，供 SecretCryptoService 使用。 */
+export const SECURITY_CONFIG = Symbol("SECURITY_CONFIG");

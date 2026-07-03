@@ -1,12 +1,16 @@
 export * from "./dto";
-export { REDIS_CLIENT } from "./tokens";
+export { REDIS_CLIENT, SECURITY_CONFIG } from "./tokens";
 export * from "./entities/app-user.entity";
 export * from "./entities/conversation.entity";
 export * from "./entities/conversation-member.entity";
+export * from "./entities/device.entity";
+export * from "./entities/device-auth-request.entity";
+export * from "./entities/email-verification.entity";
 export * from "./entities/invitation.entity";
 export * from "./entities/membership.entity";
 export * from "./entities/message.entity";
 export * from "./entities/organization.entity";
+export * from "./entities/org-model-config.entity";
 export * from "./entities/skill-package.entity";
 export * from "./entities/skill-version.entity";
 export * from "./entities/cloud-node.entity";
@@ -19,6 +23,13 @@ export {
   INVITATION_CONFIG,
 } from "./services/invitation.config";
 export { ConversationService } from "./services/conversation.service";
+export { DeviceAuthService } from "./services/device-auth.service";
+export {
+  DEVICE_TOKEN_PREFIX,
+  DeviceService,
+  hashDeviceToken,
+} from "./services/device.service";
+export { EmailVerificationService } from "./services/email-verification.service";
 export {
   type AcceptResult,
   InvitationService,
@@ -26,6 +37,14 @@ export {
 export { MembershipService } from "./services/membership.service";
 export { MessageService } from "./services/message.service";
 export { OrgService } from "./services/org.service";
+// AgentModelConfig / OrgModelConfigInput / OrgModelConfigView 迁到 @meshbot/types
+// （跨域类型，本地轨 Agent 也消费）；这里保留 re-export 以免破坏既有消费方。
+export type {
+  AgentModelConfig,
+  OrgModelConfigInput,
+  OrgModelConfigView,
+} from "@meshbot/types";
+export { OrgModelConfigService } from "./services/org-model-config.service";
 export { PresenceService } from "./services/presence.service";
 export { SkillMarketService } from "./services/skill-market.service";
 export { SkillPackageService } from "./services/skill-package.service";
@@ -37,3 +56,7 @@ export {
   type NodeView,
 } from "./services/cloud-drive.service";
 export { CloudShareLinkService } from "./services/cloud-share-link.service";
+export {
+  type SecurityConfig,
+  SecretCryptoService,
+} from "./services/secret-crypto.service";

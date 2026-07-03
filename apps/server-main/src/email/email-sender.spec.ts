@@ -12,4 +12,11 @@ describe("LogEmailSender", () => {
       }),
     ).resolves.toBeUndefined();
   });
+
+  it("sendVerificationCode 不真实发送，记录日志且不抛错", async () => {
+    const sender = new LogEmailSender();
+    await expect(
+      sender.sendVerificationCode("bob@test.io", "123456"),
+    ).resolves.toBeUndefined();
+  });
 });

@@ -6,6 +6,14 @@ import {
   CreateChannelSchema,
   type CreateDmInput,
   CreateDmSchema,
+  type DeviceAuthApproveInput,
+  DeviceAuthApproveSchema,
+  type DeviceAuthExchangeInput,
+  DeviceAuthExchangeSchema,
+  type DeviceAuthStartInput,
+  DeviceAuthStartSchema,
+  type DeviceSwitchOrgInput,
+  DeviceSwitchOrgSchema,
 } from "@meshbot/types";
 import {
   type AcceptInvitationInput,
@@ -22,18 +30,26 @@ import {
   CreateShareLinkSchema,
   type LoginInput,
   LoginSchema,
+  type OrgModelConfigCreateInput,
+  OrgModelConfigCreateSchema,
+  type OrgModelConfigUpdateInput,
+  OrgModelConfigUpdateSchema,
   type RegisterUserInput,
   RegisterUserSchema,
   type RenameOrMoveInput,
   RenameOrMoveSchema,
   type RequestUploadInput,
   RequestUploadSchema,
+  type ResendCodeInput,
+  ResendCodeSchema,
   type SetGrantsInput,
   SetGrantsSchema,
   type ShareDownloadInput,
   ShareDownloadSchema,
   type SwitchOrgInput,
   SwitchOrgSchema,
+  type VerifyEmailInput,
+  VerifyEmailSchema,
 } from "@meshbot/types-main";
 
 /**
@@ -120,3 +136,47 @@ export interface CreateShareLinkDto extends CreateShareLinkInput {}
 // biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
 export class ShareDownloadDto extends createI18nZodDto(ShareDownloadSchema) {}
 export interface ShareDownloadDto extends ShareDownloadInput {}
+
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
+export class DeviceAuthStartDto extends createI18nZodDto(
+  DeviceAuthStartSchema,
+) {}
+export interface DeviceAuthStartDto extends DeviceAuthStartInput {}
+
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
+export class DeviceAuthApproveDto extends createI18nZodDto(
+  DeviceAuthApproveSchema,
+) {}
+export interface DeviceAuthApproveDto extends DeviceAuthApproveInput {}
+
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
+export class DeviceAuthExchangeDto extends createI18nZodDto(
+  DeviceAuthExchangeSchema,
+) {}
+export interface DeviceAuthExchangeDto extends DeviceAuthExchangeInput {}
+
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
+export class DeviceSwitchOrgDto extends createI18nZodDto(
+  DeviceSwitchOrgSchema,
+) {}
+export interface DeviceSwitchOrgDto extends DeviceSwitchOrgInput {}
+
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
+export class VerifyEmailDto extends createI18nZodDto(VerifyEmailSchema) {}
+export interface VerifyEmailDto extends VerifyEmailInput {}
+
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
+export class ResendCodeDto extends createI18nZodDto(ResendCodeSchema) {}
+export interface ResendCodeDto extends ResendCodeInput {}
+
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
+export class OrgModelConfigCreateDto extends createI18nZodDto(
+  OrgModelConfigCreateSchema,
+) {}
+export interface OrgModelConfigCreateDto extends OrgModelConfigCreateInput {}
+
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
+export class OrgModelConfigUpdateDto extends createI18nZodDto(
+  OrgModelConfigUpdateSchema,
+) {}
+export interface OrgModelConfigUpdateDto extends OrgModelConfigUpdateInput {}

@@ -33,6 +33,10 @@ import { JwtMainStrategy } from "../../src/auth/jwt.strategy";
 import { type AppConfig, APP_CONFIG } from "../../src/config/app-config.schema";
 import { AuthController } from "../../src/rest/auth.controller";
 import {
+  buildCaptureEmailModule,
+  CaptureEmailSender,
+} from "../setup/capture-email-sender";
+import {
   createTestDb,
   isPostgresReachable,
   type TestDbContext,
@@ -95,6 +99,7 @@ describe.each<[Mode]>([
   let dbCtx: TestDbContext | null = null;
   let skipReason: string | null = null;
   const providerRef: ProviderRef = {};
+  const captureSender = new CaptureEmailSender();
 
   beforeAll(async () => {
     const pgOk = await isPostgresReachable();
@@ -145,7 +150,11 @@ describe.each<[Mode]>([
             bucket: "test",
           },
         }),
-        MainModule.forRoot({ expiresDays: 7 }),
+        MainModule.forRoot(
+          { expiresDays: 7 },
+          { encryptionKey: "e2e-encryption-key-0123456789abcdef" },
+        ),
+        buildCaptureEmailModule(captureSender),
       ],
       controllers: [AuthController],
       providers: [
@@ -186,7 +195,7 @@ describe.each<[Mode]>([
     displayName: "Alice",
   };
 
-  it("POST /auth/register — 注册成功返回 envelope + token + user", async () => {
+  it("POST /auth/register — 注册成功发验证码,返回 envelope + needVerify(不签 token)", async () => {
     if (maybeSkip()) return;
     const res = await request(app.getHttpServer())
       .post("/api/auth/register")
@@ -196,13 +205,38 @@ describe.each<[Mode]>([
       success: true,
       code: 0,
       message: "success",
+      data: { needVerify: true },
     });
+    expect(res.body.data.token).toBeUndefined();
+    expect(captureSender.lastVerification?.to).toBe(ALICE.email);
+    expect(captureSender.lastVerification?.code).toMatch(/^\d{6}$/);
+  });
+
+  it("POST /auth/verify-email — 验证码错误业务错误（200 + AppError code 2023）", async () => {
+    if (maybeSkip()) return;
+    const res = await request(app.getHttpServer())
+      .post("/api/auth/verify-email")
+      .send({ email: ALICE.email, code: "000000" });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      success: false,
+      code: 2023, // MainErrorCode.AUTH_VERIFICATION_INVALID
+    });
+  });
+
+  it("POST /auth/verify-email — 验证码正确：标记邮箱已验证 + 返回 envelope + token（验证即登录）", async () => {
+    if (maybeSkip()) return;
+    const code = captureSender.lastVerification?.code as string;
+    const res = await request(app.getHttpServer())
+      .post("/api/auth/verify-email")
+      .send({ email: ALICE.email, code });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ success: true, code: 0 });
     expect(res.body.data.token).toBeTruthy();
     expect(res.body.data.user).toMatchObject({
       email: ALICE.email,
       displayName: ALICE.displayName,
     });
-    expect(res.body.data.user.id).toBeTruthy();
   });
 
   it("POST /auth/register — 同 email 二次注册业务错误（200 + AppError envelope）", async () => {
@@ -241,6 +275,62 @@ describe.each<[Mode]>([
       code: 2002, // MainErrorCode.AUTH_INVALID_CREDENTIALS
       message: "Invalid email or password",
     });
+  });
+
+  it("POST /auth/login — 邮箱未验证业务错误（200 + AppError code 2022）", async () => {
+    if (maybeSkip()) return;
+    const unverified = {
+      email: `dora-${mode}@test.io`,
+      password: "dorapass1",
+      displayName: "Dora",
+    };
+    const registerRes = await request(app.getHttpServer())
+      .post("/api/auth/register")
+      .send(unverified);
+    expect(registerRes.status).toBe(201);
+    // 故意不走 verify-email，模拟真实未验证用户
+
+    const res = await request(app.getHttpServer())
+      .post("/api/auth/login")
+      .send({ email: unverified.email, password: unverified.password });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      success: false,
+      code: 2022, // MainErrorCode.AUTH_EMAIL_NOT_VERIFIED
+    });
+  });
+
+  it("POST /auth/resend-code — 未知邮箱静默返回 ok（防枚举，不真实发码）", async () => {
+    if (maybeSkip()) return;
+    captureSender.lastVerification = null;
+    const res = await request(app.getHttpServer())
+      .post("/api/auth/resend-code")
+      .send({ email: `ghost-${mode}@test.io` });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ success: true, data: { ok: true } });
+    expect(captureSender.lastVerification).toBeNull();
+  });
+
+  it("POST /auth/resend-code — 已注册邮箱冷却期内二连发同样静默 ok 且不重复发信（封堵枚举侧信道）", async () => {
+    if (maybeSkip()) return;
+    const email = `cooldown-${mode}@test.io`;
+    // 注册即发第一封验证码，随后 60s 内 resend 必然命中冷却
+    const registerRes = await request(app.getHttpServer())
+      .post("/api/auth/register")
+      .send({ email, password: "password1", displayName: "Cooldown" });
+    expect(registerRes.status).toBe(201);
+    const countAfterRegister = captureSender.verificationCount;
+
+    for (let i = 0; i < 2; i++) {
+      const res = await request(app.getHttpServer())
+        .post("/api/auth/resend-code")
+        .send({ email });
+      expect(res.status).toBe(200);
+      // 与未知邮箱的响应完全一致，双请求无法区分账号是否存在
+      expect(res.body).toMatchObject({ success: true, data: { ok: true } });
+    }
+    // 冷却期内没有真的重发邮件
+    expect(captureSender.verificationCount).toBe(countAfterRegister);
   });
 
   it("POST /auth/register — 非法 DTO 中文报错走 i18n 翻译 + envelope", async () => {

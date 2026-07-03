@@ -1,5 +1,5 @@
 import path from "node:path";
-import { app, BrowserWindow, dialog, nativeImage } from "electron";
+import { app, BrowserWindow, dialog, nativeImage, shell } from "electron";
 import { startAgentRuntime, stopAgentRuntime } from "./agent-runtime";
 import { registerIpcHandlers } from "./ipc-handlers";
 
@@ -34,6 +34,29 @@ function createWindow(agentUrl: string) {
       contextIsolation: true,
       preload: path.join(__dirname, "preload.js"),
     },
+  });
+
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    // 比较 origin 而非 startsWith，规避 agentUrl 携带路径时的误判。
+    // new URL() 必须包 try/catch：畸形 http URL（如 http://xn--/）能通过
+    // Chromium 校验送达 handler，但 new URL() 会抛 TypeError，主进程无
+    // uncaughtException handler，不防护会直接崩整个应用。
+    let isExternal: boolean;
+    try {
+      isExternal =
+        /^https?:\/\//.test(url) &&
+        new URL(url).origin !== new URL(agentUrl).origin;
+    } catch {
+      // 解析失败的 URL 一律拒绝，且不交给系统浏览器
+      return { action: "deny" };
+    }
+    if (isExternal) {
+      shell
+        .openExternal(url)
+        .catch((err) => console.error("[desktop] openExternal 失败:", err));
+      return { action: "deny" };
+    }
+    return { action: "allow" };
   });
 
   win.loadURL(agentUrl);

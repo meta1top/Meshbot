@@ -13,7 +13,6 @@ import { MainModule, REDIS_CLIENT } from "@meshbot/main";
 import { IM_WS_EVENTS, IM_WS_NAMESPACE } from "@meshbot/types";
 import type { ConversationSummary, PresenceState } from "@meshbot/types";
 import type { INestApplication } from "@nestjs/common";
-import { Module } from "@nestjs/common";
 import { EventEmitterModule } from "@nestjs/event-emitter";
 import { APP_GUARD, Reflector } from "@nestjs/core";
 import { JwtModule } from "@nestjs/jwt";
@@ -34,16 +33,16 @@ import { emitUntilEvent, waitForEvent } from "../setup/ws-test-utils";
 import { JwtAuthGuard } from "../../src/auth/jwt-auth.guard";
 import { JwtMainStrategy } from "../../src/auth/jwt.strategy";
 import { type AppConfig, APP_CONFIG } from "../../src/config/app-config.schema";
-import {
-  EMAIL_SENDER,
-  type EmailSender,
-  type InvitationMail,
-} from "../../src/email/email-sender";
 import { AuthController } from "../../src/rest/auth.controller";
 import { OrgController } from "../../src/rest/org.controller";
 import { ImController } from "../../src/rest/im.controller";
 import { HealthGateway } from "../../src/ws/health.gateway";
 import { ImGateway } from "../../src/ws/im.gateway";
+import {
+  buildCaptureEmailModule,
+  CaptureEmailSender,
+} from "../setup/capture-email-sender";
+import { registerAndVerify } from "../setup/register-and-verify";
 import {
   createTestDb,
   isPostgresReachable,
@@ -56,21 +55,8 @@ const TEST_APP_CONFIG = {
   jwt: { secret: "im-e2e-secret", expires: "1h" },
 } as AppConfig;
 
-/** 捕获邀请邮件 token。 */
-class CaptureEmailSender implements EmailSender {
-  last: { to: string; mail: InvitationMail } | null = null;
-  async sendInvitation(to: string, mail: InvitationMail): Promise<void> {
-    this.last = { to, mail };
-  }
-}
-
 const captureSender = new CaptureEmailSender();
-
-@Module({
-  providers: [{ provide: EMAIL_SENDER, useValue: captureSender }],
-  exports: [EMAIL_SENDER],
-})
-class TestEmailModule {}
+const TestEmailModule = buildCaptureEmailModule(captureSender);
 
 describe("server-main IM e2e", () => {
   let app: INestApplication;
@@ -119,7 +105,10 @@ describe("server-main IM e2e", () => {
             bucket: "test",
           },
         }),
-        MainModule.forRoot({ expiresDays: 7 }),
+        MainModule.forRoot(
+          { expiresDays: 7 },
+          { encryptionKey: "e2e-encryption-key-0123456789abcdef" },
+        ),
       ],
       controllers: [AuthController, OrgController, ImController],
       providers: [
@@ -165,14 +154,13 @@ describe("server-main IM e2e", () => {
 
   /** 注册用户并返回 JWT token。 */
   async function registerAndToken(email: string, suffix = ""): Promise<string> {
-    const res = await request(app.getHttpServer())
-      .post("/api/auth/register")
-      .send({
-        email,
-        password: "password1",
-        displayName: email.split("@")[0] + suffix,
-      });
-    return res.body.data.token as string;
+    return registerAndVerify(
+      app,
+      captureSender,
+      email,
+      "password1",
+      email.split("@")[0] + suffix,
+    );
   }
 
   /**

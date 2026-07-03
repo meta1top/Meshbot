@@ -19,10 +19,14 @@ import { SnakeNamingStrategy } from "typeorm-naming-strategies";
 import { AppUser } from "../../../../libs/main/src/entities/app-user.entity";
 import { Conversation } from "../../../../libs/main/src/entities/conversation.entity";
 import { ConversationMember } from "../../../../libs/main/src/entities/conversation-member.entity";
+import { Device } from "../../../../libs/main/src/entities/device.entity";
+import { DeviceAuthRequest } from "../../../../libs/main/src/entities/device-auth-request.entity";
+import { EmailVerification } from "../../../../libs/main/src/entities/email-verification.entity";
 import { Invitation } from "../../../../libs/main/src/entities/invitation.entity";
 import { Membership } from "../../../../libs/main/src/entities/membership.entity";
 import { Message } from "../../../../libs/main/src/entities/message.entity";
 import { Organization } from "../../../../libs/main/src/entities/organization.entity";
+import { OrgModelConfig } from "../../../../libs/main/src/entities/org-model-config.entity";
 import { SkillPackage } from "../../../../libs/main/src/entities/skill-package.entity";
 import { SkillVersion } from "../../../../libs/main/src/entities/skill-version.entity";
 
@@ -120,6 +124,10 @@ export async function createTestDb(): Promise<TestDbContext> {
       Message,
       SkillPackage,
       SkillVersion,
+      Device,
+      DeviceAuthRequest,
+      EmailVerification,
+      OrgModelConfig,
     ],
     namingStrategy: new SnakeNamingStrategy(),
     synchronize: false,

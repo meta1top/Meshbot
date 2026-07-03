@@ -12,7 +12,7 @@
 # 规则：
 #   - key 支持 kebab-case（如 access-key-id），加载时自动归一化为 camelCase
 #   - 运行模式不在这里 —— NODE_ENV 由部署环境注入（prod 镜像烤 production）
-#   - 生产严禁使用仓库里 application.yml 的 dev jwt secret（启动会 fail-fast）
+#   - 生产严禁使用仓库里 application.yml 的 dev jwt secret / dev encryption-key（启动会 fail-fast）
 #   - 配了 redis（多副本信号）必须同时给每个副本设 MESHBOT_NODE_ID（0-1023），否则拒绝启动
 
 port: 3200
@@ -58,3 +58,7 @@ email:
 
 invitation:
   expiresDays: 7            # 邀请码有效天数（1-30）
+
+security:
+  # 至少 32 字符；用于 SecretCryptoService（AES-256-GCM）加密入库敏感字段（如 API Key）
+  encryption-key: "replace-with-32+char-random-string"

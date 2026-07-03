@@ -1,23 +1,25 @@
-import { createI18nZodDto } from "@meshbot/common";
-import {
-  type LoginInput,
-  LoginSchema,
-  type RegisterUserInput,
-  RegisterUserSchema,
-} from "@meshbot/types-main";
+import { createZodDto } from "@meshbot/common";
+import { z } from "zod";
 
 /**
- * 认证 DTO 复用云端共享 schema（@meshbot/types-main）：
- * 本地代理与云端 server-main 校验规则 / i18n 文案完全一致。
+ * 浏览器授权登录 DTO：手动粘贴授权码 / 轮询本地 token。
  *
- * class + interface 声明合并：class 提供 isZodDto（全局 I18nZodValidationPipe
+ * class + interface 声明合并：class 提供 isZodDto（全局 ZodValidationPipe
  * 识别），interface 把 z.infer 字段平铺到实例类型。
  */
 
-// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
-export class RegisterDto extends createI18nZodDto(RegisterUserSchema) {}
-export interface RegisterDto extends RegisterUserInput {}
+export const AuthorizeCompleteSchema = z.object({ code: z.string().min(1) });
+export type AuthorizeCompleteInput = z.infer<typeof AuthorizeCompleteSchema>;
 
 // biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
-export class LoginDto extends createI18nZodDto(LoginSchema) {}
-export interface LoginDto extends LoginInput {}
+export class AuthorizeCompleteDto extends createZodDto(
+  AuthorizeCompleteSchema,
+) {}
+export interface AuthorizeCompleteDto extends AuthorizeCompleteInput {}
+
+export const AuthorizePollSchema = z.object({ requestId: z.string().min(1) });
+export type AuthorizePollInput = z.infer<typeof AuthorizePollSchema>;
+
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
+export class AuthorizePollDto extends createZodDto(AuthorizePollSchema) {}
+export interface AuthorizePollDto extends AuthorizePollInput {}

@@ -23,6 +23,9 @@ export class AppUser extends SnowflakeBaseEntity {
   @Column({ type: "varchar", length: 20, nullable: true })
   activeOrgId!: string | null;
 
+  @Column({ type: "timestamptz", nullable: true })
+  emailVerifiedAt!: Date | null;
+
   @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 

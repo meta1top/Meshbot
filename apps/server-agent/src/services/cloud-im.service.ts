@@ -112,9 +112,9 @@ export class CloudImService {
 
   private async withToken<T>(fn: (token: string) => Promise<T>): Promise<T> {
     const id = await this.identity.get(this.account.getOrThrow());
-    if (!id?.cloudToken) {
+    if (!id?.deviceToken) {
       throw new AppError(AgentErrorCode.AUTH_UNAUTHORIZED);
     }
-    return fn(id.cloudToken);
+    return fn(id.deviceToken);
   }
 }

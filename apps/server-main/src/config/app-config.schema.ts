@@ -63,6 +63,14 @@ export const InvitationConfigSchema = z.object({
   expiresDays: z.coerce.number().int().min(1).max(30).default(7),
 });
 
+/** 加密配置。对称密钥，供 SecretCryptoService 加解密入库敏感字段（如 API Key）。 */
+export const SecurityConfigSchema = z.object({
+  encryptionKey: z
+    .string()
+    .min(32, "security.encryptionKey 至少 32 字符")
+    .default("dev-encryption-key-do-not-use-prod!"),
+});
+
 /** Minio 对象存储配置。缺省值指向本地 minio（dev 模式下无需显式配置即可启动）。 */
 export const MinioConfigSchema = z.object({
   endPoint: z.string().default("localhost"),
@@ -85,6 +93,7 @@ export const AppConfigSchema = z.object({
   redis: RedisConfigSchema.optional(),
   email: EmailConfigSchema.optional(),
   invitation: InvitationConfigSchema.default({ expiresDays: 7 }),
+  security: SecurityConfigSchema.default({}),
   assets: AssetsConfigSchema.default({}),
   /** web-main 前端基础 URL，用于拼分享链接。默认指向本地开发端口。 */
   webMainBase: z.string().url().default("http://localhost:3002"),
@@ -96,6 +105,7 @@ export type JwtConfig = z.infer<typeof JwtConfigSchema>;
 export type RedisConfig = z.infer<typeof RedisConfigSchema>;
 export type EmailConfig = z.infer<typeof EmailConfigSchema>;
 export type InvitationConfig = z.infer<typeof InvitationConfigSchema>;
+export type SecurityConfig = z.infer<typeof SecurityConfigSchema>;
 export type MinioConfig = z.infer<typeof MinioConfigSchema>;
 export type AssetsConfig = z.infer<typeof AssetsConfigSchema>;
 

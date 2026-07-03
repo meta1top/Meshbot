@@ -7,13 +7,14 @@ import type {
   ImMessage,
   PresenceState,
 } from "@meshbot/types";
-import { IM_WS_EVENTS } from "@meshbot/types";
+import { AUTH_WS_EVENTS, IM_WS_EVENTS } from "@meshbot/types";
 import {
   QUICK_ASSISTANT_EVENTS,
   type QuickAssistantRenamedEvent,
   SCHEDULE_EVENTS,
   type ScheduleFiredEvent,
 } from "@meshbot/types-agent";
+import { clearAccessToken } from "@meshbot/web-common";
 import { useSetAtom } from "jotai";
 import { useEffect } from "react";
 import { quickAssistantNameAtom } from "@/atoms/assistant-panel";
@@ -36,6 +37,7 @@ export interface GlobalEventHandlers {
   onConversationRead: (p: ImConversationReadEvent) => void;
   onScheduleFired: (p: ScheduleFiredEvent) => void;
   onQuickAssistantRenamed: (p: QuickAssistantRenamedEvent) => void;
+  onReauthRequired: (p: { cloudUserId: string }) => void;
 }
 
 export function dispatchGlobalEvent(
@@ -64,9 +66,22 @@ export function dispatchGlobalEvent(
     case QUICK_ASSISTANT_EVENTS.renamed:
       h.onQuickAssistantRenamed(env.payload as QuickAssistantRenamedEvent);
       break;
+    case AUTH_WS_EVENTS.reauthRequired:
+      h.onReauthRequired(env.payload as { cloudUserId: string });
+      break;
     default:
       break;
   }
+}
+
+/**
+ * 云端凭据吊销 → 清本地 token（全量登出）+ 硬跳 /login。
+ * 用 `window.location.href` 而非 router.replace：硬跳顺带清空内存中的
+ * react-query 缓存 / jotai atom 状态，避免过期数据残留，简单可靠。
+ */
+function handleReauthRequired(): void {
+  clearAccessToken();
+  window.location.href = "/login";
 }
 
 /**
@@ -92,6 +107,7 @@ export function useGlobalEvents(): void {
       onConversationRead: (p) => markConversationRead(p.conversationId),
       onScheduleFired: (p) => addScheduleActivity(p.sessionId),
       onQuickAssistantRenamed: (p) => setQuickAssistantName(p.name),
+      onReauthRequired: () => handleReauthRequired(),
     };
     const onEvent = (env: GlobalEventEnvelope) =>
       dispatchGlobalEvent(env, handlers);

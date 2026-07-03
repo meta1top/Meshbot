@@ -45,11 +45,16 @@ import type { AppConfig } from "./config/app-config.schema";
 import { EmailModule } from "./email/email.module";
 import { EventEmitterModule } from "@nestjs/event-emitter";
 import { HealthController } from "./health.controller";
+import { AgentConfigController } from "./rest/agent-config.controller";
 import { AuthController } from "./rest/auth.controller";
+import { DeviceAuthController } from "./rest/device-auth.controller";
+import { DeviceController } from "./rest/device.controller";
 import { DriveController } from "./rest/drive.controller";
 import { DriveShareLinkController } from "./rest/drive-share-link.controller";
 import { ImController } from "./rest/im.controller";
+import { MetaController } from "./rest/meta.controller";
 import { OrgController } from "./rest/org.controller";
+import { OrgModelConfigController } from "./rest/org-model-config.controller";
 import { PublicShareController } from "./rest/public-share.controller";
 import { SkillController } from "./rest/skill.controller";
 import { HealthGateway } from "./ws/health.gateway";
@@ -191,16 +196,21 @@ export class AppModule {
         // 结构化健康检查（DB + Redis 分组上报）
         TerminusModule,
         EmailModule,
-        MainModule.forRoot(config.invitation),
+        MainModule.forRoot(config.invitation, config.security),
         EventEmitterModule.forRoot(),
         AssetsModule.forRoot({ provider: "minio", minio: config.assets.minio }),
       ],
       controllers: [
         HealthController,
+        MetaController,
         AuthController,
+        DeviceAuthController,
+        DeviceController,
         DriveController,
         DriveShareLinkController,
         OrgController,
+        OrgModelConfigController,
+        AgentConfigController,
         ImController,
         SkillController,
         PublicShareController,

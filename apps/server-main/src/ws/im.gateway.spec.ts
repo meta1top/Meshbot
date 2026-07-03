@@ -13,6 +13,12 @@ function makeGateway(overrides: {
   userService?: {
     findById?: jest.Mock;
   };
+  jwt?: {
+    verify?: jest.Mock;
+  };
+  devices?: {
+    verifyToken?: jest.Mock;
+  };
 }) {
   const conversation = {
     getVisibleOrThrow: jest.fn().mockResolvedValue({ id: "c1" }),
@@ -36,12 +42,20 @@ function makeGateway(overrides: {
     findById:
       overrides.userService?.findById ?? jest.fn().mockResolvedValue(undefined),
   };
+  const jwt = {
+    verify: overrides.jwt?.verify ?? jest.fn().mockReturnValue({}),
+  };
+  const devices = {
+    verifyToken:
+      overrides.devices?.verifyToken ?? jest.fn().mockResolvedValue(undefined),
+  };
   const gw = new ImGateway(
-    {} as never, // jwt
+    jwt as never,
     conversation as never,
     {} as never, // message
     presence as never, // presence
     userService as never, // userService
+    devices as never, // devices
   );
   const fetchSockets = jest.fn().mockResolvedValue(overrides.sockets ?? []);
   const roomEmitSpy = jest.fn();
@@ -50,7 +64,23 @@ function makeGateway(overrides: {
     in: jest.fn().mockReturnValue({ fetchSockets }),
     to: toSpy,
   };
-  return { gw, conversation, presence, userService, toSpy, roomEmitSpy };
+  return {
+    gw,
+    conversation,
+    presence,
+    userService,
+    jwt,
+    devices,
+    toSpy,
+    roomEmitSpy,
+  };
+}
+
+/** 访问 protected jwtVerify 的测试通道 */
+function callJwtVerify(gw: ImGateway, token: string): unknown {
+  return (gw as unknown as { jwtVerify(token: string): unknown }).jwtVerify(
+    token,
+  );
 }
 
 describe("ImGateway.handleRead 广播 im.conversation_read", () => {
@@ -144,5 +174,96 @@ describe("ImGateway.handlePresenceSet（浏览器在线态上报）", () => {
       userId: "u1",
       online: true,
     });
+  });
+
+  it("device 连接（payload 带 deviceId+orgId）竞态兜底 → 直接用 payload.orgId，不查 findById", async () => {
+    const findById = jest.fn();
+    const { gw, presence } = makeGateway({ userService: { findById } });
+    const clientData: {
+      user: { userId: string; orgId: string; deviceId: string };
+      orgId?: string;
+    } = { user: { userId: "u1", orgId: "o-dev", deviceId: "d1" } };
+    const client = { data: clientData };
+
+    await gw.handlePresenceSet({ online: true } as never, client as never);
+
+    expect(findById).not.toHaveBeenCalled();
+    expect(clientData.orgId).toBe("o-dev");
+    expect(presence.setOnline).toHaveBeenCalledWith("o-dev", "u1");
+  });
+});
+
+describe("ImGateway.jwtVerify（双凭据：用户 JWT + device token）", () => {
+  it("mbd_ 前缀 → DeviceService.verifyToken，payload = {userId,orgId,deviceId}", async () => {
+    const verifyToken = jest
+      .fn()
+      .mockResolvedValue({ id: "d1", userId: "u1", orgId: "o1" });
+    const { gw, jwt } = makeGateway({ devices: { verifyToken } });
+
+    const payload = await callJwtVerify(gw, "mbd_tok");
+
+    expect(verifyToken).toHaveBeenCalledWith("mbd_tok");
+    expect(jwt.verify).not.toHaveBeenCalled();
+    expect(payload).toEqual({ userId: "u1", orgId: "o1", deviceId: "d1" });
+  });
+
+  it("普通 token → jwt.verify（同步，保持现状）", () => {
+    const verify = jest.fn().mockReturnValue({ userId: "u2" });
+    const { gw, devices } = makeGateway({ jwt: { verify } });
+
+    const payload = callJwtVerify(gw, "eyJhbGciOi.some.jwt");
+
+    expect(verify).toHaveBeenCalledWith("eyJhbGciOi.some.jwt");
+    expect(devices.verifyToken).not.toHaveBeenCalled();
+    expect(payload).toEqual({ userId: "u2" }); // 非 Promise，同步返回
+  });
+});
+
+describe("ImGateway.onAuthedConnect（device 连接 orgId 直接用 payload）", () => {
+  function makeClient(user: Record<string, unknown>) {
+    const data: Record<string, unknown> = { user };
+    return {
+      data,
+      join: jest.fn(),
+      emit: jest.fn(),
+      disconnect: jest.fn(),
+    };
+  }
+
+  it("device 连接 → 不查 findById，入 org 房间用 payload.orgId", async () => {
+    const findById = jest.fn();
+    const { gw } = makeGateway({ userService: { findById } });
+    const conversation = {
+      listConversations: jest.fn().mockResolvedValue([{ id: "c1" }]),
+    };
+    (gw as unknown as { conversation: unknown }).conversation = conversation;
+    const client = makeClient({ userId: "u1", orgId: "o-dev", deviceId: "d1" });
+
+    await (
+      gw as unknown as { onAuthedConnect(c: unknown): Promise<void> }
+    ).onAuthedConnect(client);
+
+    expect(findById).not.toHaveBeenCalled();
+    expect(client.data.orgId).toBe("o-dev");
+    expect(client.join).toHaveBeenCalledWith("org:o-dev");
+    expect(conversation.listConversations).toHaveBeenCalledWith("u1", "o-dev");
+  });
+
+  it("用户 JWT 连接 → 保持现状查 activeOrgId", async () => {
+    const findById = jest.fn().mockResolvedValue({ activeOrgId: "o-user" });
+    const { gw } = makeGateway({ userService: { findById } });
+    const conversation = {
+      listConversations: jest.fn().mockResolvedValue([]),
+    };
+    (gw as unknown as { conversation: unknown }).conversation = conversation;
+    const client = makeClient({ userId: "u1", orgId: "o-stale" });
+
+    await (
+      gw as unknown as { onAuthedConnect(c: unknown): Promise<void> }
+    ).onAuthedConnect(client);
+
+    expect(findById).toHaveBeenCalledWith("u1");
+    expect(client.data.orgId).toBe("o-user");
+    expect(client.join).toHaveBeenCalledWith("org:o-user");
   });
 });

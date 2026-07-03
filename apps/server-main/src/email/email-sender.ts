@@ -14,9 +14,11 @@ export interface InvitationMail {
   expiresAt: Date;
 }
 
-/** 邮件发送端口。Phase 1 只发组织邀请。 */
+/** 邮件发送端口。Phase 1 发组织邀请；Phase 5 起加注册邮箱验证码。 */
 export interface EmailSender {
   sendInvitation(to: string, mail: InvitationMail): Promise<void>;
+  /** 发送注册邮箱验证码（6 位数字，10 分钟有效）。 */
+  sendVerificationCode(to: string, code: string): Promise<void>;
 }
 
 /** EmailSender 的 DI token。 */
@@ -34,6 +36,16 @@ function buildInvitationText(mail: InvitationMail): {
       `请在 meshbot 桌面端登录后，进入「加入组织」并粘贴以下邀请码：\n\n` +
       `    ${mail.code}\n\n` +
       `邀请码有效期至 ${expires}。若非本人预期，请忽略本邮件。`,
+  };
+}
+
+function buildVerificationText(code: string): {
+  subject: string;
+  text: string;
+} {
+  return {
+    subject: "meshbot 邮箱验证码",
+    text: `你的验证码是 ${code}，10 分钟内有效。若非本人操作请忽略。`,
   };
 }
 
@@ -71,6 +83,24 @@ export class DirectMailEmailSender implements EmailSender {
       new Util.RuntimeOptions({}),
     );
   }
+
+  /** 发送一封注册邮箱验证码邮件（addressType=1 用发信地址，不设回信地址）。 */
+  async sendVerificationCode(to: string, code: string): Promise<void> {
+    const { subject, text } = buildVerificationText(code);
+    const request = new SingleSendMailRequest({
+      accountName: this.accountName,
+      addressType: 1,
+      replyToAddress: false,
+      toAddress: to,
+      subject,
+      textBody: text,
+      fromAlias: this.fromAlias,
+    });
+    await this.client.singleSendMailWithOptions(
+      request,
+      new Util.RuntimeOptions({}),
+    );
+  }
 }
 
 /** 未配置 config.email 时的兜底：把邀请码打到 server 日志（仅开发用）。 */
@@ -82,6 +112,13 @@ export class LogEmailSender implements EmailSender {
     this.logger.warn(
       `[DEV] 未配置 config.email，邀请邮件不真实发送 —— to=${to} ` +
         `org=${mail.orgName} code=${mail.code}`,
+    );
+  }
+
+  /** 不真实发送，只把验证码打日志，方便本地开发联调。 */
+  async sendVerificationCode(to: string, code: string): Promise<void> {
+    this.logger.warn(
+      `[DEV] 未配置 config.email，验证码邮件不真实发送 —— to=${to} code=${code}`,
     );
   }
 }

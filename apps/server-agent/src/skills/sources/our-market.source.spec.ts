@@ -24,13 +24,13 @@ function makeSource(overrides?: {
     post: cloudPost,
   } as unknown as CloudClientService;
 
-  // token: undefined → use default "test-token"; token: null → simulate missing cloudToken
+  // token: undefined → use default "test-token"; token: null → simulate missing deviceToken
   const tokenValue =
     overrides && "token" in overrides ? overrides.token : "test-token";
   const identityRow =
     tokenValue === null
-      ? { cloudToken: undefined }
-      : { cloudToken: tokenValue };
+      ? { deviceToken: undefined }
+      : { deviceToken: tokenValue };
   const identity = {
     get: jest.fn().mockResolvedValue(identityRow),
   } as unknown as CloudIdentityService;
@@ -96,7 +96,7 @@ describe("OurMarketSource", () => {
       );
     });
 
-    it("无 cloudToken 时抛 AUTH_UNAUTHORIZED", async () => {
+    it("无 deviceToken 时抛 AUTH_UNAUTHORIZED", async () => {
       const { source } = makeSource({ token: null });
 
       await expect(source.list()).rejects.toMatchObject({
