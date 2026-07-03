@@ -73,7 +73,9 @@ function SubagentGlyph({ status }: { status: string }) {
  * dispatch_subagent「Agent 任务卡」：子 Agent 以迷你任务面板呈现——
  * 专属图标/状态胶囊/工具计数与本地耗时/折叠态当前动作行/终态结果行/footer。
  *
- * - 认领/折叠/停止/settled 逻辑全部复用既有纯函数与 hook，语义不变。
+ * - 认领/停止/settled 逻辑全部复用既有纯函数与 hook，语义不变。
+ * - 折叠：**默认收起、仅用户手动展开**（任务卡折叠态已有当前动作行兜底，
+ *   运行中自动展开被用户否决——展开体太占版面）；不进 auto 模式。
  * - 耗时为本地计时：挂载期间观察到 running 才起算，终态冻结；刷新后已
  *   终态的卡无起点、不显示。
  * - 收起只隐藏展开体 DOM，不卸载流；卸载时 hook 自清理。
@@ -84,7 +86,10 @@ export function SubagentCard({ tool }: { tool: ToolCallView }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
   const sub = useSessionStream(subSessionId, scrollRef);
-  const [collapse, setCollapse] = useState<SubagentCollapse>({ mode: "auto" });
+  const [collapse, setCollapse] = useState<SubagentCollapse>({
+    mode: "manual",
+    open: false,
+  });
   const childRunning = sub.running || tool.status === "running";
   const open = isSubagentOpen(collapse, childRunning);
   const status =
