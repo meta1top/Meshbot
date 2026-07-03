@@ -101,6 +101,36 @@ export class SessionService {
   }
 
   /**
+   * 建 Agent-DM 会话：云端 IM 对话首次触发 inbound 时建的本地会话
+   * （kind="im-agent"）。不进侧栏（`listAllSorted` 只取 kind='user'），
+   * 与 `createSession` 分开是因为公开的 `CreateSessionSchema.kind` 只收
+   * "user"/"quick"（REST 入参），不适合让外部调用方直接指定内部专用 kind。
+   * 跨两表写入，@Transactional 包裹。供 AgentInboxService 首次 inbound 时调用。
+   */
+  async createImAgentSession(
+    content: string,
+  ): Promise<{ sessionId: string; session: SessionSummary }> {
+    return this.createImAgentSessionInTx(content);
+  }
+
+  @Transactional()
+  private async createImAgentSessionInTx(
+    content: string,
+  ): Promise<{ sessionId: string; session: SessionSummary }> {
+    const saved = (await this.sessionRepo.save({
+      title: stripLlmuse(content).slice(0, TITLE_MAX),
+      status: "running" as const,
+      kind: "im-agent" as const,
+    })) as Session;
+    await this.pendingRepo.save({
+      sessionId: saved.id,
+      content,
+      status: "pending" as const,
+    });
+    return { sessionId: saved.id, session: toSummary(saved) };
+  }
+
+  /**
    * 建子 Agent 子会话：Session(kind:"subagent" + parent 关联, running) + 首条 pending(task)。
    * 跨两表写入，@Transactional 包裹。须在父 run 账号上下文内调用（作用域仓库自动盖 cloudUserId）。
    */

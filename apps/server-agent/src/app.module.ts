@@ -27,6 +27,7 @@ import {
 import { AccountContextInterceptor } from "./account/account-context.interceptor";
 import { AccountModule } from "./account/account.module";
 import { AccountRuntimeModule } from "./account/account-runtime.module";
+import { AgentInboxModule } from "./agent-inbox.module";
 import { AuthModule } from "./auth.module";
 import { CronJobModule } from "./cron-job.module";
 import { ImAgentSessionModule } from "./im-agent-session.module";
@@ -128,6 +129,7 @@ const meshbotDir = resolveMeshbotDir();
     AgentModule,
     AccountRuntimeModule,
     AccountModule,
+    AgentInboxModule,
     CronJobModule,
     ImAgentSessionModule,
     RuntimeContextModule,
