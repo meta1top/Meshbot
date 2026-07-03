@@ -280,6 +280,9 @@
       "streamFooterDone": "Sub-session · {count} messages",
       "abortedResult": "Stopped manually; partial results remain in the sub-session",
       "errorResult": "Sub-agent failed to produce a result"
+    },
+    "artifact": {
+      "presentFailed": "Presentation failed"
     }
   },
   "newMessage": {
@@ -853,5 +856,6 @@
   "streamFooterRunning": "",
   "streamFooterDone": "",
   "abortedResult": "",
-  "errorResult": ""
+  "errorResult": "",
+  "presentFailed": ""
 }

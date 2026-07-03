@@ -280,6 +280,9 @@
       "streamFooterDone": "子会话 · {count} 条消息",
       "abortedResult": "已手动停止；已完成部分保留在子会话中",
       "errorResult": "子 Agent 运行失败，未产出结果"
+    },
+    "artifact": {
+      "presentFailed": "呈现失败"
     }
   },
   "newMessage": {
@@ -853,5 +856,6 @@
   "streamFooterRunning": "",
   "streamFooterDone": "",
   "abortedResult": "",
-  "errorResult": ""
+  "errorResult": "",
+  "presentFailed": ""
 }
