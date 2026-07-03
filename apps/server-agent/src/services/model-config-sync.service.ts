@@ -27,7 +27,11 @@ export class ModelConfigSyncService
   implements OnApplicationBootstrap, OnModuleDestroy
 {
   private timer: NodeJS.Timeout | null = null;
-  private failCount = 0;
+  /**
+   * 按账号独立的连续失败计数（cloudUserId → 连败次数）。
+   * 全局共享单计数会被健康账号每轮归零，持续故障账号的退避永远卡在低档位。
+   */
+  private readonly failCounts = new Map<string, number>();
   private readonly logger = new Logger(ModelConfigSyncService.name);
 
   constructor(
@@ -67,12 +71,13 @@ export class ModelConfigSyncService
       await this.account.run(cloudUserId, () =>
         this.modelConfig.replaceCloudConfigs(configs),
       );
-      this.failCount = 0;
+      this.failCounts.delete(cloudUserId);
       return true;
     } catch (err) {
-      this.failCount += 1;
+      const count = (this.failCounts.get(cloudUserId) ?? 0) + 1;
+      this.failCounts.set(cloudUserId, count);
       this.logger.warn(
-        `模型配置同步失败（第 ${this.failCount} 次）: ${String(err)}`,
+        `模型配置同步失败（账号 ${cloudUserId} 连续第 ${count} 次）: ${String(err)}`,
       );
       return false;
     }
@@ -82,15 +87,23 @@ export class ModelConfigSyncService
   private schedule(delay: number): void {
     this.timer = setTimeout(async () => {
       const identities = await this.identity.listLoggedIn().catch(() => []);
-      let allOk = identities.length > 0;
+      let roundOk = true;
       for (const id of identities) {
-        allOk = (await this.syncNow(id.cloudUserId)) && allOk;
+        roundOk = (await this.syncNow(id.cloudUserId)) && roundOk;
       }
-      const backoff = allOk
-        ? SYNC_INTERVAL_MS
-        : Math.min(BACKOFF_BASE_MS * 2 ** this.failCount, SYNC_INTERVAL_MS);
-      this.schedule(backoff);
+      this.schedule(this.nextDelay(identities.length, roundOk));
     }, delay);
     this.timer.unref();
+  }
+
+  /**
+   * 计算下一轮同步延迟：
+   * - 无已登录账号 / 本轮全部成功 → 正常间隔 30 分钟（"无账号"不是失败路径，不得空转退避）
+   * - 有失败 → 按各账号中最大的连败次数指数退避（首败 1 分钟，连败翻倍，封顶 30 分钟）
+   */
+  private nextDelay(identityCount: number, roundOk: boolean): number {
+    if (identityCount === 0 || roundOk) return SYNC_INTERVAL_MS;
+    const maxFail = Math.max(1, ...this.failCounts.values());
+    return Math.min(BACKOFF_BASE_MS * 2 ** (maxFail - 1), SYNC_INTERVAL_MS);
   }
 }

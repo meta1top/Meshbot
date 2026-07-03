@@ -92,4 +92,105 @@ describe("ModelConfigSyncService", () => {
     expect(cloud.get).not.toHaveBeenCalled();
     expect(modelConfig.replaceCloudConfigs).not.toHaveBeenCalled();
   });
+
+  describe("失败退避（按账号独立计数）", () => {
+    const MINUTE = 60 * 1000;
+    const INTERVAL = 30 * MINUTE;
+
+    /** 访问私有 nextDelay（退避计算抽出的可测方法）。 */
+    function nextDelay(
+      service: ModelConfigSyncService,
+      identityCount: number,
+      roundOk: boolean,
+    ): number {
+      return (
+        service as unknown as {
+          nextDelay(identityCount: number, roundOk: boolean): number;
+        }
+      ).nextDelay(identityCount, roundOk);
+    }
+
+    /** 让指定账号的 syncNow 失败一次（identity 有 token，cloud.get 抛错）。 */
+    async function failOnce(
+      service: ModelConfigSyncService,
+      identity: { get: jest.Mock },
+      cloud: { get: jest.Mock },
+      cloudUserId: string,
+    ): Promise<void> {
+      identity.get.mockResolvedValue({ deviceToken: "mbd_x" });
+      cloud.get.mockRejectedValue(new Error("boom"));
+      await expect(service.syncNow(cloudUserId)).resolves.toBe(false);
+    }
+
+    /** 让指定账号的 syncNow 成功一次。 */
+    async function succeedOnce(
+      service: ModelConfigSyncService,
+      identity: { get: jest.Mock },
+      cloud: { get: jest.Mock },
+      cloudUserId: string,
+    ): Promise<void> {
+      identity.get.mockResolvedValue({ deviceToken: "mbd_x" });
+      cloud.get.mockResolvedValue(sampleConfigs());
+      await expect(service.syncNow(cloudUserId)).resolves.toBe(true);
+    }
+
+    it("单账号连续失败 3 轮 → 退避 1 → 2 → 4 分钟递增", async () => {
+      const { cloud, identity, service } = build();
+
+      await failOnce(service, identity, cloud, "u1");
+      expect(nextDelay(service, 1, false)).toBe(1 * MINUTE);
+
+      await failOnce(service, identity, cloud, "u1");
+      expect(nextDelay(service, 1, false)).toBe(2 * MINUTE);
+
+      await failOnce(service, identity, cloud, "u1");
+      expect(nextDelay(service, 1, false)).toBe(4 * MINUTE);
+    });
+
+    it("退避封顶 30 分钟（连败 6+ 轮不再翻倍）", async () => {
+      const { cloud, identity, service } = build();
+
+      for (let i = 0; i < 7; i += 1) {
+        await failOnce(service, identity, cloud, "u1");
+      }
+      expect(nextDelay(service, 1, false)).toBe(INTERVAL);
+    });
+
+    it("u1 成功不影响 u2 的失败计数（按账号隔离）", async () => {
+      const { cloud, identity, service } = build();
+
+      await failOnce(service, identity, cloud, "u2");
+      await failOnce(service, identity, cloud, "u2");
+      await succeedOnce(service, identity, cloud, "u1");
+
+      // u2 已连败 2 次，u1 的成功不得把退避拉回首败档位
+      expect(nextDelay(service, 2, false)).toBe(2 * MINUTE);
+    });
+
+    it("u2 成功后其失败计数清零，再失败从 1 分钟重新起步", async () => {
+      const { cloud, identity, service } = build();
+
+      await failOnce(service, identity, cloud, "u2");
+      await failOnce(service, identity, cloud, "u2");
+      await succeedOnce(service, identity, cloud, "u2");
+
+      expect(nextDelay(service, 1, true)).toBe(INTERVAL);
+
+      await failOnce(service, identity, cloud, "u2");
+      expect(nextDelay(service, 1, false)).toBe(1 * MINUTE);
+    });
+
+    it("无已登录账号 → 正常 30 分钟间隔（不算失败路径）", () => {
+      const { service } = build();
+
+      expect(nextDelay(service, 0, false)).toBe(INTERVAL);
+    });
+
+    it("本轮全部成功 → 正常 30 分钟间隔", async () => {
+      const { cloud, identity, service } = build();
+
+      await succeedOnce(service, identity, cloud, "u1");
+      expect(nextDelay(service, 1, true)).toBe(INTERVAL);
+    });
+  });
 });
