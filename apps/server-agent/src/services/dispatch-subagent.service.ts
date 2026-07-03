@@ -5,7 +5,11 @@ import {
   capForLlm,
 } from "@meshbot/agent";
 import { SESSION_WS_EVENTS } from "@meshbot/types-agent";
-import { Injectable, Logger } from "@nestjs/common";
+import {
+  Injectable,
+  Logger,
+  type OnApplicationBootstrap,
+} from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { ModelConfigService } from "./model-config.service";
 import { RunnerService } from "./runner.service";
@@ -64,7 +68,9 @@ class Semaphore {
  * 复用 RunnerService.kickAndWait 跑子会话（子会话 kind=subagent → GraphRunner 自动用子图）。
  */
 @Injectable()
-export class DispatchSubagentService implements DispatchSubagentPort {
+export class DispatchSubagentService
+  implements DispatchSubagentPort, OnApplicationBootstrap
+{
   private readonly logger = new Logger(DispatchSubagentService.name);
   /** 按账号的并发信号量。 */
   private readonly semaphores = new Map<string, Semaphore>();
@@ -335,6 +341,38 @@ export class DispatchSubagentService implements DispatchSubagentPort {
       await this.sessions.setBackground(args.subSessionId, false);
     } finally {
       sem.release();
+    }
+  }
+
+  /**
+   * 重启恢复：扫描所有账号「待了结的后台子任务」（background=1），逐个在归属账号
+   * 上下文内取槽 → settleBackground（kickAndWait 对无 pending 的会话是 no-op，
+   * 天然覆盖「宕机时没跑完→续跑」与「跑完但播报丢失→补播报」两分支）。
+   * fire-and-forget：恢复不阻塞启动；单任务失败只记日志。
+   *
+   * 生命周期时机：Nest 保证 onApplicationBootstrap 晚于所有模块的
+   * onModuleInit（含 RunnerService.onModuleInit 的 processing→pending 回滚），
+   * 因此本方法扫到的 background=1 会话，其 pending 状态已经是回滚后的稳态。
+   */
+  async onApplicationBootstrap(): Promise<void> {
+    const rows = await this.sessions.listPendingBackgroundSubagentsUnscoped();
+    if (rows.length === 0) return;
+    this.logger.log(`重启恢复：发现 ${rows.length} 个待了结后台子任务`);
+    for (const row of rows) {
+      if (!row.parentSessionId || !row.parentToolCallId) continue;
+      void this.account
+        .run(row.cloudUserId, async () => {
+          await this.semaphore().acquire();
+          await this.settleBackground({
+            subSessionId: row.id,
+            parentSessionId: row.parentSessionId as string,
+            parentToolCallId: row.parentToolCallId as string,
+            description: row.title ?? "后台任务",
+          });
+        })
+        .catch((err) =>
+          this.logger.warn(`重启恢复 settle 失败 sub=${row.id}`, err),
+        );
     }
   }
 }

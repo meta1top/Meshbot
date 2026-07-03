@@ -1,3 +1,4 @@
+import { AccountContextService } from "@meshbot/agent";
 import { DispatchSubagentService } from "./dispatch-subagent.service";
 
 /** 反复 await Promise.resolve() 排空微任务队列，供 fire-and-forget 分支的断言用。 */
@@ -5,7 +6,14 @@ async function flush(times = 20): Promise<void> {
   for (let i = 0; i < times; i++) await Promise.resolve();
 }
 
-function make(overrides?: Partial<Record<string, unknown>>) {
+/** account 依赖的最小接口：默认走假账号（免上下文），重启恢复用例需真实例断言上下文。 */
+interface AccountLike {
+  getOrThrow(): string;
+  run<T>(cloudUserId: string, fn: () => T): T;
+  get(): string | null;
+}
+
+function make(opts?: { account?: AccountLike }) {
   const sessions = {
     createSubSession: jest.fn().mockResolvedValue({ subSessionId: "sub-1" }),
     findOrNull: jest.fn().mockResolvedValue({ id: "parent", kind: "user" }),
@@ -14,6 +22,7 @@ function make(overrides?: Partial<Record<string, unknown>>) {
     appendMessage: jest
       .fn()
       .mockResolvedValue({ messageId: "m1", queued: true }),
+    listPendingBackgroundSubagentsUnscoped: jest.fn().mockResolvedValue([]),
   };
   const messages = {
     findLastAssistant: jest.fn().mockResolvedValue({ content: "子答案" }),
@@ -25,7 +34,11 @@ function make(overrides?: Partial<Record<string, unknown>>) {
     kick: jest.fn(),
   };
   const emitter = { emit: jest.fn() };
-  const account = { getOrThrow: jest.fn().mockReturnValue("u1") };
+  const account: AccountLike = opts?.account ?? {
+    getOrThrow: jest.fn().mockReturnValue("u1"),
+    run: (_id, fn) => fn(),
+    get: () => "u1",
+  };
   const modelConfigs = {
     findByIdOrName: jest.fn().mockResolvedValue(null),
   };
@@ -45,7 +58,6 @@ function make(overrides?: Partial<Record<string, unknown>>) {
     emitter,
     account,
     modelConfigs,
-    ...overrides,
   };
 }
 
@@ -571,5 +583,46 @@ describe("DispatchSubagentService.dispatch（后台）", () => {
     });
     await flush();
     await p5;
+  });
+});
+
+describe("DispatchSubagentService.onApplicationBootstrap（重启恢复）", () => {
+  it("boot 扫描 background=1：逐个建账号上下文并 settle（过信号量）", async () => {
+    const account = new AccountContextService();
+    const { svc, sessions } = make({ account });
+    sessions.listPendingBackgroundSubagentsUnscoped = jest
+      .fn()
+      .mockResolvedValue([
+        {
+          id: "sub-1",
+          parentSessionId: "p1",
+          parentToolCallId: "tc-1",
+          title: "任务甲",
+          cloudUserId: "u1",
+        },
+        {
+          id: "sub-2",
+          parentSessionId: "p2",
+          parentToolCallId: "tc-2",
+          title: "任务乙",
+          cloudUserId: "u2",
+        },
+      ]);
+    const settled: string[] = [];
+    jest.spyOn(svc, "settleBackground").mockImplementation(async (args) => {
+      // 断言运行在对应账号上下文内
+      settled.push(`${account.get()}:${args.subSessionId}`);
+    });
+    await svc.onApplicationBootstrap();
+    await flush();
+    expect(settled.sort()).toEqual(["u1:sub-1", "u2:sub-2"]);
+  });
+
+  it("无待恢复任务时零动作", async () => {
+    const { svc, sessions } = make();
+    sessions.listPendingBackgroundSubagentsUnscoped = jest
+      .fn()
+      .mockResolvedValue([]);
+    await expect(svc.onApplicationBootstrap()).resolves.toBeUndefined();
   });
 });
