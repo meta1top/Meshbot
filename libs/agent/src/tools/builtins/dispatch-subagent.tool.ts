@@ -8,7 +8,12 @@ import {
 import { Tool } from "../tool.decorator";
 import type { MeshbotTool, ToolContext } from "../tool.types";
 
-/** dispatch_subagent 工具入参（使用 schema input 类型，兼容 ZodDefault）。 */
+/**
+ * dispatch_subagent 工具入参（使用 schema input 类型，兼容 ZodDefault）。
+ *
+ * schema 的 background 有 `.default(false)`，input 类型让该字段可选、与 LLM 实际传参一致；
+ * infer 会要求必填。
+ */
 type DispatchSubagentArgs = z.input<typeof dispatchSubagentSchema>;
 
 @Injectable()
@@ -20,9 +25,13 @@ export class DispatchSubagentTool
   readonly description =
     "Delegate a self-contained sub-task to a fresh, context-isolated sub-agent. " +
     "The sub-agent has the same tools but starts from a clean context with only your " +
-    "`task` prompt, runs to completion, and returns a JSON result {subSessionId,status,output}. " +
-    "Use to decompose large tasks or keep your own context clean. You may call it multiple " +
-    "times in one turn to run sub-agents in parallel. Sub-agents cannot dispatch further.";
+    "`task` prompt. By default (foreground) it blocks until the sub-agent finishes and " +
+    "returns a JSON result {subSessionId,status,output}. Set `background:true` to return " +
+    'immediately with {subSessionId,status:"running"}; the sub-agent keeps running and its ' +
+    "completion is announced back into this session automatically. `model` optionally overrides " +
+    "the sub-agent's model by ModelConfig id or name. Use to decompose large tasks or keep your " +
+    "own context clean. You may call it multiple times in one turn to run sub-agents in " +
+    "parallel. Sub-agents cannot dispatch further.";
   readonly schema = dispatchSubagentSchema;
 
   constructor(

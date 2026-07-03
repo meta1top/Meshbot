@@ -21,32 +21,15 @@ import {
 } from "nestjs-i18n";
 import { io as createClient, type Socket } from "socket.io-client";
 
+import { waitForEvent } from "../setup/ws-test-utils";
 import { HealthGateway } from "../../src/ws/health.gateway";
 
 const I18N_PATH = path.join(__dirname, "..", "..", "i18n");
 const JWT_SECRET = "ws-e2e-secret";
 
-/**
- * 等待 socket 收一条事件；超时 fail。
- */
-function waitForEvent<T = unknown>(
-  socket: Socket,
-  event: string,
-  timeoutMs = 2_000,
-): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      socket.off(event);
-      reject(
-        new Error(`[ws-e2e] event "${event}" timeout after ${timeoutMs}ms`),
-      );
-    }, timeoutMs);
-    socket.once(event, (payload: T) => {
-      clearTimeout(timer);
-      resolve(payload);
-    });
-  });
-}
+// 本文件保留一个较短的默认超时（2s vs 共享 helper 默认 4s），本 spec 均为单端
+// ping/pong 且不依赖对端异步 join 房间，无需给「等待更久」留余地。
+const DEFAULT_TIMEOUT_MS = 2_000;
 
 @Module({
   imports: [
@@ -119,7 +102,7 @@ describe("HealthGateway e2e", () => {
 
   it("合法 JWT → ping 收 pong + traceId", async () => {
     const socket = connect({ token: validToken });
-    await waitForEvent(socket, "connect");
+    await waitForEvent(socket, "connect", DEFAULT_TIMEOUT_MS);
 
     const ack = await new Promise<{ pong: true; traceId: string }>(
       (resolve, reject) => {
@@ -142,14 +125,14 @@ describe("HealthGateway e2e", () => {
 
   it("无 token → ping 触发 error envelope (code 2 UNAUTHORIZED) + disconnect", async () => {
     const socket = connect({});
-    await waitForEvent(socket, "connect");
+    await waitForEvent(socket, "connect", DEFAULT_TIMEOUT_MS);
 
     const errorPromise = waitForEvent<{
       success: false;
       code: number;
       message: string;
       traceId?: string;
-    }>(socket, "exception");
+    }>(socket, "exception", DEFAULT_TIMEOUT_MS);
     socket.emit("ping");
     const err = await errorPromise;
 
@@ -160,7 +143,7 @@ describe("HealthGateway e2e", () => {
 
     // 服务端应主动 disconnect
     if (socket.connected) {
-      await waitForEvent(socket, "disconnect");
+      await waitForEvent(socket, "disconnect", DEFAULT_TIMEOUT_MS);
     }
     expect(socket.connected).toBe(false);
 
@@ -170,7 +153,7 @@ describe("HealthGateway e2e", () => {
   it("上游 traceId → pong response 等于上游值", async () => {
     const upstream = "ws-trace-upstream-xyz";
     const socket = connect({ token: validToken, traceId: upstream });
-    await waitForEvent(socket, "connect");
+    await waitForEvent(socket, "connect", DEFAULT_TIMEOUT_MS);
 
     const ack = await new Promise<{ pong: true; traceId: string }>(
       (resolve, reject) => {

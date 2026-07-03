@@ -14,6 +14,7 @@ import {
   type RunInterruptedEvent,
   type RunReasoningChunkEvent,
   type RunReasoningDoneEvent,
+  type RunSubagentSettledEvent,
   type RunSubagentSpawnedEvent,
   type RunToolCallArgsDeltaEvent,
   type RunToolCallEndEvent,
@@ -242,5 +243,13 @@ export class SessionGateway extends BaseWebSocketGateway {
     this.server
       .to(payload.sessionId)
       .emit(SESSION_WS_EVENTS.runSubagentSpawned, payload);
+  }
+
+  /** 后台子任务终态 → 转发到父会话房间（前端把 dispatch 卡更新为终态）。 */
+  @OnEvent(SESSION_WS_EVENTS.runSubagentSettled)
+  onSubagentSettled(payload: RunSubagentSettledEvent): void {
+    this.server
+      .to(payload.sessionId)
+      .emit(SESSION_WS_EVENTS.runSubagentSettled, payload);
   }
 }

@@ -109,6 +109,8 @@ export class SessionService {
     parentToolCallId: string;
     task: string;
     description?: string;
+    background?: boolean;
+    modelConfigId?: string | null;
   }): Promise<{ subSessionId: string }> {
     return this.createSubSessionInTx(input);
   }
@@ -119,6 +121,8 @@ export class SessionService {
     parentToolCallId: string;
     task: string;
     description?: string;
+    background?: boolean;
+    modelConfigId?: string | null;
   }): Promise<{ subSessionId: string }> {
     const title = (input.description ?? stripLlmuse(input.task)).slice(
       0,
@@ -130,6 +134,8 @@ export class SessionService {
       kind: "subagent" as const,
       parentSessionId: input.parentSessionId,
       parentToolCallId: input.parentToolCallId,
+      background: input.background ? 1 : 0,
+      modelConfigId: input.modelConfigId ?? null,
     })) as Session;
     await this.pendingRepo.save({
       sessionId: saved.id,
@@ -197,6 +203,53 @@ export class SessionService {
   /** 找会话，不存在返 null（不抛）。 */
   findOrNull(sessionId: string): Promise<Session | null> {
     return this.sessionRepo.findOneBy({ id: sessionId });
+  }
+
+  /**
+   * 列出某父会话派生的全部子会话（id + 认领用的 parentToolCallId）。
+   * 供 history 组装嵌套卡关联：子 run 进行中工具结果未落库，前端刷新后唯有
+   * 此路能把 dispatch 工具卡认领到子会话。
+   */
+  listChildren(
+    parentSessionId: string,
+  ): Promise<Array<Pick<Session, "id" | "parentToolCallId">>> {
+    return this.sessionRepo.find({
+      where: { parentSessionId },
+      select: { id: true, parentToolCallId: true },
+    });
+  }
+
+  /** 置/清「待了结后台子任务」标记（播报完成置 0）。 */
+  async setBackground(sessionId: string, value: boolean): Promise<void> {
+    await this.sessionRepo.update(
+      { id: sessionId },
+      { background: value ? 1 : 0 },
+    );
+  }
+
+  /**
+   * 系统级扫描：所有账号的「待了结后台子任务」（kind=subagent 且 background=1）。
+   * 仅供进程启动恢复用——boot 时无账号上下文，须 unscoped 反查后逐个建上下文处理。
+   */
+  listPendingBackgroundSubagentsUnscoped(): Promise<
+    Array<
+      Pick<
+        Session,
+        "id" | "parentSessionId" | "parentToolCallId" | "title" | "cloudUserId"
+      >
+    >
+  > {
+    // scope-check: allow-unscoped
+    return this.sessionRepo.unscoped().find({
+      where: { kind: "subagent", background: 1 },
+      select: {
+        id: true,
+        parentSessionId: true,
+        parentToolCallId: true,
+        title: true,
+        cloudUserId: true,
+      },
+    });
   }
 
   /** 按 session 反查其归属账号（系统级，无账号上下文时用，如 runner/cron 建上下文）。 */
@@ -291,21 +344,6 @@ export class SessionService {
   async markFailed(ids: string[]): Promise<void> {
     if (ids.length === 0) return;
     await this.pendingRepo.update({ id: In(ids) }, { status: "failed" });
-  }
-
-  /**
-   * 会话下是否存在 failed 状态的 pending 消息。
-   *
-   * `RunnerService.kickAndWait` 会吞掉 `runOnce` 抛出的错误（log + break 后
-   * 正常 resolve），调用方拿不到异常；但失败的批次已被 `markFailed` 落成
-   * failed 状态，据此可判定该 session 的最近一次 run 是否失败。
-   * 供 `DispatchSubagentService` 判断子会话 run 结果——单表读，无需事务。
-   */
-  async hasFailedPending(sessionId: string): Promise<boolean> {
-    const count = await this.pendingRepo.count({
-      where: { sessionId, status: "failed" },
-    });
-    return count > 0;
   }
 
   /** 把一批消息标记为 processed，写 processed_at。 */
@@ -453,15 +491,53 @@ export class SessionService {
     await this.sessionRepo.delete({ id: sessionId });
   }
 
-  /** 范围内创建的会话数。since 为 null 表示全部。 */
+  /**
+   * 范围内创建的会话数。since 为 null 表示全部。
+   * 排除 kind=subagent（子 Agent 会话不是用户主动发起的会话，统计口径不计入；
+   * quick 随手问会话仍计入，最小语义变化）。
+   */
   async countCreatedSince(since: Date | null): Promise<number> {
-    const qb = this.sessionRepo.scopedQueryBuilder("s");
+    const qb = this.sessionRepo
+      .scopedQueryBuilder("s")
+      .andWhere("s.kind != 'subagent'");
     if (since) {
       qb.andWhere("datetime(s.created_at) >= datetime(:since)", {
         since: since.toISOString(),
       });
     }
     return qb.getCount();
+  }
+
+  /**
+   * 系统级扫描：孤儿前台子会话——kind=subagent 且 background=0（前台）但仍
+   * 残留活跃 pending（pending/processing）。
+   *
+   * 前台派发是父 run 同步 `kickAndWait` 等到子会话跑完才返回；若进程重启后
+   * 这类子会话还有活跃 pending，说明父 run 随进程一起死了、不会再有人消费
+   * 其结果（不同于 background=1 有 `settleBackground` 兜底续跑/补播报）。
+   * background=0 的子会话绝大多数是正常跑完的（无活跃 pending），必须用
+   * EXISTS 子查询只挑「仍有活跃 pending」的那部分，否则会把全部已完成的
+   * 前台子会话误判为孤儿。
+   *
+   * 语义已拍板：只标记了结（markFailed + setStatus idle），不重跑——父上下文
+   * 已死，重跑结果无人消费。仅供进程启动恢复用：boot 时无账号上下文，须
+   * unscoped 反查后逐个建上下文处理。
+   */
+  listOrphanForegroundSubagentsUnscoped(): Promise<
+    Array<{ id: string; cloudUserId: string }>
+  > {
+    // scope-check: allow-unscoped
+    return this.sessionRepo
+      .unscoped()
+      .createQueryBuilder("s")
+      .select("s.id", "id")
+      .addSelect("s.cloudUserId", "cloudUserId")
+      .where("s.kind = :kind", { kind: "subagent" })
+      .andWhere("s.background = :bg", { bg: 0 })
+      .andWhere(
+        "EXISTS (SELECT 1 FROM pending_messages pm WHERE pm.session_id = s.id AND pm.status IN ('pending', 'processing'))",
+      )
+      .getRawMany();
   }
 
   /**

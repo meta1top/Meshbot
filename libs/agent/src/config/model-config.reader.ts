@@ -50,3 +50,39 @@ export function readActiveModelConfig(
     db.close();
   }
 }
+
+/**
+ * 按 id 读指定账号的模型凭证（per-run 覆盖用；**不过滤 enabled**——覆盖本意
+ * 就是用非默认模型）。查不到返回 null。
+ */
+export function readModelConfigById(
+  dbPath: string,
+  cloudUserId: string,
+  id: string,
+): ActiveModelConfig | null {
+  const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+  try {
+    const row = db
+      .prepare(
+        `SELECT provider_type, model, api_key, base_url
+         FROM model_configs WHERE cloud_user_id = ? AND id = ? LIMIT 1`,
+      )
+      .get(cloudUserId, id) as
+      | {
+          provider_type: string;
+          model: string;
+          api_key: string;
+          base_url: string;
+        }
+      | undefined;
+    if (!row) return null;
+    return {
+      providerType: row.provider_type,
+      model: row.model,
+      apiKey: row.api_key,
+      baseUrl: row.base_url,
+    };
+  } finally {
+    db.close();
+  }
+}

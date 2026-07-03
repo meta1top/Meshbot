@@ -33,14 +33,37 @@ import { SkillVersion } from "../../../../libs/main/src/entities/skill-version.e
 /** 云端 schema 的真相源：apps/server-main/migrations/*.sql（DDL 由 DBA 手动执行）。 */
 const MIGRATIONS_DIR = path.join(__dirname, "..", "..", "migrations");
 
-/** 按文件名顺序把全部 DDL 执行到当前连接（测试 schema 由 search_path 圈定）。 */
+/**
+ * 跨并行 suite 串行化 DDL 的 advisory lock 键（任意固定 64 位整数）。
+ * CREATE EXTENSION 是库级全局对象：多个 jest worker 同时 applyDdl 时，
+ * `IF NOT EXISTS` 防不住 pg_extension 唯一索引的并发插入竞态
+ * （duplicate key "pg_extension_name_index"）。
+ */
+const DDL_ADVISORY_LOCK_KEY = 881_234_017;
+
+/**
+ * 按文件名顺序把全部 DDL 执行到当前连接（测试 schema 由 search_path 圈定）。
+ * 整段包在 session 级 advisory lock 内串行化并行 suite 的 DDL——lock/unlock
+ * 必须落在同一条连接上，故用独占 queryRunner 而非走池的 ds.query。
+ */
 async function applyDdl(ds: DataSource): Promise<void> {
   const files = readdirSync(MIGRATIONS_DIR)
     .filter((f) => f.endsWith(".sql"))
     .sort();
-  for (const file of files) {
-    const sql = readFileSync(path.join(MIGRATIONS_DIR, file), "utf8");
-    await ds.query(sql);
+  const runner = ds.createQueryRunner();
+  await runner.connect();
+  try {
+    await runner.query(`SELECT pg_advisory_lock(${DDL_ADVISORY_LOCK_KEY})`);
+    try {
+      for (const file of files) {
+        const sql = readFileSync(path.join(MIGRATIONS_DIR, file), "utf8");
+        await runner.query(sql);
+      }
+    } finally {
+      await runner.query(`SELECT pg_advisory_unlock(${DDL_ADVISORY_LOCK_KEY})`);
+    }
+  } finally {
+    await runner.release();
   }
 }
 

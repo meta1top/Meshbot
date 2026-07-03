@@ -133,6 +133,14 @@ export class SessionController {
       }
     }
 
+    // dispatch_subagent 嵌套卡认领：按 parent_tool_call_id 反查子会话。
+    // 子 run 进行中工具结果未落库（无 tool 行），前端刷新后唯有此路能认领。
+    const children = await this.sessions.listChildren(id);
+    const childByToolCallId = new Map<string, string>();
+    for (const c of children) {
+      if (c.parentToolCallId) childByToolCallId.set(c.parentToolCallId, c.id);
+    }
+
     const messages = rows
       .filter((r) => r.role !== "tool")
       .map((r) => {
@@ -169,12 +177,14 @@ export class SessionController {
           const toolCalls: HistoryToolCall[] = calls.map((c) => {
             const tr = toolByCallId.get(c.id);
             const status = computeToolCallStatus(tr);
+            const subSessionId = childByToolCallId.get(c.id);
             return {
               toolCallId: c.id,
               name: c.name,
               args: c.args,
               status,
               result: tr?.content ?? "",
+              ...(subSessionId ? { subSessionId } : {}),
             };
           });
           return { ...base, toolCalls };

@@ -1,4 +1,8 @@
-import { AccountContextService, GraphRunner } from "@meshbot/agent";
+import {
+  AccountContextService,
+  GraphRunner,
+  ModelRunContext,
+} from "@meshbot/agent";
 import {
   type RunToolCallEndEvent,
   SESSION_WS_EVENTS,
@@ -77,6 +81,7 @@ export class RunnerService implements OnModuleInit {
     private readonly compactor: ContextCompactor,
     private readonly modelConfig: ModelConfigService,
     private readonly account: AccountContextService,
+    private readonly modelRunCtx: ModelRunContext,
   ) {}
 
   /** 启动时把遗留的 processing 消息退回 pending（重启 inflight 丢失后可重跑）。 */
@@ -431,8 +436,10 @@ export class RunnerService implements OnModuleInit {
   }
 
   /**
-   * stream 消费内循环：创建 stream（streamMessage 或 resumeStream）并逐事件处理。
-   * 机械提取自原 runOnce try 块，语义完全等价。供 ctx-exceeded 兜底重试复用。
+   * stream 消费入口：先读 session 拿 kind（subAgent 判定）与 modelConfigId
+   * （per-run 模型覆盖），再把「建流 + for-await 消费 + finally」整段包进
+   * ModelRunContext.run —— async generator 的 next() 跑在调用方（本方法）
+   * 的 ALS 上下文里，包裹范围必须覆盖整个消费循环，只包建流无效。
    */
   private async consumeRunStream(
     sessionId: string,
@@ -441,10 +448,35 @@ export class RunnerService implements OnModuleInit {
     resume: boolean,
     runStartedAt: number,
   ): Promise<void> {
-    let firstHumanLogged = false;
-    let firstChunkLogged = false;
     const session = await this.sessions.findOrNull(sessionId);
     const subAgent = session?.kind === "subagent";
+    await this.modelRunCtx.run(session?.modelConfigId ?? null, () =>
+      this.consumeRunStreamInCtx(
+        sessionId,
+        batch,
+        run,
+        resume,
+        runStartedAt,
+        subAgent,
+      ),
+    );
+  }
+
+  /**
+   * consumeRunStream 的原有主体（建流 + 逐事件消费），整体运行在
+   * ModelRunContext 内。机械提取自原 runOnce try 块，语义完全等价。
+   * 供 ctx-exceeded 兜底重试复用。
+   */
+  private async consumeRunStreamInCtx(
+    sessionId: string,
+    batch: { id: string; content: string }[],
+    run: InflightRun,
+    resume: boolean,
+    runStartedAt: number,
+    subAgent: boolean,
+  ): Promise<void> {
+    let firstHumanLogged = false;
+    let firstChunkLogged = false;
     const stream = resume
       ? this.graphRunner.resumeStream(sessionId, run.abort.signal, { subAgent })
       : this.graphRunner.streamMessage(sessionId, batch, run.abort.signal, {

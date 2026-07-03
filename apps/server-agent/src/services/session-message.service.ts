@@ -177,6 +177,15 @@ export class SessionMessageService {
   }
 
   /**
+   * 按 toolCallId 重写 tool 行结果（后台子任务终态回写 UI 副本；不动 checkpointer，
+   * 父 LLM 上下文不受影响）。返回受影响行数——0 表示 tool 行尚未落库（调用方可重试）。
+   */
+  async updateToolResult(toolCallId: string, content: string): Promise<number> {
+    const r = await this.repo.update({ toolCallId, role: "tool" }, { content });
+    return r.affected ?? 0;
+  }
+
+  /**
    * 写一条 compaction 占位行（role=system，metadata 标 kind=compaction）。
    * 幂等：同 id 已存在直接返回。
    *
@@ -305,12 +314,19 @@ export class SessionMessageService {
   /**
    * 范围内消息活跃度聚合：总数 + 按本地日分桶（热力图/活跃天/连续天数来源）
    * + 按本地小时分桶（高峰时段来源）。since 为 null 表示全部。
+   * 排除 kind=subagent 会话下的消息（子 Agent 会话不是用户主动的活动，统计
+   * 口径不计入）。子查询按 session_id（雪花 id 全局唯一）过滤，不必再带账号
+   * scope——即便跨账号也只是排除范围的确定，不泄露数据。
    */
   async activitySince(
     since: Date | null,
   ): Promise<{ total: number; byDate: HeatmapCell[]; byHour: number[] }> {
     const base = () => {
-      const qb = this.repo.scopedQueryBuilder("m");
+      const qb = this.repo
+        .scopedQueryBuilder("m")
+        .andWhere(
+          "m.session_id NOT IN (SELECT id FROM sessions WHERE kind = 'subagent')",
+        );
       if (since) {
         qb.andWhere("datetime(m.created_at) >= datetime(:since)", {
           since: since.toISOString(),

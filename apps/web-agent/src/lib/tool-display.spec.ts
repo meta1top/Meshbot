@@ -9,6 +9,9 @@ describe("toolDisplayName", () => {
   it("未收录工具兜底为下划线转空格（不暴露 snake 原名）", () => {
     expect(toolDisplayName("foo_bar_baz")).toBe("foo bar baz");
   });
+  it("dispatch_subagent 映射「派发子任务」", () => {
+    expect(toolDisplayName("dispatch_subagent")).toBe("派发子任务");
+  });
 });
 
 describe("sanitizeMeshbotPaths", () => {

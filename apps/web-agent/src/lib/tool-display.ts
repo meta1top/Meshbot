@@ -3,6 +3,7 @@ const TOOL_LABELS: Record<string, string> = {
   ask_question: "提问",
   bash: "终端命令",
   date: "当前时间",
+  dispatch_subagent: "派发子任务",
   edit_file: "编辑文件",
   glob: "查找文件",
   grep: "搜索内容",

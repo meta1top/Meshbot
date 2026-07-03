@@ -97,6 +97,12 @@ export const HistoryToolCallSchema = z.object({
   args: z.unknown(),
   status: z.enum(["ok", "error", "running"]),
   result: z.string(),
+  /**
+   * dispatch_subagent 专用：该次调用派生的子会话 id。后端组装 history 时按
+   * parent_tool_call_id 反查带出，供前端嵌套卡在任意时刻（含子 run 进行中刷新）
+   * 认领。其他工具无此字段。
+   */
+  subSessionId: z.string().optional(),
 });
 export type HistoryToolCall = z.infer<typeof HistoryToolCallSchema>;
 
@@ -408,6 +414,20 @@ export interface RunSubagentSpawnedEvent {
   description: string;
 }
 
+/** 子 Agent 了结事件：后台子任务终态回传，前端把 dispatch 卡更新为终态。 */
+export interface RunSubagentSettledEvent {
+  /** 父会话 id（事件按此路由到父房间）。 */
+  sessionId: string;
+  /** 父会话里那次 dispatch 工具调用的 toolCallId。 */
+  toolCallId: string;
+  /** 子会话 id。 */
+  subSessionId: string;
+  /** 子 run 终态。 */
+  status: "done" | "error" | "aborted";
+  /** 终态输出（已截断），与重写后的工具结果 JSON 一致。 */
+  output: string;
+}
+
 /** socket: run.compaction_start —— 压缩开始通知。 */
 export const RunCompactionStartEventSchema = z.object({
   sessionId: z.string(),
@@ -495,4 +515,5 @@ export const SESSION_WS_EVENTS = {
   runCompactionDone: "run.compaction_done",
   runCompactionError: "run.compaction_error",
   runSubagentSpawned: "run.subagent_spawned",
+  runSubagentSettled: "run.subagent_settled",
 } as const;

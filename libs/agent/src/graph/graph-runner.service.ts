@@ -229,8 +229,6 @@ export class GraphRunner {
 
   /**
    * 按 opts.subAgent 标志选取图：子会话用子图，普通会话用主图。
-   *
-   * msgIdMap（resolveMessageId / deleteMsgIds）全局共享，不随图切换，故不在此处理。
    */
   private pickGraph(opts?: { subAgent?: boolean }) {
     return opts?.subAgent
@@ -359,6 +357,12 @@ export class GraphRunner {
     const startedAt = Date.now();
     const stream = await this.pickGraph(opts).stream(input, {
       configurable: { thread_id: threadId },
+      // 显式给 metadata 盖上本次 run 的 thread_id 章：LangGraph 的
+      // ensureLangGraphConfig 只在 metadata 缺 thread_id 时才从 configurable 回填。
+      // dispatch_subagent 的子图在父图 tools 节点的 ALS 上下文内调用，不显式传时
+      // 会原样继承父的 metadata（含父 thread_id），导致下方读侧过滤无从判别；
+      // 且独立子 run 本就不应继承父的 metadata。父子都走本调用点，各自盖各自的章。
+      metadata: { thread_id: threadId },
       streamMode: ["messages", "updates"] as const,
       signal,
       // LangGraph 默认 recursionLimit=25，长会话 + 频繁 tool 调用容易撞墙
@@ -376,6 +380,7 @@ export class GraphRunner {
     // 本轮事件对外用的雪花 id（= resolveMessageId(currentId)）。currentId 仅用于
     // 判轮切换；所有 yield 的 messageId 用 currentSid，与 checkpointer 写入的 id 收口一致。
     let currentSid: string | null = null;
+    // msgIdMap（resolveMessageId / deleteMsgIds）全局共享，不随图切换。
     // 本 run 见过的模型 UUID，run 结束时从 msgIdMap 清理，避免长进程累积。
     const seenModelIds = new Set<string>();
     let currentAcc: AIMessageChunk | undefined;
@@ -467,6 +472,19 @@ export class GraphRunner {
       // messages 模式：payload = [BaseMessage, metadata]
       const messagePart = payload as unknown[];
       const msg = Array.isArray(messagePart) ? messagePart[0] : messagePart;
+      // 按 metadata.thread_id 过滤外来事件：dispatch_subagent 的子图在父图 tools
+      // 节点内部调用，streamMode:"messages" 经 callback 树采集 LLM token，子图的
+      // 事件会冒泡进父图的 stream（父消费侧看到子的轮次 → UI 泄漏、llm_calls 双记）。
+      // 上方写侧已显式盖章 metadata.thread_id = 本次 threadId：凡带 thread_id 且
+      // 不等于本次 threadId 的事件一律丢弃——必须放在 AIMessageChunk 累加与下面的
+      // 非 AIMessageChunk backup-flush 之前（外来 ToolMessage 也不得触发 flushRound）。
+      // thread_id 缺失时 fail-open 保留，避免误杀本图自身不带该字段的事件。
+      const meta = (Array.isArray(messagePart) ? messagePart[1] : undefined) as
+        | { thread_id?: unknown }
+        | undefined;
+      if (typeof meta?.thread_id === "string" && meta.thread_id !== threadId) {
+        continue;
+      }
       if (!(msg instanceof AIMessageChunk)) {
         // 非 AIMessageChunk（ToolMessage 等）：上面 updates 路径已经把 supervisor 出口
         // flush 过了；这里保留为 backup 兜底，防 updates 事件意外缺失。
