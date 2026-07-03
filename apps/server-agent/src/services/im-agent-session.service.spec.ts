@@ -1,18 +1,8 @@
 import { AccountContextService } from "@meshbot/agent";
-import { SnowflakeBaseEntity } from "@meshbot/common";
-import { Column, CreateDateColumn, DataSource, Entity } from "typeorm";
+import { DataSource } from "typeorm";
+import { ImAgentSession } from "../entities/im-agent-session.entity";
 import { ImAgentSessionService } from "./im-agent-session.service";
 import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
-
-@Entity("im_agent_session")
-class TestImAgentSession extends SnowflakeBaseEntity {
-  @Column({ name: "conversation_id", type: "text" }) conversationId!: string;
-  @Column({ name: "session_id", type: "text" }) sessionId!: string;
-  @Column({ name: "cloud_user_id", type: "text" }) cloudUserId!: string;
-  @Column({ name: "last_processed_message_id", type: "text", nullable: true })
-  lastProcessedMessageId!: string | null;
-  @CreateDateColumn({ name: "created_at" }) createdAt!: Date;
-}
 
 describe("ImAgentSessionService", () => {
   let ds: DataSource;
@@ -23,12 +13,12 @@ describe("ImAgentSessionService", () => {
     ds = new DataSource({
       type: "better-sqlite3",
       database: ":memory:",
-      entities: [TestImAgentSession],
+      entities: [ImAgentSession],
       synchronize: true,
     });
     await ds.initialize();
     ctx = new AccountContextService();
-    const rawRepo = ds.getRepository(TestImAgentSession);
+    const rawRepo = ds.getRepository(ImAgentSession);
     const factory = new ScopedRepositoryFactory(ctx);
     service = new ImAgentSessionService(rawRepo, factory);
   });

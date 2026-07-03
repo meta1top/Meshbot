@@ -17,11 +17,11 @@ export class ImAgentSession1780900000000 implements MigrationInterface {
       `CREATE UNIQUE INDEX IF NOT EXISTS "uq_im_agent_session_conv" ON "im_agent_session" ("conversation_id")`,
     );
     await queryRunner.query(
-      `CREATE INDEX IF NOT EXISTS "idx_im_agent_session_cloud_user" ON "im_agent_session" ("cloud_user_id")`,
+      `CREATE INDEX IF NOT EXISTS "idx_im_agent_session_cloud_user_id" ON "im_agent_session" ("cloud_user_id")`,
     );
   }
 
   public async down(): Promise<void> {
-    // SQLite 无 DROP COLUMN / 保留表
+    // 保留表，回滚由重建库处理
   }
 }
