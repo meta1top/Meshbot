@@ -11,7 +11,6 @@ import { currentUserAtom } from "@/atoms/auth";
 import { AssistantMessageActions } from "./assistant-message-actions";
 import { CompactionRow } from "./compaction-row";
 import { MarkdownContent } from "./markdown-content";
-import { TodoPanel } from "./todo-panel";
 import { ToolCallBlock } from "./tool-call-block";
 import { UserMessageActions } from "./user-message-actions";
 
@@ -85,7 +84,7 @@ interface MessageListProps {
   onRegenerateOptimisticCut: (messageId: string) => void;
   /** 按消息 ID 索引的单次 LLM 调用用量，仅 assistant 消息使用。 */
   usageByMessage?: Record<string, MessageUsage>;
-  /** 嵌套模式（子 Agent 卡内）：隐藏头像行/名字/重试/反馈/TodoPanel，仅保留内容与工具块。 */
+  /** 嵌套模式（子 Agent 卡内）：隐藏头像行/名字/重试/反馈，仅保留内容与工具块。 */
   nested?: boolean;
 }
 
@@ -113,7 +112,6 @@ export function MessageList({
   const assistantName = t("assistantName");
   return (
     <div className={cn("flex flex-col gap-1", nested ? "py-1" : "pb-6 pt-2")}>
-      {!nested && <TodoPanel messages={messages} />}
       {messages
         .filter(
           (m) => !(m.role === "system" && m.metadata?.kind !== "compaction"),
