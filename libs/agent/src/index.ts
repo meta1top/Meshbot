@@ -12,7 +12,9 @@ export type {
 export { COMPACTION_SYSTEM_PROMPT } from "./prompt/compactor.prompt";
 export { GraphRunner } from "./graph/graph-runner.service";
 export { ModelResolver } from "./graph/model-resolver.service";
+export { ModelRunContext } from "./graph/model-run-context";
 export { ThreadStateService } from "./graph/thread-state.service";
+export { capForLlm } from "./graph/nodes/tools.node";
 export type { ModelProvider } from "./graph/nodes/supervisor.node";
 export { McpService } from "./mcp/mcp.service";
 export type {
