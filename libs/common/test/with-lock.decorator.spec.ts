@@ -31,7 +31,18 @@ describe("@WithLock with MemoryLockProvider", () => {
 
   it("同一 key 串行化", async () => {
     await Promise.all([svc.run("X", "a"), svc.run("X", "b")]);
-    expect(svc.log).toEqual(["a-start", "a-end", "b-start", "b-end"]);
+    // 串行化语义 = 两次调用不交错；但 Promise.all 不保证「数组首元素先拿到锁」
+    // （并发获锁的调度序不定，CI 负载下尤其），故不能硬编码 a 先。断言无交错：
+    // 先跑者整段 start→end 跑完，后跑者才开始。
+    expect(svc.log).toHaveLength(4);
+    const firstLabel = svc.log[0].split("-")[0];
+    const secondLabel = firstLabel === "a" ? "b" : "a";
+    expect(svc.log).toEqual([
+      `${firstLabel}-start`,
+      `${firstLabel}-end`,
+      `${secondLabel}-start`,
+      `${secondLabel}-end`,
+    ]);
   });
 
   it("不同 key 并发", async () => {

@@ -75,6 +75,8 @@ export function mergeMessages(
  * @param registry tool 注册表（启动期注册完毕）
  * @param emitter 进程内 EventEmitter（用于 toolsNode emit run.tool_call_* 事件，
  *   session 无关 → 构造期一次性注入即可）
+ * @param resolveMessageId 模型 UUID → 雪花 id 映射函数
+ * @param excludeToolNames 从可绑定工具集排除的工具名列表，用于子 Agent 去掉 dispatch_subagent 实现一层嵌套
  */
 export function buildSupervisorGraph(
   checkpointer: SqliteSaver,

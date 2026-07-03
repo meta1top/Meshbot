@@ -8,10 +8,12 @@ import {
   isSubagentOpen,
   resolveSubagentStatus,
   resolveSubSessionId,
+  resolveUnclaimedStatus,
   type SubagentCollapse,
   settleSubagentOnTimeline,
   subagentTitle,
   toggleSubagentOpen,
+  truncate,
 } from "./subagent-card";
 
 describe("resolveSubSessionId 三路认领", () => {
@@ -87,6 +89,54 @@ describe("resolveSubagentStatus", () => {
     expect(
       resolveSubagentStatus({ status: "error", result: "boom" }, false),
     ).toBe("error");
+  });
+});
+
+describe("resolveUnclaimedStatus", () => {
+  it("排队期 abort：result JSON status=aborted → 返回 aborted", () => {
+    expect(
+      resolveUnclaimedStatus({ result: '{"status":"aborted","output":""}' }),
+    ).toBe("aborted");
+  });
+  it("排队期父缺失：result JSON status=error → 返回 error", () => {
+    expect(
+      resolveUnclaimedStatus({
+        result: '{"status":"error","output":"父会话已不存在"}',
+      }),
+    ).toBe("error");
+  });
+  it("result JSON status=running 或无 result → null（仍在排队/未终局）", () => {
+    expect(
+      resolveUnclaimedStatus({ result: '{"status":"running"}' }),
+    ).toBeNull();
+    expect(resolveUnclaimedStatus({})).toBeNull();
+  });
+  it("result 非 JSON → null", () => {
+    expect(resolveUnclaimedStatus({ result: "oops" })).toBeNull();
+  });
+});
+
+describe("truncate（code-point 安全截断）", () => {
+  it("ascii 未超长原样返回，超长截断加省略号", () => {
+    expect(truncate("hello", 10)).toBe("hello");
+    expect(truncate("a".repeat(90), 80)).toBe(`${"a".repeat(80)}…`);
+  });
+  it("边界恰好等于 max 不加省略号", () => {
+    expect(truncate("a".repeat(80), 80)).toBe("a".repeat(80));
+  });
+  it("emoji（代理对）不被切半：截断结果无 U+FFFD、无孤立代理项", () => {
+    const emoji = "🎉".repeat(50); // 每个 emoji 占 2 个 UTF-16 code unit
+    const result = truncate(emoji, 10);
+    expect(Array.from(result.replace("…", "")).length).toBe(10);
+    expect(result).not.toContain("�");
+    // 孤立代理项检测：高位代理后必须紧跟低位代理（或串已结束在完整字符边界）
+    for (let i = 0; i < result.length; i++) {
+      const code = result.charCodeAt(i);
+      if (code >= 0xd800 && code <= 0xdbff) {
+        const next = result.charCodeAt(i + 1);
+        expect(next >= 0xdc00 && next <= 0xdfff).toBe(true);
+      }
+    }
   });
 });
 
