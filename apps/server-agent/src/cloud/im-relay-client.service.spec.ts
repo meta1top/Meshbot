@@ -63,15 +63,16 @@ function makeService(
     },
   );
 
+  const account = new AccountContextService();
   const svc = new ImRelayClientService(
     cloudIdentityService as never,
     emitter,
     "http://cloud.test",
-    new AccountContextService(),
+    account,
     ioFactory as never,
   );
 
-  return { svc, cloudIdentityService, emitter, emitSpy, ioFactory };
+  return { svc, cloudIdentityService, emitter, emitSpy, ioFactory, account };
 }
 
 describe("ImRelayClientService", () => {
@@ -231,16 +232,23 @@ describe("ImRelayClientService", () => {
 
     it("agent.inbound 下行事件 → emitter.emit 被调用且在 account.run 上下文内", async () => {
       const s1 = new FakeSocket();
-      const { svc, emitSpy } = makeService(
+      const { svc, emitSpy, emitter, account } = makeService(
         { u1: { deviceToken: "tok-u1", orgId: "org1" } },
         { u1: s1 },
       );
 
       await svc.connect("u1");
 
+      // 真实监听：捕获 emit 发生时的 ALS 账号上下文（不变量：必须在 account.run 内）
+      let ctxAtEmit: string | null | undefined;
+      emitter.on(IM_WS_EVENTS.agentInbound, () => {
+        ctxAtEmit = account.get();
+      });
+
       const inbound = { type: "request", id: "req1", content: "test" };
       s1.simulateServerEvent(IM_WS_EVENTS.agentInbound, inbound);
       expect(emitSpy).toHaveBeenCalledWith(IM_WS_EVENTS.agentInbound, inbound);
+      expect(ctxAtEmit).toBe("u1");
 
       svc.disconnect("u1");
     });
@@ -656,9 +664,9 @@ describe("ImRelayClientService", () => {
       svc.disconnect("u1");
     });
 
-    it("socket.on(connect) → emitter emit IM_RELAY_EVENTS.connected 事件", async () => {
+    it("socket.on(connect) → emitter emit IM_RELAY_EVENTS.connected 事件（在 account.run 上下文内）", async () => {
       const s1 = new FakeSocket();
-      const { svc, emitSpy } = makeService(
+      const { svc, emitSpy, emitter, account } = makeService(
         { u1: { deviceToken: "tok-u1", orgId: "org1" } },
         { u1: s1 },
       );
@@ -666,11 +674,18 @@ describe("ImRelayClientService", () => {
       await svc.connect("u1");
       s1.emitted.length = 0;
 
+      // 真实监听：捕获 emit 发生时的 ALS 账号上下文（Task 11 补处理靠此路由账号）
+      let ctxAtEmit: string | null | undefined;
+      emitter.on(IM_RELAY_EVENTS.connected, () => {
+        ctxAtEmit = account.get();
+      });
+
       s1.simulateServerEvent("connect", undefined);
 
       expect(emitSpy).toHaveBeenCalledWith(IM_RELAY_EVENTS.connected, {
         cloudUserId: "u1",
       });
+      expect(ctxAtEmit).toBe("u1");
 
       svc.disconnect("u1");
     });
