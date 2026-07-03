@@ -153,6 +153,9 @@
     "revoke": "撤销",
     "revokeConfirmTitle": "撤销该邀请？",
     "revokeConfirmDescription": "撤销后该邀请链接将立即失效，对方无法再用它加入组织。",
+    "revokeFailed": "撤销邀请失败，请重试",
+    "resendFailed": "重发邀请失败，请重试",
+    "dismiss": "关闭",
     "cancel": "取消",
     "status": {
       "pending": "待处理",
@@ -176,10 +179,12 @@
     "revoke": "吊销",
     "revokeConfirmTitle": "吊销该设备？",
     "revokeConfirmDescription": "吊销后该设备将立即失去访问权限，需要重新授权才能再次接入。",
+    "revokeFailed": "吊销设备失败，请重试",
     "cancel": "取消"
   },
   "models": {
     "title": "模型配置",
+    "noOrg": "尚未加入任何组织",
     "create": "新建配置",
     "loading": "加载中…",
     "loadFailed": "加载模型配置失败",
@@ -213,7 +218,10 @@
     "saveFailed": "保存失败，请重试",
     "cancel": "取消",
     "deleteConfirmTitle": "删除该模型配置？",
-    "deleteConfirmDescription": "删除后无法恢复，使用该配置的 Agent 将无法继续调用该模型。"
+    "deleteConfirmDescription": "删除后无法恢复，使用该配置的 Agent 将无法继续调用该模型。",
+    "deleteFailed": "删除失败，请重试",
+    "toggleFailed": "切换启用状态失败，请重试",
+    "dismiss": "关闭"
   },
   "loginFailed": "",
   "welcomeBack": "",
@@ -357,5 +365,10 @@
   "inviting": "",
   "invite": "",
   "pendingTitle": "",
-  "noPending": ""
+  "noPending": "",
+  "revokeFailed": "",
+  "toggleFailed": "",
+  "deleteFailed": "",
+  "dismiss": "",
+  "resendFailed": ""
 }

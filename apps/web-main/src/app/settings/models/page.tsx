@@ -228,6 +228,9 @@ export default function ModelsSettingsPage() {
   );
   const [formError, setFormError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  /** enabled 开关等行内即时变更的失败提示（页面顶部可消除错误条）。 */
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const closePanel = () => {
     setPanel(null);
@@ -270,22 +273,57 @@ export default function ModelsSettingsPage() {
   };
 
   const toggleEnabled = (config: OrgModelConfigView) => {
-    updateConfig.mutate({
-      configId: config.id,
-      input: { enabled: !config.enabled },
-    });
+    setActionError(null);
+    updateConfig.mutate(
+      {
+        configId: config.id,
+        input: { enabled: !config.enabled },
+      },
+      {
+        onError: (err) => {
+          setActionError(
+            err instanceof ApiError ? err.message : t("toggleFailed"),
+          );
+        },
+      },
+    );
   };
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
-    await deleteConfig.mutateAsync(deleteTarget);
-    setDeleteTarget(null);
+    setDeleteError(null);
+    try {
+      await deleteConfig.mutateAsync(deleteTarget);
+      setDeleteTarget(null);
+    } catch (err) {
+      // 失败保持弹窗打开展示错误，可重试 / 取消
+      setDeleteError(err instanceof ApiError ? err.message : t("deleteFailed"));
+    }
   };
 
   const saving = createConfig.isPending || updateConfig.isPending;
 
+  if (!activeOrg) {
+    return <div className="text-sm text-muted-foreground">{t("noOrg")}</div>;
+  }
+
   return (
     <div className="flex flex-col gap-6">
+      {actionError ? (
+        <Alert variant="destructive">
+          <AlertDescription className="flex items-center justify-between gap-2">
+            <span>{actionError}</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setActionError(null)}
+            >
+              {t("dismiss")}
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>{t("title")}</CardTitle>
@@ -373,7 +411,10 @@ export default function ModelsSettingsPage() {
                             type="button"
                             variant="outline"
                             size="sm"
-                            onClick={() => setDeleteTarget(c.id)}
+                            onClick={() => {
+                              setDeleteError(null);
+                              setDeleteTarget(c.id);
+                            }}
                           >
                             {t("delete")}
                           </Button>
@@ -390,6 +431,9 @@ export default function ModelsSettingsPage() {
 
       {isOwner && panel != null ? (
         <ModelFormPanel
+          // key 强制切换目标（编辑 A → 编辑 B / 切新建）时重挂表单，
+          // 否则 react-hook-form 仍持旧 defaultValues，提交会把 A 的值写进 B
+          key={panel === "create" ? "create" : panel.id}
           mode={panel === "create" ? "create" : "edit"}
           initial={panel === "create" ? null : panel}
           onCancel={closePanel}
@@ -407,8 +451,12 @@ export default function ModelsSettingsPage() {
         cancelText={t("cancel")}
         loading={deleteConfig.isPending}
         destructive
+        error={deleteError}
         onConfirm={() => void confirmDelete()}
-        onCancel={() => setDeleteTarget(null)}
+        onCancel={() => {
+          setDeleteTarget(null);
+          setDeleteError(null);
+        }}
       />
     </div>
   );

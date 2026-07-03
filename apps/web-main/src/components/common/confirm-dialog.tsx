@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@meshbot/design";
+import { Alert, AlertDescription, Button } from "@meshbot/design";
 import { type ReactNode, useEffect } from "react";
 import { createPortal } from "react-dom";
 
@@ -14,6 +14,8 @@ interface ConfirmDialogProps {
   loading?: boolean;
   /** 危险操作（吊销/删除等）：确认按钮用 destructive 红色。 */
   destructive?: boolean;
+  /** 确认动作失败时的错误信息；非空则展示在按钮上方，弹窗保持打开可重试 / 取消。 */
+  error?: ReactNode;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -32,6 +34,7 @@ export function ConfirmDialog({
   cancelText,
   loading,
   destructive,
+  error,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -58,6 +61,11 @@ export function ConfirmDialog({
           <div className="text-[13px] leading-relaxed text-muted-foreground">
             {description}
           </div>
+        )}
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
         <div className="mt-2 flex justify-end gap-2">
           <Button

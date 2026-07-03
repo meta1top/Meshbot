@@ -153,6 +153,9 @@
     "revoke": "Revoke",
     "revokeConfirmTitle": "Revoke this invitation?",
     "revokeConfirmDescription": "The invitation link will stop working immediately — the recipient will no longer be able to use it to join the organization.",
+    "revokeFailed": "Failed to revoke invitation, please try again",
+    "resendFailed": "Failed to resend invitation, please try again",
+    "dismiss": "Dismiss",
     "cancel": "Cancel",
     "status": {
       "pending": "Pending",
@@ -176,10 +179,12 @@
     "revoke": "Revoke",
     "revokeConfirmTitle": "Revoke this device?",
     "revokeConfirmDescription": "The device will lose access immediately and must be re-authorized to connect again.",
+    "revokeFailed": "Failed to revoke device, please try again",
     "cancel": "Cancel"
   },
   "models": {
     "title": "Model configurations",
+    "noOrg": "You haven't joined any organization yet",
     "create": "New configuration",
     "loading": "Loading…",
     "loadFailed": "Failed to load model configurations",
@@ -213,7 +218,10 @@
     "saveFailed": "Failed to save, please try again",
     "cancel": "Cancel",
     "deleteConfirmTitle": "Delete this model configuration?",
-    "deleteConfirmDescription": "This cannot be undone. Agents using this configuration will no longer be able to call this model."
+    "deleteConfirmDescription": "This cannot be undone. Agents using this configuration will no longer be able to call this model.",
+    "deleteFailed": "Failed to delete, please try again",
+    "toggleFailed": "Failed to toggle enabled state, please try again",
+    "dismiss": "Dismiss"
   },
   "loginFailed": "",
   "welcomeBack": "",
@@ -357,5 +365,10 @@
   "inviting": "",
   "invite": "",
   "pendingTitle": "",
-  "noPending": ""
+  "noPending": "",
+  "revokeFailed": "",
+  "toggleFailed": "",
+  "deleteFailed": "",
+  "dismiss": "",
+  "resendFailed": ""
 }

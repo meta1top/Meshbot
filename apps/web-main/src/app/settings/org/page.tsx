@@ -59,6 +59,9 @@ export default function OrgSettingsPage() {
   // Form 不暴露 reset API —— 提交成功后 key++ 强制重挂以清空输入
   const [formKey, setFormKey] = useState(0);
   const [revokeTarget, setRevokeTarget] = useState<string | null>(null);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
+  /** 重发等行内即时动作的失败提示（邀请卡片内可消除错误条）。 */
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const onInvite = async (values: CreateInvitationInput) => {
     setInviteError(null);
@@ -70,10 +73,27 @@ export default function OrgSettingsPage() {
     }
   };
 
+  const handleResend = (invitationId: string) => {
+    setActionError(null);
+    resend.mutate(invitationId, {
+      onError: (err) => {
+        setActionError(
+          err instanceof ApiError ? err.message : t("resendFailed"),
+        );
+      },
+    });
+  };
+
   const confirmRevoke = async () => {
     if (!revokeTarget) return;
-    await revoke.mutateAsync(revokeTarget);
-    setRevokeTarget(null);
+    setRevokeError(null);
+    try {
+      await revoke.mutateAsync(revokeTarget);
+      setRevokeTarget(null);
+    } catch (err) {
+      // 失败保持弹窗打开展示错误，可重试 / 取消
+      setRevokeError(err instanceof ApiError ? err.message : t("revokeFailed"));
+    }
   };
 
   if (!activeOrg) {
@@ -149,6 +169,21 @@ export default function OrgSettingsPage() {
                 <AlertDescription>{inviteError}</AlertDescription>
               </Alert>
             ) : null}
+            {actionError ? (
+              <Alert variant="destructive">
+                <AlertDescription className="flex items-center justify-between gap-2">
+                  <span>{actionError}</span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setActionError(null)}
+                  >
+                    {t("dismiss")}
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            ) : null}
 
             <div className="flex flex-col gap-1 pt-2">
               <p className="text-xs font-semibold text-muted-foreground">
@@ -178,7 +213,7 @@ export default function OrgSettingsPage() {
                               variant="outline"
                               size="sm"
                               disabled={resend.isPending}
-                              onClick={() => resend.mutate(inv.id)}
+                              onClick={() => handleResend(inv.id)}
                             >
                               {t("resend")}
                             </Button>
@@ -187,7 +222,10 @@ export default function OrgSettingsPage() {
                               variant="outline"
                               size="sm"
                               disabled={revoke.isPending}
-                              onClick={() => setRevokeTarget(inv.id)}
+                              onClick={() => {
+                                setRevokeError(null);
+                                setRevokeTarget(inv.id);
+                              }}
                             >
                               {t("revoke")}
                             </Button>
@@ -211,8 +249,12 @@ export default function OrgSettingsPage() {
         cancelText={t("cancel")}
         loading={revoke.isPending}
         destructive
+        error={revokeError}
         onConfirm={() => void confirmRevoke()}
-        onCancel={() => setRevokeTarget(null)}
+        onCancel={() => {
+          setRevokeTarget(null);
+          setRevokeError(null);
+        }}
       />
     </div>
   );
