@@ -7,6 +7,7 @@ import {
 import {
   ConversationService,
   DEVICE_TOKEN_PREFIX,
+  DevicePresenceService,
   DeviceService,
   MainErrorCode,
   MessageService,
@@ -17,6 +18,7 @@ import {
   IM_WS_EVENTS,
   IM_WS_NAMESPACE,
   type ConversationSummary,
+  type ImAgentInboundEvent,
   type ImConversationReadEvent,
   type ImPresenceSetInput,
   type ImReadInput,
@@ -72,6 +74,7 @@ export class ImGateway extends BaseWebSocketGateway {
     private readonly presence: PresenceService,
     private readonly userService: UserService,
     private readonly devices: DeviceService,
+    private readonly devicePresence: DevicePresenceService,
   ) {
     super();
   }
@@ -139,6 +142,17 @@ export class ImGateway extends BaseWebSocketGateway {
 
       client.join(`org:${orgId}`);
 
+      // device 连接（Agent 反向通道）：join device room + 上线 + 广播设备 presence。
+      const deviceId = (client.data.user as { deviceId?: string }).deviceId;
+      if (deviceId) {
+        client.join(`device:${deviceId}`);
+        await this.devicePresence.setOnline(orgId, deviceId);
+        this.server.to(`org:${orgId}`).emit(IM_WS_EVENTS.presence, {
+          userId: `agent:${deviceId}`,
+          online: true,
+        } satisfies PresenceState);
+      }
+
       const convs = await this.conversation.listConversations(userId, orgId);
       for (const conv of convs) {
         client.join(`conv:${conv.id}`);
@@ -166,6 +180,16 @@ export class ImGateway extends BaseWebSocketGateway {
     try {
       const userId: string | undefined = client.data?.user?.userId;
       const orgId: string | undefined = client.data?.orgId;
+      const deviceId = (client.data?.user as { deviceId?: string })?.deviceId;
+
+      if (deviceId && orgId) {
+        await this.devicePresence.setOffline(orgId, deviceId);
+        this.server.to(`org:${orgId}`).emit(IM_WS_EVENTS.presence, {
+          userId: `agent:${deviceId}`,
+          online: false,
+        } satisfies PresenceState);
+      }
+
       if (!userId || !orgId) return;
 
       await this.presence.setOffline(orgId, userId);
@@ -179,7 +203,11 @@ export class ImGateway extends BaseWebSocketGateway {
   }
 
   /**
-   * 发消息：校验可见性 → 持久化 → 推到 conv 房间。
+   * 发消息：
+   * - device 连接（Agent 反向通道回流）：免可见性校验（设备只对自己的 Agent-DM 发），
+   *   盖 senderType='agent'、senderId=deviceId，持久化后推到 conv 房间。
+   * - 用户连接：校验可见性 → 持久化（senderType='user'）→ 推到 conv 房间；
+   *   若目标会话是 Agent-DM，额外定向下发 `agentInbound` 到对应 device room。
    * WsExceptionFilter 统一处理 AppError（CONVERSATION_NOT_FOUND / FORBIDDEN）。
    */
   @UseGuards(WsAuthGuard)
@@ -188,25 +216,52 @@ export class ImGateway extends BaseWebSocketGateway {
     @MessageBody() body: ImSendInput,
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
-    const userId: string = client.data.user.userId;
+    const payload = client.data.user as { userId: string; deviceId?: string };
     const orgId: string | undefined = client.data.orgId;
     if (!orgId) throw new AppError(MainErrorCode.CONVERSATION_FORBIDDEN);
 
+    if (payload.deviceId) {
+      const msg = await this.message.persistMessage(
+        body.conversationId,
+        payload.deviceId,
+        body.content,
+        "agent",
+      );
+      this.server
+        .to(`conv:${body.conversationId}`)
+        .emit(IM_WS_EVENTS.message, msg);
+      return;
+    }
+
     await this.conversation.getVisibleOrThrow(
       body.conversationId,
-      userId,
+      payload.userId,
       orgId,
     );
 
     const msg = await this.message.persistMessage(
       body.conversationId,
-      userId,
+      payload.userId,
       body.content,
+      "user",
     );
 
     this.server
       .to(`conv:${body.conversationId}`)
       .emit(IM_WS_EVENTS.message, msg);
+
+    const conv = await this.conversation.findAgentDevice(body.conversationId);
+    if (conv?.agentDeviceId) {
+      const event: ImAgentInboundEvent = {
+        conversationId: body.conversationId,
+        messageId: msg.id,
+        content: body.content,
+        senderUserId: payload.userId,
+      };
+      this.server
+        .to(`device:${conv.agentDeviceId}`)
+        .emit(IM_WS_EVENTS.agentInbound, event);
+    }
   }
 
   /**

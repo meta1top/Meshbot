@@ -19,6 +19,10 @@ function makeGateway(overrides: {
   devices?: {
     verifyToken?: jest.Mock;
   };
+  devicePresence?: {
+    setOnline?: jest.Mock;
+    setOffline?: jest.Mock;
+  };
 }) {
   const conversation = {
     getVisibleOrThrow: jest.fn().mockResolvedValue({ id: "c1" }),
@@ -49,6 +53,14 @@ function makeGateway(overrides: {
     verifyToken:
       overrides.devices?.verifyToken ?? jest.fn().mockResolvedValue(undefined),
   };
+  const devicePresence = {
+    setOnline:
+      overrides.devicePresence?.setOnline ??
+      jest.fn().mockResolvedValue(undefined),
+    setOffline:
+      overrides.devicePresence?.setOffline ??
+      jest.fn().mockResolvedValue(undefined),
+  };
   const gw = new ImGateway(
     jwt as never,
     conversation as never,
@@ -56,6 +68,7 @@ function makeGateway(overrides: {
     presence as never, // presence
     userService as never, // userService
     devices as never, // devices
+    devicePresence as never, // devicePresence
   );
   const fetchSockets = jest.fn().mockResolvedValue(overrides.sockets ?? []);
   const roomEmitSpy = jest.fn();
@@ -71,6 +84,7 @@ function makeGateway(overrides: {
     userService,
     jwt,
     devices,
+    devicePresence,
     toSpy,
     roomEmitSpy,
   };
@@ -230,9 +244,11 @@ describe("ImGateway.onAuthedConnect（device 连接 orgId 直接用 payload）",
     };
   }
 
-  it("device 连接 → 不查 findById，入 org 房间用 payload.orgId", async () => {
+  it("device 连接 → 不查 findById，入 org 房间用 payload.orgId，同时 join device room + 上线 + 广播 agent presence", async () => {
     const findById = jest.fn();
-    const { gw } = makeGateway({ userService: { findById } });
+    const { gw, devicePresence, toSpy, roomEmitSpy } = makeGateway({
+      userService: { findById },
+    });
     const conversation = {
       listConversations: jest.fn().mockResolvedValue([{ id: "c1" }]),
     };
@@ -246,7 +262,16 @@ describe("ImGateway.onAuthedConnect（device 连接 orgId 直接用 payload）",
     expect(findById).not.toHaveBeenCalled();
     expect(client.data.orgId).toBe("o-dev");
     expect(client.join).toHaveBeenCalledWith("org:o-dev");
+    expect(client.join).toHaveBeenCalledWith("device:d1");
+    expect(devicePresence.setOnline).toHaveBeenCalledWith("o-dev", "d1");
+    expect(toSpy).toHaveBeenCalledWith("org:o-dev");
+    expect(roomEmitSpy).toHaveBeenCalledWith("im.presence", {
+      userId: "agent:d1",
+      online: true,
+    });
     expect(conversation.listConversations).toHaveBeenCalledWith("u1", "o-dev");
+    // Agent-DM 会话 conv room 同样靠 listConversations(device.userId,...) 覆盖
+    expect(client.join).toHaveBeenCalledWith("conv:c1");
   });
 
   it("用户 JWT 连接 → 保持现状查 activeOrgId", async () => {
@@ -265,5 +290,43 @@ describe("ImGateway.onAuthedConnect（device 连接 orgId 直接用 payload）",
     expect(findById).toHaveBeenCalledWith("u1");
     expect(client.data.orgId).toBe("o-user");
     expect(client.join).toHaveBeenCalledWith("org:o-user");
+  });
+});
+
+describe("ImGateway.handleDisconnect（device 连接下线）", () => {
+  it("device 连接断连 → devicePresence.setOffline + 广播 agent presence offline（旁路，user setOffline 仍执行）", async () => {
+    const { gw, presence, devicePresence, toSpy, roomEmitSpy } = makeGateway(
+      {},
+    );
+    const client = {
+      data: {
+        orgId: "o-dev",
+        user: { userId: "u1", orgId: "o-dev", deviceId: "d1" },
+      },
+    };
+
+    await gw.handleDisconnect(client as never);
+
+    expect(devicePresence.setOffline).toHaveBeenCalledWith("o-dev", "d1");
+    expect(presence.setOffline).toHaveBeenCalledWith("o-dev", "u1");
+    expect(toSpy).toHaveBeenCalledWith("org:o-dev");
+    expect(roomEmitSpy).toHaveBeenCalledWith("im.presence", {
+      userId: "agent:d1",
+      online: false,
+    });
+    expect(roomEmitSpy).toHaveBeenCalledWith("im.presence", {
+      userId: "u1",
+      online: false,
+    });
+  });
+
+  it("用户 JWT 连接断连 → 不调 devicePresence.setOffline", async () => {
+    const { gw, presence, devicePresence } = makeGateway({});
+    const client = { data: { orgId: "o1", user: { userId: "u1" } } };
+
+    await gw.handleDisconnect(client as never);
+
+    expect(devicePresence.setOffline).not.toHaveBeenCalled();
+    expect(presence.setOffline).toHaveBeenCalledWith("o1", "u1");
   });
 });

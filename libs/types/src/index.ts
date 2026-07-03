@@ -26,6 +26,7 @@ export {
 export {
   IM_WS_EVENTS,
   IM_WS_NAMESPACE,
+  type ImAgentInboundEvent,
   type ImConversationCreatedEvent,
   type ImConversationReadEvent,
   type ImMessageEvent,
