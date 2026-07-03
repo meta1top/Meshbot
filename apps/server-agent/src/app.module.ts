@@ -29,6 +29,7 @@ import { AccountModule } from "./account/account.module";
 import { AccountRuntimeModule } from "./account/account-runtime.module";
 import { AuthModule } from "./auth.module";
 import { CronJobModule } from "./cron-job.module";
+import { ImAgentSessionModule } from "./im-agent-session.module";
 import { ImContextModule } from "./im-context.module";
 import { ImModule } from "./im.module";
 import { AskQuestionModule } from "./ask-question.module";
@@ -46,6 +47,7 @@ import { SetupController } from "./controllers/setup.controller";
 import { EnvSchema } from "./env.schema";
 import { CloudIdentity } from "./entities/cloud-identity.entity";
 import { CronJob } from "./entities/cron-job.entity";
+import { ImAgentSession } from "./entities/im-agent-session.entity";
 import { LlmCall } from "./entities/llm-call.entity";
 import { ModelConfig } from "./entities/model-config.entity";
 import { PendingMessage } from "./entities/pending-message.entity";
@@ -97,6 +99,7 @@ const meshbotDir = resolveMeshbotDir();
         SessionMessage,
         CronJob,
         CloudIdentity,
+        ImAgentSession,
       ],
       migrations: [path.join(__dirname, "migrations", "*.{js,ts}")],
       synchronize: false,
@@ -126,6 +129,7 @@ const meshbotDir = resolveMeshbotDir();
     AccountRuntimeModule,
     AccountModule,
     CronJobModule,
+    ImAgentSessionModule,
     RuntimeContextModule,
     SessionModule,
     AuthModule,
