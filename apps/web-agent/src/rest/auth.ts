@@ -1,6 +1,6 @@
 "use client";
 
-import type { AuthStatus, LoginResponse } from "@meshbot/types-agent";
+import type { LoginResponse } from "@meshbot/types-agent";
 import {
   addAccount,
   apiClient,
@@ -8,24 +8,9 @@ import {
   setAccessToken,
 } from "@meshbot/web-common";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
 import { profileQueryKey } from "@/lib/profile-client";
 
-export const authStatusQueryKey = ["auth", "status"] as const;
 export const cloudWebUrlQueryKey = ["auth", "cloud-web-url"] as const;
-
-function useClientMounted(): boolean {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-  return mounted;
-}
-
-export async function fetchAuthStatus(): Promise<AuthStatus> {
-  const { data } = await apiClient.get<AuthStatus>("/api/setup-status");
-  return data;
-}
 
 function decodeJwtPayload(
   token: string,
@@ -111,18 +96,6 @@ export async function logout(): Promise<void> {
   await apiClient.post("/api/auth/logout");
 }
 
-export function useAuthStatus() {
-  const mounted = useClientMounted();
-  return useQuery({
-    queryKey: authStatusQueryKey,
-    queryFn: fetchAuthStatus,
-    enabled: mounted,
-    retry: 2,
-    retryDelay: 600,
-    networkMode: "always",
-  });
-}
-
 /**
  * 登出：先调服务端登出（需要 Bearer），settle 后再清本地 token + 缓存。
  * 云端不可达时调用方可 catch 忽略，onSettled 仍保证本地登出。
@@ -137,7 +110,6 @@ export function useLogout() {
     onSettled: () => {
       clearAccessToken();
       queryClient.invalidateQueries({ queryKey: profileQueryKey });
-      queryClient.invalidateQueries({ queryKey: authStatusQueryKey });
     },
   });
 }

@@ -27,7 +27,6 @@ import { profileQueryKey } from "@/lib/profile-client";
 import { ACCENT_BTN } from "@/lib/ui";
 import {
   applyAuthToken,
-  authStatusQueryKey,
   completeAuthorize,
   pollAuthorize,
   startAuthorize,
@@ -80,7 +79,6 @@ export default function LoginPage() {
     clearTimers();
     applyAuthToken(access_token);
     queryClient.invalidateQueries({ queryKey: profileQueryKey });
-    queryClient.invalidateQueries({ queryKey: authStatusQueryKey });
     router.replace("/");
   };
 

@@ -28,72 +28,11 @@
       "codeRequired": "请输入授权码"
     }
   },
-  "setup": {
-    "getStarted": "开始配置",
-    "createAccount": "创建账号",
-    "createAccountDescription": "先完成账户初始化，再进入模型配置",
-    "email": "邮箱",
-    "emailPlaceholder": "you@example.com",
-    "displayName": "显示名",
-    "displayNamePlaceholder": "请输入显示名",
-    "password": "密码",
-    "passwordPlaceholder": "至少 8 位",
-    "confirmPassword": "确认密码",
-    "confirmPasswordPlaceholder": "再次输入密码",
-    "creating": "创建中...",
-    "createAndContinue": "创建账号并继续",
-    "chooseProvider": "选择供应商",
-    "chooseProviderDescription": "选择一个模型供应商并完成配置",
-    "provider": "供应商",
-    "chooseProviderPlaceholder": "请选择供应商",
-    "modelConfig": "模型配置",
-    "chooseProviderToStart": "请选择一个模型供应商开始配置",
-    "registerFailed": "注册失败，请重试",
-    "saveFailed": "保存失败，请重试",
-    "haveAccount": "已有账号？",
-    "goLogin": "去登录",
-    "orgTitle": "创建或加入组织",
-    "orgDescription": "创建一个新企业，或用邀请码加入已有企业",
-    "orgCreateTab": "创建组织",
-    "orgJoinTab": "加入组织",
-    "orgName": "组织名称",
-    "orgNamePlaceholder": "如：Acme 公司",
-    "orgCreating": "创建中...",
-    "orgCreateAndContinue": "创建并继续",
-    "orgCreateFailed": "创建组织失败",
-    "orgInviteCode": "邀请码",
-    "orgInviteCodePlaceholder": "粘贴邮件里的邀请码",
-    "orgJoining": "加入中...",
-    "orgJoinAndContinue": "加入并继续",
-    "orgJoinFailed": "加入失败，请检查邀请码",
-    "orgSwitchFailed": "切换组织失败，请重试",
-    "validation": {
-      "confirmPasswordRequired": "请确认密码",
-      "passwordNotMatch": "两次输入的密码不一致",
-      "orgNameRequired": "请输入组织名称",
-      "orgNameTooLong": "组织名称过长",
-      "inviteCodeRequired": "请输入邀请码"
-    }
-  },
-  "modelForm": {
-    "name": "名称",
-    "optional": "可选",
-    "model": "模型标识",
-    "modelInputPlaceholder": "输入模型名，如 gpt-4o",
-    "selectModel": "选择模型",
-    "custom": "自定义",
-    "apiKey": "API Key",
-    "apiEndpoint": "API 端点",
-    "contextWindow": "上下文窗口",
-    "contextWindowHint": "留空使用所选模型的内置默认值",
-    "contextWindowPlaceholder": "如 128000",
-    "saving": "保存中...",
-    "saveAndStart": "保存并开始",
-    "validation": {
-      "modelRequired": "请选择或输入模型",
-      "apiKeyRequired": "请输入 API Key",
-      "contextWindowPositive": "上下文窗口必须是正整数"
-    }
+  "modelSetupGate": {
+    "title": "组织还没有可用的模型配置",
+    "description": "请组织管理员在云端配置模型后，回到本地刷新即可继续使用。",
+    "configureInCloud": "在云端配置",
+    "refresh": "刷新"
   },
   "assistantDock": {
     "title": "随手问",
@@ -155,25 +94,6 @@
       "moreTitle": "更多",
       "moreBody": "文件、知识库等扩展能力即将上线。",
       "goAssistant": "前往助手"
-    }
-  },
-  "orgSettings": {
-    "title": "组织",
-    "noOrg": "你还没有加入任何组织",
-    "membersTitle": "{org} · 成员",
-    "inviteTitle": "邀请成员",
-    "invitePlaceholder": "对方邮箱",
-    "invite": "发送邀请",
-    "inviting": "发送中...",
-    "inviteFailed": "邀请失败，请重试",
-    "pendingTitle": "待处理邀请",
-    "code": "邀请码",
-    "roleOwner": "所有者",
-    "roleMember": "成员",
-    "loading": "加载中...",
-    "loadFailed": "成员加载失败",
-    "validation": {
-      "emailInvalid": "邮箱格式不正确"
     }
   },
   "chatInput": {
@@ -839,5 +759,7 @@
   "manualLabel": "",
   "manualPlaceholder": "",
   "manualSubmitting": "",
-  "manualSubmit": ""
+  "manualSubmit": "",
+  "configureInCloud": "",
+  "refresh": ""
 }

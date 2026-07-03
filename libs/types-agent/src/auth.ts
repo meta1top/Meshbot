@@ -6,12 +6,6 @@ export const authorizeCodeSchema = z.object({
 });
 export type AuthorizeCodeInput = z.infer<typeof authorizeCodeSchema>;
 
-/** 邀请成员（owner 输对方邮箱）。 */
-export const inviteMemberSchema = z.object({
-  email: z.string().email("orgSettings.validation.emailInvalid"),
-});
-export type InviteMemberInput = z.infer<typeof inviteMemberSchema>;
-
 /**
  * setup-status 三态：needs-login → needs-model → ready。
  * 组织归属现由云端浏览器授权登录流程（web-main 注册/组织向导）保证，
@@ -49,14 +43,4 @@ export interface MemberInfo {
   email: string;
   displayName: string;
   role: "owner" | "member";
-}
-
-/** 邀请摘要。 */
-export interface InvitationInfo {
-  id: string;
-  email: string;
-  status: "pending" | "accepted" | "revoked" | "expired";
-  token: string;
-  expiresAt: string;
-  createdAt: string;
 }
