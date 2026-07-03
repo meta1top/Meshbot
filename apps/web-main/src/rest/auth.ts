@@ -21,9 +21,13 @@ export interface ProfileUser {
   displayName: string;
 }
 
-/** `GET /api/auth/profile` 响应体（已解 envelope）。 */
+/**
+ * `GET /api/auth/profile` 响应体（已解 envelope）。
+ * `user` 可空：token 有效但用户已删时后端返回 `user:null`（success:true），
+ * 调用方（AuthGuard / 页面）必须判空，视同未认证处理。
+ */
 export interface Profile {
-  user: ProfileUser;
+  user: ProfileUser | null;
   activeOrg: OrgSummary | null;
   memberships: OrgSummary[];
 }

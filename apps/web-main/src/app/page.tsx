@@ -10,11 +10,13 @@ export default function Home() {
   const t = useTranslations("common");
   const router = useRouter();
   const profile = useProfile();
+  // user 可空（token 有效但用户已删），判空后才算已登录
+  const authenticated = profile.isSuccess && profile.data.user != null;
 
   useEffect(() => {
     if (profile.isPending) return;
-    router.replace(profile.isSuccess ? "/settings/org" : "/login");
-  }, [profile.isPending, profile.isSuccess, router]);
+    router.replace(authenticated ? "/settings/org" : "/login");
+  }, [profile.isPending, authenticated, router]);
 
   return (
     <main className="flex min-h-screen items-center justify-center">

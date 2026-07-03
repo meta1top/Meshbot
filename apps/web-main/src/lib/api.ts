@@ -1,5 +1,6 @@
 import axios from "axios";
 import { clearMainToken, getMainToken } from "./auth-storage";
+import { isPublicPath } from "./routes";
 
 /** 业务错误（envelope `success:false`）。code 对应后端 `MainErrorCode`。 */
 export class ApiError extends Error {
@@ -11,9 +12,6 @@ export class ApiError extends Error {
     this.name = "ApiError";
   }
 }
-
-/** 无需登录即可访问的路径前缀——401 时不跳转，避免死循环。 */
-const PUBLIC_PATHS = ["/login", "/register", "/authorize", "/share"];
 
 /**
  * 云协同前端独立 axios 实例。与 `@meshbot/web-common` 的 apiClient（agent 域）
@@ -48,7 +46,7 @@ mainApi.interceptors.response.use(
     if (err.response?.status === 401 && typeof window !== "undefined") {
       clearMainToken();
       const path = window.location.pathname;
-      if (!PUBLIC_PATHS.some((p) => path.startsWith(p))) {
+      if (!isPublicPath(path)) {
         window.location.href = `/login?next=${encodeURIComponent(path + window.location.search)}`;
       }
     }

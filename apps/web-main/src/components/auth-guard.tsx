@@ -3,30 +3,42 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect } from "react";
+import { clearMainToken } from "@/lib/auth-storage";
+import { isPublicPath } from "@/lib/routes";
 import { useProfile } from "@/rest/auth";
-
-/** 未登录 / token 失效时不重定向的公开路径前缀（与 `lib/api.ts` 的 PUBLIC_PATHS 保持一致）。 */
-const PUBLIC_PATHS = ["/login", "/register", "/authorize", "/share"];
 
 /**
  * 云协同前端启动鉴权守卫：拉 profile，401 / 请求失败即跳转登录页
- * （携带 `next` 便于登录后跳回原页面），公开路径（登录/注册/分享等）自身不拦截。
+ * （`next` 携带路径 + query，便于登录后跳回原页面），公开路径（登录/注册/分享等）
+ * 自身不拦截。有效 token 但用户已删（success 且 `user:null`）同样视为未认证——
+ * 先清 token 再跳转，防止带着僵尸 token 循环重定向。
  */
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const t = useTranslations("common");
   const router = useRouter();
   const pathname = usePathname();
   const profile = useProfile();
-  const isPublicPath = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
+  const publicPath = isPublicPath(pathname);
+  const authenticated = profile.isSuccess && profile.data.user != null;
 
   useEffect(() => {
-    if (isPublicPath || profile.isPending || profile.isSuccess) return;
-    router.replace(`/login?next=${encodeURIComponent(pathname)}`);
-  }, [isPublicPath, profile.isPending, profile.isSuccess, pathname, router]);
+    if (publicPath || profile.isPending || authenticated) return;
+    if (profile.isSuccess) clearMainToken(); // success 但 user:null → 清僵尸 token
 
-  if (isPublicPath) return <>{children}</>;
+    const next = pathname + window.location.search;
+    router.replace(`/login?next=${encodeURIComponent(next)}`);
+  }, [
+    publicPath,
+    profile.isPending,
+    profile.isSuccess,
+    authenticated,
+    pathname,
+    router,
+  ]);
 
-  if (profile.isPending || profile.isError) {
+  if (publicPath) return <>{children}</>;
+
+  if (!authenticated) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div
