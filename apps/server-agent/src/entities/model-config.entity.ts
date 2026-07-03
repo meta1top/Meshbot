@@ -27,6 +27,9 @@ export class ModelConfig extends SnowflakeBaseEntity {
   @Column({ name: "context_window", type: "int", default: 128_000 })
   contextWindow!: number;
 
+  @Column({ type: "text", default: "local" })
+  source!: "cloud" | "local";
+
   @CreateDateColumn({ name: "created_at" })
   createdAt!: Date;
 

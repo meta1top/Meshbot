@@ -23,8 +23,12 @@ export class CloudIdentity extends SnowflakeBaseEntity {
   @Column({ type: "text", nullable: true })
   role!: string | null;
 
+  /** @deprecated 旧密码代理流程遗留，仅迁移期兼容 */
   @Column({ name: "cloud_token", type: "text" })
   cloudToken!: string;
+
+  @Column({ name: "device_token", type: "text", nullable: true })
+  deviceToken!: string | null;
 
   @Column({ name: "cloud_token_expires_at", type: "text", nullable: true })
   cloudTokenExpiresAt!: string | null;
