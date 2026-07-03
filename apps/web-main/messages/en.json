@@ -84,7 +84,7 @@
     },
     "denied": {
       "title": "Authorization denied",
-      "description": "You can close this page. The request will expire automatically in 10 minutes."
+      "description": "You can close this page."
     },
     "confirm": {
       "title": "Device requesting access",
@@ -99,7 +99,8 @@
       "title": "Approved",
       "description": "If the desktop app did not finish automatically, paste this code into the app.",
       "copy": "Copy",
-      "copied": "Copied"
+      "copied": "Copied",
+      "copyManually": "Copy failed — please select the code and copy it manually."
     },
     "onboarding": {
       "title": "Join an organization first",
@@ -157,7 +158,8 @@
     "copied": "",
     "copy": "",
     "title": "",
-    "description": ""
+    "description": "",
+    "copyManually": ""
   },
   "confirm": {
     "approveFailed": "",

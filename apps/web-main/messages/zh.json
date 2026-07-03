@@ -84,7 +84,7 @@
     },
     "denied": {
       "title": "已拒绝授权",
-      "description": "你可以关闭此页面，该请求将在 10 分钟后自动失效。"
+      "description": "你可以关闭此页。"
     },
     "confirm": {
       "title": "设备请求接入",
@@ -99,7 +99,8 @@
       "title": "已授权",
       "description": "若桌面端没有自动完成，请把此授权码粘贴到应用中。",
       "copy": "复制",
-      "copied": "已复制"
+      "copied": "已复制",
+      "copyManually": "复制失败，请手动选中授权码复制。"
     },
     "onboarding": {
       "title": "先加入一个组织",
@@ -157,7 +158,8 @@
     "copied": "",
     "copy": "",
     "title": "",
-    "description": ""
+    "description": "",
+    "copyManually": ""
   },
   "confirm": {
     "approveFailed": "",
