@@ -192,5 +192,20 @@ describe("ModelConfigSyncService", () => {
       await succeedOnce(service, identity, cloud, "u1");
       expect(nextDelay(service, 1, true)).toBe(INTERVAL);
     });
+
+    it("账号 teardown 后其失败计数清零，不再影响下轮延迟计算", async () => {
+      const { cloud, identity, service } = build();
+
+      // u2 连续失败 2 次，延迟将升到 2 分钟
+      await failOnce(service, identity, cloud, "u2");
+      await failOnce(service, identity, cloud, "u2");
+      expect(nextDelay(service, 1, false)).toBe(2 * MINUTE);
+
+      // u2 teardown 清理计数
+      service.onRuntimeTeardown({ cloudUserId: "u2" });
+
+      // 下轮虽然无成功账号（roundOk=false），但 failCounts 已空，用 Math.max(1, ...[])=1 算出 1 分钟
+      expect(nextDelay(service, 0, false)).toBe(INTERVAL); // 无账号返回 INTERVAL
+    });
   });
 });

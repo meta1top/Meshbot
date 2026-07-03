@@ -59,6 +59,12 @@ export class ModelConfigSyncService
     await this.syncNow(cloudUserId);
   }
 
+  /** 账号运行时销毁（登出）时清理该账号的失败计数，防陈旧计数拖高退避。 */
+  @OnEvent(ACCOUNT_EVENTS.runtimeTeardown)
+  onRuntimeTeardown({ cloudUserId }: AccountRuntimeEvent): void {
+    this.failCounts.delete(cloudUserId);
+  }
+
   /** 拉取云端组织模型配置并整体替换本地 cloud 来源缓存；失败静默返回 false（仅告警日志）。 */
   async syncNow(cloudUserId: string): Promise<boolean> {
     try {

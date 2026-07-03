@@ -1,33 +1,10 @@
 import { createI18nZodDto } from "@meshbot/common";
-import {
-  type AcceptInvitationInput,
-  AcceptInvitationSchema,
-  type CreateInvitationInput,
-  CreateInvitationSchema,
-  type CreateOrgInput,
-  CreateOrgSchema,
-  type SwitchOrgInput,
-  SwitchOrgSchema,
-} from "@meshbot/types-main";
+import { type SwitchOrgInput, SwitchOrgSchema } from "@meshbot/types-main";
 
 /**
- * 组织代理 DTO 复用云端共享 schema（@meshbot/types-main），
- * 与 auth.dto.ts 同款 class + interface 声明合并模式。
+ * 组织代理 DTO（精简版）：仅保留组织切换所需。
+ * 组织管理操作（建组织/邀请/接受邀请）的 DTO 已转移到云端。
  */
-
-// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
-export class CreateOrgDto extends createI18nZodDto(CreateOrgSchema) {}
-export interface CreateOrgDto extends CreateOrgInput {}
-
-// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
-export class InviteMemberDto extends createI18nZodDto(CreateInvitationSchema) {}
-export interface InviteMemberDto extends CreateInvitationInput {}
-
-// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
-export class AcceptInvitationDto extends createI18nZodDto(
-  AcceptInvitationSchema,
-) {}
-export interface AcceptInvitationDto extends AcceptInvitationInput {}
 
 // biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
 export class SwitchOrgDto extends createI18nZodDto(SwitchOrgSchema) {}
