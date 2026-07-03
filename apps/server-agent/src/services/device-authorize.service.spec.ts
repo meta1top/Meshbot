@@ -98,6 +98,22 @@ describe("DeviceAuthorizeService", () => {
     });
   });
 
+  it("同 requestId 并发 complete 只有一个成功", async () => {
+    const { svc } = build();
+    await svc.start();
+    const results = await Promise.allSettled([
+      svc.complete("r1", "code-1"),
+      svc.complete("r1", "code-1"),
+    ]);
+    const fulfilled = results.filter((r) => r.status === "fulfilled");
+    const rejected = results.filter((r) => r.status === "rejected");
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect((rejected[0] as PromiseRejectedResult).reason).toMatchObject({
+      name: "AppError",
+    });
+  });
+
   it("completeByCode 用最新 pending", async () => {
     const { svc } = build();
     await svc.start();
