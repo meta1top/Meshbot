@@ -35,6 +35,7 @@ import { CloudNodeGrantService } from "./services/cloud-node-grant.service";
 import { CloudDriveService } from "./services/cloud-drive.service";
 import { CloudShareLinkService } from "./services/cloud-share-link.service";
 import { PresenceService } from "./services/presence.service";
+import { DevicePresenceService } from "./services/device-presence.service";
 import {
   type SecurityConfig,
   SecretCryptoService,
@@ -110,6 +111,7 @@ export class MainModule {
         DeviceService,
         EmailVerificationService,
         PresenceService,
+        DevicePresenceService,
         SkillPackageService,
         SkillMarketService,
         CloudNodeService,
@@ -132,6 +134,7 @@ export class MainModule {
         DeviceService,
         EmailVerificationService,
         PresenceService,
+        DevicePresenceService,
         SkillPackageService,
         SkillMarketService,
         CloudNodeService,

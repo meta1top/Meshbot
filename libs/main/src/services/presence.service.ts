@@ -12,7 +12,7 @@ const PRESENCE_TTL_SECONDS = 45;
  * 避免直接 import ioredis（libs/main 未把 ioredis 列为依赖），
  * 同时方便测试时注入手写桩。
  */
-interface RedisPresenceClient {
+export interface RedisPresenceClient {
   zadd(key: string, score: number, member: string): Promise<number>;
   zrem(key: string, member: string): Promise<number>;
   zremrangebyscore(

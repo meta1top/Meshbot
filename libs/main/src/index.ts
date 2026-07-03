@@ -46,6 +46,7 @@ export type {
 } from "@meshbot/types";
 export { OrgModelConfigService } from "./services/org-model-config.service";
 export { PresenceService } from "./services/presence.service";
+export { DevicePresenceService } from "./services/device-presence.service";
 export { SkillMarketService } from "./services/skill-market.service";
 export { SkillPackageService } from "./services/skill-package.service";
 export { UserService } from "./services/user.service";
