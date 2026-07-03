@@ -6,7 +6,6 @@ import {
   formatElapsed,
   isBackgroundDispatch,
   isSubagentOpen,
-  type LiveAction,
   resolveSubagentStatus,
   resolveSubSessionId,
   type SubagentCollapse,
