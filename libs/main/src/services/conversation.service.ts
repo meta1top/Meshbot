@@ -11,6 +11,7 @@ import type { Repository } from "typeorm";
 import { Conversation } from "../entities/conversation.entity";
 import { ConversationMember } from "../entities/conversation-member.entity";
 import { MainErrorCode } from "../errors/main.error-codes";
+import { DeviceService } from "./device.service";
 import { MembershipService } from "./membership.service";
 import { MessageService } from "./message.service";
 import { UserService } from "./user.service";
@@ -21,6 +22,9 @@ import { UserService } from "./user.service";
  * 职责：
  * - 频道建立（persistChannelInTx）：跨表写，@Transactional()
  * - DM 去重（findOrCreateDm）：先排序 dmKey，再 @WithLock（按 orgId+dmKey）包 @Transactional()
+ * - Agent-DM 建会话（findOrCreateAgentDm）：校验 device 归属，再 @WithLock（按 userId+deviceId，
+ *   不含 orgId）包 @Transactional()；一个 user↔device 全局唯一一条会话
+ * - Agent-DM 枚举/断言（listAgentDmsForDevice / getAgentDmOrThrow / findAgentDevice）：只读，无需事务
  * - 默认频道保障（ensureDefaultChannel）：@WithLock（按 orgId）包单表写
  * - 可见性校验（getVisibleOrThrow）：只读，无需事务
  * - 会话列表（listConversations）：公开频道 ∪ 成员所在私有频道/DM
@@ -41,6 +45,7 @@ export class ConversationService {
     private readonly messageService: MessageService,
     private readonly userService: UserService,
     private readonly membership: MembershipService,
+    private readonly devices: DeviceService,
   ) {}
 
   /**
@@ -200,6 +205,96 @@ export class ConversationService {
     );
 
     return this.toSummary(conv, a);
+  }
+
+  /**
+   * 找/建当前用户与某设备 Agent 的私聊会话（幂等）。
+   * 先校验 device 属于该 userId 且未吊销，再委托加锁的建会话逻辑。
+   */
+  async findOrCreateAgentDm(
+    orgId: string,
+    userId: string,
+    deviceId: string,
+  ): Promise<ConversationSummary> {
+    const device = await this.devices.findOwnedActive(userId, deviceId);
+    if (!device) throw new AppError(MainErrorCode.AGENT_DEVICE_INVALID);
+    return this.findOrCreateAgentDmLocked(orgId, userId, deviceId);
+  }
+
+  /**
+   * @WithLock 按 (userId, deviceId) 加锁（不含 orgId：一个 user↔device 全局唯一一条会话，
+   * 即便设备后续切换组织也复用同一会话）。锁在 @Transactional 外层（check:lock-tx 要求）。
+   */
+  @WithLock({ key: "agentdm:findOrCreate:#{1}:#{2}", waitTimeout: 5000 })
+  private async findOrCreateAgentDmLocked(
+    orgId: string,
+    userId: string,
+    deviceId: string,
+  ): Promise<ConversationSummary> {
+    const existing = await this.convRepo.findOne({
+      where: { agentDeviceId: deviceId, createdBy: userId },
+    });
+    if (existing) return this.toSummary(existing, userId);
+    return this.persistAgentDmInTx(orgId, userId, deviceId);
+  }
+
+  /**
+   * Agent-DM 事务体：建会话 + 唯一一条 member 行（对端是设备 Agent，非真实用户，无需第二条 member 行）。
+   * @Transactional() — 跨表写，命名 *InTx（check:naming）。
+   */
+  @Transactional()
+  private async persistAgentDmInTx(
+    orgId: string,
+    userId: string,
+    deviceId: string,
+  ): Promise<ConversationSummary> {
+    const conv = await this.convRepo.save(
+      this.convRepo.create({
+        orgId,
+        type: "dm",
+        name: null,
+        dmKey: null,
+        createdBy: userId,
+        visibility: "private",
+        agentDeviceId: deviceId,
+      }),
+    );
+    const memberRepo = this.convRepo.manager.getRepository(ConversationMember);
+    await memberRepo.save(
+      memberRepo.create({
+        conversationId: conv.id,
+        userId,
+        lastReadAt: null,
+      }),
+    );
+    return this.toSummary(conv, userId);
+  }
+
+  /** 枚举某设备的全部 Agent-DM 会话（server-agent 补处理枚举用，不带账号作用域）。 */
+  async listAgentDmsForDevice(
+    deviceId: string,
+  ): Promise<{ conversationId: string; orgId: string }[]> {
+    const rows = await this.convRepo.find({
+      where: { agentDeviceId: deviceId },
+    });
+    return rows.map((c) => ({ conversationId: c.id, orgId: c.orgId }));
+  }
+
+  /** 断言会话是 Agent-DM（agentDeviceId 非空），否则抛 AGENT_DEVICE_INVALID；供 gateway 判定"该定向下发"。 */
+  async getAgentDmOrThrow(conversationId: string): Promise<Conversation> {
+    const conv = await this.convRepo.findOne({ where: { id: conversationId } });
+    if (!conv?.agentDeviceId)
+      throw new AppError(MainErrorCode.AGENT_DEVICE_INVALID);
+    return conv;
+  }
+
+  /** 轻量查询会话的 agentDeviceId，不抛错；会话不存在返回 null（供 gateway 判定用）。 */
+  async findAgentDevice(
+    conversationId: string,
+  ): Promise<{ agentDeviceId: string | null } | null> {
+    const conv = await this.convRepo.findOne({ where: { id: conversationId } });
+    if (!conv) return null;
+    return { agentDeviceId: conv.agentDeviceId };
   }
 
   /**
@@ -396,7 +491,15 @@ export class ConversationService {
     ]);
 
     let peer: ImPeer | null = null;
-    if (conv.type === "dm" && conv.dmKey) {
+    if (conv.type === "dm" && conv.agentDeviceId) {
+      // Agent-DM：对端是设备 Agent，非真实用户；peer.userId 用 'agent:' 前缀区分，displayName 取设备名
+      const device = await this.devices.findById(conv.agentDeviceId);
+      peer = {
+        userId: `agent:${conv.agentDeviceId}`,
+        displayName: device?.name ?? conv.agentDeviceId,
+        email: "",
+      };
+    } else if (conv.type === "dm" && conv.dmKey) {
       // dmKey = [a,b].sort().join(":")，对端是 dmKey 中另一个 userId
       const parts = conv.dmKey.split(":");
       const peerId = parts.find((id) => id !== requestorId) ?? parts[0];
@@ -417,6 +520,7 @@ export class ConversationService {
       name: conv.name,
       peer,
       unreadCount,
+      agentDeviceId: conv.agentDeviceId ?? null,
       lastMessage: lastMsg
         ? {
             content: lastMsg.content,

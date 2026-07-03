@@ -75,4 +75,21 @@ export class DeviceService {
   async updateOrg(deviceId: string, orgId: string): Promise<void> {
     await this.deviceRepo.update({ id: deviceId }, { orgId });
   }
+
+  /** 校验设备属于该用户且未吊销（Agent-DM 建会话前置校验）；查无/非本人/已吊销均返回 null */
+  async findOwnedActive(
+    userId: string,
+    deviceId: string,
+  ): Promise<Device | null> {
+    const device = await this.deviceRepo.findOne({
+      where: { id: deviceId, userId },
+    });
+    if (!device || device.revokedAt) return null;
+    return device;
+  }
+
+  /** 按 id 查设备，不校验归属/吊销状态（供跨 Service 展示用，如会话对端名称） */
+  async findById(deviceId: string): Promise<Device | null> {
+    return this.deviceRepo.findOne({ where: { id: deviceId } });
+  }
 }

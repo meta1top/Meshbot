@@ -112,4 +112,9 @@ export const MainErrorCode = defineErrorCode({
     message: "device.notFound",
     httpStatus: 404,
   },
+  AGENT_DEVICE_INVALID: {
+    code: 2029,
+    message: "im.agentDeviceInvalid",
+    httpStatus: 400,
+  },
 });
