@@ -872,6 +872,9 @@ importers:
 
   packages/web-common:
     dependencies:
+      '@meshbot/design':
+        specifier: workspace:*
+        version: link:../design
       '@meshbot/types':
         specifier: workspace:*
         version: link:../../libs/types
@@ -884,6 +887,9 @@ importers:
       best-effort-json-parser:
         specifier: ^1.4.1
         version: 1.4.1
+      lucide-react:
+        specifier: ^0.468
+        version: 0.468.0(react@19.2.5)
       react:
         specifier: '>=18'
         version: 19.2.5
