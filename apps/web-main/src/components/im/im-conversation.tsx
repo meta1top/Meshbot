@@ -13,6 +13,21 @@ interface ImConversationProps {
 }
 
 /**
+ * 按 id 去重合并两组消息，结果按 createdAt 升序（同刻以雪花 id 为次序稳定 tiebreak）。
+ * 初次加载与向上翻页共用：既能把 REST 历史与已累积的实时消息合并去重，也能保证
+ * 「mount 后、REST 返回前经 ws 到达的实时消息」不被历史快照无条件覆盖抹掉。
+ */
+function mergeById(a: ImMessage[], b: ImMessage[]): ImMessage[] {
+  const map = new Map<string, ImMessage>();
+  for (const m of a) map.set(m.id, m);
+  for (const m of b) map.set(m.id, m);
+  return [...map.values()].sort((x, y) => {
+    if (x.createdAt !== y.createdAt) return x.createdAt < y.createdAt ? -1 : 1;
+    return x.id < y.id ? -1 : x.id > y.id ? 1 : 0;
+  });
+}
+
+/**
  * Agent-DM 会话主体（web-main 直连 server-main `/ws/im`，非信封总线）：
  * 打开时拉历史 + 标记已读，订阅原生 `IM_WS_EVENTS.message` 事件按 conversationId 过滤追加，
  * 发送走 `IM_WS_EVENTS.send`（无乐观插入，靠服务端广播回声上屏），
@@ -62,7 +77,9 @@ export function ImConversation({ conversationId }: ImConversationProps) {
     void fetchMessages(conversationId)
       .then((page) => {
         if (cancelled) return;
-        setMessages(page.messages);
+        // 合并而非覆盖：保留 mount 后、本次 REST 返回前经 ws 实时到达的消息，
+        // 避免「点通知打开会话恰逢回复落地」时回复闪现后被历史快照抹掉。
+        setMessages((prev) => mergeById(page.messages, prev));
         oldestMessageIdRef.current = page.messages[0]?.id ?? null;
         hasMoreHistoryRef.current = page.hasMore;
         setHasMoreHistory(page.hasMore);
@@ -112,11 +129,7 @@ export function ImConversation({ conversationId }: ImConversationProps) {
 
     try {
       const page = await fetchMessages(conversationId, cursor);
-      setMessages((prev) => {
-        const existingIds = new Set(prev.map((m) => m.id));
-        const fresh = page.messages.filter((m) => !existingIds.has(m.id));
-        return [...fresh, ...prev];
-      });
+      setMessages((prev) => mergeById(page.messages, prev));
       oldestMessageIdRef.current = page.messages[0]?.id ?? cursor;
       hasMoreHistoryRef.current = page.hasMore;
       setHasMoreHistory(page.hasMore);
