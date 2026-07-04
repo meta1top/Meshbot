@@ -45,7 +45,8 @@
     "quick": "随手问",
     "artifact": "产物",
     "tools": "工具",
-    "members": "成员"
+    "members": "成员",
+    "toolsEmpty": "本会话暂无工具调用"
   },
   "appShell": {
     "newSession": "新会话",

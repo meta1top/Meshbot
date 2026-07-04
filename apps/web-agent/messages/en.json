@@ -45,7 +45,8 @@
     "quick": "Ask",
     "artifact": "Artifact",
     "tools": "Tools",
-    "members": "Members"
+    "members": "Members",
+    "toolsEmpty": "No tool calls in this session"
   },
   "appShell": {
     "newSession": "New session",
