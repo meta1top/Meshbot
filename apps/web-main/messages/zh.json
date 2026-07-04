@@ -130,7 +130,8 @@
       "switchOrg": "切换组织",
       "current": "当前",
       "logout": "登出"
-    }
+    },
+    "messagesLink": "消息"
   },
   "orgSettings": {
     "noOrg": "尚未加入任何组织",
@@ -370,5 +371,32 @@
   "toggleFailed": "",
   "deleteFailed": "",
   "dismiss": "",
-  "resendFailed": ""
+  "resendFailed": "",
+  "messages": {
+    "title": "消息",
+    "settingsLink": "设置",
+    "empty": {
+      "title": "选择一个 Agent 开始对话",
+      "description": "从左侧选择一个设备 Agent 会话，或点右上角新建一个。"
+    }
+  },
+  "messagesSidebar": {
+    "title": "消息",
+    "newDm": "新建会话",
+    "agentDms": "设备 Agent",
+    "empty": "还没有会话",
+    "loading": "加载中…",
+    "loadFailed": "加载会话失败",
+    "online": "在线",
+    "offline": "离线",
+    "picker": {
+      "title": "选择设备 Agent",
+      "description": "从你的已授权设备中选择一个，开始与它的 Agent 对话。",
+      "loading": "加载设备中…",
+      "empty": "没有可用的设备，请先在桌面端登录并授权设备。",
+      "loadFailed": "加载设备失败",
+      "createFailed": "创建会话失败，请重试",
+      "cancel": "取消"
+    }
+  }
 }
