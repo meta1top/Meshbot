@@ -72,4 +72,31 @@ export class ImAgentSessionService {
     const row = await this.repo.findOne({ where: { conversationId } });
     return row?.lastProcessedMessageId ?? null;
   }
+
+  /**
+   * 推进 append 游标（该条用户消息已 append 进本地 Agent 会话）。
+   *
+   * @param conversationId - 云端对话 ID
+   * @param messageId - 已 append 的消息 ID
+   */
+  async advanceAppended(
+    conversationId: string,
+    messageId: string,
+  ): Promise<void> {
+    await this.repo.update(
+      { conversationId },
+      { lastAppendedMessageId: messageId },
+    );
+  }
+
+  /**
+   * 取 append 游标。
+   *
+   * @param conversationId - 云端对话 ID
+   * @returns 最后 append 的消息 ID，或 null 如果未设置
+   */
+  async getAppended(conversationId: string): Promise<string | null> {
+    const row = await this.repo.findOne({ where: { conversationId } });
+    return row?.lastAppendedMessageId ?? null;
+  }
 }

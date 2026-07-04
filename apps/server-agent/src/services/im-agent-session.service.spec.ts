@@ -126,6 +126,56 @@ describe("ImAgentSessionService", () => {
     expect(cursor).toBeNull();
   });
 
+  it("advanceAppended 推进 append 游标", async () => {
+    const convId = "conv123";
+    const sessId = "sess456";
+    const msgId = "msg789";
+
+    await ctx.run("user1", () => service.create(convId, sessId));
+    await ctx.run("user1", () => service.advanceAppended(convId, msgId));
+
+    const appended = await ctx.run("user1", () => service.getAppended(convId));
+    expect(appended).toBe(msgId);
+  });
+
+  it("getAppended 未设置时返回 null", async () => {
+    const convId = "conv123";
+    const sessId = "sess456";
+
+    await ctx.run("user1", () => service.create(convId, sessId));
+
+    const appended = await ctx.run("user1", () => service.getAppended(convId));
+    expect(appended).toBeNull();
+  });
+
+  it("getAppended 他账号的 append 游标不可见", async () => {
+    const convId = "conv123";
+    const sessId = "sess456";
+    const msgId = "msg789";
+
+    await ctx.run("user1", () => service.create(convId, sessId));
+    await ctx.run("user1", () => service.advanceAppended(convId, msgId));
+
+    const appended = await ctx.run("user2", () => service.getAppended(convId));
+    expect(appended).toBeNull();
+  });
+
+  it("append 游标与处理游标相互独立", async () => {
+    const convId = "conv123";
+    const sessId = "sess456";
+
+    await ctx.run("user1", () => service.create(convId, sessId));
+    await ctx.run("user1", () =>
+      service.advanceAppended(convId, "msg-appended"),
+    );
+
+    // 只推进了 append 游标，处理游标应仍为 null
+    const cursor = await ctx.run("user1", () => service.getCursor(convId));
+    expect(cursor).toBeNull();
+    const appended = await ctx.run("user1", () => service.getAppended(convId));
+    expect(appended).toBe("msg-appended");
+  });
+
   it("create 与 findByConversation 一致性", async () => {
     const convId = "conv123";
     const sessId = "sess456";

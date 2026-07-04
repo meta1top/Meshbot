@@ -16,9 +16,13 @@ export class ImAgentSession extends SnowflakeBaseEntity {
   @Column({ name: "cloud_user_id", type: "text" })
   cloudUserId!: string;
 
-  /** 最后处理的消息 ID（游标）。 */
+  /** 最后处理的消息 ID（投递游标：回复已成功投递给云端才推进）。 */
   @Column({ name: "last_processed_message_id", type: "text", nullable: true })
   lastProcessedMessageId!: string | null;
+
+  /** 最后 append 进本地会话的消息 ID（append 游标：防补处理重跑时 dup-append）。 */
+  @Column({ name: "last_appended_message_id", type: "text", nullable: true })
+  lastAppendedMessageId!: string | null;
 
   /** 创建时间。 */
   @CreateDateColumn({ name: "created_at" })
