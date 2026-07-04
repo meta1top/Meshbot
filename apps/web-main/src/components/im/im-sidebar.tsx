@@ -6,20 +6,23 @@ import { SquarePen } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
-import { useDeviceOnline } from "@/rest/agent-devices";
+import { useDeviceOnline, useDevicePresenceSync } from "@/rest/agent-devices";
 import { useConversations } from "@/rest/im";
 import { AgentPicker } from "./agent-picker";
 
 /**
  * IM 侧栏（web-main）：顶部「新建会话」开 Agent picker，下面列出与各设备 Agent 的
  * 私信会话（`agentDeviceId != null`），会话名取设备名（`peer.displayName`），左侧在线点。
- * 实时增量（新会话 / presence）由 `ws/im` 承担（Task 14），本 task 只做首屏渲染。
+ * 在线点首屏取 `useDeviceOnline` 快照，实时变化由 `useDevicePresenceSync` 订阅
+ * `ws/im` 的 presence 事件推送更新。
  */
 export function ImSidebar() {
   const t = useTranslations("messagesSidebar");
   const router = useRouter();
   const { data: conversations = [], isPending, error } = useConversations();
   const [pickerOpen, setPickerOpen] = useState(false);
+
+  useDevicePresenceSync();
 
   const agentDms = conversations.filter((c) => c.agentDeviceId != null);
 
@@ -80,7 +83,7 @@ interface AgentDmItemProps {
 
 /**
  * 单个 Agent-DM 会话项：在线点 + 设备名 + 未读 badge。在线态取首屏快照
- * （`useDeviceOnline`），实时变化由 Task 14 的 presence 事件更新。
+ * （`useDeviceOnline`），实时变化由 `useDevicePresenceSync` 写入的 presence 缓存驱动。
  */
 function AgentDmItem({ conversation, onClick }: AgentDmItemProps) {
   const t = useTranslations("messagesSidebar");
