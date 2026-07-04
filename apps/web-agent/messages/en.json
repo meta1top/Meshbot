@@ -236,6 +236,14 @@
     "usage": "Usage",
     "scheduled": "Scheduled"
   },
+  "assistantSidebar": {
+    "title": "Assistant",
+    "newSession": "New session",
+    "thisDevice": "This device",
+    "empty": "No sessions yet",
+    "loadFailed": "Failed to load",
+    "emptyHint": "Pick or start a session to begin"
+  },
   "messages": {
     "title": "Messages",
     "channels": "Channels",

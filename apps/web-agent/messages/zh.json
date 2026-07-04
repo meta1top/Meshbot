@@ -236,6 +236,14 @@
     "usage": "使用情况",
     "scheduled": "定时任务"
   },
+  "assistantSidebar": {
+    "title": "助手",
+    "newSession": "新会话",
+    "thisDevice": "本机",
+    "empty": "暂无会话",
+    "loadFailed": "加载失败",
+    "emptyHint": "选择或新建一个会话开始"
+  },
   "messages": {
     "title": "消息",
     "channels": "频道",
