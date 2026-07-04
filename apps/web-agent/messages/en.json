@@ -74,7 +74,9 @@
       "assistant": "Assistant",
       "skills": "Skills",
       "more": "More",
-      "drive": "Files"
+      "drive": "Files",
+      "flows": "Flows",
+      "settings": "Settings"
     },
     "search": {
       "placeholder": "Search meshbot"

@@ -74,7 +74,9 @@
       "assistant": "助手",
       "skills": "技能",
       "more": "更多",
-      "drive": "文件"
+      "drive": "文件",
+      "flows": "流程",
+      "settings": "设置"
     },
     "search": {
       "placeholder": "搜索 meshbot"
