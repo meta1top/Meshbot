@@ -89,7 +89,7 @@ export function MessagesSidebar() {
                     label={c.peer?.displayName ?? ""}
                     trailing={
                       c.unreadCount > 0 ? (
-                        <span className="shrink-0 rounded-full bg-(--shell-accent) px-1.5 py-0.5 text-[10px] font-bold leading-none">
+                        <span className="shrink-0 rounded-full bg-(--shell-accent) px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
                           {c.unreadCount > 99 ? "99+" : c.unreadCount}
                         </span>
                       ) : undefined
@@ -119,7 +119,7 @@ export function MessagesSidebar() {
                     label={c.name}
                     trailing={
                       c.unreadCount > 0 ? (
-                        <span className="shrink-0 rounded-full bg-(--shell-accent) px-1.5 py-0.5 text-[10px] font-bold leading-none">
+                        <span className="shrink-0 rounded-full bg-(--shell-accent) px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
                           {c.unreadCount > 99 ? "99+" : c.unreadCount}
                         </span>
                       ) : undefined
