@@ -3,6 +3,7 @@ import { injectLockProvider } from "@meshbot/common";
 import type { ConversationSummary } from "@meshbot/types";
 import { Repository } from "typeorm";
 import { MainErrorCode } from "../errors/main.error-codes";
+import type { DeviceService } from "./device.service";
 import type { MembershipService } from "./membership.service";
 import type { MessageService } from "./message.service";
 import type { UserService } from "./user.service";
@@ -59,6 +60,7 @@ function makeConv(
     createdBy: string;
     createdAt: Date;
     visibility: "public" | "private";
+    agentDeviceId: string | null;
   }> = {},
 ) {
   return {
@@ -70,6 +72,7 @@ function makeConv(
     createdBy: "user-1",
     createdAt: new Date(),
     visibility: "public" as "public" | "private",
+    agentDeviceId: null as string | null,
     ...overrides,
   };
 }
@@ -209,6 +212,21 @@ function makeMembershipSvc(
   } as unknown as MembershipService;
 }
 
+function makeDeviceSvc(
+  overrides: Partial<Record<keyof DeviceService, jest.Mock>> = {},
+): DeviceService {
+  return {
+    findOwnedActive: jest.fn().mockResolvedValue(null),
+    findById: jest.fn().mockResolvedValue(null),
+    listByUser: jest.fn().mockResolvedValue([]),
+    issueDevice: jest.fn(),
+    verifyToken: jest.fn(),
+    revoke: jest.fn(),
+    updateOrg: jest.fn(),
+    ...overrides,
+  } as unknown as DeviceService;
+}
+
 /** 构造 ConversationService，注入 passthrough lock。 */
 function buildSvc(
   convRepo: ReturnType<typeof makeConvRepo>,
@@ -216,6 +234,7 @@ function buildSvc(
   messageSvc: MessageService,
   userSvc: UserService,
   membershipSvc: MembershipService = makeMembershipSvc(),
+  deviceSvc: DeviceService = makeDeviceSvc(),
 ) {
   const svc = new ConversationService(
     convRepo as never,
@@ -223,6 +242,7 @@ function buildSvc(
     messageSvc,
     userSvc,
     membershipSvc,
+    deviceSvc,
   );
   injectLockProvider(svc, passthroughLock as never);
   return svc;
@@ -403,6 +423,7 @@ describe("ConversationService", () => {
         makeMessageSvc(),
         userSvc,
         makeMembershipSvc() as never,
+        makeDeviceSvc() as never,
       );
       // biome-ignore lint/suspicious/noExplicitAny: test instrumentation
       (injectLockProvider as (svc: any, p: any) => void)(svc, capturingLock);
@@ -454,6 +475,184 @@ describe("ConversationService", () => {
       expect(out.peer?.displayName).toBe("Bob Smith");
       expect(out.peer?.email).toBe("bob@acme.io");
       expect(userSvc.findById).toHaveBeenCalledWith("bob");
+    });
+  });
+
+  // ── findOrCreateAgentDm / listAgentDmsForDevice / getAgentDmOrThrow ──
+  describe("findOrCreateAgentDm", () => {
+    it("对合法 device 建会话，agentDeviceId 落值；二次调用返回同一会话（幂等）", async () => {
+      const device = {
+        id: "dev-1",
+        userId: "user-1",
+        name: "我的 MacBook",
+        revokedAt: null,
+      };
+      const deviceSvc = makeDeviceSvc({
+        findOwnedActive: jest.fn().mockResolvedValue(device),
+        findById: jest.fn().mockResolvedValue(device),
+      });
+      const agentConv = makeConv({
+        id: "conv-agent-1",
+        type: "dm",
+        name: null,
+        dmKey: null,
+        createdBy: "user-1",
+        visibility: "private",
+        agentDeviceId: "dev-1",
+      });
+      let created = false;
+      const convRepo = makeConvRepo({
+        findOne: jest
+          .fn()
+          .mockImplementation(() =>
+            Promise.resolve(created ? agentConv : null),
+          ),
+        save: jest.fn().mockImplementation(() => {
+          created = true;
+          return Promise.resolve(agentConv);
+        }),
+      });
+      const svc = buildSvc(
+        convRepo,
+        makeMemberRepo(),
+        makeMessageSvc(),
+        makeUserSvc(),
+        makeMembershipSvc(),
+        deviceSvc,
+      );
+
+      const first = await svc.findOrCreateAgentDm("org-1", "user-1", "dev-1");
+      expect(first.id).toBe("conv-agent-1");
+      expect(first.agentDeviceId).toBe("dev-1");
+      expect(first.peer?.userId).toBe("agent:dev-1");
+      expect(first.peer?.displayName).toBe("我的 MacBook");
+      expect(convRepo.save).toHaveBeenCalledTimes(1);
+
+      const second = await svc.findOrCreateAgentDm("org-1", "user-1", "dev-1");
+      expect(second.id).toBe("conv-agent-1");
+      // 幂等：第二次不应再次 save 建会话
+      expect(convRepo.save).toHaveBeenCalledTimes(1);
+    });
+
+    it("对不属于该 user 的 device 抛 AGENT_DEVICE_INVALID", async () => {
+      const deviceSvc = makeDeviceSvc({
+        findOwnedActive: jest.fn().mockResolvedValue(null),
+      });
+      const svc = buildSvc(
+        makeConvRepo(),
+        makeMemberRepo(),
+        makeMessageSvc(),
+        makeUserSvc(),
+        makeMembershipSvc(),
+        deviceSvc,
+      );
+      await expect(
+        svc.findOrCreateAgentDm("org-1", "user-1", "dev-not-owned"),
+      ).rejects.toMatchObject({
+        errorCode: MainErrorCode.AGENT_DEVICE_INVALID,
+      });
+    });
+  });
+
+  describe("listAgentDmsForDevice", () => {
+    it("返回该 device 的全部 Agent-DM 会话 id + orgId", async () => {
+      const rows = [
+        makeConv({ id: "c1", orgId: "org-1", agentDeviceId: "dev-1" }),
+        makeConv({ id: "c2", orgId: "org-2", agentDeviceId: "dev-1" }),
+      ];
+      const convRepo = makeConvRepo({
+        find: jest.fn().mockResolvedValue(rows),
+      });
+      const svc = buildSvc(
+        convRepo,
+        makeMemberRepo(),
+        makeMessageSvc(),
+        makeUserSvc(),
+      );
+      const out = await svc.listAgentDmsForDevice("dev-1");
+      expect(out).toEqual([
+        { conversationId: "c1", orgId: "org-1" },
+        { conversationId: "c2", orgId: "org-2" },
+      ]);
+    });
+  });
+
+  describe("getAgentDmOrThrow", () => {
+    it("agentDeviceId 非空 → 返回该 conversation", async () => {
+      const conv = makeConv({ id: "conv-agent-2", agentDeviceId: "dev-2" });
+      const convRepo = makeConvRepo({
+        findOne: jest.fn().mockResolvedValue(conv),
+      });
+      const svc = buildSvc(
+        convRepo,
+        makeMemberRepo(),
+        makeMessageSvc(),
+        makeUserSvc(),
+      );
+      const result = await svc.getAgentDmOrThrow("conv-agent-2");
+      expect(result.id).toBe("conv-agent-2");
+    });
+
+    it("agentDeviceId 为空（普通会话）→ 抛 AGENT_DEVICE_INVALID", async () => {
+      const conv = makeConv({ id: "ch-1", agentDeviceId: null });
+      const convRepo = makeConvRepo({
+        findOne: jest.fn().mockResolvedValue(conv),
+      });
+      const svc = buildSvc(
+        convRepo,
+        makeMemberRepo(),
+        makeMessageSvc(),
+        makeUserSvc(),
+      );
+      await expect(svc.getAgentDmOrThrow("ch-1")).rejects.toMatchObject({
+        errorCode: MainErrorCode.AGENT_DEVICE_INVALID,
+      });
+    });
+
+    it("会话不存在 → 抛 AGENT_DEVICE_INVALID", async () => {
+      const convRepo = makeConvRepo({
+        findOne: jest.fn().mockResolvedValue(null),
+      });
+      const svc = buildSvc(
+        convRepo,
+        makeMemberRepo(),
+        makeMessageSvc(),
+        makeUserSvc(),
+      );
+      await expect(svc.getAgentDmOrThrow("no-such")).rejects.toMatchObject({
+        errorCode: MainErrorCode.AGENT_DEVICE_INVALID,
+      });
+    });
+  });
+
+  describe("findAgentDevice", () => {
+    it("会话存在 → 返回 agentDeviceId（可能为 null）", async () => {
+      const conv = makeConv({ id: "conv-agent-3", agentDeviceId: "dev-3" });
+      const convRepo = makeConvRepo({
+        findOne: jest.fn().mockResolvedValue(conv),
+      });
+      const svc = buildSvc(
+        convRepo,
+        makeMemberRepo(),
+        makeMessageSvc(),
+        makeUserSvc(),
+      );
+      const result = await svc.findAgentDevice("conv-agent-3");
+      expect(result).toEqual({ agentDeviceId: "dev-3" });
+    });
+
+    it("会话不存在 → 返回 null（不抛错）", async () => {
+      const convRepo = makeConvRepo({
+        findOne: jest.fn().mockResolvedValue(null),
+      });
+      const svc = buildSvc(
+        convRepo,
+        makeMemberRepo(),
+        makeMessageSvc(),
+        makeUserSvc(),
+      );
+      const result = await svc.findAgentDevice("no-such");
+      expect(result).toBeNull();
     });
   });
 

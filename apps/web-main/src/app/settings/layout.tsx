@@ -1,22 +1,11 @@
 "use client";
 
-import {
-  Button,
-  cn,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@meshbot/design";
+import { cn } from "@meshbot/design";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
-import { clearMainToken } from "@/lib/auth-storage";
-import { useProfile } from "@/rest/auth";
-import { useSwitchOrg } from "@/rest/org";
+import { UserMenu } from "@/components/common/user-menu";
 
 interface NavItem {
   href: string;
@@ -57,75 +46,22 @@ function SettingsNav() {
   );
 }
 
-/** 顶栏用户菜单：展示 displayName + 当前组织，列 memberships 可切组织，含登出。 */
-function UserMenu() {
-  const t = useTranslations("settings");
-  const router = useRouter();
-  const profile = useProfile();
-  const switchOrg = useSwitchOrg();
-
-  const user = profile.data?.user ?? null;
-  const activeOrg = profile.data?.activeOrg ?? null;
-  const memberships = profile.data?.memberships ?? [];
-
-  const handleLogout = () => {
-    clearMainToken();
-    router.replace("/login");
-  };
-
-  const handleSwitchOrg = (orgId: string) => {
-    if (orgId === activeOrg?.id || switchOrg.isPending) return;
-    switchOrg.mutate({ orgId });
-  };
-
-  if (!user) return null;
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-1.5">
-          <span className="max-w-[160px] truncate">{user.displayName}</span>
-          {activeOrg ? (
-            <span className="max-w-[120px] truncate text-muted-foreground">
-              · {activeOrg.name}
-            </span>
-          ) : null}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel>{user.email}</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-muted-foreground">
-          {t("userMenu.switchOrg")}
-        </DropdownMenuLabel>
-        {memberships.map((m) => (
-          <DropdownMenuItem
-            key={m.id}
-            onSelect={() => handleSwitchOrg(m.id)}
-            disabled={switchOrg.isPending}
-            className={cn(m.id === activeOrg?.id && "font-semibold")}
-          >
-            {m.name}
-            {m.id === activeOrg?.id ? ` (${t("userMenu.current")})` : ""}
-          </DropdownMenuItem>
-        ))}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem destructive onSelect={handleLogout}>
-          {t("userMenu.logout")}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-/** `/settings/*` 共享壳：左导航 + 顶栏用户菜单。鉴权由根 `Providers` 里的全局 `AuthGuard` 统一负责。 */
+/** `/settings/*` 共享壳：左导航 + 顶栏（含「消息」入口 + 用户菜单）。鉴权由根 `Providers` 里的全局 `AuthGuard` 统一负责。 */
 export default function SettingsLayout({ children }: { children: ReactNode }) {
   const t = useTranslations("settings");
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-5">
-        <div className="text-sm font-semibold">{t("title")}</div>
+        <div className="flex items-center gap-4">
+          <div className="text-sm font-semibold">{t("title")}</div>
+          <Link
+            href="/messages"
+            className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            {t("messagesLink")}
+          </Link>
+        </div>
         <UserMenu />
       </header>
       <div className="flex min-h-0 flex-1">

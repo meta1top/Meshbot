@@ -130,7 +130,8 @@
       "switchOrg": "Switch organization",
       "current": "current",
       "logout": "Log out"
-    }
+    },
+    "messagesLink": "Messages"
   },
   "orgSettings": {
     "noOrg": "You haven't joined any organization yet",
@@ -172,8 +173,11 @@
     "colName": "Device name",
     "colPlatform": "Platform",
     "colLastSeen": "Last seen",
+    "colOnline": "Presence",
     "colStatus": "Status",
     "neverSeen": "Never active",
+    "online": "Online",
+    "offline": "Offline",
     "statusActive": "Active",
     "statusRevoked": "Revoked",
     "revoke": "Revoke",
@@ -370,5 +374,45 @@
   "toggleFailed": "",
   "deleteFailed": "",
   "dismiss": "",
-  "resendFailed": ""
+  "resendFailed": "",
+  "messages": {
+    "title": "Messages",
+    "settingsLink": "Settings",
+    "empty": {
+      "title": "Pick an Agent to start chatting",
+      "description": "Select a device Agent conversation on the left, or start a new one from the top-right."
+    }
+  },
+  "messagesSidebar": {
+    "title": "Messages",
+    "newDm": "New conversation",
+    "agentDms": "Device Agents",
+    "empty": "No conversations yet",
+    "loading": "Loading…",
+    "loadFailed": "Failed to load conversations",
+    "online": "Online",
+    "offline": "Offline",
+    "picker": {
+      "title": "Choose a device Agent",
+      "description": "Pick one of your authorized devices to start chatting with its Agent.",
+      "loading": "Loading devices…",
+      "empty": "No available devices. Sign in and authorize a device from the desktop app first.",
+      "loadFailed": "Failed to load devices",
+      "createFailed": "Failed to create conversation, please try again",
+      "cancel": "Cancel"
+    }
+  },
+  "imConversation": {
+    "agentFallback": "Device Agent",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "historyError": "Failed to load message history, please try again",
+    "emptyTitle": "No messages yet",
+    "emptyDescription": "Send {agent} a message to start the conversation",
+    "loadingMore": "Loading earlier messages…"
+  },
+  "chatInput": {
+    "placeholder": "Type a message…",
+    "send": "Send"
+  }
 }

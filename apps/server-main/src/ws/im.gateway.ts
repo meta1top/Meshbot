@@ -7,6 +7,7 @@ import {
 import {
   ConversationService,
   DEVICE_TOKEN_PREFIX,
+  DevicePresenceService,
   DeviceService,
   MainErrorCode,
   MessageService,
@@ -17,6 +18,7 @@ import {
   IM_WS_EVENTS,
   IM_WS_NAMESPACE,
   type ConversationSummary,
+  type ImAgentInboundEvent,
   type ImConversationReadEvent,
   type ImPresenceSetInput,
   type ImReadInput,
@@ -72,6 +74,7 @@ export class ImGateway extends BaseWebSocketGateway {
     private readonly presence: PresenceService,
     private readonly userService: UserService,
     private readonly devices: DeviceService,
+    private readonly devicePresence: DevicePresenceService,
   ) {
     super();
   }
@@ -139,6 +142,17 @@ export class ImGateway extends BaseWebSocketGateway {
 
       client.join(`org:${orgId}`);
 
+      // device 连接（Agent 反向通道）：join device room + 上线 + 广播设备 presence。
+      const deviceId = (client.data.user as { deviceId?: string }).deviceId;
+      if (deviceId) {
+        client.join(`device:${deviceId}`);
+        await this.devicePresence.setOnline(orgId, deviceId);
+        this.server.to(`org:${orgId}`).emit(IM_WS_EVENTS.presence, {
+          userId: `agent:${deviceId}`,
+          online: true,
+        } satisfies PresenceState);
+      }
+
       const convs = await this.conversation.listConversations(userId, orgId);
       for (const conv of convs) {
         client.join(`conv:${conv.id}`);
@@ -166,6 +180,16 @@ export class ImGateway extends BaseWebSocketGateway {
     try {
       const userId: string | undefined = client.data?.user?.userId;
       const orgId: string | undefined = client.data?.orgId;
+      const deviceId = (client.data?.user as { deviceId?: string })?.deviceId;
+
+      if (deviceId && orgId) {
+        await this.devicePresence.setOffline(orgId, deviceId);
+        this.server.to(`org:${orgId}`).emit(IM_WS_EVENTS.presence, {
+          userId: `agent:${deviceId}`,
+          online: false,
+        } satisfies PresenceState);
+      }
+
       if (!userId || !orgId) return;
 
       await this.presence.setOffline(orgId, userId);
@@ -179,7 +203,17 @@ export class ImGateway extends BaseWebSocketGateway {
   }
 
   /**
-   * 发消息：校验可见性 → 持久化 → 推到 conv 房间。
+   * 发消息：
+   * - device 连接（Agent 反向通道回流）：对象级授权——先 `getAgentDmOrThrow` 断言
+   *   该会话确是 Agent-DM（否则抛 AGENT_DEVICE_INVALID），再校验会话的
+   *   `agentDeviceId` 与本连接的 deviceId 一致（否则抛 CONVERSATION_FORBIDDEN，
+   *   防止持合法 device token 者越权向任意 conversationId 注入伪造 agent 消息）。
+   *   **不额外校验 `conv.orgId`**：`findOrCreateAgentDmLocked` 按 (userId, deviceId)
+   *   全局唯一建会话，orgId 建时固定、设备后续切换组织不换会话，`agentDeviceId` 归属
+   *   断言已完全封死越权，叠加 orgId 校验只会在设备切组织后把合法回流误判为越权。
+   *   通过后盖 senderType='agent'、senderId=deviceId，持久化后推到 conv 房间。
+   * - 用户连接：校验可见性 → 持久化（senderType='user'）→ 推到 conv 房间；
+   *   若目标会话是 Agent-DM，额外定向下发 `agentInbound` 到对应 device room。
    * WsExceptionFilter 统一处理 AppError（CONVERSATION_NOT_FOUND / FORBIDDEN）。
    */
   @UseGuards(WsAuthGuard)
@@ -188,25 +222,58 @@ export class ImGateway extends BaseWebSocketGateway {
     @MessageBody() body: ImSendInput,
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
-    const userId: string = client.data.user.userId;
+    const payload = client.data.user as { userId: string; deviceId?: string };
     const orgId: string | undefined = client.data.orgId;
     if (!orgId) throw new AppError(MainErrorCode.CONVERSATION_FORBIDDEN);
 
+    if (payload.deviceId) {
+      const conv = await this.conversation.getAgentDmOrThrow(
+        body.conversationId,
+      );
+      if (conv.agentDeviceId !== payload.deviceId) {
+        throw new AppError(MainErrorCode.CONVERSATION_FORBIDDEN);
+      }
+      const msg = await this.message.persistMessage(
+        body.conversationId,
+        payload.deviceId,
+        body.content,
+        "agent",
+      );
+      this.server
+        .to(`conv:${body.conversationId}`)
+        .emit(IM_WS_EVENTS.message, msg);
+      return;
+    }
+
     await this.conversation.getVisibleOrThrow(
       body.conversationId,
-      userId,
+      payload.userId,
       orgId,
     );
 
     const msg = await this.message.persistMessage(
       body.conversationId,
-      userId,
+      payload.userId,
       body.content,
+      "user",
     );
 
     this.server
       .to(`conv:${body.conversationId}`)
       .emit(IM_WS_EVENTS.message, msg);
+
+    const conv = await this.conversation.findAgentDevice(body.conversationId);
+    if (conv?.agentDeviceId) {
+      const event: ImAgentInboundEvent = {
+        conversationId: body.conversationId,
+        messageId: msg.id,
+        content: body.content,
+        senderUserId: payload.userId,
+      };
+      this.server
+        .to(`device:${conv.agentDeviceId}`)
+        .emit(IM_WS_EVENTS.agentInbound, event);
+    }
   }
 
   /**
@@ -282,14 +349,31 @@ export class ImGateway extends BaseWebSocketGateway {
 
   /**
    * Keepalive ping：续期 presence TTL。
-   * server-agent 每 ~20s 发一次，防止 TTL（45s）到期被判离线。
+   * server-agent 每 ~20s 发一次（设备连着 server-main 就发，不再依赖是否有浏览器
+   * 在线），防止 TTL（45s）到期被误判离线。
+   * device 连接（payload 带 deviceId）额外续期设备级 presence
+   * （`devicePresence.heartbeat`，orgId 与 onAuthedConnect 的 setOnline 同源，
+   * 取 `client.data.orgId`），且**无条件**执行（headless agent 无浏览器也要维持
+   * 设备级在线）。
+   *
+   * 终审复核 FIX B：用户级 `presence.heartbeat` **不再无条件执行**——只在该用户
+   * 当前已在线（`presence.isOnline`）时才续期，不会用 ping 把一个已被显式
+   * `setOffline`（浏览器关闭 → `handlePresenceSet({online:false})`）的用户重新
+   * 续活，恢复"用户级在线 = 有浏览器在看 IM"的门控语义；用户级与设备级两个
+   * presence 互不覆盖。
    */
   @UseGuards(WsAuthGuard)
   @SubscribeMessage(IM_WS_EVENTS.ping)
   async handlePing(@ConnectedSocket() client: Socket): Promise<void> {
     const orgId: string | undefined = client.data?.orgId;
-    if (orgId) {
-      await this.presence.heartbeat(orgId, client.data.user.userId);
+    if (!orgId) return;
+    const deviceId = (client.data?.user as { deviceId?: string })?.deviceId;
+    if (deviceId) {
+      await this.devicePresence.heartbeat(orgId, deviceId);
+    }
+    const userId: string = client.data.user.userId;
+    if (await this.presence.isOnline(orgId, userId)) {
+      await this.presence.heartbeat(orgId, userId);
     }
   }
 

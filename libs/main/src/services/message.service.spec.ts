@@ -14,6 +14,7 @@ describe("MessageService", () => {
       senderId: string;
       content: string;
       createdAt: Date;
+      senderType: "user" | "agent";
     }> = {},
   ) => ({
     id: "msg-1",
@@ -21,17 +22,20 @@ describe("MessageService", () => {
     senderId: "user-1",
     content: "hello",
     createdAt: new Date("2024-01-01T10:00:00.000Z"),
+    senderType: "user" as "user" | "agent",
     ...overrides,
   });
 
   // ─── persistMessage ────────────────────────────────────────────────────────
 
   describe("persistMessage", () => {
-    it("保存消息并返回含 id 的 ImMessage（createdAt 为 ISO 字符串）", async () => {
+    it("保存消息并返回含 id 的 ImMessage（createdAt 为 ISO 字符串），默认 senderType='user'", async () => {
       const saved = makeMsg();
       const repo = {
-        create: jest.fn().mockReturnValue(saved),
-        save: jest.fn().mockResolvedValue(saved),
+        create: jest
+          .fn()
+          .mockImplementation((d: object) => ({ ...saved, ...d })),
+        save: jest.fn().mockImplementation((e: object) => Promise.resolve(e)),
         createQueryBuilder: jest.fn(),
         findOne: jest.fn(),
         count: jest.fn(),
@@ -48,7 +52,32 @@ describe("MessageService", () => {
       expect(out.content).toBe("hello");
       expect(typeof out.createdAt).toBe("string");
       expect(() => new Date(out.createdAt)).not.toThrow();
+      expect(out.senderType).toBe("user");
       expect(repo.save).toHaveBeenCalledTimes(1);
+    });
+
+    it("传 senderType='agent' → 落 senderType='agent'（设备 Agent 反向下发消息）", async () => {
+      const saved = makeMsg({ senderType: "agent" });
+      const repo = {
+        create: jest
+          .fn()
+          .mockImplementation((d: object) => ({ ...saved, ...d })),
+        save: jest.fn().mockImplementation((e: object) => Promise.resolve(e)),
+        createQueryBuilder: jest.fn(),
+        findOne: jest.fn(),
+        count: jest.fn(),
+      };
+      const svc = new MessageService(repo as never);
+      const out: ImMessage = await svc.persistMessage(
+        "conv-agent-1",
+        "dev-1",
+        "hi from agent",
+        "agent",
+      );
+      expect(out.senderType).toBe("agent");
+      expect(repo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ senderType: "agent" }),
+      );
     });
   });
 

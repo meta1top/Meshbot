@@ -14,6 +14,7 @@ import { type Socket, io } from "socket.io-client";
 
 import { AgentErrorCode } from "../errors/agent.error-codes";
 import { AUTH_EVENTS } from "../services/auth.events";
+import { IM_RELAY_EVENTS, type ImRelayConnectedEvent } from "./im-relay.events";
 import type { CloudIdentityService } from "../services/cloud-identity.service";
 
 /** socket.io-client 工厂函数类型（方便测试注入伪实现）。 */
@@ -58,8 +59,9 @@ export class ImRelayClientService implements OnModuleDestroy {
 
   /**
    * 「有浏览器连着」的账号集合（cloudUserId）。由 EventsGateway 按浏览器连接数
-   * 在 0↔1 跳变时调 setUiPresence 维护。决定：① 是否 ping（无浏览器不续期 TTL）
-   * ② relay 重连后是否重新上报在线。
+   * 在 0↔1 跳变时调 setUiPresence 维护。决定 relay（重）连后是否重新上报「用户」
+   * 在线态（presence_set）。注意：不再门控 keepalive ping——设备连着 server-main
+   * 就无条件周期 ping 续期设备级 presence（headless agent 无浏览器仍需在线）。
    */
   private readonly uiOnline = new Set<string>();
 
@@ -116,6 +118,7 @@ export class ImRelayClientService implements OnModuleDestroy {
         IM_WS_EVENTS.conversationCreated,
         IM_WS_EVENTS.conversationRemoved,
         IM_WS_EVENTS.conversationRead,
+        IM_WS_EVENTS.agentInbound,
       ] as const) {
         socket.on(event, (payload: unknown) => {
           if (event === IM_WS_EVENTS.presence) {
@@ -148,11 +151,19 @@ export class ImRelayClientService implements OnModuleDestroy {
             online: true,
           } satisfies ImPresenceSetInput);
         }
+        this.account.run(cloudUserId, () => {
+          this.emitter.emit(IM_RELAY_EVENTS.connected, {
+            cloudUserId,
+          } satisfies ImRelayConnectedEvent);
+        });
       });
 
-      // keepalive ping（无浏览器时不续期 TTL；unref 防止阻塞进程退出）
+      // keepalive ping：只要 socket 连着就无条件周期发（设备连着 server-main 就该
+      // 持续续期设备级 presence——headless agent 无浏览器也要维持在线态，故不再门控于
+      // uiOnline；uiOnline 语义只保留给"用户浏览器在线态"presence_set 上报）。
+      // unref 防止阻塞进程退出。
       const timer = setInterval(() => {
-        if (socket.connected && this.uiOnline.has(cloudUserId)) {
+        if (socket.connected) {
           socket.emit(IM_WS_EVENTS.ping);
         }
       }, PING_INTERVAL_MS);

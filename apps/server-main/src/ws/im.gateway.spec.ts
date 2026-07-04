@@ -1,3 +1,4 @@
+import { DevicePresenceService, PresenceService } from "@meshbot/main";
 import { IM_WS_EVENTS } from "@meshbot/types";
 import { ImGateway } from "./im.gateway";
 
@@ -9,6 +10,7 @@ function makeGateway(overrides: {
     setOffline?: jest.Mock;
     heartbeat?: jest.Mock;
     listOnline?: jest.Mock;
+    isOnline?: jest.Mock;
   };
   userService?: {
     findById?: jest.Mock;
@@ -18,6 +20,11 @@ function makeGateway(overrides: {
   };
   devices?: {
     verifyToken?: jest.Mock;
+  };
+  devicePresence?: {
+    setOnline?: jest.Mock;
+    setOffline?: jest.Mock;
+    heartbeat?: jest.Mock;
   };
 }) {
   const conversation = {
@@ -37,6 +44,9 @@ function makeGateway(overrides: {
       overrides.presence?.heartbeat ?? jest.fn().mockResolvedValue(undefined),
     listOnline:
       overrides.presence?.listOnline ?? jest.fn().mockResolvedValue([]),
+    // 默认已在线：保持既有测试对「无条件续期」场景的假设不变，
+    // FIX B 的「离线不复活」场景在下方单独用 isOnline: false 覆盖。
+    isOnline: overrides.presence?.isOnline ?? jest.fn().mockResolvedValue(true),
   };
   const userService = {
     findById:
@@ -49,6 +59,17 @@ function makeGateway(overrides: {
     verifyToken:
       overrides.devices?.verifyToken ?? jest.fn().mockResolvedValue(undefined),
   };
+  const devicePresence = {
+    setOnline:
+      overrides.devicePresence?.setOnline ??
+      jest.fn().mockResolvedValue(undefined),
+    setOffline:
+      overrides.devicePresence?.setOffline ??
+      jest.fn().mockResolvedValue(undefined),
+    heartbeat:
+      overrides.devicePresence?.heartbeat ??
+      jest.fn().mockResolvedValue(undefined),
+  };
   const gw = new ImGateway(
     jwt as never,
     conversation as never,
@@ -56,6 +77,7 @@ function makeGateway(overrides: {
     presence as never, // presence
     userService as never, // userService
     devices as never, // devices
+    devicePresence as never, // devicePresence
   );
   const fetchSockets = jest.fn().mockResolvedValue(overrides.sockets ?? []);
   const roomEmitSpy = jest.fn();
@@ -71,6 +93,7 @@ function makeGateway(overrides: {
     userService,
     jwt,
     devices,
+    devicePresence,
     toSpy,
     roomEmitSpy,
   };
@@ -230,9 +253,11 @@ describe("ImGateway.onAuthedConnect（device 连接 orgId 直接用 payload）",
     };
   }
 
-  it("device 连接 → 不查 findById，入 org 房间用 payload.orgId", async () => {
+  it("device 连接 → 不查 findById，入 org 房间用 payload.orgId，同时 join device room + 上线 + 广播 agent presence", async () => {
     const findById = jest.fn();
-    const { gw } = makeGateway({ userService: { findById } });
+    const { gw, devicePresence, toSpy, roomEmitSpy } = makeGateway({
+      userService: { findById },
+    });
     const conversation = {
       listConversations: jest.fn().mockResolvedValue([{ id: "c1" }]),
     };
@@ -246,7 +271,16 @@ describe("ImGateway.onAuthedConnect（device 连接 orgId 直接用 payload）",
     expect(findById).not.toHaveBeenCalled();
     expect(client.data.orgId).toBe("o-dev");
     expect(client.join).toHaveBeenCalledWith("org:o-dev");
+    expect(client.join).toHaveBeenCalledWith("device:d1");
+    expect(devicePresence.setOnline).toHaveBeenCalledWith("o-dev", "d1");
+    expect(toSpy).toHaveBeenCalledWith("org:o-dev");
+    expect(roomEmitSpy).toHaveBeenCalledWith("im.presence", {
+      userId: "agent:d1",
+      online: true,
+    });
     expect(conversation.listConversations).toHaveBeenCalledWith("u1", "o-dev");
+    // Agent-DM 会话 conv room 同样靠 listConversations(device.userId,...) 覆盖
+    expect(client.join).toHaveBeenCalledWith("conv:c1");
   });
 
   it("用户 JWT 连接 → 保持现状查 activeOrgId", async () => {
@@ -265,5 +299,150 @@ describe("ImGateway.onAuthedConnect（device 连接 orgId 直接用 payload）",
     expect(findById).toHaveBeenCalledWith("u1");
     expect(client.data.orgId).toBe("o-user");
     expect(client.join).toHaveBeenCalledWith("org:o-user");
+  });
+});
+
+describe("ImGateway.handleDisconnect（device 连接下线）", () => {
+  it("device 连接断连 → devicePresence.setOffline + 广播 agent presence offline（旁路，user setOffline 仍执行）", async () => {
+    const { gw, presence, devicePresence, toSpy, roomEmitSpy } = makeGateway(
+      {},
+    );
+    const client = {
+      data: {
+        orgId: "o-dev",
+        user: { userId: "u1", orgId: "o-dev", deviceId: "d1" },
+      },
+    };
+
+    await gw.handleDisconnect(client as never);
+
+    expect(devicePresence.setOffline).toHaveBeenCalledWith("o-dev", "d1");
+    expect(presence.setOffline).toHaveBeenCalledWith("o-dev", "u1");
+    expect(toSpy).toHaveBeenCalledWith("org:o-dev");
+    expect(roomEmitSpy).toHaveBeenCalledWith("im.presence", {
+      userId: "agent:d1",
+      online: false,
+    });
+    expect(roomEmitSpy).toHaveBeenCalledWith("im.presence", {
+      userId: "u1",
+      online: false,
+    });
+  });
+
+  it("用户 JWT 连接断连 → 不调 devicePresence.setOffline", async () => {
+    const { gw, presence, devicePresence } = makeGateway({});
+    const client = { data: { orgId: "o1", user: { userId: "u1" } } };
+
+    await gw.handleDisconnect(client as never);
+
+    expect(devicePresence.setOffline).not.toHaveBeenCalled();
+    expect(presence.setOffline).toHaveBeenCalledWith("o1", "u1");
+  });
+});
+
+describe("ImGateway.handlePing（心跳续期 presence TTL）", () => {
+  it("FIX1：device 连接（payload 带 deviceId）→ devicePresence.heartbeat + presence.heartbeat 都续期（用户级已在线）", async () => {
+    const { gw, presence, devicePresence } = makeGateway({});
+    const client = {
+      data: {
+        orgId: "o-dev",
+        user: { userId: "u1", orgId: "o-dev", deviceId: "d1" },
+      },
+    };
+
+    await gw.handlePing(client as never);
+
+    expect(devicePresence.heartbeat).toHaveBeenCalledWith("o-dev", "d1");
+    expect(presence.isOnline).toHaveBeenCalledWith("o-dev", "u1");
+    expect(presence.heartbeat).toHaveBeenCalledWith("o-dev", "u1");
+  });
+
+  it("用户 JWT 连接（无 deviceId）→ 只续期用户级，不碰 devicePresence.heartbeat", async () => {
+    const { gw, presence, devicePresence } = makeGateway({});
+    const client = { data: { orgId: "o1", user: { userId: "u1" } } };
+
+    await gw.handlePing(client as never);
+
+    expect(devicePresence.heartbeat).not.toHaveBeenCalled();
+    expect(presence.heartbeat).toHaveBeenCalledWith("o1", "u1");
+  });
+
+  it("无 orgId → 不续期任何一级", async () => {
+    const { gw, presence, devicePresence } = makeGateway({});
+    const client = { data: { user: { userId: "u1", deviceId: "d1" } } };
+
+    await gw.handlePing(client as never);
+
+    expect(devicePresence.heartbeat).not.toHaveBeenCalled();
+    expect(presence.heartbeat).not.toHaveBeenCalled();
+  });
+
+  it("终审复核 FIX B：用户级已离线（浏览器关闭 setOffline 之后）→ 即便 device ping 持续发，也不会重新续期用户级；设备级仍无条件续期", async () => {
+    const isOnline = jest.fn().mockResolvedValue(false);
+    const { gw, presence, devicePresence } = makeGateway({
+      presence: { isOnline },
+    });
+    const client = {
+      data: {
+        orgId: "o-dev",
+        user: { userId: "u1", orgId: "o-dev", deviceId: "d1" },
+      },
+    };
+
+    await gw.handlePing(client as never);
+
+    expect(devicePresence.heartbeat).toHaveBeenCalledWith("o-dev", "d1");
+    expect(presence.isOnline).toHaveBeenCalledWith("o-dev", "u1");
+    expect(presence.heartbeat).not.toHaveBeenCalled();
+  });
+});
+
+describe("终审复核 FIX B（集成：真实 PresenceService + DevicePresenceService，不 mock）", () => {
+  it("浏览器关闭（presence_set online:false）后，即便设备 ping 持续发（跨越用户级 TTL 窗口），用户级 presence 仍离线；设备级因 ping 持续续期保持在线", async () => {
+    let now = 1_000_000;
+    // 真实服务 + 可控假时钟：redis=null 走内存回退路径，语义与生产 Redis 路径一致。
+    const presence = new PresenceService(null, () => now);
+    const devicePresence = new DevicePresenceService(null, () => now);
+    const gw = new ImGateway(
+      {} as never, // jwt
+      {} as never, // conversation
+      {} as never, // message
+      presence,
+      {} as never, // userService
+      {} as never, // devices
+      devicePresence,
+    );
+    (gw as unknown as { server: unknown }).server = {
+      to: jest.fn().mockReturnValue({ emit: jest.fn() }),
+    };
+    const client = {
+      data: {
+        orgId: "org1",
+        user: { userId: "u1", orgId: "org1", deviceId: "d1" },
+      },
+    };
+
+    // 初始：浏览器在看 → 用户上线；设备连着 server-main → 设备上线
+    // （分别对应 handlePresenceSet({online:true}) 与 onAuthedConnect 的效果）。
+    await presence.setOnline("org1", "u1");
+    await devicePresence.setOnline("org1", "d1");
+    expect(await presence.listOnline("org1")).toContain("u1");
+
+    // 浏览器关闭：EventsGateway 聚合浏览器连接数 0 → relay.setUiPresence(false)
+    // → 上报 im.presence_set {online:false}，用户级立即下线。
+    await gw.handlePresenceSet({ online: false } as never, client as never);
+    expect(await presence.listOnline("org1")).not.toContain("u1");
+
+    // 设备仍连着 server-main（headless），relay 每 20s 无条件发一次 im.ping；
+    // 推进 3 轮（60s，超过用户级 TTL 45s 一整个窗口）。
+    for (let i = 0; i < 3; i++) {
+      now += 20_000;
+      await gw.handlePing(client as never);
+    }
+
+    // 验收：用户级 presence 没被 ping 复活（跨越 TTL 窗口后仍离线）；
+    // 设备级 presence 因持续 ping 续期，未过期，仍在线。
+    expect(await presence.listOnline("org1")).not.toContain("u1");
+    expect(await devicePresence.listOnline("org1")).toContain("d1");
   });
 });

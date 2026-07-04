@@ -12,7 +12,7 @@ const PRESENCE_TTL_SECONDS = 45;
  * 避免直接 import ioredis（libs/main 未把 ioredis 列为依赖），
  * 同时方便测试时注入手写桩。
  */
-interface RedisPresenceClient {
+export interface RedisPresenceClient {
   zadd(key: string, score: number, member: string): Promise<number>;
   zrem(key: string, member: string): Promise<number>;
   zremrangebyscore(
@@ -129,6 +129,15 @@ export class PresenceService {
       this.memStore.delete(orgId);
     }
     return online;
+  }
+
+  /**
+   * 判断某用户当前是否在线。
+   * 供 `ImGateway.handlePing` 门控用户级续期：只在"已在线"时才 heartbeat，
+   * 不能让 ping 把一个已被显式 setOffline（如浏览器关闭）的用户重新续活。
+   */
+  async isOnline(orgId: string, userId: string): Promise<boolean> {
+    return (await this.listOnline(orgId)).includes(userId);
   }
 
   // ─── 私有辅助 ─────────────────────────────────────────────────────────────

@@ -14,6 +14,9 @@ export class Message extends SnowflakeBaseEntity {
   @Column({ type: "text" })
   content!: string;
 
+  @Column({ type: "varchar", length: 8, default: "user" })
+  senderType!: "user" | "agent";
+
   @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 }

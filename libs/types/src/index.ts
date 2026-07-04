@@ -26,6 +26,7 @@ export {
 export {
   IM_WS_EVENTS,
   IM_WS_NAMESPACE,
+  type ImAgentInboundEvent,
   type ImConversationCreatedEvent,
   type ImConversationReadEvent,
   type ImMessageEvent,
@@ -39,6 +40,8 @@ export {
   type ChannelMember,
   type ConversationSummary,
   type ConversationType,
+  type CreateAgentDmInput,
+  CreateAgentDmSchema,
   type CreateChannelInput,
   CreateChannelSchema,
   type CreateDmInput,
