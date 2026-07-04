@@ -4,7 +4,10 @@ import { cn } from "@meshbot/design";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { Download, Sparkles, X } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { previewArtifactAtom } from "@/atoms/assistant-panel";
+import {
+  previewArtifactAtom,
+  quickAssistantNameAtom,
+} from "@/atoms/assistant-panel";
 import {
   availableContextTabsAtom,
   effectiveRightTabAtom,
@@ -17,7 +20,6 @@ import {
 } from "@/components/artifact/artifact-body";
 import { AssistantDock } from "@/components/im/assistant-dock";
 import { MembersPanel } from "@/components/im/members-panel";
-import { ToolsPanel } from "@/components/session/tools-panel";
 
 /** 右区容器：统一 tab 条（上下文 tab + 钉住 ✦随手问）+ 选中面板。 */
 export function RightZone() {
@@ -25,11 +27,11 @@ export function RightZone() {
   const ctx = useAtomValue(availableContextTabsAtom);
   const active = useAtomValue(effectiveRightTabAtom);
   const [, setSelected] = useAtom(selectedContextTabAtom);
+  const quickName = useAtomValue(quickAssistantNameAtom);
 
   const label: Record<RightTab, string> = {
-    quick: t("quick"),
+    quick: quickName,
     artifact: t("artifact"),
-    tools: t("tools"),
     members: t("members"),
   };
 
@@ -62,13 +64,12 @@ export function RightZone() {
           )}
         >
           <Sparkles className="h-3.5 w-3.5" />
-          {label.quick}
+          <span className="max-w-[120px] truncate">{label.quick}</span>
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-hidden">
         {active === "quick" && <AssistantDock chromeless />}
         {active === "artifact" && <ArtifactBodyPane />}
-        {active === "tools" && <ToolsPanel />}
         {active === "members" && <MembersPanel />}
       </div>
     </div>
@@ -85,7 +86,13 @@ function ArtifactBodyPane() {
   const artifact = useAtomValue(previewArtifactAtom);
   const setPreviewArtifact = useSetAtom(previewArtifactAtom);
   const setSelectedContextTab = useSetAtom(selectedContextTabAtom);
-  if (!artifact) return null;
+  if (!artifact) {
+    return (
+      <div className="flex h-full items-center justify-center text-[12px] text-muted-foreground">
+        {t("artifactEmpty")}
+      </div>
+    );
+  }
   // 标题：优先 title，其次 name（网盘源），其次 path 末段（产物源）
   const title =
     artifact.title ??
