@@ -6,7 +6,7 @@ import { useTranslations } from "next-intl";
 import { SidebarNavItem } from "@/components/shell/sidebar-nav-item";
 
 /**
- * 「更多」区左侧子导航（Slack 左对齐）：使用情况 + 定时任务。
+ * 「设置」区左侧子导航（Slack 左对齐）：使用情况 + 定时任务。
  * 容器范式同 messages-sidebar；当前路由高亮。
  */
 export function MoreSidebar() {

@@ -231,11 +231,6 @@
     "loadFailed": "Failed to load",
     "retry": "Retry"
   },
-  "moreSidebar": {
-    "title": "More",
-    "usage": "Usage",
-    "scheduled": "Scheduled"
-  },
   "flows": {
     "comingTitle": "Flows coming soon",
     "comingHint": "Human–agent workflow orchestration is under development."

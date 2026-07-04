@@ -17,7 +17,7 @@ const RANGES: StatsRange[] = ["all", "30d", "7d"];
 export default function MorePage() {
   const t = useTranslations("home");
   // 页头标题复用「更多」子导航的「使用情况」文案，点选与页头一致。
-  const tNav = useTranslations("moreSidebar");
+  const tNav = useTranslations("settingsSidebar");
   const [range, setRange] = useState<StatsRange>("all");
   const [stats, setStats] = useState<StatsResponse | null>(null);
 

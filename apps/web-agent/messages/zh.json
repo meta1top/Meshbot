@@ -231,11 +231,6 @@
     "loadFailed": "加载失败",
     "retry": "重试"
   },
-  "moreSidebar": {
-    "title": "更多",
-    "usage": "使用情况",
-    "scheduled": "定时任务"
-  },
   "flows": {
     "comingTitle": "流程即将上线",
     "comingHint": "人机协作的流程编排能力正在开发中,敬请期待。"
