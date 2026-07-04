@@ -1,3 +1,4 @@
+import { DevicePresenceService, PresenceService } from "@meshbot/main";
 import { IM_WS_EVENTS } from "@meshbot/types";
 import { ImGateway } from "./im.gateway";
 
@@ -9,6 +10,7 @@ function makeGateway(overrides: {
     setOffline?: jest.Mock;
     heartbeat?: jest.Mock;
     listOnline?: jest.Mock;
+    isOnline?: jest.Mock;
   };
   userService?: {
     findById?: jest.Mock;
@@ -42,6 +44,9 @@ function makeGateway(overrides: {
       overrides.presence?.heartbeat ?? jest.fn().mockResolvedValue(undefined),
     listOnline:
       overrides.presence?.listOnline ?? jest.fn().mockResolvedValue([]),
+    // 默认已在线：保持既有测试对「无条件续期」场景的假设不变，
+    // FIX B 的「离线不复活」场景在下方单独用 isOnline: false 覆盖。
+    isOnline: overrides.presence?.isOnline ?? jest.fn().mockResolvedValue(true),
   };
   const userService = {
     findById:
@@ -336,7 +341,7 @@ describe("ImGateway.handleDisconnect（device 连接下线）", () => {
 });
 
 describe("ImGateway.handlePing（心跳续期 presence TTL）", () => {
-  it("FIX1：device 连接（payload 带 deviceId）→ devicePresence.heartbeat + presence.heartbeat 都续期", async () => {
+  it("FIX1：device 连接（payload 带 deviceId）→ devicePresence.heartbeat + presence.heartbeat 都续期（用户级已在线）", async () => {
     const { gw, presence, devicePresence } = makeGateway({});
     const client = {
       data: {
@@ -348,6 +353,7 @@ describe("ImGateway.handlePing（心跳续期 presence TTL）", () => {
     await gw.handlePing(client as never);
 
     expect(devicePresence.heartbeat).toHaveBeenCalledWith("o-dev", "d1");
+    expect(presence.isOnline).toHaveBeenCalledWith("o-dev", "u1");
     expect(presence.heartbeat).toHaveBeenCalledWith("o-dev", "u1");
   });
 
@@ -369,5 +375,74 @@ describe("ImGateway.handlePing（心跳续期 presence TTL）", () => {
 
     expect(devicePresence.heartbeat).not.toHaveBeenCalled();
     expect(presence.heartbeat).not.toHaveBeenCalled();
+  });
+
+  it("终审复核 FIX B：用户级已离线（浏览器关闭 setOffline 之后）→ 即便 device ping 持续发，也不会重新续期用户级；设备级仍无条件续期", async () => {
+    const isOnline = jest.fn().mockResolvedValue(false);
+    const { gw, presence, devicePresence } = makeGateway({
+      presence: { isOnline },
+    });
+    const client = {
+      data: {
+        orgId: "o-dev",
+        user: { userId: "u1", orgId: "o-dev", deviceId: "d1" },
+      },
+    };
+
+    await gw.handlePing(client as never);
+
+    expect(devicePresence.heartbeat).toHaveBeenCalledWith("o-dev", "d1");
+    expect(presence.isOnline).toHaveBeenCalledWith("o-dev", "u1");
+    expect(presence.heartbeat).not.toHaveBeenCalled();
+  });
+});
+
+describe("终审复核 FIX B（集成：真实 PresenceService + DevicePresenceService，不 mock）", () => {
+  it("浏览器关闭（presence_set online:false）后，即便设备 ping 持续发（跨越用户级 TTL 窗口），用户级 presence 仍离线；设备级因 ping 持续续期保持在线", async () => {
+    let now = 1_000_000;
+    // 真实服务 + 可控假时钟：redis=null 走内存回退路径，语义与生产 Redis 路径一致。
+    const presence = new PresenceService(null, () => now);
+    const devicePresence = new DevicePresenceService(null, () => now);
+    const gw = new ImGateway(
+      {} as never, // jwt
+      {} as never, // conversation
+      {} as never, // message
+      presence,
+      {} as never, // userService
+      {} as never, // devices
+      devicePresence,
+    );
+    (gw as unknown as { server: unknown }).server = {
+      to: jest.fn().mockReturnValue({ emit: jest.fn() }),
+    };
+    const client = {
+      data: {
+        orgId: "org1",
+        user: { userId: "u1", orgId: "org1", deviceId: "d1" },
+      },
+    };
+
+    // 初始：浏览器在看 → 用户上线；设备连着 server-main → 设备上线
+    // （分别对应 handlePresenceSet({online:true}) 与 onAuthedConnect 的效果）。
+    await presence.setOnline("org1", "u1");
+    await devicePresence.setOnline("org1", "d1");
+    expect(await presence.listOnline("org1")).toContain("u1");
+
+    // 浏览器关闭：EventsGateway 聚合浏览器连接数 0 → relay.setUiPresence(false)
+    // → 上报 im.presence_set {online:false}，用户级立即下线。
+    await gw.handlePresenceSet({ online: false } as never, client as never);
+    expect(await presence.listOnline("org1")).not.toContain("u1");
+
+    // 设备仍连着 server-main（headless），relay 每 20s 无条件发一次 im.ping；
+    // 推进 3 轮（60s，超过用户级 TTL 45s 一整个窗口）。
+    for (let i = 0; i < 3; i++) {
+      now += 20_000;
+      await gw.handlePing(client as never);
+    }
+
+    // 验收：用户级 presence 没被 ping 复活（跨越 TTL 窗口后仍离线）；
+    // 设备级 presence 因持续 ping 续期，未过期，仍在线。
+    expect(await presence.listOnline("org1")).not.toContain("u1");
+    expect(await devicePresence.listOnline("org1")).toContain("d1");
   });
 });

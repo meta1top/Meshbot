@@ -131,6 +131,15 @@ export class PresenceService {
     return online;
   }
 
+  /**
+   * 判断某用户当前是否在线。
+   * 供 `ImGateway.handlePing` 门控用户级续期：只在"已在线"时才 heartbeat，
+   * 不能让 ping 把一个已被显式 setOffline（如浏览器关闭）的用户重新续活。
+   */
+  async isOnline(orgId: string, userId: string): Promise<boolean> {
+    return (await this.listOnline(orgId)).includes(userId);
+  }
+
   // ─── 私有辅助 ─────────────────────────────────────────────────────────────
 
   /** Redis sorted-set 键名。 */

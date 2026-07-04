@@ -206,8 +206,11 @@ export class ImGateway extends BaseWebSocketGateway {
    * 发消息：
    * - device 连接（Agent 反向通道回流）：对象级授权——先 `getAgentDmOrThrow` 断言
    *   该会话确是 Agent-DM（否则抛 AGENT_DEVICE_INVALID），再校验会话的
-   *   `agentDeviceId` 与 `orgId` 都与本连接一致（否则抛 CONVERSATION_FORBIDDEN，
-   *   防止持合法 device token 者越权向任意 conversationId 注入伪造 agent 消息）；
+   *   `agentDeviceId` 与本连接的 deviceId 一致（否则抛 CONVERSATION_FORBIDDEN，
+   *   防止持合法 device token 者越权向任意 conversationId 注入伪造 agent 消息）。
+   *   **不额外校验 `conv.orgId`**：`findOrCreateAgentDmLocked` 按 (userId, deviceId)
+   *   全局唯一建会话，orgId 建时固定、设备后续切换组织不换会话，`agentDeviceId` 归属
+   *   断言已完全封死越权，叠加 orgId 校验只会在设备切组织后把合法回流误判为越权。
    *   通过后盖 senderType='agent'、senderId=deviceId，持久化后推到 conv 房间。
    * - 用户连接：校验可见性 → 持久化（senderType='user'）→ 推到 conv 房间；
    *   若目标会话是 Agent-DM，额外定向下发 `agentInbound` 到对应 device room。
@@ -227,7 +230,7 @@ export class ImGateway extends BaseWebSocketGateway {
       const conv = await this.conversation.getAgentDmOrThrow(
         body.conversationId,
       );
-      if (conv.agentDeviceId !== payload.deviceId || conv.orgId !== orgId) {
+      if (conv.agentDeviceId !== payload.deviceId) {
         throw new AppError(MainErrorCode.CONVERSATION_FORBIDDEN);
       }
       const msg = await this.message.persistMessage(
@@ -350,7 +353,14 @@ export class ImGateway extends BaseWebSocketGateway {
    * 在线），防止 TTL（45s）到期被误判离线。
    * device 连接（payload 带 deviceId）额外续期设备级 presence
    * （`devicePresence.heartbeat`，orgId 与 onAuthedConnect 的 setOnline 同源，
-   * 取 `client.data.orgId`）；用户级 `presence.heartbeat` 照旧执行，两者互不覆盖。
+   * 取 `client.data.orgId`），且**无条件**执行（headless agent 无浏览器也要维持
+   * 设备级在线）。
+   *
+   * 终审复核 FIX B：用户级 `presence.heartbeat` **不再无条件执行**——只在该用户
+   * 当前已在线（`presence.isOnline`）时才续期，不会用 ping 把一个已被显式
+   * `setOffline`（浏览器关闭 → `handlePresenceSet({online:false})`）的用户重新
+   * 续活，恢复"用户级在线 = 有浏览器在看 IM"的门控语义；用户级与设备级两个
+   * presence 互不覆盖。
    */
   @UseGuards(WsAuthGuard)
   @SubscribeMessage(IM_WS_EVENTS.ping)
@@ -361,7 +371,10 @@ export class ImGateway extends BaseWebSocketGateway {
     if (deviceId) {
       await this.devicePresence.heartbeat(orgId, deviceId);
     }
-    await this.presence.heartbeat(orgId, client.data.user.userId);
+    const userId: string = client.data.user.userId;
+    if (await this.presence.isOnline(orgId, userId)) {
+      await this.presence.heartbeat(orgId, userId);
+    }
   }
 
   /**

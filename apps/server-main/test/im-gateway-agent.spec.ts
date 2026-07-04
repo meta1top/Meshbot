@@ -4,10 +4,12 @@ import { IM_WS_EVENTS } from "@meshbot/types";
 import { ImGateway } from "../src/ws/im.gateway";
 
 /**
- * ImGateway.handleSend 的轻量断言测试（Task 4+5 Step 2 + FIX2 device 对象级授权）。
+ * ImGateway.handleSend 的轻量断言测试（Task 4+5 Step 2 + FIX2 device 对象级授权 + 终审复核）。
  *
  * 覆盖 device 反向通道回流 / Agent-DM 定向下发 / 普通会话不下发 三分支，
- * 外加 FIX2：device 分支落库前 getAgentDmOrThrow + agentDeviceId/orgId 归属断言；
+ * 外加 FIX2：device 分支落库前 getAgentDmOrThrow + agentDeviceId 归属断言（对象级授权）；
+ * 终审复核：**不**额外校验 conv.orgId——设备切组织后合法回流的 conv.orgId（建时固定）
+ * 与连接 orgId（设备现属组织）不同属正常场景，只留 agentDeviceId 归属断言；
  * 手工 new ImGateway + mock conversation/message/server（不起真实 socket.io/DB）。
  * 完整端到端行为（真实双端连接 + presence 广播）由 Task 7 的
  * `apps/server-main/test/e2e/agent-dm-flow.e2e.spec.ts` 验证。
@@ -152,34 +154,40 @@ describe("ImGateway.handleSend（device 回流 / Agent-DM 定向下发）", () =
     expect(toSpy).not.toHaveBeenCalled();
   });
 
-  it("FIX2 越权：device 连接发到「跨 org」的本设备 Agent-DM（orgId 不匹配）→ 抛 CONVERSATION_FORBIDDEN，不落库", async () => {
-    const persistMessage = jest.fn();
-    const { gw, message, toSpy } = makeGateway({
+  it("终审复核 FIX：设备切组织后回流「跨 org」的本设备 Agent-DM（会话建时 orgId 与设备现 orgId 不同）→ 不误判越权，正常落库+广播", async () => {
+    // findOrCreateAgentDmLocked 按 (userId, deviceId) 全局唯一建会话，orgId 建时固定；
+    // 设备后续切换组织后 conv.orgId（建时）≠ 连接 orgId（设备现属组织）属合法场景，
+    // agentDeviceId 归属断言已完全封死越权，不应额外校验 orgId 否则合法回流被误杀。
+    const { gw, conversation, message, toSpy, roomEmitSpy } = makeGateway({
       conversation: {
-        // agentDeviceId 匹配本设备，但会话 org 与连接 org 不一致
         getAgentDmOrThrow: jest.fn().mockResolvedValue({
           id: "c1",
           agentDeviceId: "d1",
-          orgId: "org-other",
+          orgId: "org-old", // 会话建时的组织，已与设备当前组织不同
         }),
       },
-      message: { persistMessage },
     });
     const client = {
-      data: { orgId: "org1", user: { userId: "u1", deviceId: "d1" } },
+      data: { orgId: "org-new", user: { userId: "u1", deviceId: "d1" } },
     };
 
-    await expect(
-      gw.handleSend(
-        { conversationId: "c1", content: "hi" } as never,
-        client as never,
-      ),
-    ).rejects.toMatchObject({
-      errorCode: MainErrorCode.CONVERSATION_FORBIDDEN,
-    });
+    await gw.handleSend(
+      { conversationId: "c1", content: "hi" } as never,
+      client as never,
+    );
 
-    expect(message.persistMessage).not.toHaveBeenCalled();
-    expect(toSpy).not.toHaveBeenCalled();
+    expect(conversation.getAgentDmOrThrow).toHaveBeenCalledWith("c1");
+    expect(message.persistMessage).toHaveBeenCalledWith(
+      "c1",
+      "d1",
+      "hi",
+      "agent",
+    );
+    expect(toSpy).toHaveBeenCalledWith("conv:c1");
+    expect(roomEmitSpy).toHaveBeenCalledWith(
+      IM_WS_EVENTS.message,
+      expect.objectContaining({ id: "m1" }),
+    );
   });
 
   it("分支2：user 连接发到 Agent-DM 会话（findAgentDevice 返回 agentDeviceId）→ 定向下发 agentInbound 到 device room，payload 字段正确", async () => {
