@@ -1,4 +1,5 @@
 export { PageHeader } from "./page-header";
+export { PageShellView, type PageShellViewProps } from "./page-shell-view";
 export { RailNavItem } from "./rail-nav-item";
 export { SidebarNavItem } from "./sidebar-nav-item";
 export { SidebarSection } from "./sidebar-section";
