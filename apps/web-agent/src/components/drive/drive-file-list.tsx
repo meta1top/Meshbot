@@ -28,9 +28,9 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   assistantPanelOpenAtom,
-  assistantPanelTypeAtom,
   previewArtifactAtom,
 } from "@/atoms/assistant-panel";
+import { selectedContextTabAtom } from "@/atoms/right-zone";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { DriveMoveModal } from "@/components/drive/drive-move-modal";
 import { DriveShareLinkModal } from "@/components/drive/drive-share-link-modal";
@@ -243,7 +243,7 @@ function FileListRow({
   const canEdit = node.permission === "owner" || node.permission === "editor";
 
   const setPreviewArtifact = useSetAtom(previewArtifactAtom);
-  const setPanelType = useSetAtom(assistantPanelTypeAtom);
+  const setSelectedTab = useSetAtom(selectedContextTabAtom);
   const setPanelOpen = useSetAtom(assistantPanelOpenAtom);
 
   const deleteMutation = useDeleteNode(parentId);
@@ -259,7 +259,7 @@ function FileListRow({
   async function handlePreview() {
     const { url } = await getFileUrl(node.id);
     setPreviewArtifact({ url, name: node.name });
-    setPanelType("preview");
+    setSelectedTab("artifact");
     setPanelOpen(true);
   }
 
