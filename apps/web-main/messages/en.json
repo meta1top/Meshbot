@@ -398,5 +398,18 @@
       "createFailed": "Failed to create conversation, please try again",
       "cancel": "Cancel"
     }
+  },
+  "imConversation": {
+    "agentFallback": "Device Agent",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "historyError": "Failed to load message history, please try again",
+    "emptyTitle": "No messages yet",
+    "emptyDescription": "Send {agent} a message to start the conversation",
+    "loadingMore": "Loading earlier messages…"
+  },
+  "chatInput": {
+    "placeholder": "Type a message…",
+    "send": "Send"
   }
 }
