@@ -41,6 +41,12 @@
     "placeholder": "Ask anything…",
     "emptyHint": "Ask the assistant anything — not tied to this conversation."
   },
+  "rightZone": {
+    "quick": "Ask",
+    "artifact": "Artifact",
+    "tools": "Tools",
+    "members": "Members"
+  },
   "appShell": {
     "newSession": "New session",
     "scheduled": "Scheduled",

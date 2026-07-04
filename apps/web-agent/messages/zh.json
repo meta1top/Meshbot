@@ -41,6 +41,12 @@
     "placeholder": "继续问，或问点别的…",
     "emptyHint": "随手问点什么——不绑定当前对话。"
   },
+  "rightZone": {
+    "quick": "随手问",
+    "artifact": "产物",
+    "tools": "工具",
+    "members": "成员"
+  },
   "appShell": {
     "newSession": "新会话",
     "scheduled": "计划任务",
