@@ -1,5 +1,5 @@
 import { AccountContextService } from "@meshbot/agent";
-import { AgentInboxService } from "./agent-inbox.service";
+import { AgentInboxService, NO_REPLY_TEXT } from "./agent-inbox.service";
 
 /** 反复 await Promise.resolve() 排空微任务队列。 */
 async function flush(times = 20): Promise<void> {
@@ -11,6 +11,9 @@ function make() {
     findByConversation: jest.fn().mockResolvedValue(null),
     create: jest.fn().mockResolvedValue(undefined),
     advanceCursor: jest.fn().mockResolvedValue(undefined),
+    getCursor: jest.fn().mockResolvedValue(null),
+    advanceAppended: jest.fn().mockResolvedValue(undefined),
+    getAppended: jest.fn().mockResolvedValue(null),
   };
   const sessions = {
     createImAgentSession: jest
@@ -29,6 +32,10 @@ function make() {
   const relay = {
     send: jest.fn(),
   };
+  const cloudIm = {
+    listAgentConversations: jest.fn().mockResolvedValue([]),
+    getMessages: jest.fn().mockResolvedValue({ messages: [], hasMore: false }),
+  };
   const account = new AccountContextService();
   const svc = new AgentInboxService(
     imAgentSession as never,
@@ -36,9 +43,29 @@ function make() {
     runner as never,
     messages as never,
     relay as never,
+    cloudIm as never,
     account,
   );
-  return { svc, imAgentSession, sessions, runner, messages, relay, account };
+  return {
+    svc,
+    imAgentSession,
+    sessions,
+    runner,
+    messages,
+    relay,
+    cloudIm,
+    account,
+  };
+}
+
+/** 直接调用私有 catchUp（绕开 fire-and-forget 的 @OnEvent 包装，测试无需 flush）。 */
+function callCatchUp(
+  svc: AgentInboxService,
+  cloudUserId: string,
+): Promise<void> {
+  return (
+    svc as unknown as { catchUp(cloudUserId: string): Promise<void> }
+  ).catchUp(cloudUserId);
 }
 
 /** relay 下行事件真实场景：emitter.emit 在 account.run(cloudUserId, ...) 内触发。 */
@@ -72,6 +99,10 @@ describe("AgentInboxService.handleInbound", () => {
     expect(sessions.createImAgentSession).toHaveBeenCalledWith("你好");
     expect(sessions.appendMessage).not.toHaveBeenCalled();
     expect(imAgentSession.create).toHaveBeenCalledWith("conv-1", "s1");
+    expect(imAgentSession.advanceAppended).toHaveBeenCalledWith(
+      "conv-1",
+      "msg-1",
+    );
     expect(runner.kickAndWait).toHaveBeenCalledWith("s1");
     expect(messages.findLastAssistant).toHaveBeenCalledWith("s1");
     expect(relay.send).toHaveBeenCalledWith("u1", {
@@ -111,6 +142,10 @@ describe("AgentInboxService.handleInbound", () => {
     // messageId 由本服务生成（appendMessage 的入参要求非空 messageId）
     expect(sessions.appendMessage.mock.calls[0][1].messageId).toEqual(
       expect.any(String),
+    );
+    expect(imAgentSession.advanceAppended).toHaveBeenCalledWith(
+      "conv-1",
+      "msg-2",
     );
     expect(runner.kickAndWait).toHaveBeenCalledWith("s-existing");
     expect(messages.findLastAssistant).toHaveBeenCalledWith("s-existing");
@@ -169,9 +204,37 @@ describe("AgentInboxService.handleInbound", () => {
       senderUserId: "peer-1",
     });
 
+    // T10 Minor 补：即便 relay.send 自己也抛错，也应确认它确实被调用过
+    // （不是被跳过），且这不影响 advanceCursor 仍然推进。
+    expect(relay.send).toHaveBeenCalledTimes(1);
     expect(imAgentSession.advanceCursor).toHaveBeenCalledWith(
       "conv-1",
       "msg-4",
+    );
+  });
+
+  it("run 成功但 findLastAssistant 为 null：用 NO_REPLY_TEXT 兜底文案回流", async () => {
+    const { svc, imAgentSession, messages, relay, account } = make();
+    imAgentSession.findByConversation.mockResolvedValue({
+      sessionId: "s-existing",
+      conversationId: "conv-1",
+    });
+    messages.findLastAssistant.mockResolvedValue(null);
+
+    await inbound(svc, account, "u1", {
+      conversationId: "conv-1",
+      messageId: "msg-6",
+      content: "无回复场景",
+      senderUserId: "peer-1",
+    });
+
+    expect(relay.send).toHaveBeenCalledWith("u1", {
+      conversationId: "conv-1",
+      content: NO_REPLY_TEXT,
+    });
+    expect(imAgentSession.advanceCursor).toHaveBeenCalledWith(
+      "conv-1",
+      "msg-6",
     );
   });
 
@@ -266,5 +329,371 @@ describe("AgentInboxService.handleInbound", () => {
       r();
     });
     await Promise.all([p1, p2]);
+  });
+});
+
+describe("AgentInboxService 游标语义修正（Task 11 必修）", () => {
+  it("run 成功但投递失败（relay 未连）：不推进处理游标；重投同一条消息不 dup-append，投递成功后游标推进", async () => {
+    const { svc, imAgentSession, sessions, runner, messages, relay, account } =
+      make();
+    imAgentSession.findByConversation.mockResolvedValue({
+      sessionId: "s-existing",
+      conversationId: "conv-1",
+    });
+    messages.findLastAssistant.mockResolvedValue({ content: "计算好的回复" });
+    relay.send.mockImplementationOnce(() => {
+      throw new Error("IM_NOT_CONNECTED");
+    });
+
+    await inbound(svc, account, "u1", {
+      conversationId: "conv-1",
+      messageId: "msg-5",
+      content: "问一句",
+      senderUserId: "peer-1",
+    });
+
+    // run 成功但投递失败：处理游标不推进
+    expect(imAgentSession.advanceCursor).not.toHaveBeenCalled();
+    expect(sessions.appendMessage).toHaveBeenCalledTimes(1);
+    expect(imAgentSession.advanceAppended).toHaveBeenCalledWith(
+      "conv-1",
+      "msg-5",
+    );
+
+    // 模拟补处理重投同一条消息（messageId 不变）：append 游标已推进 →
+    // resolveSession 应跳过 append，不再重复调用 appendMessage / kickAndWait 之前的准备。
+    imAgentSession.getAppended.mockResolvedValue("msg-5");
+    sessions.appendMessage.mockClear();
+    runner.kickAndWait.mockClear();
+    relay.send.mockClear();
+
+    await inbound(svc, account, "u1", {
+      conversationId: "conv-1",
+      messageId: "msg-5",
+      content: "问一句",
+      senderUserId: "peer-1",
+    });
+
+    expect(sessions.appendMessage).not.toHaveBeenCalled(); // 不 dup-append
+    expect(runner.kickAndWait).toHaveBeenCalledTimes(1);
+    expect(relay.send).toHaveBeenCalledWith("u1", {
+      conversationId: "conv-1",
+      content: "计算好的回复",
+    });
+    // 这次投递成功：处理游标推进
+    expect(imAgentSession.advanceCursor).toHaveBeenCalledWith(
+      "conv-1",
+      "msg-5",
+    );
+  });
+
+  it("resolveSession 失败（如 findByConversation 抛错）：process 不抛出，best-effort 回错误文案并推进处理游标", async () => {
+    // 回归保护：process 是 @OnEvent(handleInbound) 的下游 fire-and-forget 调用，
+    // 一旦某一步（哪怕是 resolveSession 这种"找/建会话"阶段）意外抛出且没被
+    // 兜住，会变成未捕获的 promise rejection。两段游标重构必须保留原 T10 的
+    // "process 全程不抛出"不变量。
+    const { svc, imAgentSession, runner, relay, account } = make();
+    imAgentSession.findByConversation.mockRejectedValue(
+      new Error("DB 连接失败"),
+    );
+
+    await expect(
+      inbound(svc, account, "u1", {
+        conversationId: "conv-1",
+        messageId: "msg-8",
+        content: "触发 resolveSession 失败",
+        senderUserId: "peer-1",
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(runner.kickAndWait).not.toHaveBeenCalled();
+    expect(relay.send).toHaveBeenCalledTimes(1);
+    const [, sendInput] = relay.send.mock.calls[0];
+    expect(sendInput.content).toContain("DB 连接失败");
+    expect(imAgentSession.advanceCursor).toHaveBeenCalledWith(
+      "conv-1",
+      "msg-8",
+    );
+  });
+
+  it("run 失败：处理游标无条件推进（不受投递结果影响）——三条路径之一", async () => {
+    const { svc, imAgentSession, runner, relay, account } = make();
+    imAgentSession.findByConversation.mockResolvedValue({
+      sessionId: "s-existing",
+      conversationId: "conv-1",
+    });
+    runner.kickAndWait.mockRejectedValue(new Error("崩了"));
+
+    await inbound(svc, account, "u1", {
+      conversationId: "conv-1",
+      messageId: "msg-7",
+      content: "会崩的一条",
+      senderUserId: "peer-1",
+    });
+
+    expect(relay.send).toHaveBeenCalledTimes(1);
+    expect(imAgentSession.advanceCursor).toHaveBeenCalledWith(
+      "conv-1",
+      "msg-7",
+    );
+  });
+});
+
+describe("AgentInboxService.catchUp（重连/启动补处理）", () => {
+  it("枚举 2 个会话：会话 A 游标之后有 2 条 user 消息，各触发一次 process（kickAndWait 2 次）且游标推进到最后一条；会话 B 无新消息不处理", async () => {
+    const { svc, imAgentSession, runner, messages, cloudIm } = make();
+    imAgentSession.findByConversation.mockImplementation(
+      async (conversationId: string) => ({
+        sessionId: `s-${conversationId}`,
+        conversationId,
+      }),
+    );
+    imAgentSession.getCursor.mockImplementation(
+      async (conversationId: string) =>
+        conversationId === "conv-A" ? "msg-0" : "msg-99",
+    );
+    messages.findLastAssistant.mockResolvedValue({ content: "ok" });
+
+    cloudIm.listAgentConversations.mockResolvedValue([
+      { conversationId: "conv-A", orgId: "org1" },
+      { conversationId: "conv-B", orgId: "org1" },
+    ]);
+    cloudIm.getMessages.mockImplementation(async (conversationId: string) => {
+      if (conversationId === "conv-A") {
+        return {
+          messages: [
+            {
+              id: "msg-1",
+              conversationId,
+              senderId: "peer-1",
+              content: "A1",
+              createdAt: "2026-01-01T00:00:01.000Z",
+              senderType: "user",
+            },
+            {
+              id: "msg-2",
+              conversationId,
+              senderId: "peer-1",
+              content: "A2",
+              createdAt: "2026-01-01T00:00:02.000Z",
+              senderType: "user",
+            },
+          ],
+          hasMore: false,
+        };
+      }
+      return { messages: [], hasMore: false };
+    });
+
+    await callCatchUp(svc, "u1");
+
+    expect(cloudIm.getMessages).toHaveBeenCalledWith("conv-A", undefined, "50");
+    expect(cloudIm.getMessages).toHaveBeenCalledWith("conv-B", undefined, "50");
+    expect(runner.kickAndWait).toHaveBeenCalledTimes(2);
+    expect(runner.kickAndWait).toHaveBeenNthCalledWith(1, "s-conv-A");
+    expect(runner.kickAndWait).toHaveBeenNthCalledWith(2, "s-conv-A");
+    expect(imAgentSession.advanceCursor).toHaveBeenCalledWith(
+      "conv-A",
+      "msg-2",
+    );
+    // 会话 B 无新消息：不触发处理
+    expect(runner.kickAndWait).not.toHaveBeenCalledWith("s-conv-B");
+  });
+
+  it("实时 inbound 已处理的消息，catchUp 补处理因游标过滤而跳过（不双处理）", async () => {
+    const { svc, imAgentSession, runner, messages, relay, cloudIm, account } =
+      make();
+    imAgentSession.findByConversation.mockResolvedValue({
+      sessionId: "s1",
+      conversationId: "conv-1",
+    });
+    messages.findLastAssistant.mockResolvedValue({ content: "ok" });
+
+    let cursor: string | null = null;
+    imAgentSession.getCursor.mockImplementation(async () => cursor);
+    imAgentSession.advanceCursor.mockImplementation(
+      async (_conversationId: string, messageId: string) => {
+        cursor = messageId;
+      },
+    );
+
+    // 实时 inbound 先处理了 msg-1，处理游标推进到 msg-1
+    await inbound(svc, account, "u1", {
+      conversationId: "conv-1",
+      messageId: "msg-1",
+      content: "你好",
+      senderUserId: "peer-1",
+    });
+    expect(cursor).toBe("msg-1");
+
+    runner.kickAndWait.mockClear();
+    relay.send.mockClear();
+
+    cloudIm.listAgentConversations.mockResolvedValue([
+      { conversationId: "conv-1", orgId: "org1" },
+    ]);
+    cloudIm.getMessages.mockResolvedValue({
+      messages: [
+        {
+          id: "msg-1",
+          conversationId: "conv-1",
+          senderId: "peer-1",
+          content: "你好",
+          createdAt: "2026-01-01T00:00:01.000Z",
+          senderType: "user",
+        },
+      ],
+      hasMore: false,
+    });
+
+    await callCatchUp(svc, "u1");
+
+    expect(runner.kickAndWait).not.toHaveBeenCalled();
+    expect(relay.send).not.toHaveBeenCalled();
+  });
+
+  it("两次连续 catchUp（模拟 connected 与 runtimeCreated 首连双触发）不重复投递", async () => {
+    const { svc, imAgentSession, sessions, runner, messages, relay, cloudIm } =
+      make();
+    imAgentSession.findByConversation.mockResolvedValue({
+      sessionId: "s1",
+      conversationId: "conv-1",
+    });
+    messages.findLastAssistant.mockResolvedValue({ content: "ok" });
+
+    let cursor: string | null = null;
+    imAgentSession.getCursor.mockImplementation(async () => cursor);
+    imAgentSession.advanceCursor.mockImplementation(
+      async (_conversationId: string, messageId: string) => {
+        cursor = messageId;
+      },
+    );
+    let appended: string | null = null;
+    imAgentSession.getAppended.mockImplementation(async () => appended);
+    imAgentSession.advanceAppended.mockImplementation(
+      async (_conversationId: string, messageId: string) => {
+        appended = messageId;
+      },
+    );
+
+    cloudIm.listAgentConversations.mockResolvedValue([
+      { conversationId: "conv-1", orgId: "org1" },
+    ]);
+    cloudIm.getMessages.mockResolvedValue({
+      messages: [
+        {
+          id: "msg-1",
+          conversationId: "conv-1",
+          senderId: "peer-1",
+          content: "你好",
+          createdAt: "2026-01-01T00:00:01.000Z",
+          senderType: "user",
+        },
+      ],
+      hasMore: false,
+    });
+
+    // 首连时 runtimeCreated 与 connected 几乎同时触发，各自独立调用一次 catchUp
+    await callCatchUp(svc, "u1");
+    await callCatchUp(svc, "u1");
+
+    // append 只在第一次 catchUp 处理 msg-1 时发生一次；第二次 catchUp 时
+    // 处理游标已推进到 msg-1，会被 getCursor 过滤掉，根本不会再进 resolveSession。
+    expect(sessions.appendMessage).toHaveBeenCalledTimes(1);
+    expect(runner.kickAndWait).toHaveBeenCalledTimes(1);
+    expect(relay.send).toHaveBeenCalledTimes(1);
+  });
+
+  it("onRuntimeCreated / onRelayConnected 事件都会触发 catchUp（fire-and-forget）", async () => {
+    const { svc, account } = make();
+    const catchUpSpy = jest
+      .spyOn(
+        svc as unknown as { catchUp: (cloudUserId: string) => Promise<void> },
+        "catchUp",
+      )
+      .mockResolvedValue(undefined);
+
+    svc.onRuntimeCreated({ cloudUserId: "u1" });
+    await flush();
+    expect(catchUpSpy).toHaveBeenCalledWith("u1");
+
+    catchUpSpy.mockClear();
+    svc.onRelayConnected({ cloudUserId: "u2" });
+    await flush();
+    expect(catchUpSpy).toHaveBeenCalledWith("u2");
+
+    // 事件处理器内的 account.run 应带上对应 cloudUserId 的账号上下文
+    expect(account.get()).toBeNull(); // fire-and-forget 结束后回到无上下文
+  });
+
+  it("枚举会话失败：只记日志，不抛出", async () => {
+    const { svc, cloudIm } = make();
+    cloudIm.listAgentConversations.mockRejectedValue(new Error("网络错误"));
+
+    await expect(callCatchUp(svc, "u1")).resolves.toBeUndefined();
+  });
+
+  it("并发：同一会话的 catchUp 与实时 inbound 同时触发，serialize 锁保证不并发跑两个 kickAndWait", async () => {
+    const { svc, imAgentSession, runner, messages, cloudIm, account } = make();
+    imAgentSession.findByConversation.mockResolvedValue({
+      sessionId: "s1",
+      conversationId: "conv-1",
+    });
+    messages.findLastAssistant.mockResolvedValue({ content: "ok" });
+
+    cloudIm.listAgentConversations.mockResolvedValue([
+      { conversationId: "conv-1", orgId: "org1" },
+    ]);
+    cloudIm.getMessages.mockResolvedValue({
+      messages: [
+        {
+          id: "msg-2",
+          conversationId: "conv-1",
+          senderId: "peer-1",
+          content: "补处理这条",
+          createdAt: "2026-01-01T00:00:02.000Z",
+          senderType: "user",
+        },
+      ],
+      hasMore: false,
+    });
+
+    const order: string[] = [];
+    const releasers: Array<() => void> = [];
+    runner.kickAndWait.mockImplementation((sessionId: string) => {
+      order.push(`start:${sessionId}`);
+      return new Promise<void>((resolve) => {
+        releasers.push(() => {
+          order.push(`end:${sessionId}`);
+          resolve();
+        });
+      });
+    });
+
+    // 实时 inbound 先进入（占住 conv-1 的串行锁）
+    const p1 = inbound(svc, account, "u1", {
+      conversationId: "conv-1",
+      messageId: "msg-1",
+      content: "第一条",
+      senderUserId: "peer-1",
+    });
+    await flush();
+    expect(releasers).toHaveLength(1);
+
+    // catchUp 几乎同时触发，理应被 serialize 锁挡住，等第一条跑完才轮到
+    const p2 = callCatchUp(svc, "u1");
+    await flush();
+    expect(releasers).toHaveLength(1); // 未新增：catchUp 还没进 kickAndWait
+
+    releasers[0]();
+    await flush();
+    await p1;
+
+    expect(releasers).toHaveLength(2); // 第一条跑完，catchUp 的这条才进入
+    releasers[1]();
+    await flush();
+    await p2;
+
+    expect(order).toEqual(["start:s1", "end:s1", "start:s1", "end:s1"]);
   });
 });
