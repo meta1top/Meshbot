@@ -44,6 +44,17 @@
 
 :root {
   --radius: 0.5rem;
+  /* 品牌焦橙:全局唯一强调色(收敛原 --secondary #f97316 与 web-agent 局部
+     --shell-accent #d24a0d 两个不一致的橙)。--brand 不复用 --accent(那是 shadcn 中性灰)。 */
+  --brand: #d24a0d;
+  --brand-hover: #b03d0a;
+  /* 外壳结构 token:从 web-agent 局部提升为共享(两端可用;修复 web-main --shell-accent 悬空)。 */
+  --shell-chrome: #241c15;
+  --shell-sidebar: #342a20;
+  --shell-content: #ffffff;
+  --shell-accent: var(--brand);
+  --shell-accent-hover: var(--brand-hover);
+  --shell-radius: 0.5rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -52,7 +63,7 @@
   --popover-foreground: oklch(0.145 0 0);
   --primary: #241c15;
   --primary-foreground: #fafafa;
-  --secondary: #f97316;
+  --secondary: var(--brand);
   --secondary-foreground: #fafafa;
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
@@ -62,7 +73,7 @@
   --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: #f97316;
+  --ring: var(--brand);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -90,7 +101,7 @@
   --popover-foreground: oklch(0.96 0.005 55);
   --primary: #241c15;
   --primary-foreground: #fafafa;
-  --secondary: #f97316;
+  --secondary: var(--brand);
   --secondary-foreground: #fafafa;
   --muted: oklch(0.27 0.011 55);
   --muted-foreground: oklch(0.71 0.012 55);
@@ -100,7 +111,7 @@
   --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(0.275 0.01 55);
   --input: oklch(0.275 0.01 55);
-  --ring: #f97316;
+  --ring: var(--brand);
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
@@ -114,6 +125,10 @@
   --sidebar-accent-foreground: oklch(0.96 0.005 55);
   --sidebar-border: oklch(0.275 0.01 55);
   --sidebar-ring: oklch(0.439 0 0);
+  /* 暗色「暖炭·配橙」外壳:chrome 0.135(最暗外框/rail/顶栏) < content 0.155(=--background) < sidebar 0.195。 */
+  --shell-chrome: oklch(0.135 0.008 55);
+  --shell-sidebar: oklch(0.195 0.01 55);
+  --shell-content: oklch(0.155 0.009 55);
 }
 
 @layer base {

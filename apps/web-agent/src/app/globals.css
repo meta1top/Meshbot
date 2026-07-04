@@ -123,13 +123,6 @@ pre code.hljs {
 :root {
   --titlebar-height: 42px;
   --mac-controls-safe-left: 92px;
-  /* Slack 风格外壳配色（web-agent 局部，不进共享 design 系统） */
-  --shell-chrome: #241c15;
-  --shell-sidebar: #342a20;
-  --shell-content: #ffffff;
-  --shell-accent: #d24a0d;
-  --shell-accent-hover: #b03d0a;
-  --shell-radius: 0.5rem;
 }
 
 .drag-region,
@@ -198,10 +191,3 @@ pre code.hljs {
   }
 }
 
-/* 暗色模式「暖炭·配橙」：近黑炭底注入极低饱和暖色相(hue 55, chroma~0.01)，与橙同族、和谐去死灰。
-   明度层次 chrome 0.135(最暗外框/rail/顶栏) < content 0.155(=--background) < sidebar 0.195。 */
-html.dark {
-  --shell-chrome: oklch(0.135 0.008 55);
-  --shell-sidebar: oklch(0.195 0.01 55);
-  --shell-content: oklch(0.155 0.009 55);
-}
