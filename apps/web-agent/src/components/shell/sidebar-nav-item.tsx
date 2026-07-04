@@ -32,8 +32,8 @@ export function SidebarNavItem({
       className={cn(
         "flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] transition-colors [&_svg]:h-3.5 [&_svg]:w-3.5 [&_svg]:shrink-0",
         active
-          ? "bg-(--shell-accent) text-white"
-          : "text-white/80 hover:bg-white/12",
+          ? "bg-(--shell-content) text-(--shell-sidebar-fg) shadow-sm"
+          : "text-(--shell-sidebar-fg)/80 hover:bg-(--shell-sidebar-hover)",
       )}
     >
       {icon}

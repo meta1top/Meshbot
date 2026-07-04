@@ -28,14 +28,14 @@ export function AssistantSidebar() {
   }, [loadSidebar]);
 
   return (
-    <div className="flex h-full flex-col bg-(--shell-sidebar) text-white">
-      <div className="flex h-13 shrink-0 items-center justify-between border-b border-white/8 px-3.5">
+    <div className="flex h-full flex-col bg-(--shell-sidebar) text-(--shell-sidebar-fg)">
+      <div className="flex h-13 shrink-0 items-center justify-between border-b border-(--shell-sidebar-border) px-3.5">
         <span className="text-[15px] font-extrabold">{t("title")}</span>
         <button
           type="button"
           title={t("newSession")}
           onClick={() => router.push("/assistant")}
-          className="flex h-7 w-7 items-center justify-center rounded-md text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+          className="flex h-7 w-7 items-center justify-center rounded-md text-(--shell-sidebar-fg)/70 transition-colors hover:bg-(--shell-sidebar-hover) hover:text-(--shell-sidebar-fg)"
         >
           <SquarePen className="h-4 w-4" />
         </button>
@@ -46,11 +46,11 @@ export function AssistantSidebar() {
         ) : (
           <SidebarSection title={t("thisDevice")}>
             {status === "error" ? (
-              <div className="px-2 py-1 text-[12px] text-white/55">
+              <div className="px-2 py-1 text-[12px] text-(--shell-sidebar-fg)/55">
                 {t("loadFailed")}
               </div>
             ) : sessions.length === 0 ? (
-              <div className="px-2 py-1 text-[12px] text-white/55">
+              <div className="px-2 py-1 text-[12px] text-(--shell-sidebar-fg)/55">
                 {t("empty")}
               </div>
             ) : (

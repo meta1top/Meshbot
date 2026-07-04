@@ -7,12 +7,12 @@ export function SidebarSkeleton() {
     <div className="animate-pulse space-y-4" aria-hidden>
       {[0, 1, 2].map((section) => (
         <div key={section} className="space-y-1.5">
-          <div className="mx-2 h-3 w-12 rounded bg-white/10" />
+          <div className="mx-2 h-3 w-12 rounded bg-(--shell-sidebar-fg)/10" />
           {[0, 1, 2].map((row) => (
             <div key={row} className="flex items-center gap-2 px-2 py-1">
-              <div className="h-3.5 w-3.5 shrink-0 rounded bg-white/10" />
+              <div className="h-3.5 w-3.5 shrink-0 rounded bg-(--shell-sidebar-fg)/10" />
               <div
-                className="h-3 rounded bg-white/10"
+                className="h-3 rounded bg-(--shell-sidebar-fg)/10"
                 style={{ width: `${64 - row * 12}%` }}
               />
             </div>
