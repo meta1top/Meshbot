@@ -46,7 +46,8 @@
     "artifact": "产物",
     "tools": "工具",
     "members": "成员",
-    "toolsEmpty": "本会话暂无工具调用"
+    "toolsEmpty": "本会话暂无工具调用",
+    "membersEmpty": "在频道会话里查看成员"
   },
   "appShell": {
     "newSession": "新会话",
