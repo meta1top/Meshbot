@@ -42,11 +42,9 @@
     "emptyHint": "Ask the assistant anything — not tied to this conversation."
   },
   "rightZone": {
-    "quick": "Ask",
-    "artifact": "Artifact",
-    "tools": "Tools",
+    "artifact": "Preview",
+    "artifactEmpty": "No artifact yet",
     "members": "Members",
-    "toolsEmpty": "No tool calls in this session",
     "membersEmpty": "Open a channel to see members",
     "artifactUntitled": "Preview",
     "artifactDownload": "Download",

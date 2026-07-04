@@ -1,11 +1,10 @@
 "use client";
 
 import { stripLlmuse } from "@meshbot/types-agent";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue } from "jotai";
 import { ArrowDown } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
-import { currentAssistantToolCallsAtom } from "@/atoms/right-zone";
 import {
   sessionTotalsFamily,
   usageByMessageFamily,
@@ -22,7 +21,6 @@ import { useAutoOpenArtifact } from "@/hooks/use-auto-open-artifact";
 import { useChatScroll } from "@/hooks/use-chat-scroll";
 import { useLlmusePrefix } from "@/hooks/use-llmuse-prefix";
 import { useSessionStream } from "@/hooks/use-session-stream";
-import { deriveToolCalls } from "@/lib/derive-tool-calls";
 import { toI18nList } from "@/lib/i18n-list";
 import { useModelConfigs } from "@/rest/model-config";
 import { deletePendingMessage } from "@/rest/session";
@@ -64,25 +62,6 @@ export function AssistantConversationBody({
 
   const prefix = useLlmusePrefix();
   const stream = useSessionStream(id, scrollRef);
-
-  // 发布工具调用到共享 atom，供右区 ToolsPanel 只读展示——ToolsPanel 不再自行
-  // useSessionStream（见 C1：单例 socket 无 refcount，二次订阅/退订会冻结本会话
-  // 的实时流）。桥接真实 TimelineMessage.toolCalls(字段名 name)到
-  // deriveToolCalls 期望的最小形状(字段名 toolName)。卸载时清空，避免残留。
-  const setToolCalls = useSetAtom(currentAssistantToolCallsAtom);
-  useEffect(() => {
-    setToolCalls(
-      deriveToolCalls(
-        stream.messages.map((m) => ({
-          toolCalls: m.toolCalls?.map((tc) => ({
-            toolCallId: tc.toolCallId,
-            toolName: tc.name,
-          })),
-        })),
-      ),
-    );
-    return () => setToolCalls([]);
-  }, [stream.messages, setToolCalls]);
 
   const timelineMessages = useMemo(
     () => stream.messages.filter((m) => !m.pending),

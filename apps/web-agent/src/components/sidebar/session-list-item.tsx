@@ -106,14 +106,16 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
         className={cn(
           "group flex h-7 w-full items-center gap-2 rounded-md px-2 text-[13px] transition-colors",
           active
-            ? "bg-(--shell-accent) text-white"
-            : "text-white/85 hover:bg-white/12 hover:text-white",
+            ? "bg-(--shell-content) text-(--shell-sidebar-fg) shadow-sm"
+            : "text-(--shell-sidebar-fg)/85 hover:bg-(--shell-sidebar-hover)",
         )}
       >
         <Sparkles
           className={cn(
             "h-3.5 w-3.5 shrink-0",
-            active ? "text-white" : "text-white/70 group-hover:text-white",
+            active
+              ? "text-(--shell-accent)"
+              : "text-(--shell-sidebar-fg)/60 group-hover:text-(--shell-sidebar-fg)",
           )}
         />
         {editing ? (
@@ -151,7 +153,7 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
                 className={cn(
                   "opacity-0 transition-opacity group-hover:opacity-100",
                   menuOpen && "opacity-100",
-                  "text-white/70 hover:text-white",
+                  "text-(--shell-sidebar-fg)/70 hover:text-(--shell-sidebar-fg)",
                 )}
                 aria-label="menu"
               >

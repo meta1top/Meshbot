@@ -42,11 +42,9 @@
     "emptyHint": "随手问点什么——不绑定当前对话。"
   },
   "rightZone": {
-    "quick": "随手问",
-    "artifact": "产物",
-    "tools": "工具",
+    "artifact": "预览",
+    "artifactEmpty": "暂无产物",
     "members": "成员",
-    "toolsEmpty": "本会话暂无工具调用",
     "membersEmpty": "在频道会话里查看成员",
     "artifactUntitled": "预览",
     "artifactDownload": "下载",

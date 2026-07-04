@@ -28,11 +28,11 @@ export function SidebarSection({
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="mb-1.5">
-      <div className="group flex h-6 items-center gap-1 px-2 text-[11px] font-semibold tracking-wide text-white/50">
+      <div className="group flex h-6 items-center gap-1 px-2 text-[11px] font-semibold tracking-wide text-(--shell-sidebar-fg)/50">
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="flex items-center gap-1 transition-colors hover:text-white/75"
+          className="flex items-center gap-1 transition-colors hover:text-(--shell-sidebar-fg)/75"
         >
           <ChevronDown
             className={cn(
@@ -47,7 +47,7 @@ export function SidebarSection({
             type="button"
             onClick={onAdd}
             title={addLabel}
-            className="ml-auto opacity-0 transition-opacity hover:text-white/80 group-hover:opacity-100"
+            className="ml-auto opacity-0 transition-opacity hover:text-(--shell-sidebar-fg)/80 group-hover:opacity-100"
           >
             <Plus className="h-3.5 w-3.5" />
           </button>

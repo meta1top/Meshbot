@@ -1,10 +1,8 @@
 "use client";
 
-import { useSetAtom } from "jotai";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Suspense, useEffect, useRef } from "react";
-import { currentAssistantSessionIdAtom } from "@/atoms/right-zone";
+import { Suspense, useRef } from "react";
 import { PageShell } from "@/components/layouts/page-shell";
 import { AssistantConversationBody } from "@/components/session/assistant-conversation-body";
 import { SessionHeader } from "@/components/session/session-header";
@@ -15,15 +13,6 @@ function AssistantView() {
   const searchParams = useSearchParams();
   const id = searchParams.get("id");
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  // 把当前主会话 id 同步到右区 atom，供 RightZone 工具面板取用；离开/无 id 时置 null
-  const setCurrentAssistantSessionId = useSetAtom(
-    currentAssistantSessionIdAtom,
-  );
-  useEffect(() => {
-    setCurrentAssistantSessionId(id ?? null);
-    return () => setCurrentAssistantSessionId(null);
-  }, [id, setCurrentAssistantSessionId]);
 
   return (
     <PageShell
