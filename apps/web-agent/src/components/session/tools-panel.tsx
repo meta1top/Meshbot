@@ -3,28 +3,23 @@
 import { useAtomValue } from "jotai";
 import { Wrench } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useRef } from "react";
-import { currentAssistantSessionIdAtom } from "@/atoms/right-zone";
-import { useSessionStream } from "@/hooks/use-session-stream";
-import { deriveToolCalls } from "@/lib/derive-tool-calls";
+import {
+  currentAssistantSessionIdAtom,
+  currentAssistantToolCallsAtom,
+} from "@/atoms/right-zone";
 import { toolDisplayName } from "@/lib/tool-display";
 
-/** 工具上下文面板:列出当前主助手会话的工具调用。 */
+/**
+ * 工具上下文面板:列出当前主助手会话的工具调用。
+ * 不自行订阅消息流——工具调用数据由 AssistantConversationBody(持有唯一的
+ * 会话流订阅)发布到 currentAssistantToolCallsAtom,这里只读。会话 socket 是
+ * 无 refcount 的模块单例,若本组件再挂一份订阅,卸载时的退订会把唯一 socket
+ * 从房间踢出,冻结主会话的实时流。
+ */
 export function ToolsPanel() {
   const t = useTranslations("rightZone");
   const sessionId = useAtomValue(currentAssistantSessionIdAtom);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const stream = useSessionStream(sessionId, scrollRef);
-  // 桥接真实 TimelineMessage.toolCalls(字段名 name)到纯函数期望的最小形状
-  // (字段名 toolName),派生逻辑本身与具体消息类型解耦、保持可单测。
-  const calls = deriveToolCalls(
-    stream.messages.map((m) => ({
-      toolCalls: m.toolCalls?.map((tc) => ({
-        toolCallId: tc.toolCallId,
-        toolName: tc.name,
-      })),
-    })),
-  );
+  const calls = useAtomValue(currentAssistantToolCallsAtom);
 
   if (!sessionId || calls.length === 0) {
     return (
@@ -34,7 +29,7 @@ export function ToolsPanel() {
     );
   }
   return (
-    <div ref={scrollRef} className="h-full overflow-y-auto p-3">
+    <div className="h-full overflow-y-auto p-3">
       {calls.map((c) => (
         <div
           key={c.toolCallId}

@@ -47,7 +47,10 @@
     "tools": "Tools",
     "members": "Members",
     "toolsEmpty": "No tool calls in this session",
-    "membersEmpty": "Open a channel to see members"
+    "membersEmpty": "Open a channel to see members",
+    "artifactUntitled": "Preview",
+    "artifactDownload": "Download",
+    "artifactClose": "Close"
   },
   "appShell": {
     "newSession": "New session",

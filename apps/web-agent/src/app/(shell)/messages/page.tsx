@@ -30,6 +30,12 @@ function MessagesView() {
     const imId = id ?? null;
     setCurrentConversationId(imId);
     if (!imId) setMessages([]);
+    // 离开消息区（卸载）时复位，避免残留 stale 的 currentConversationId
+    // （例如右区 members tab 会据此判断是否在频道会话里）。
+    return () => {
+      setCurrentConversationId(null);
+      setMessages([]);
+    };
   }, [id, isAssistant, router, setCurrentConversationId, setMessages]);
 
   // 重定向进行中，不渲染消息壳，避免闪一帧空 IM。
