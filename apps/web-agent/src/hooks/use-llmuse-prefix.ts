@@ -1,7 +1,7 @@
 "use client";
 
 import { useAtomValue } from "jotai";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useCallback } from "react";
 import { currentConversationAtom } from "@/atoms/im";
 import {
@@ -18,8 +18,6 @@ import {
  */
 export function useLlmusePrefix(): (text: string) => string {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const isAssistant = searchParams.get("kind") === "assistant";
   const conv = useAtomValue(currentConversationAtom);
 
   return useCallback(
@@ -36,11 +34,11 @@ export function useLlmusePrefix(): (text: string) => string {
             }
           : null;
       const block = formatLlmuseBlock({
-        pageLabel: describeRoute(pathname, isAssistant),
+        pageLabel: describeRoute(pathname),
         conversation,
       });
       return `${block}\n${text}`;
     },
-    [pathname, isAssistant, conv],
+    [pathname, conv],
   );
 }

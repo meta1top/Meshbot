@@ -10,7 +10,7 @@ import { SidebarNavItem } from "@/components/shell/sidebar-nav-item";
  * 容器范式同 messages-sidebar；当前路由高亮。
  */
 export function MoreSidebar() {
-  const t = useTranslations("moreSidebar");
+  const t = useTranslations("settingsSidebar");
   const router = useRouter();
   const pathname = usePathname();
 

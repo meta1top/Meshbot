@@ -236,6 +236,15 @@
     "usage": "Usage",
     "scheduled": "Scheduled"
   },
+  "flows": {
+    "comingTitle": "Flows coming soon",
+    "comingHint": "Human–agent workflow orchestration is under development."
+  },
+  "settingsSidebar": {
+    "title": "Settings",
+    "usage": "Usage",
+    "scheduled": "Scheduled tasks"
+  },
   "assistantSidebar": {
     "title": "Assistant",
     "newSession": "New session",

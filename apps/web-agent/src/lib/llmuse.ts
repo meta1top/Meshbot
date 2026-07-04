@@ -9,13 +9,14 @@ export interface LlmuseConversation {
 }
 
 /** 路由 → 人类可读页面名。未知路径回退原始 pathname。 */
-export function describeRoute(pathname: string, isAssistant: boolean): string {
-  if (pathname.startsWith("/messages"))
-    return isAssistant ? "助手会话" : "消息";
-  if (pathname.startsWith("/schedule")) return "日程";
+export function describeRoute(pathname: string): string {
+  if (pathname.startsWith("/assistant")) return "助手会话";
+  if (pathname.startsWith("/messages")) return "消息";
   if (pathname.startsWith("/skills")) return "技能";
-  if (pathname.startsWith("/settings")) return "设置";
-  if (pathname.startsWith("/more")) return "更多";
+  if (pathname.startsWith("/drive")) return "文件";
+  if (pathname.startsWith("/flows")) return "流程";
+  if (pathname.startsWith("/more") || pathname.startsWith("/schedule"))
+    return "设置";
   return pathname;
 }
 
