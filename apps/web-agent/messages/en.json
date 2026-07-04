@@ -41,6 +41,17 @@
     "placeholder": "Ask anything…",
     "emptyHint": "Ask the assistant anything — not tied to this conversation."
   },
+  "rightZone": {
+    "quick": "Ask",
+    "artifact": "Artifact",
+    "tools": "Tools",
+    "members": "Members",
+    "toolsEmpty": "No tool calls in this session",
+    "membersEmpty": "Open a channel to see members",
+    "artifactUntitled": "Preview",
+    "artifactDownload": "Download",
+    "artifactClose": "Close"
+  },
   "appShell": {
     "newSession": "New session",
     "scheduled": "Scheduled",
@@ -74,7 +85,9 @@
       "assistant": "Assistant",
       "skills": "Skills",
       "more": "More",
-      "drive": "Files"
+      "drive": "Files",
+      "flows": "Flows",
+      "settings": "Settings"
     },
     "search": {
       "placeholder": "Search meshbot"
@@ -229,10 +242,22 @@
     "loadFailed": "Failed to load",
     "retry": "Retry"
   },
-  "moreSidebar": {
-    "title": "More",
+  "flows": {
+    "comingTitle": "Flows coming soon",
+    "comingHint": "Human–agent workflow orchestration is under development."
+  },
+  "settingsSidebar": {
+    "title": "Settings",
     "usage": "Usage",
-    "scheduled": "Scheduled"
+    "scheduled": "Scheduled tasks"
+  },
+  "assistantSidebar": {
+    "title": "Assistant",
+    "newSession": "New session",
+    "thisDevice": "This device",
+    "empty": "No sessions yet",
+    "loadFailed": "Failed to load",
+    "emptyHint": "Pick or start a session to begin"
   },
   "messages": {
     "title": "Messages",

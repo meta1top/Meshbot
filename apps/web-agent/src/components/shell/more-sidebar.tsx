@@ -6,11 +6,11 @@ import { useTranslations } from "next-intl";
 import { SidebarNavItem } from "@/components/shell/sidebar-nav-item";
 
 /**
- * 「更多」区左侧子导航（Slack 左对齐）：使用情况 + 定时任务。
+ * 「设置」区左侧子导航（Slack 左对齐）：使用情况 + 定时任务。
  * 容器范式同 messages-sidebar；当前路由高亮。
  */
 export function MoreSidebar() {
-  const t = useTranslations("moreSidebar");
+  const t = useTranslations("settingsSidebar");
   const router = useRouter();
   const pathname = usePathname();
 
@@ -33,7 +33,7 @@ export function MoreSidebar() {
 
   return (
     <div className="flex h-full flex-col bg-(--shell-sidebar) text-white">
-      <div className="flex h-11 shrink-0 items-center border-b border-white/8 px-3.5 text-[15px] font-extrabold">
+      <div className="flex h-13 shrink-0 items-center border-b border-white/8 px-3.5 text-[15px] font-extrabold">
         {t("title")}
       </div>
       <nav className="flex flex-col gap-0.5 px-2 py-2">

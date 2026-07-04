@@ -34,8 +34,11 @@ import { createSession, fetchQuickSessions } from "@/rest/session";
  * 不再有「多会话/历史/新建/保存」——挂载时解析账号唯一的 quick 会话（最新一条即
  * 全局会话），之后永远往它追加；上下文长了由 runner 的 ContextCompactor 自动压缩。
  * 不存在时等首条消息惰性创建，且永不创建第二个。
+ *
+ * @param chromeless 为真时不渲染自绘的品牌头（RightZone 的统一 tab 条已充当头部），
+ *   只保留对话区 + 输入；为假/省略时保持原样（独立使用场景）。
  */
-export function AssistantDock() {
+export function AssistantDock({ chromeless }: { chromeless?: boolean } = {}) {
   const t = useTranslations("assistantDock");
   const setOpen = useSetAtom(assistantPanelOpenAtom);
   const [sessionId, setSessionId] = useAtom(currentQuickSessionIdAtom);
@@ -121,48 +124,50 @@ export function AssistantDock() {
 
   return (
     <div className="flex h-full w-full flex-col">
-      {/* 品牌渐变头（高度对齐左侧会话头 h-11） */}
-      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border bg-[linear-gradient(120deg,#fff3ea,#ffe7ef_45%,#eef2ff)] px-3.5 dark:bg-none">
-        <span className="flex h-6 w-6 items-center justify-center rounded-md bg-(--shell-accent) text-white">
-          <Sparkles className="h-3.5 w-3.5" />
-        </span>
-        {previewArtifact && <DockTabs />}
-        {!previewArtifact &&
-          (editingName ? (
-            <input
-              // biome-ignore lint/a11y/noAutofocus: 点击标题进入编辑，聚焦即用户意图
-              autoFocus
-              value={nameDraft}
-              maxLength={QUICK_ASSISTANT_NAME_MAX}
-              onChange={(e) => setNameDraft(e.target.value)}
-              onBlur={() => void commitName()}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void commitName();
-                else if (e.key === "Escape") setEditingName(false);
-              }}
-              aria-label={t("rename")}
-              className="min-w-0 flex-1 rounded bg-black/5 px-1.5 py-0.5 text-[14px] font-bold text-foreground outline-none focus:bg-black/10 dark:bg-white/10"
-            />
-          ) : (
-            <button
-              type="button"
-              onClick={startEditName}
-              title={t("rename")}
-              className="min-w-0 flex-1 truncate text-left text-[14px] font-bold text-foreground hover:opacity-80"
-            >
-              {name}
-            </button>
-          ))}
-        <button
-          type="button"
-          onClick={() => setOpen(false)}
-          title={t("close")}
-          aria-label={t("close")}
-          className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-black/5 hover:text-foreground"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
+      {/* 品牌渐变头（高度对齐左侧会话头 h-13）；chromeless 时由外层容器（RightZone）自绘头部承担，这里不渲染 */}
+      {!chromeless && (
+        <div className="flex h-13 shrink-0 items-center gap-2 border-b border-border bg-[linear-gradient(120deg,#fff3ea,#ffe7ef_45%,#eef2ff)] px-3.5 dark:bg-none">
+          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-(--shell-accent) text-white">
+            <Sparkles className="h-3.5 w-3.5" />
+          </span>
+          {previewArtifact && <DockTabs />}
+          {!previewArtifact &&
+            (editingName ? (
+              <input
+                // biome-ignore lint/a11y/noAutofocus: 点击标题进入编辑，聚焦即用户意图
+                autoFocus
+                value={nameDraft}
+                maxLength={QUICK_ASSISTANT_NAME_MAX}
+                onChange={(e) => setNameDraft(e.target.value)}
+                onBlur={() => void commitName()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void commitName();
+                  else if (e.key === "Escape") setEditingName(false);
+                }}
+                aria-label={t("rename")}
+                className="min-w-0 flex-1 rounded bg-black/5 px-1.5 py-0.5 text-[14px] font-bold text-foreground outline-none focus:bg-black/10 dark:bg-white/10"
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={startEditName}
+                title={t("rename")}
+                className="min-w-0 flex-1 truncate text-left text-[14px] font-bold text-foreground hover:opacity-80"
+              >
+                {name}
+              </button>
+            ))}
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            title={t("close")}
+            aria-label={t("close")}
+            className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-black/5 hover:text-foreground"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* 对话区 */}
       <div

@@ -27,7 +27,7 @@ export function CronJobCard({ job, onToggle, onDelete, busy }: Props) {
     <div className="flex items-start gap-3 rounded-md border border-border bg-card p-3">
       <div className="min-w-0 flex-1">
         <Link
-          href={`/messages?kind=assistant&id=${job.sessionId}`}
+          href={`/assistant?id=${job.sessionId}`}
           className="block truncate text-sm font-medium hover:underline"
         >
           {job.title}

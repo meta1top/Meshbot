@@ -14,13 +14,15 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAtomValue } from "jotai";
 import {
   Blocks,
+  Bot,
   Building2,
   Check,
   Folder,
   MessageSquare,
   Moon,
-  MoreHorizontal,
+  Settings,
   Sun,
+  Workflow,
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -91,6 +93,12 @@ export function WorkspaceRail() {
       <BrandLogo size="sm" />
       <nav className="mt-1 flex w-full flex-col gap-1">
         <RailNavItem
+          icon={<Bot className="h-5 w-5" />}
+          label={t("rail.assistant")}
+          active={area === "assistant"}
+          onClick={() => router.push("/assistant")}
+        />
+        <RailNavItem
           icon={<MessageSquare className="h-5 w-5" />}
           label={t("rail.messages")}
           active={area === "messages"}
@@ -109,9 +117,15 @@ export function WorkspaceRail() {
           onClick={() => router.push("/drive")}
         />
         <RailNavItem
-          icon={<MoreHorizontal className="h-5 w-5" />}
-          label={t("rail.more")}
-          active={area === "more"}
+          icon={<Workflow className="h-5 w-5" />}
+          label={t("rail.flows")}
+          active={area === "flows"}
+          onClick={() => router.push("/flows")}
+        />
+        <RailNavItem
+          icon={<Settings className="h-5 w-5" />}
+          label={t("rail.settings")}
+          active={area === "settings"}
           onClick={() => router.push("/more")}
         />
       </nav>

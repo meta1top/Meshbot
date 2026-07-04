@@ -3,16 +3,28 @@ import { describeRoute, formatLlmuseBlock } from "./llmuse";
 
 describe("describeRoute", () => {
   it("助手会话页", () => {
-    expect(describeRoute("/messages", true)).toBe("助手会话");
+    expect(describeRoute("/assistant")).toBe("助手会话");
   });
   it("消息页", () => {
-    expect(describeRoute("/messages", false)).toBe("消息");
+    expect(describeRoute("/messages")).toBe("消息");
   });
-  it("日程页", () => {
-    expect(describeRoute("/schedule", false)).toBe("日程");
+  it("技能页", () => {
+    expect(describeRoute("/skills")).toBe("技能");
+  });
+  it("文件页", () => {
+    expect(describeRoute("/drive")).toBe("文件");
+  });
+  it("流程页", () => {
+    expect(describeRoute("/flows")).toBe("流程");
+  });
+  it("设置页（更多）", () => {
+    expect(describeRoute("/more")).toBe("设置");
+  });
+  it("设置页（定时任务）", () => {
+    expect(describeRoute("/schedule")).toBe("设置");
   });
   it("未知页回退路径", () => {
-    expect(describeRoute("/foo", false)).toBe("/foo");
+    expect(describeRoute("/foo")).toBe("/foo");
   });
 });
 

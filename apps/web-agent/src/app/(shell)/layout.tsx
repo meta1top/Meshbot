@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@meshbot/design";
-import { useAtom, useAtomValue } from "jotai";
+import { useAtom } from "jotai";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
@@ -14,16 +14,12 @@ import {
 } from "react";
 import {
   assistantPanelOpenAtom,
-  assistantPanelTypeAtom,
   assistantPanelWidthAtom,
-  previewArtifactAtom,
-  previewPanelWidthAtom,
   sidebarDrawerOpenAtom,
 } from "@/atoms/assistant-panel";
-import { ArtifactPreviewPanel } from "@/components/artifact/artifact-preview-panel";
 import { DragRegion } from "@/components/drag-region";
-import { AssistantDock } from "@/components/im/assistant-dock";
 import { ShellRefsContext } from "@/components/layouts/shell-refs-context";
+import { RightZone } from "@/components/shell/right-zone";
 import { ShellTopBar } from "@/components/shell/shell-top-bar";
 import { WorkspaceRail } from "@/components/shell/workspace-rail";
 import { useGlobalEvents } from "@/hooks/use-global-events";
@@ -36,32 +32,10 @@ function ShellInner({ children }: { children: ReactNode }) {
   const [, setSidebarDrawerOpen] = useAtom(sidebarDrawerOpenAtom);
   useGlobalEvents();
   const [assistantWidth, setAssistantWidth] = useAtom(assistantPanelWidthAtom);
-  const [previewWidth, setPreviewWidth] = useAtom(previewPanelWidthAtom);
   const [isResizing, setIsResizing] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
-  const [availW, setAvailW] = useState(0);
-  const panelType = useAtomValue(assistantPanelTypeAtom);
-  const previewArtifact = useAtomValue(previewArtifactAtom);
-  const isPreview = panelType === "preview" && !!previewArtifact;
-  const effectiveWidth = isPreview
-    ? previewWidth > 0
-      ? `${previewWidth}px`
-      : availW > 0
-        ? `${Math.round(availW * 0.5)}px`
-        : "50vw"
-    : `${assistantWidth}px`;
-
-  useEffect(() => {
-    const update = () => {
-      const c = contentRef.current?.clientWidth ?? 0;
-      const s = sidebarRef.current?.clientWidth ?? 0;
-      setAvailW(c - s);
-    };
-    update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
-  }, []);
+  const effectiveWidth = `${assistantWidth}px`;
 
   const startPanelResize = useCallback(
     (e: React.MouseEvent) => {
@@ -71,24 +45,14 @@ function ShellInner({ children }: { children: ReactNode }) {
       const cw = contentRef.current?.clientWidth ?? window.innerWidth;
       const sw = sidebarRef.current?.clientWidth ?? 0;
       const avail = cw - sw;
-      const maxW = isPreview
-        ? Math.round(avail * 0.9)
-        : Math.round(avail * 0.5);
-      const startW = isPreview
-        ? previewWidth > 0
-          ? previewWidth
-          : Math.round(avail * 0.5)
-        : assistantWidth;
+      const maxW = Math.round(avail * 0.5);
+      const startW = assistantWidth;
       const onMove = (ev: MouseEvent) => {
         const next = Math.min(
           Math.max(startW + (startX - ev.clientX), 300),
           maxW,
         );
-        if (isPreview) {
-          setPreviewWidth(next);
-        } else {
-          setAssistantWidth(next);
-        }
+        setAssistantWidth(next);
       };
       const onUp = () => {
         document.removeEventListener("mousemove", onMove);
@@ -100,13 +64,7 @@ function ShellInner({ children }: { children: ReactNode }) {
       document.addEventListener("mousemove", onMove);
       document.addEventListener("mouseup", onUp);
     },
-    [
-      isPreview,
-      assistantWidth,
-      previewWidth,
-      setAssistantWidth,
-      setPreviewWidth,
-    ],
+    [assistantWidth, setAssistantWidth],
   );
 
   useEffect(() => {
@@ -169,7 +127,7 @@ function ShellInner({ children }: { children: ReactNode }) {
                 !panelOpen && "xl:hidden",
               )}
             >
-              {isPreview ? <ArtifactPreviewPanel /> : <AssistantDock />}
+              <RightZone />
             </aside>
             {isResizing && (
               <div className="fixed inset-0 z-50 cursor-col-resize" />

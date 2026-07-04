@@ -9,13 +9,13 @@ function SessionRedirect() {
   const id = searchParams.get("id");
 
   useEffect(() => {
-    router.replace(id ? `/messages?kind=assistant&id=${id}` : "/messages");
+    router.replace(id ? `/assistant?id=${id}` : "/assistant");
   }, [id, router]);
 
   return null;
 }
 
-/** /session 兼容跳板：旧链接自动重定向到 /messages?kind=assistant&id=。 */
+/** /session 兼容跳板：旧链接自动重定向到 /assistant?id=。 */
 export default function SessionPage() {
   return (
     <Suspense fallback={null}>

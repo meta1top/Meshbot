@@ -1,6 +1,7 @@
 import { TooltipProvider } from "@meshbot/design";
 import { themeScript } from "@meshbot/web-common";
 import type { Metadata } from "next";
+import { Hanken_Grotesk } from "next/font/google";
 import { ElectronInit } from "@/components/electron-init";
 import { IntlProvider } from "@/components/intl-provider";
 import { Providers } from "@/components/providers";
@@ -11,13 +12,19 @@ export const metadata: Metadata = {
   description: "MeshBot Agent",
 };
 
+const hanken = Hanken_Grotesk({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-hanken",
+});
+
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <html lang="zh" suppressHydrationWarning>
+    <html lang="zh" suppressHydrationWarning className={hanken.variable}>
       <head>
         <script
           // biome-ignore lint/security/noDangerouslySetInnerHtml: themeScript

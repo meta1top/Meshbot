@@ -6,9 +6,9 @@ import { FileText, FileWarning } from "lucide-react";
 import { useTranslations } from "next-intl";
 import {
   assistantPanelOpenAtom,
-  assistantPanelTypeAtom,
   previewArtifactAtom,
 } from "@/atoms/assistant-panel";
+import { selectedContextTabAtom } from "@/atoms/right-zone";
 import { artifactKind } from "@/lib/artifact";
 import type { ToolCallView } from "./message-list";
 
@@ -58,7 +58,7 @@ function parsePresented(
  */
 export function ArtifactFileCard({ tool }: { tool: ToolCallView }) {
   const t = useTranslations("session.artifact");
-  const setType = useSetAtom(assistantPanelTypeAtom);
+  const setTab = useSetAtom(selectedContextTabAtom);
   const setArtifact = useSetAtom(previewArtifactAtom);
   const setOpen = useSetAtom(assistantPanelOpenAtom);
 
@@ -93,7 +93,7 @@ export function ArtifactFileCard({ tool }: { tool: ToolCallView }) {
   const open = () => {
     if (!previewPath) return;
     setArtifact({ path: previewPath, title: args.title });
-    setType("preview");
+    setTab("artifact");
     setOpen(true);
   };
 
