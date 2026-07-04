@@ -66,6 +66,7 @@ packages/
 **两轨**：
 - **本地轨**（server-agent + cli-agent + desktop + web-agent）：单进程 + SQLite + 单用户，跑全部 Agent 业务逻辑
 - **云端轨**（server-main + web-main）：Postgres + Redis + 多租户，只跑协同元数据 CRUD，**不跑 Agent 逻辑**
+- **IM 反向通道**（子项目 B）：云端轨 `server-main` 的 IM 消息经 `ws/im` device room 定向下发到已注册设备的本地轨 `server-agent`（`AgentInboxService` 触发本地 run），回复异步回流云端会话——是云端轨触发本地轨 Agent 逻辑的唯一例外通道，云端轨自身仍不跑 Agent 逻辑。
 
 ## 关键约定
 
@@ -127,5 +128,5 @@ packages/
 
 | 应用 | 数据库 | 当前 Entity |
 |------|--------|-------------|
-| server-agent | `agent.db`（SQLite，`~/.meshbot/`，TypeORM 迁移管理） | `CloudIdentity`（含 `device_token` 列，浏览器授权换发的设备凭据）/ `Setting` / `ModelConfig`（含 `source` 列，`cloud` \| `local`，区分云端下发与本地配置）/ `Session` / `SessionMessage` / `LlmCall` / `PendingMessage` |
-| server-main | Postgres（SQL DDL 文件，DBA 手动执行） | `AppUser` / `Organization` / `Membership` / `Invitation`（云端身份 + 企业/组织；Phase 1）/ `Device` / `DeviceAuthRequest` / `EmailVerification` / `OrgModelConfig`（设备授权登录 + 邮箱验证码 + 组织级模型配置云端化；子项目 A） |
+| server-agent | `agent.db`（SQLite，`~/.meshbot/`，TypeORM 迁移管理） | `CloudIdentity`（含 `device_token` 列，浏览器授权换发的设备凭据）/ `Setting` / `ModelConfig`（含 `source` 列，`cloud` \| `local`，区分云端下发与本地配置）/ `Session` / `SessionMessage` / `LlmCall` / `PendingMessage` / `ImAgentSession`（会话映射 + 处理游标 `last_processed_message_id` / 追加游标 `last_appended_message_id`；设备 Agent 反向通道，子项目 B） |
+| server-main | Postgres（SQL DDL 文件，DBA 手动执行） | `AppUser` / `Organization` / `Membership` / `Invitation`（云端身份 + 企业/组织；Phase 1）/ `Device` / `DeviceAuthRequest` / `EmailVerification` / `OrgModelConfig`（设备授权登录 + 邮箱验证码 + 组织级模型配置云端化；子项目 A）/ `Conversation`（加 `agent_device_id` 列，人 ↔ 设备 Agent 私聊 DM 标记目标设备）/ `Message`（加 `sender_type` 列，`user` \| `agent`，默认 `user`；设备 Agent 反向通道，子项目 B） |
