@@ -1,7 +1,7 @@
 "use client";
 
+import { PageHeader } from "@meshbot/web-common/shell";
 import type { ReactNode, RefObject } from "react";
-import { PageHeader } from "@/components/layouts/page-header";
 import { PageShell } from "@/components/layouts/page-shell";
 
 interface ToolPageProps {

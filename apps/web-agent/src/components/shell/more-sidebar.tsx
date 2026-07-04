@@ -1,9 +1,9 @@
 "use client";
 
+import { SidebarNavItem } from "@meshbot/web-common/shell";
 import { BarChart3, Clock } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { SidebarNavItem } from "@/components/shell/sidebar-nav-item";
 
 /**
  * 「设置」区左侧子导航（Slack 左对齐）：使用情况 + 定时任务。

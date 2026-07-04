@@ -1,6 +1,11 @@
 "use client";
 
 import { cn } from "@meshbot/design";
+import {
+  SidebarNavItem,
+  SidebarSection,
+  SidebarSkeleton,
+} from "@meshbot/web-common/shell";
 import { useAtomValue, useSetAtom } from "jotai";
 import { Hash, Lock, SquarePen } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
@@ -13,9 +18,6 @@ import {
 } from "@/atoms/im";
 import { sessionsStatusAtom } from "@/atoms/sessions";
 import { loadSidebarAtom } from "@/atoms/sidebar";
-import { SidebarNavItem } from "@/components/shell/sidebar-nav-item";
-import { SidebarSection } from "@/components/shell/sidebar-section";
-import { SidebarSkeleton } from "@/components/shell/sidebar-skeleton";
 
 /**
  * 统一消息侧栏：私信 / 频道两段，均来自 IM atom。助手已迁至独立 `/assistant` 区，

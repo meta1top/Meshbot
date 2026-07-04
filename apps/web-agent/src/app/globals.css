@@ -119,6 +119,7 @@ pre code.hljs {
 }
 
 @source "../../../../packages/design/src";
+@source "../../../../packages/web-common/src/shell";
 
 :root {
   --titlebar-height: 42px;

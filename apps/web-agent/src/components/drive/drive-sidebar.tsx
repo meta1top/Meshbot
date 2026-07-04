@@ -1,8 +1,8 @@
 "use client";
 
+import { SidebarNavItem } from "@meshbot/web-common/shell";
 import { HardDrive, Users } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { SidebarNavItem } from "@/components/shell/sidebar-nav-item";
 
 export type DriveTab = "mine" | "shared";
 
