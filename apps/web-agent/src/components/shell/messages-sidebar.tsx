@@ -11,16 +11,15 @@ import {
   currentConversationIdAtom,
   presenceAtom,
 } from "@/atoms/im";
-import { sessionsAtom, sessionsStatusAtom } from "@/atoms/sessions";
+import { sessionsStatusAtom } from "@/atoms/sessions";
 import { loadSidebarAtom } from "@/atoms/sidebar";
 import { SidebarNavItem } from "@/components/shell/sidebar-nav-item";
 import { SidebarSection } from "@/components/shell/sidebar-section";
 import { SidebarSkeleton } from "@/components/shell/sidebar-skeleton";
-import { SessionListItem } from "@/components/sidebar/session-list-item";
 
 /**
- * 统一消息侧栏：频道 / 私信 / 助手三段。频道+私信来自 IM atom，
- * 助手来自 session atom。点击频道/私信→/messages?id=，助手→/messages?kind=assistant&id=。
+ * 统一消息侧栏：私信 / 频道两段，均来自 IM atom。助手已迁至独立 `/assistant` 区，
+ * 不在此侧栏出现。点击私信/频道→/messages?id=；助手→/assistant?id=。
  */
 export function MessagesSidebar() {
   const t = useTranslations("messagesSidebar");
@@ -32,7 +31,6 @@ export function MessagesSidebar() {
   const currentConvId = useAtomValue(currentConversationIdAtom);
   const presence = useAtomValue(presenceAtom);
 
-  const assistantSessions = useAtomValue(sessionsAtom);
   const sessionsStatus = useAtomValue(sessionsStatusAtom);
 
   const loadSidebar = useSetAtom(loadSidebarAtom);
@@ -67,38 +65,6 @@ export function MessagesSidebar() {
           <SidebarSkeleton />
         ) : (
           <>
-            {/* 频道 */}
-            <SidebarSection title={t("channels")}>
-              {channels.map((c) => {
-                const active =
-                  pathname === "/messages" &&
-                  c.id === currentConvId &&
-                  searchParams.get("kind") !== "assistant";
-                return (
-                  <SidebarNavItem
-                    key={c.id}
-                    active={active}
-                    onClick={() => router.push(`/messages?id=${c.id}`)}
-                    icon={
-                      c.visibility === "private" ? (
-                        <Lock className="opacity-70" />
-                      ) : (
-                        <Hash className="opacity-70" />
-                      )
-                    }
-                    label={c.name}
-                    trailing={
-                      c.unreadCount > 0 ? (
-                        <span className="shrink-0 rounded-full bg-(--shell-accent) px-1.5 py-0.5 text-[10px] font-bold leading-none">
-                          {c.unreadCount > 99 ? "99+" : c.unreadCount}
-                        </span>
-                      ) : undefined
-                    }
-                  />
-                );
-              })}
-            </SidebarSection>
-
             {/* 私信 */}
             <SidebarSection title={t("directMessages")}>
               {dms.map((c) => {
@@ -134,22 +100,36 @@ export function MessagesSidebar() {
               })}
             </SidebarSection>
 
-            {/* 助手 */}
-            <SidebarSection title={t("assistant")}>
-              {sessionsStatus === "error" ? (
-                <div className="px-2 py-1 text-[12px] text-white/55">
-                  {t("loadFailed")}
-                </div>
-              ) : assistantSessions.length === 0 &&
-                sessionsStatus === "loaded" ? (
-                <div className="px-2 py-1 text-[12px] text-white/55">
-                  {t("assistantEmpty")}
-                </div>
-              ) : (
-                assistantSessions.map((s) => (
-                  <SessionListItem key={s.id} session={s} />
-                ))
-              )}
+            {/* 频道 */}
+            <SidebarSection title={t("channels")}>
+              {channels.map((c) => {
+                const active =
+                  pathname === "/messages" &&
+                  c.id === currentConvId &&
+                  searchParams.get("kind") !== "assistant";
+                return (
+                  <SidebarNavItem
+                    key={c.id}
+                    active={active}
+                    onClick={() => router.push(`/messages?id=${c.id}`)}
+                    icon={
+                      c.visibility === "private" ? (
+                        <Lock className="opacity-70" />
+                      ) : (
+                        <Hash className="opacity-70" />
+                      )
+                    }
+                    label={c.name}
+                    trailing={
+                      c.unreadCount > 0 ? (
+                        <span className="shrink-0 rounded-full bg-(--shell-accent) px-1.5 py-0.5 text-[10px] font-bold leading-none">
+                          {c.unreadCount > 99 ? "99+" : c.unreadCount}
+                        </span>
+                      ) : undefined
+                    }
+                  />
+                );
+              })}
             </SidebarSection>
           </>
         )}

@@ -1,19 +1,18 @@
 "use client";
 
 import { useSetAtom } from "jotai";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Suspense, useEffect, useRef } from "react";
 import { currentConversationIdAtom, messagesAtom } from "@/atoms/im";
 import { ImConversationBody } from "@/components/im/im-conversation-body";
 import { ImConversationHeader } from "@/components/im/im-conversation-header";
 import { PageShell } from "@/components/layouts/page-shell";
-import { AssistantConversationBody } from "@/components/session/assistant-conversation-body";
-import { SessionHeader } from "@/components/session/session-header";
 import { MessagesSidebar } from "@/components/shell/messages-sidebar";
 
 function MessagesView() {
   const t = useTranslations("messages");
+  const router = useRouter();
   const searchParams = useSearchParams();
   const id = searchParams.get("id");
   const isAssistant = searchParams.get("kind") === "assistant";
@@ -21,35 +20,33 @@ function MessagesView() {
 
   const setCurrentConversationId = useSetAtom(currentConversationIdAtom);
   const setMessages = useSetAtom(messagesAtom);
-  // IM 会话 hydration / 复位：仅在看 IM 会话（非助手且有 id）时写入当前会话 id；
-  // 助手会话 / 裸 /messages 时复位为 null 并清空消息——否则离开后侧栏旧频道残留高亮，
-  // 且离开的会话仍被「当前会话不计未读」吞掉未读。body 卸载不复位，故由 page 统一管。
+  // 旧 assistant 链接：客户端重定向到独立助手区（与 /session 跳板同款惯例）。
+  // 其余：进 IM 会话时写当前会话 id；裸 /messages 复位清空。
   useEffect(() => {
-    const imId = !isAssistant && id ? id : null;
+    if (isAssistant) {
+      router.replace(id ? `/assistant?id=${id}` : "/assistant");
+      return;
+    }
+    const imId = id ?? null;
     setCurrentConversationId(imId);
     if (!imId) setMessages([]);
-  }, [id, isAssistant, setCurrentConversationId, setMessages]);
+  }, [id, isAssistant, router, setCurrentConversationId, setMessages]);
+
+  // 重定向进行中，不渲染消息壳，避免闪一帧空 IM。
+  if (isAssistant) return null;
 
   return (
     <PageShell
       sidebar={<MessagesSidebar />}
       scrollContainerRef={scrollRef}
-      header={
-        !id ? undefined : isAssistant ? (
-          <SessionHeader sessionId={id} />
-        ) : (
-          <ImConversationHeader />
-        )
-      }
+      header={id ? <ImConversationHeader /> : undefined}
     >
-      {!id ? (
+      {id ? (
+        <ImConversationBody id={id} scrollRef={scrollRef} />
+      ) : (
         <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
           {t("emptyHint")}
         </div>
-      ) : isAssistant ? (
-        <AssistantConversationBody id={id} scrollRef={scrollRef} />
-      ) : (
-        <ImConversationBody id={id} scrollRef={scrollRef} />
       )}
     </PageShell>
   );
