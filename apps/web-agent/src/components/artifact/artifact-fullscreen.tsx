@@ -39,7 +39,7 @@ export function ArtifactFullscreen({
 
   return createPortal(
     <div className="fullscreen-titlebar-safe fixed inset-0 z-50 flex flex-col bg-background">
-      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3.5">
+      <div className="flex h-13 shrink-0 items-center gap-2 border-b border-border px-3.5">
         <span className="min-w-0 flex-1 truncate text-[14px] font-bold text-foreground">
           {title}
         </span>

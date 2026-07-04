@@ -17,6 +17,7 @@ import {
   assistantPanelOpenAtom,
   sidebarDrawerOpenAtom,
 } from "@/atoms/assistant-panel";
+import { selectedContextTabAtom } from "@/atoms/right-zone";
 
 /**
  * 顶部全宽搜索栏（位于橙色 chrome 上）。左：（窄屏汉堡）+前进/后退；中：全局搜索（本期 UI 占位）；右：✦随手问 + 帮助。
@@ -27,6 +28,7 @@ export function ShellTopBar() {
   const t = useTranslations("appShell");
   const [panelOpen, setPanelOpen] = useAtom(assistantPanelOpenAtom);
   const setSidebarDrawerOpen = useSetAtom(sidebarDrawerOpenAtom);
+  const setSelectedContextTab = useSetAtom(selectedContextTabAtom);
   const fullscreen = useAtomValue(artifactFullscreenAtom);
   return (
     <div className="drag-handle flex h-[42px] shrink-0 items-center gap-2 bg-(--shell-chrome) px-3">
@@ -71,7 +73,11 @@ export function ShellTopBar() {
         <button
           type="button"
           data-no-drag
-          onClick={() => setPanelOpen((v) => !v)}
+          onClick={() => {
+            // 关→开时把右区选中 tab 设为随手问；开→关保持 toggle 原语义不变。
+            if (!panelOpen) setSelectedContextTab("quick");
+            setPanelOpen(!panelOpen);
+          }}
           title={t("assistant")}
           aria-label={t("assistant")}
           aria-pressed={panelOpen}

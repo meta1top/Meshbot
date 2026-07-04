@@ -25,12 +25,6 @@ export const assistantPanelWidthAtom = atomWithStorage(
   340,
 );
 
-/** 产物预览面板宽度（px）：与助手宽度独立管理；0 = 用默认（窗口 50%）。 */
-export const previewPanelWidthAtom = atomWithStorage(
-  "meshbot.previewPanelWidth",
-  0,
-);
-
 /** 右侧面板当前内容：助手 or 产物预览。 */
 export const assistantPanelTypeAtom = atom<"assistant" | "preview">(
   "assistant",
