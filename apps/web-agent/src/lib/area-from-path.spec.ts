@@ -25,4 +25,13 @@ describe("areaFromPath", () => {
   it("未知路径归 other", () => {
     expect(areaFromPath("/nope")).toBe("other");
   });
+  it("容忍 query string(startsWith 匹配)", () => {
+    expect(areaFromPath("/messages?id=abc")).toBe("messages");
+    expect(areaFromPath("/assistant?id=x")).toBe("assistant");
+    expect(areaFromPath("/schedule?id=x")).toBe("settings");
+  });
+  it("容忍子路径(startsWith 匹配)", () => {
+    expect(areaFromPath("/skills/foo")).toBe("skills");
+    expect(areaFromPath("/drive/bar")).toBe("drive");
+  });
 });
