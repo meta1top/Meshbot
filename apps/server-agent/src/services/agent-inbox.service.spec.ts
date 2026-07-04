@@ -552,7 +552,95 @@ describe("AgentInboxService.catchUp（重连/启动补处理）", () => {
     expect(relay.send).not.toHaveBeenCalled();
   });
 
-  it("两次连续 catchUp（模拟 connected 与 runtimeCreated 首连双触发）不重复投递", async () => {
+  it("真并发双触发（runtimeCreated 与 connected 首连重叠）：第一次卡在 getMessages 时第二次进来，账号级 in-flight 去重合并，同一消息只投递一次", async () => {
+    const { svc, imAgentSession, sessions, runner, messages, relay, cloudIm } =
+      make();
+    imAgentSession.findByConversation.mockResolvedValue({
+      sessionId: "s1",
+      conversationId: "conv-1",
+    });
+    messages.findLastAssistant.mockResolvedValue({ content: "ok" });
+
+    // 游标真实推进（catchUp 内部处理成功后才推进），验证去重不是靠游标而是靠 in-flight 合并
+    let cursor: string | null = null;
+    imAgentSession.getCursor.mockImplementation(async () => cursor);
+    imAgentSession.advanceCursor.mockImplementation(
+      async (_conversationId: string, messageId: string) => {
+        cursor = messageId;
+      },
+    );
+    let appended: string | null = null;
+    imAgentSession.getAppended.mockImplementation(async () => appended);
+    imAgentSession.advanceAppended.mockImplementation(
+      async (_conversationId: string, messageId: string) => {
+        appended = messageId;
+      },
+    );
+
+    cloudIm.listAgentConversations.mockResolvedValue([
+      { conversationId: "conv-1", orgId: "org1" },
+    ]);
+    // 让第一次 catchUp 卡在 getMessages（模拟网络往返未回），期间触发第二次。
+    // 用对象持有 resolver，避开 TS 对闭包内赋值的 let 的控制流收窄。
+    const deferred: { release?: () => void } = {};
+    let getMessagesCalls = 0;
+    cloudIm.getMessages.mockImplementation(() => {
+      getMessagesCalls++;
+      return new Promise((resolve) => {
+        deferred.release = () =>
+          resolve({
+            messages: [
+              {
+                id: "msg-1",
+                conversationId: "conv-1",
+                senderId: "peer-1",
+                content: "你好",
+                createdAt: "2026-01-01T00:00:01.000Z",
+                senderType: "user",
+              },
+            ],
+            hasMore: false,
+          });
+      });
+    });
+
+    // 首连：runtimeCreated 先触发（catchUp 进入、卡在 getMessages），connected 紧接触发
+    const p1 = callCatchUp(svc, "u1");
+    await flush();
+    // 第一次已进入 getMessages
+    expect(getMessagesCalls).toBe(1);
+
+    const p2 = callCatchUp(svc, "u1");
+    await flush();
+    // 第二次被 in-flight 去重合并，未再发起 getMessages
+    expect(getMessagesCalls).toBe(1);
+
+    deferred.release?.();
+    await Promise.all([p1, p2]);
+
+    // 同一条 msg-1 只 append/run/投递一次（不因双触发重发）
+    expect(sessions.appendMessage).toHaveBeenCalledTimes(1);
+    expect(runner.kickAndWait).toHaveBeenCalledTimes(1);
+    expect(relay.send).toHaveBeenCalledTimes(1);
+    // 去重后可再次触发（此时前一次已结束、游标已推进到 msg-1）：走游标幂等过滤，不再投递
+    cloudIm.getMessages.mockResolvedValue({
+      messages: [
+        {
+          id: "msg-1",
+          conversationId: "conv-1",
+          senderId: "peer-1",
+          content: "你好",
+          createdAt: "2026-01-01T00:00:01.000Z",
+          senderType: "user",
+        },
+      ],
+      hasMore: false,
+    });
+    await callCatchUp(svc, "u1");
+    expect(relay.send).toHaveBeenCalledTimes(1);
+  });
+
+  it("两次顺序 catchUp（前一次完全跑完后再触发）：游标已推进，第二次被 getCursor 过滤，不重复投递", async () => {
     const { svc, imAgentSession, sessions, runner, messages, relay, cloudIm } =
       make();
     imAgentSession.findByConversation.mockResolvedValue({
@@ -593,12 +681,10 @@ describe("AgentInboxService.catchUp（重连/启动补处理）", () => {
       hasMore: false,
     });
 
-    // 首连时 runtimeCreated 与 connected 几乎同时触发，各自独立调用一次 catchUp
     await callCatchUp(svc, "u1");
     await callCatchUp(svc, "u1");
 
-    // append 只在第一次 catchUp 处理 msg-1 时发生一次；第二次 catchUp 时
-    // 处理游标已推进到 msg-1，会被 getCursor 过滤掉，根本不会再进 resolveSession。
+    // 第一次处理 msg-1 并推进游标；第二次 getCursor 已是 msg-1，被过滤掉。
     expect(sessions.appendMessage).toHaveBeenCalledTimes(1);
     expect(runner.kickAndWait).toHaveBeenCalledTimes(1);
     expect(relay.send).toHaveBeenCalledTimes(1);

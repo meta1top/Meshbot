@@ -45,6 +45,14 @@ export class AgentInboxService {
   private readonly logger = new Logger(AgentInboxService.name);
   /** 每会话（conversationId）in-flight 串行链。 */
   private readonly inflight = new Map<string, Promise<void>>();
+  /**
+   * 每账号（cloudUserId）in-flight 的 catchUp。首连有积压时 runtimeCreated
+   * （relay.connect resolve 即发）与 connected（等 WS 握手）几乎必然重叠触发两次
+   * catchUp，二者基于同一未推进游标算出相同 fresh 列表——serialize 只排队不去重，
+   * 第二次 kickAndWait 空转但仍会 findLastAssistant + relay.send 把同一回复重发一遍。
+   * 此处按账号合并：已有在跑的 catchUp 时复用同一 Promise，不并发跑第二次。
+   */
+  private readonly catchUpInflight = new Map<string, Promise<void>>();
 
   constructor(
     private readonly imAgentSession: ImAgentSessionService,
@@ -85,10 +93,27 @@ export class AgentInboxService {
   }
 
   /**
-   * 重连/启动补处理：枚举本设备全部 Agent-DM 会话，处理各自处理游标之后的
+   * 重连/启动补处理入口（账号级 in-flight 去重）：若该账号已有在跑的 catchUp，
+   * 直接复用同一 Promise，不并发跑第二次——把首连时 runtimeCreated 与 connected
+   * 的双触发合并成一次，避免同一批未读消息被算两遍、回复重发。
+   */
+  private catchUp(cloudUserId: string): Promise<void> {
+    const running = this.catchUpInflight.get(cloudUserId);
+    if (running) return running;
+    const next = this.runCatchUp(cloudUserId).finally(() => {
+      if (this.catchUpInflight.get(cloudUserId) === next) {
+        this.catchUpInflight.delete(cloudUserId);
+      }
+    });
+    this.catchUpInflight.set(cloudUserId, next);
+    return next;
+  }
+
+  /**
+   * catchUp 实际工作：枚举本设备全部 Agent-DM 会话，处理各自处理游标之后的
    * user 消息。枚举失败或单会话处理失败都只记日志，不影响其他会话。
    */
-  private async catchUp(cloudUserId: string): Promise<void> {
+  private async runCatchUp(cloudUserId: string): Promise<void> {
     let convs: { conversationId: string; orgId: string }[];
     try {
       convs = await this.cloudIm.listAgentConversations();
