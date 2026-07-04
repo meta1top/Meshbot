@@ -387,7 +387,7 @@ function PrivateChannelControls({
  * IM 会话顶部标题栏。
  * 频道：# name；私信：peer.displayName + 在线状态圆点。
  * 私有频道额外显示：成员数 / 添加成员 / 退出频道。
- * 镜像 session-header.tsx 的样式：h-11 + bg-(--shell-content) + border-b。
+ * 镜像 session-header.tsx 的样式：h-13 + bg-(--shell-content) + border-b。
  */
 export function ImConversationHeader() {
   const t = useTranslations("messages");
@@ -399,7 +399,7 @@ export function ImConversationHeader() {
   if (!conv) {
     return (
       <div className="shrink-0 bg-(--shell-content)">
-        <div className="flex h-11 w-full items-center gap-2 border-b border-border px-4 lg:px-6">
+        <div className="flex h-13 w-full items-center gap-2 border-b border-border px-4 lg:px-6">
           <div className="h-4 w-4 shrink-0 animate-pulse rounded bg-muted" />
           <div className="h-3.5 w-32 animate-pulse rounded bg-muted" />
         </div>
@@ -419,7 +419,7 @@ export function ImConversationHeader() {
 
   return (
     <div className="shrink-0 bg-(--shell-content)">
-      <div className="flex h-11 w-full items-center gap-2 border-b border-border px-4 lg:px-6">
+      <div className="flex h-13 w-full items-center gap-2 border-b border-border px-4 lg:px-6">
         {isChannel ? (
           isPrivateChannel ? (
             <Lock className="h-4 w-4 shrink-0 text-muted-foreground" />

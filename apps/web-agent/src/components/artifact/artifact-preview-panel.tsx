@@ -33,7 +33,7 @@ export function ArtifactPreviewPanel() {
 
   return (
     <div className="flex h-full w-full flex-col">
-      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border bg-[linear-gradient(120deg,#fff3ea,#ffe7ef_45%,#eef2ff)] px-3.5 dark:bg-none">
+      <div className="flex h-13 shrink-0 items-center gap-2 border-b border-border bg-[linear-gradient(120deg,#fff3ea,#ffe7ef_45%,#eef2ff)] px-3.5 dark:bg-none">
         <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-(--shell-accent) text-white">
           <PreviewIcon className="h-3.5 w-3.5" />
         </span>

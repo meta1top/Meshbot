@@ -46,7 +46,7 @@ export function MessagesSidebar() {
   return (
     <div className="flex h-full flex-col bg-(--shell-sidebar) text-white">
       {/* Header */}
-      <div className="flex h-11 shrink-0 items-center justify-between border-b border-white/8 px-3.5">
+      <div className="flex h-13 shrink-0 items-center justify-between border-b border-white/8 px-3.5">
         <span className="text-[15px] font-extrabold">{t("title")}</span>
         <button
           type="button"
