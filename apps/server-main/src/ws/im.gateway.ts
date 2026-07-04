@@ -204,8 +204,11 @@ export class ImGateway extends BaseWebSocketGateway {
 
   /**
    * 发消息：
-   * - device 连接（Agent 反向通道回流）：免可见性校验（设备只对自己的 Agent-DM 发），
-   *   盖 senderType='agent'、senderId=deviceId，持久化后推到 conv 房间。
+   * - device 连接（Agent 反向通道回流）：对象级授权——先 `getAgentDmOrThrow` 断言
+   *   该会话确是 Agent-DM（否则抛 AGENT_DEVICE_INVALID），再校验会话的
+   *   `agentDeviceId` 与 `orgId` 都与本连接一致（否则抛 CONVERSATION_FORBIDDEN，
+   *   防止持合法 device token 者越权向任意 conversationId 注入伪造 agent 消息）；
+   *   通过后盖 senderType='agent'、senderId=deviceId，持久化后推到 conv 房间。
    * - 用户连接：校验可见性 → 持久化（senderType='user'）→ 推到 conv 房间；
    *   若目标会话是 Agent-DM，额外定向下发 `agentInbound` 到对应 device room。
    * WsExceptionFilter 统一处理 AppError（CONVERSATION_NOT_FOUND / FORBIDDEN）。
@@ -221,6 +224,12 @@ export class ImGateway extends BaseWebSocketGateway {
     if (!orgId) throw new AppError(MainErrorCode.CONVERSATION_FORBIDDEN);
 
     if (payload.deviceId) {
+      const conv = await this.conversation.getAgentDmOrThrow(
+        body.conversationId,
+      );
+      if (conv.agentDeviceId !== payload.deviceId || conv.orgId !== orgId) {
+        throw new AppError(MainErrorCode.CONVERSATION_FORBIDDEN);
+      }
       const msg = await this.message.persistMessage(
         body.conversationId,
         payload.deviceId,
@@ -337,15 +346,22 @@ export class ImGateway extends BaseWebSocketGateway {
 
   /**
    * Keepalive ping：续期 presence TTL。
-   * server-agent 每 ~20s 发一次，防止 TTL（45s）到期被判离线。
+   * server-agent 每 ~20s 发一次（设备连着 server-main 就发，不再依赖是否有浏览器
+   * 在线），防止 TTL（45s）到期被误判离线。
+   * device 连接（payload 带 deviceId）额外续期设备级 presence
+   * （`devicePresence.heartbeat`，orgId 与 onAuthedConnect 的 setOnline 同源，
+   * 取 `client.data.orgId`）；用户级 `presence.heartbeat` 照旧执行，两者互不覆盖。
    */
   @UseGuards(WsAuthGuard)
   @SubscribeMessage(IM_WS_EVENTS.ping)
   async handlePing(@ConnectedSocket() client: Socket): Promise<void> {
     const orgId: string | undefined = client.data?.orgId;
-    if (orgId) {
-      await this.presence.heartbeat(orgId, client.data.user.userId);
+    if (!orgId) return;
+    const deviceId = (client.data?.user as { deviceId?: string })?.deviceId;
+    if (deviceId) {
+      await this.devicePresence.heartbeat(orgId, deviceId);
     }
+    await this.presence.heartbeat(orgId, client.data.user.userId);
   }
 
   /**

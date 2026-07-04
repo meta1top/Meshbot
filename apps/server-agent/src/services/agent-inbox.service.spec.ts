@@ -68,6 +68,32 @@ function callCatchUp(
   ).catchUp(cloudUserId);
 }
 
+/**
+ * 直接经 serialize 驱动私有 process（模拟 catchUp 读到旧游标、已把该条纳入 fresh
+ * 后排队进来的那次 process 调用）——用于验证 FIX3 process 串行段起始重读游标短路。
+ */
+function callProcess(
+  svc: AgentInboxService,
+  account: AccountContextService,
+  cloudUserId: string,
+  payload: {
+    conversationId: string;
+    messageId: string;
+    content: string;
+    senderUserId: string;
+  },
+): Promise<void> {
+  const inner = svc as unknown as {
+    serialize(key: string, fn: () => Promise<void>): Promise<void>;
+    process(cloudUserId: string, payload: unknown): Promise<void>;
+  };
+  return account.run(cloudUserId, () =>
+    inner.serialize(payload.conversationId, () =>
+      inner.process(cloudUserId, payload),
+    ),
+  );
+}
+
 /** relay 下行事件真实场景：emitter.emit 在 account.run(cloudUserId, ...) 内触发。 */
 function inbound(
   svc: AgentInboxService,
@@ -781,5 +807,64 @@ describe("AgentInboxService.catchUp（重连/启动补处理）", () => {
     await p2;
 
     expect(order).toEqual(["start:s1", "end:s1", "start:s1", "end:s1"]);
+  });
+});
+
+describe("AgentInboxService FIX3：process 串行段起始重读游标短路重投", () => {
+  it("同会话 catchUp 与实时 inbound 同一 messageId：实时先跑推进游标，catchUp 排队进来的 process 重读游标被短路（不 kickAndWait/不 relay.send 重投）", async () => {
+    const { svc, imAgentSession, sessions, runner, messages, relay, account } =
+      make();
+    imAgentSession.findByConversation.mockResolvedValue({
+      sessionId: "s1",
+      conversationId: "conv-1",
+    });
+    messages.findLastAssistant.mockResolvedValue({ content: "回复" });
+
+    // 游标 / append 游标可变，随处理推进
+    let cursor: string | null = null;
+    imAgentSession.getCursor.mockImplementation(async () => cursor);
+    imAgentSession.advanceCursor.mockImplementation(
+      async (_conversationId: string, messageId: string) => {
+        cursor = messageId;
+      },
+    );
+    let appended: string | null = null;
+    imAgentSession.getAppended.mockImplementation(async () => appended);
+    imAgentSession.advanceAppended.mockImplementation(
+      async (_conversationId: string, messageId: string) => {
+        appended = messageId;
+      },
+    );
+
+    // 实时 inbound msg-1 先跑：kickAndWait + relay.send 各一次，游标推进到 msg-1
+    await inbound(svc, account, "u1", {
+      conversationId: "conv-1",
+      messageId: "msg-1",
+      content: "你好",
+      senderUserId: "peer-1",
+    });
+    expect(cursor).toBe("msg-1");
+    expect(runner.kickAndWait).toHaveBeenCalledTimes(1);
+    expect(relay.send).toHaveBeenCalledTimes(1);
+
+    runner.kickAndWait.mockClear();
+    relay.send.mockClear();
+    sessions.appendMessage.mockClear();
+
+    // catchUp 读到旧游标已把 msg-1 纳入 fresh，排队进来的 process(msg-1)：
+    // 串行段起始重读 getCursor 现在已是 msg-1（msg-1 <= msg-1）→ 短路，
+    // 不 kickAndWait、不 findLastAssistant、不 relay.send（避免重复回复）
+    messages.findLastAssistant.mockClear();
+    await callProcess(svc, account, "u1", {
+      conversationId: "conv-1",
+      messageId: "msg-1",
+      content: "你好",
+      senderUserId: "peer-1",
+    });
+
+    expect(runner.kickAndWait).not.toHaveBeenCalled();
+    expect(messages.findLastAssistant).not.toHaveBeenCalled();
+    expect(relay.send).not.toHaveBeenCalled();
+    expect(sessions.appendMessage).not.toHaveBeenCalled();
   });
 });

@@ -183,11 +183,23 @@ export class AgentInboxService {
    * - run 成功 + relay.send 成功：推进处理游标（已投递）。
    * - run 成功 + relay.send 抛（未连接）：不推进处理游标、不改错误文案，
    *   只记日志——回复留给 catchUp 重投，append 游标保证重投不 dup-append。
+   *
+   * 串行段起始重读处理游标短路：serialize 保证同会话串行，进入 process 后重读
+   * `getCursor`，若本条 messageId 已 <= 游标（实时 inbound 已先处理并推进游标，
+   * 而 catchUp 循环前只读一次旧游标、把本条纳入 fresh 排队进来），直接短路 return
+   * ——不 kickAndWait（无 pending 空转）、不 findLastAssistant、不 relay.send 重投
+   * 同一回复，避免用户看到重复回复。
    */
   private async process(
     cloudUserId: string,
     payload: ImAgentInboundEvent,
   ): Promise<void> {
+    const cursor = await this.imAgentSession
+      .getCursor(payload.conversationId)
+      .catch(() => null);
+    if (cursor && payload.messageId <= cursor) {
+      return;
+    }
     let sessionId: string;
     try {
       sessionId = await this.resolveSession(

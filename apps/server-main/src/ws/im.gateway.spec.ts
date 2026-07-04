@@ -22,6 +22,7 @@ function makeGateway(overrides: {
   devicePresence?: {
     setOnline?: jest.Mock;
     setOffline?: jest.Mock;
+    heartbeat?: jest.Mock;
   };
 }) {
   const conversation = {
@@ -59,6 +60,9 @@ function makeGateway(overrides: {
       jest.fn().mockResolvedValue(undefined),
     setOffline:
       overrides.devicePresence?.setOffline ??
+      jest.fn().mockResolvedValue(undefined),
+    heartbeat:
+      overrides.devicePresence?.heartbeat ??
       jest.fn().mockResolvedValue(undefined),
   };
   const gw = new ImGateway(
@@ -328,5 +332,42 @@ describe("ImGateway.handleDisconnect（device 连接下线）", () => {
 
     expect(devicePresence.setOffline).not.toHaveBeenCalled();
     expect(presence.setOffline).toHaveBeenCalledWith("o1", "u1");
+  });
+});
+
+describe("ImGateway.handlePing（心跳续期 presence TTL）", () => {
+  it("FIX1：device 连接（payload 带 deviceId）→ devicePresence.heartbeat + presence.heartbeat 都续期", async () => {
+    const { gw, presence, devicePresence } = makeGateway({});
+    const client = {
+      data: {
+        orgId: "o-dev",
+        user: { userId: "u1", orgId: "o-dev", deviceId: "d1" },
+      },
+    };
+
+    await gw.handlePing(client as never);
+
+    expect(devicePresence.heartbeat).toHaveBeenCalledWith("o-dev", "d1");
+    expect(presence.heartbeat).toHaveBeenCalledWith("o-dev", "u1");
+  });
+
+  it("用户 JWT 连接（无 deviceId）→ 只续期用户级，不碰 devicePresence.heartbeat", async () => {
+    const { gw, presence, devicePresence } = makeGateway({});
+    const client = { data: { orgId: "o1", user: { userId: "u1" } } };
+
+    await gw.handlePing(client as never);
+
+    expect(devicePresence.heartbeat).not.toHaveBeenCalled();
+    expect(presence.heartbeat).toHaveBeenCalledWith("o1", "u1");
+  });
+
+  it("无 orgId → 不续期任何一级", async () => {
+    const { gw, presence, devicePresence } = makeGateway({});
+    const client = { data: { user: { userId: "u1", deviceId: "d1" } } };
+
+    await gw.handlePing(client as never);
+
+    expect(devicePresence.heartbeat).not.toHaveBeenCalled();
+    expect(presence.heartbeat).not.toHaveBeenCalled();
   });
 });

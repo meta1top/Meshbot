@@ -583,11 +583,11 @@ describe("ImRelayClientService", () => {
     });
   });
 
-  describe("ping 门控（仅有浏览器时 ping）", () => {
+  describe("keepalive ping（FIX1：设备连着就发，不门控 uiOnline）", () => {
     beforeEach(() => jest.useFakeTimers());
     afterEach(() => jest.useRealTimers());
 
-    it("无浏览器（未调 setUiPresence(true)）→ 推进 PING_INTERVAL_MS 不 emit ping", async () => {
+    it("FIX1：无浏览器（未调 setUiPresence(true)）但 socket 连着 → 推进 PING_INTERVAL_MS 仍 emit ping（headless device 续期设备级 presence）", async () => {
       const s1 = new FakeSocket();
       const { svc } = makeService(
         { u1: { deviceToken: "tok-u1", orgId: "org1" } },
@@ -598,9 +598,8 @@ describe("ImRelayClientService", () => {
 
       jest.advanceTimersByTime(20_000);
 
-      expect(
-        s1.emitted.find(([ev]) => ev === IM_WS_EVENTS.ping),
-      ).toBeUndefined();
+      // 不再门控 uiOnline：设备连着 server-main 就周期 ping
+      expect(s1.emitted.find(([ev]) => ev === IM_WS_EVENTS.ping)).toBeDefined();
 
       svc.disconnect("u1");
     });
@@ -618,6 +617,25 @@ describe("ImRelayClientService", () => {
       jest.advanceTimersByTime(20_000);
 
       expect(s1.emitted.find(([ev]) => ev === IM_WS_EVENTS.ping)).toBeDefined();
+
+      svc.disconnect("u1");
+    });
+
+    it("socket 未连（connected=false）→ 推进不 emit ping", async () => {
+      const s1 = new FakeSocket();
+      const { svc } = makeService(
+        { u1: { deviceToken: "tok-u1", orgId: "org1" } },
+        { u1: s1 },
+      );
+      await svc.connect("u1");
+      s1.connected = false; // 模拟断线（尚未清理定时器）
+      s1.emitted.length = 0;
+
+      jest.advanceTimersByTime(20_000);
+
+      expect(
+        s1.emitted.find(([ev]) => ev === IM_WS_EVENTS.ping),
+      ).toBeUndefined();
 
       svc.disconnect("u1");
     });
@@ -691,11 +709,8 @@ describe("ImRelayClientService", () => {
     });
   });
 
-  describe("disconnect 清 uiOnline（ping 门控间接验证）", () => {
-    beforeEach(() => jest.useFakeTimers());
-    afterEach(() => jest.useRealTimers());
-
-    it("setUiPresence(true) → disconnect → 重连后 ping 不发（uiOnline 已清）", async () => {
+  describe("disconnect 清 uiOnline（重连不再重断言用户在线态）", () => {
+    it("setUiPresence(true) → disconnect → 重连后 connect 事件不重发 presence_set（uiOnline 已清）", async () => {
       const s2 = new FakeSocket();
       // 重新 connect 需要新的 socket 实例
       let callCount = 0;
@@ -723,14 +738,16 @@ describe("ImRelayClientService", () => {
       svc.setUiPresence("u1", true);
       svc.disconnect("u1");
 
-      // 重新连接
+      // 重新连接（ping 不再门控 uiOnline，故改用 connect 事件重断言 presence_set
+      // 是否发生来间接验证 uiOnline 已清）
       await svc.connect("u1");
       s2.emitted.length = 0;
-      jest.advanceTimersByTime(20_000);
 
-      // uiOnline 已清，ping 不应发
+      s2.simulateServerEvent("connect", undefined);
+
+      // uiOnline 已清，connect 事件不应重发用户在线态 presence_set
       expect(
-        s2.emitted.find(([ev]) => ev === IM_WS_EVENTS.ping),
+        s2.emitted.find(([ev]) => ev === IM_WS_EVENTS.presenceSet),
       ).toBeUndefined();
 
       svc.disconnect("u1");
