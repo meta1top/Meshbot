@@ -16,6 +16,10 @@
     "./shell": {
       "types": "./src/shell/index.ts",
       "default": "./src/shell/index.ts"
+    },
+    "./im": {
+      "types": "./src/im/index.ts",
+      "default": "./src/im/index.ts"
     }
   },
   "scripts": {
