@@ -77,9 +77,9 @@ function ShellInner({ children }: { children: ReactNode }) {
   }, [setPreviewArtifact]);
 
   return (
-    <main className="titlebar-safe flex h-screen flex-col bg-(--surface-0) text-foreground">
+    <main className="titlebar-safe flex h-screen flex-col bg-(--shell-page) text-foreground">
       <DragRegion />
-      <div className="m-2 flex min-h-0 flex-1 overflow-hidden rounded-xl border border-(--shell-sidebar-border) bg-(--shell-content) shadow-sm">
+      <div className="m-3 flex min-h-0 flex-1 overflow-hidden rounded-xl border border-(--shell-sidebar-border) bg-(--shell-content) shadow-sm">
         <WorkspaceSidebar sublistSlotRef={setSlotEl} />
         <div
           ref={contentRef}

@@ -36,12 +36,12 @@ export function ModelSetupGate() {
   };
 
   return (
-    <main className="titlebar-safe flex h-screen flex-col bg-(--surface-0) text-foreground">
+    <main className="titlebar-safe flex h-screen flex-col bg-(--shell-page) text-foreground">
       <DragRegion />
-      <div className="flex min-h-0 flex-1">
+      <div className="m-3 flex min-h-0 flex-1 overflow-hidden rounded-xl border border-(--shell-sidebar-border) bg-(--shell-content) shadow-sm">
         <WorkspaceSidebar sublistSlotRef={setSlotEl} />
-        <div className="relative flex min-h-0 flex-1 overflow-hidden pr-1.5 pb-1.5">
-          <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-(--shell-radius) bg-(--shell-content)">
+        <div className="relative flex min-h-0 flex-1 overflow-hidden">
+          <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-(--shell-content)">
             <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto p-4 lg:px-6">
               <Card className="w-full max-w-[480px]">
                 <CardContent className="flex flex-col items-center gap-4 pt-6 text-center">
