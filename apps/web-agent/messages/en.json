@@ -26,7 +26,13 @@
     "welcomeBack": "Welcome back to meshbot",
     "validation": {
       "codeRequired": "Please enter the authorization code"
-    }
+    },
+    "deviceHeadline": "Start working with your Agent",
+    "deviceSubtitle": "Authorize this device and your Agent stands by locally",
+    "footNote": "Opens your browser to confirm · never asks for a password",
+    "waitingHeadline": "Authorization page opened in your browser",
+    "waitingSub": "You'll be signed in automatically",
+    "reopen": "Didn't open? Reopen the authorization page"
   },
   "modelSetupGate": {
     "title": "No model configured for your organization yet",
