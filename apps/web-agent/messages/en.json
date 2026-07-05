@@ -111,7 +111,8 @@
       "moreTitle": "More",
       "moreBody": "Files, knowledge base and more are coming soon.",
       "goAssistant": "Go to Assistant"
-    }
+    },
+    "newTask": ""
   },
   "chatInput": {
     "placeholder": "Type here",
