@@ -36,9 +36,9 @@ export function ModelSetupGate() {
   };
 
   return (
-    <main className="titlebar-safe flex h-screen flex-col bg-(--shell-page) text-foreground">
+    <main className="titlebar-safe flex h-screen flex-col bg-(--shell-content) text-foreground">
       <DragRegion />
-      <div className="m-3 flex min-h-0 flex-1 overflow-hidden rounded-xl border border-(--shell-sidebar-border) bg-(--shell-content) shadow-sm">
+      <div className="flex min-h-0 flex-1">
         <WorkspaceSidebar sublistSlotRef={setSlotEl} />
         <div className="relative flex min-h-0 flex-1 overflow-hidden">
           <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-(--shell-content)">
