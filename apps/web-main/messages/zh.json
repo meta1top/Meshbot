@@ -10,7 +10,7 @@
       "assistant": "助手",
       "messages": "消息",
       "skills": "技能",
-      "drive": "网盘",
+      "drive": "文件",
       "flows": "流程",
       "settings": "设置"
     }
@@ -18,7 +18,7 @@
   "shellStub": {
     "assistant": "助手",
     "skills": "技能",
-    "drive": "网盘",
+    "drive": "文件",
     "flows": "流程",
     "comingHint": "该功能正在开发中，敬请期待。"
   },
