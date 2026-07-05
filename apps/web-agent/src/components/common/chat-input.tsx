@@ -47,6 +47,8 @@ interface ChatInputProps {
   onInterrupt?: () => void;
   isLoading?: boolean;
   placeholder?: string;
+  /** 精简模式：隐藏格式工具栏与底部附件栏（起手台等干净 composer 用）。 */
+  minimal?: boolean;
   modelName?: string;
   tokenUsage?: {
     /**
@@ -89,6 +91,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       onInterrupt,
       isLoading = false,
       placeholder,
+      minimal = false,
       modelName,
       tokenUsage,
     },
@@ -186,83 +189,85 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
 
     return (
       <div className="overflow-hidden rounded-[10px] border border-border bg-card">
-        {/* 工具栏 */}
-        <div className="flex items-center gap-1 border-b border-border px-2 py-1 text-muted-foreground">
-          {(
-            [
-              {
-                key: "bold",
-                Icon: Bold,
-                run: () => editor?.chain().focus().toggleBold().run(),
-                active: () => !!editor?.isActive("bold"),
-              },
-              {
-                key: "italic",
-                Icon: Italic,
-                run: () => editor?.chain().focus().toggleItalic().run(),
-                active: () => !!editor?.isActive("italic"),
-              },
-              {
-                key: "strikethrough",
-                Icon: Strikethrough,
-                run: () => editor?.chain().focus().toggleStrike().run(),
-                active: () => !!editor?.isActive("strike"),
-              },
-              {
-                key: "code",
-                Icon: Code,
-                run: () => editor?.chain().focus().toggleCode().run(),
-                active: () => !!editor?.isActive("code"),
-              },
-              {
-                key: "codeBlock",
-                Icon: SquareCode,
-                run: () => editor?.chain().focus().toggleCodeBlock().run(),
-                active: () => !!editor?.isActive("codeBlock"),
-              },
-              {
-                key: "link",
-                Icon: Link,
-                run: () =>
-                  editor
-                    ?.chain()
-                    .focus()
-                    .toggleLink({ href: "https://" })
-                    .run(),
-                active: () => !!editor?.isActive("link"),
-              },
-              {
-                key: "bulletList",
-                Icon: List,
-                run: () => editor?.chain().focus().toggleBulletList().run(),
-                active: () => !!editor?.isActive("bulletList"),
-              },
-              {
-                key: "numberedList",
-                Icon: ListOrdered,
-                run: () => editor?.chain().focus().toggleOrderedList().run(),
-                active: () => !!editor?.isActive("orderedList"),
-              },
-            ] as const
-          ).map(({ key, Icon, run, active }) => (
-            <button
-              key={key}
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={run}
-              title={tChat(`format.${key}`)}
-              aria-label={tChat(`format.${key}`)}
-              className={cn(
-                "flex h-6 w-6 items-center justify-center rounded transition-colors",
-                active()
-                  ? "bg-muted text-foreground"
-                  : "hover:bg-muted hover:text-foreground",
-              )}
-            >
-              <Icon className="h-3.5 w-3.5" />
-            </button>
-          ))}
-        </div>
+        {/* 工具栏（精简模式隐藏） */}
+        {!minimal && (
+          <div className="flex items-center gap-1 border-b border-border px-2 py-1 text-muted-foreground">
+            {(
+              [
+                {
+                  key: "bold",
+                  Icon: Bold,
+                  run: () => editor?.chain().focus().toggleBold().run(),
+                  active: () => !!editor?.isActive("bold"),
+                },
+                {
+                  key: "italic",
+                  Icon: Italic,
+                  run: () => editor?.chain().focus().toggleItalic().run(),
+                  active: () => !!editor?.isActive("italic"),
+                },
+                {
+                  key: "strikethrough",
+                  Icon: Strikethrough,
+                  run: () => editor?.chain().focus().toggleStrike().run(),
+                  active: () => !!editor?.isActive("strike"),
+                },
+                {
+                  key: "code",
+                  Icon: Code,
+                  run: () => editor?.chain().focus().toggleCode().run(),
+                  active: () => !!editor?.isActive("code"),
+                },
+                {
+                  key: "codeBlock",
+                  Icon: SquareCode,
+                  run: () => editor?.chain().focus().toggleCodeBlock().run(),
+                  active: () => !!editor?.isActive("codeBlock"),
+                },
+                {
+                  key: "link",
+                  Icon: Link,
+                  run: () =>
+                    editor
+                      ?.chain()
+                      .focus()
+                      .toggleLink({ href: "https://" })
+                      .run(),
+                  active: () => !!editor?.isActive("link"),
+                },
+                {
+                  key: "bulletList",
+                  Icon: List,
+                  run: () => editor?.chain().focus().toggleBulletList().run(),
+                  active: () => !!editor?.isActive("bulletList"),
+                },
+                {
+                  key: "numberedList",
+                  Icon: ListOrdered,
+                  run: () => editor?.chain().focus().toggleOrderedList().run(),
+                  active: () => !!editor?.isActive("orderedList"),
+                },
+              ] as const
+            ).map(({ key, Icon, run, active }) => (
+              <button
+                key={key}
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={run}
+                title={tChat(`format.${key}`)}
+                aria-label={tChat(`format.${key}`)}
+                className={cn(
+                  "flex h-6 w-6 items-center justify-center rounded transition-colors",
+                  active()
+                    ? "bg-muted text-foreground"
+                    : "hover:bg-muted hover:text-foreground",
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* 编辑区 */}
         <div className="flex items-start gap-2 px-3 py-2">
@@ -298,93 +303,98 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           </div>
         </div>
 
-        {/* 底部栏 */}
-        <div className="flex items-center justify-between border-t border-border px-3 py-1.5">
-          <button
-            type="button"
-            className="flex h-5 w-5 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-            title={tChat("attachment")}
-          >
-            <Paperclip className="h-3.5 w-3.5" />
-          </button>
+        {/* 底部栏（精简模式隐藏） */}
+        {!minimal && (
+          <div className="flex items-center justify-between border-t border-border px-3 py-1.5">
+            <button
+              type="button"
+              className="flex h-5 w-5 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+              title={tChat("attachment")}
+            >
+              <Paperclip className="h-3.5 w-3.5" />
+            </button>
 
-          {tokenUsage && (
-            <div className="flex items-center gap-2">
-              {modelName && (
-                <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
-                  {modelName}
-                </span>
-              )}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="h-4 w-4 cursor-pointer">
-                    <svg
-                      className="h-full w-full -rotate-90"
-                      viewBox="0 0 36 36"
-                      role="img"
-                      aria-label="Token usage"
-                    >
-                      <path
-                        className="text-border"
-                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      />
-                      <path
-                        className="text-accent transition-all"
-                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeDasharray={`${tokenPercent}, 100`}
-                        strokeWidth="4"
-                      />
-                    </svg>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {tokenUsage.breakdown ? (
-                    <div className="space-y-0.5 text-xs">
-                      <div>
-                        {tSession("usage.nextRequestLabel")}{" "}
+            {tokenUsage && (
+              <div className="flex items-center gap-2">
+                {modelName && (
+                  <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+                    {modelName}
+                  </span>
+                )}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="h-4 w-4 cursor-pointer">
+                      <svg
+                        className="h-full w-full -rotate-90"
+                        viewBox="0 0 36 36"
+                        role="img"
+                        aria-label="Token usage"
+                      >
+                        <path
+                          className="text-border"
+                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        />
+                        <path
+                          className="text-accent transition-all"
+                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeDasharray={`${tokenPercent}, 100`}
+                          strokeWidth="4"
+                        />
+                      </svg>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {tokenUsage.breakdown ? (
+                      <div className="space-y-0.5 text-xs">
+                        <div>
+                          {tSession("usage.nextRequestLabel")}{" "}
+                          {formatTokens(tokenUsage.current)} /{" "}
+                          {formatTokens(tokenUsage.max)}
+                        </div>
+                        <div>
+                          {tSession("usage.inputLabel")}{" "}
+                          {formatTokens(tokenUsage.breakdown.inputTokens)}
+                          {tokenUsage.breakdown.cacheReadTokens > 0 &&
+                            `（${tSession("usage.cacheLabel")} ${formatTokens(tokenUsage.breakdown.cacheReadTokens)}）`}
+                        </div>
+                        <div>
+                          {tSession("usage.outputLabel")}{" "}
+                          {formatTokens(tokenUsage.breakdown.outputTokens)}
+                          {tokenUsage.breakdown.reasoningTokens > 0 &&
+                            `（${tSession("usage.reasoningLabel")} ${formatTokens(tokenUsage.breakdown.reasoningTokens)}）`}
+                        </div>
+                        {tokenUsage.breakdown.cumulativeTokens !==
+                          undefined && (
+                          <div>
+                            {tSession("usage.cumulativeLabel")}{" "}
+                            {formatTokens(
+                              tokenUsage.breakdown.cumulativeTokens,
+                            )}
+                          </div>
+                        )}
+                        <div>
+                          {tSession("usage.callCount", {
+                            count: tokenUsage.breakdown.callCount,
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <>
                         {formatTokens(tokenUsage.current)} /{" "}
                         {formatTokens(tokenUsage.max)}
-                      </div>
-                      <div>
-                        {tSession("usage.inputLabel")}{" "}
-                        {formatTokens(tokenUsage.breakdown.inputTokens)}
-                        {tokenUsage.breakdown.cacheReadTokens > 0 &&
-                          `（${tSession("usage.cacheLabel")} ${formatTokens(tokenUsage.breakdown.cacheReadTokens)}）`}
-                      </div>
-                      <div>
-                        {tSession("usage.outputLabel")}{" "}
-                        {formatTokens(tokenUsage.breakdown.outputTokens)}
-                        {tokenUsage.breakdown.reasoningTokens > 0 &&
-                          `（${tSession("usage.reasoningLabel")} ${formatTokens(tokenUsage.breakdown.reasoningTokens)}）`}
-                      </div>
-                      {tokenUsage.breakdown.cumulativeTokens !== undefined && (
-                        <div>
-                          {tSession("usage.cumulativeLabel")}{" "}
-                          {formatTokens(tokenUsage.breakdown.cumulativeTokens)}
-                        </div>
-                      )}
-                      <div>
-                        {tSession("usage.callCount", {
-                          count: tokenUsage.breakdown.callCount,
-                        })}
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      {formatTokens(tokenUsage.current)} /{" "}
-                      {formatTokens(tokenUsage.max)}
-                    </>
-                  )}
-                </TooltipContent>
-              </Tooltip>
-            </div>
-          )}
-        </div>
+                      </>
+                    )}
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   },

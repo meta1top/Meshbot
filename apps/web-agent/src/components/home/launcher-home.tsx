@@ -1,7 +1,15 @@
 "use client";
 
 import { useSetAtom } from "jotai";
-import { Blocks, ChevronDown, Link2, Shield } from "lucide-react";
+import {
+  Blocks,
+  ChevronDown,
+  Coffee,
+  Link2,
+  Palette,
+  Shield,
+  Terminal,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
@@ -33,24 +41,23 @@ export function LauncherHome() {
   // 场景分段（视觉占位，本地 state 切高亮，不接功能）
   const [scene, setScene] = useState("daily");
   const scenes = [
-    { key: "daily", label: t("scenes.daily") },
-    { key: "code", label: t("scenes.code") },
-    { key: "design", label: t("scenes.design") },
+    { key: "daily", label: t("scenes.daily"), icon: Coffee },
+    { key: "code", label: t("scenes.code"), icon: Terminal },
+    { key: "design", label: t("scenes.design"), icon: Palette },
   ];
 
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center px-6">
-      <div className="flex w-full max-w-[640px] flex-col items-center gap-5">
+      <div className="flex w-full max-w-[600px] flex-col items-center gap-5">
         <div className="text-center">
-          <h1 className="text-[40px] font-extrabold leading-tight tracking-tight text-foreground">
+          <h1 className="text-[40px] font-extrabold leading-[1.08] tracking-tight text-foreground">
             MeshBot
+            <br />
+            {t("slogan")}
           </h1>
-          <p className="mt-1 text-[18px] font-semibold text-muted-foreground">
-            {t("title")}
-          </p>
         </div>
         {/* 场景分段（视觉占位） */}
-        <div className="inline-flex gap-1 rounded-xl bg-muted p-1">
+        <div className="inline-flex gap-1 rounded-xl bg-(--shell-sidebar) p-1">
           {scenes.map((s) => (
             <button
               key={s.key}
@@ -58,10 +65,11 @@ export function LauncherHome() {
               onClick={() => setScene(s.key)}
               className={
                 scene === s.key
-                  ? "rounded-lg bg-(--shell-chrome) px-4 py-1.5 text-[13px] font-semibold text-white"
-                  : "rounded-lg px-4 py-1.5 text-[13px] font-semibold text-muted-foreground hover:text-foreground"
+                  ? "flex items-center gap-1.5 rounded-lg bg-(--shell-chrome) px-4 py-1.5 text-[13px] font-semibold text-white"
+                  : "flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-[13px] font-semibold text-(--shell-sidebar-fg)/60 hover:text-(--shell-sidebar-fg)"
               }
             >
+              <s.icon className="h-3.5 w-3.5" />
               {s.label}
             </button>
           ))}
@@ -101,6 +109,7 @@ export function LauncherHome() {
             ))}
           </div>
           <ChatInput
+            minimal
             value={draft}
             onChange={setDraft}
             onSend={(text) => void handleSend(text)}
