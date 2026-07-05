@@ -18,7 +18,6 @@ import {
 import { ArtifactSplitPane } from "@/components/artifact/artifact-split-pane";
 import { DragRegion } from "@/components/drag-region";
 import { QuickAssistantFab } from "@/components/im/quick-assistant-fab";
-import { ShellTopBar } from "@/components/shell/shell-top-bar";
 import { SidebarSlotContext } from "@/components/shell/sidebar-slot-context";
 import { WorkspaceSidebar } from "@/components/shell/workspace-sidebar";
 import { useGlobalEvents } from "@/hooks/use-global-events";
@@ -78,9 +77,8 @@ function ShellInner({ children }: { children: ReactNode }) {
   }, [setPreviewArtifact]);
 
   return (
-    <main className="titlebar-safe flex h-screen flex-col bg-(--shell-chrome) text-foreground">
+    <main className="titlebar-safe flex h-screen flex-col bg-(--surface-0) text-foreground">
       <DragRegion />
-      <ShellTopBar />
       <div className="flex min-h-0 flex-1">
         <WorkspaceSidebar sublistSlotRef={setSlotEl} />
         <div

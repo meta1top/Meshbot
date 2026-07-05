@@ -53,7 +53,7 @@
   --brand-hover: #b03d0a;
   /* 外壳结构 token:从 web-agent 局部提升为共享(两端可用;修复 web-main --shell-accent 悬空)。 */
   --shell-chrome: #241c15;
-  --shell-sidebar: #f0e8de;
+  --shell-sidebar: #f7f4f0;
   --shell-sidebar-fg: #241c15;
   --shell-sidebar-hover: rgba(36, 28, 21, 0.06);
   --shell-sidebar-border: #e6ded4;

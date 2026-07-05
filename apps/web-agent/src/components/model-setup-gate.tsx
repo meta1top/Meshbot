@@ -5,7 +5,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { DragRegion } from "@/components/drag-region";
-import { ShellTopBar } from "@/components/shell/shell-top-bar";
 import { WorkspaceSidebar } from "@/components/shell/workspace-sidebar";
 import { ACCENT_BTN } from "@/lib/ui";
 import { useCloudWebUrl } from "@/rest/auth";
@@ -37,9 +36,8 @@ export function ModelSetupGate() {
   };
 
   return (
-    <main className="titlebar-safe flex h-screen flex-col bg-(--shell-chrome) text-foreground">
+    <main className="titlebar-safe flex h-screen flex-col bg-(--surface-0) text-foreground">
       <DragRegion />
-      <ShellTopBar />
       <div className="flex min-h-0 flex-1">
         <WorkspaceSidebar sublistSlotRef={setSlotEl} />
         <div className="relative flex min-h-0 flex-1 overflow-hidden pr-1.5 pb-1.5">

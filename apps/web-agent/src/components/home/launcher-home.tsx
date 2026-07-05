@@ -48,8 +48,8 @@ export function LauncherHome() {
 
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center px-6">
-      <div className="flex w-full max-w-[600px] flex-col items-center gap-5">
-        <div className="text-center">
+      <div className="flex w-full max-w-[600px] flex-col items-start gap-5">
+        <div>
           <h1 className="text-[40px] font-extrabold leading-[1.08] tracking-tight text-foreground">
             MeshBot
             <br />
