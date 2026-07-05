@@ -27,8 +27,8 @@ export function AssistantSidebar() {
   }, [loadSidebar]);
 
   return (
-    <div className="flex h-full flex-col bg-(--shell-sidebar) text-(--shell-sidebar-fg)">
-      <div className="flex h-13 shrink-0 items-center justify-between border-b border-(--shell-sidebar-border) px-3.5">
+    <div className="flex h-full flex-col">
+      <div className="flex h-10 shrink-0 items-center justify-between px-3">
         <span className="text-[15px] font-extrabold">{t("title")}</span>
         <button
           type="button"
@@ -39,7 +39,7 @@ export function AssistantSidebar() {
           <SquarePen className="h-4 w-4" />
         </button>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 py-2">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-2">
         {status === "idle" || status === "loading" ? (
           <SidebarSkeleton />
         ) : (

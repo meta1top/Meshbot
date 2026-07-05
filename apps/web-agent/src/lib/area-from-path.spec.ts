@@ -15,12 +15,10 @@ describe("areaFromPath", () => {
     expect(areaFromPath("/skills")).toBe("skills");
     expect(areaFromPath("/drive")).toBe("drive");
   });
-  it("/flows 归流程区", () => {
-    expect(areaFromPath("/flows")).toBe("flows");
-  });
-  it("/more 与 /schedule 归设置区", () => {
-    expect(areaFromPath("/more")).toBe("settings");
-    expect(areaFromPath("/schedule")).toBe("settings");
+  it("/flows、/more、/schedule 归更多区", () => {
+    expect(areaFromPath("/flows")).toBe("more");
+    expect(areaFromPath("/more")).toBe("more");
+    expect(areaFromPath("/schedule")).toBe("more");
   });
   it("未知路径归 other", () => {
     expect(areaFromPath("/nope")).toBe("other");
@@ -28,7 +26,7 @@ describe("areaFromPath", () => {
   it("容忍 query string(startsWith 匹配)", () => {
     expect(areaFromPath("/messages?id=abc")).toBe("messages");
     expect(areaFromPath("/assistant?id=x")).toBe("assistant");
-    expect(areaFromPath("/schedule?id=x")).toBe("settings");
+    expect(areaFromPath("/schedule?id=x")).toBe("more");
   });
   it("容忍子路径(startsWith 匹配)", () => {
     expect(areaFromPath("/skills/foo")).toBe("skills");

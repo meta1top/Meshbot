@@ -1,6 +1,6 @@
 {
   "common": {
-    "appTitle": "meshbot Cloud",
+    "appTitle": "MeshBot Cloud",
     "switchToLightTheme": "Switch to light theme",
     "switchToDarkTheme": "Switch to dark theme",
     "loading": "Loading…"
@@ -34,12 +34,12 @@
     "passwordNotMatch": ""
   },
   "authShell": {
-    "brand": "meshbot",
+    "brand": "MeshBot",
     "tagline": "Where your team and AI work together",
     "subtitle": "Local agent + cloud collaboration — pick up your workflow anywhere."
   },
   "login": {
-    "welcomeBack": "Welcome back to meshbot",
+    "welcomeBack": "Welcome back to MeshBot",
     "title": "Sign in",
     "subtitle": "Cloud account",
     "email": "Email",
@@ -82,7 +82,7 @@
     }
   },
   "authorize": {
-    "backToDesktop": "Please go back to the meshbot desktop app and start the login again.",
+    "backToDesktop": "Please go back to the MeshBot desktop app and start the login again.",
     "requestMissing": {
       "title": "Incomplete link",
       "description": "The authorization link is missing its request parameter — it may have been copied incompletely."

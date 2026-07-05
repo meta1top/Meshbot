@@ -48,7 +48,7 @@ export function SuggestionChips({ onPick }: SuggestionChipsProps) {
         {[0, 1, 2].map((i) => (
           <span
             key={i}
-            className="h-7 w-28 animate-pulse rounded-full bg-secondary/30"
+            className="h-8 w-28 animate-pulse rounded-lg bg-muted"
           />
         ))}
       </div>
@@ -62,7 +62,7 @@ export function SuggestionChips({ onPick }: SuggestionChipsProps) {
           key={s}
           type="button"
           onClick={() => onPick(s)}
-          className="rounded-full bg-secondary px-3 py-1 text-[13px] text-secondary-foreground transition-colors hover:bg-secondary/80"
+          className="rounded-lg border border-border bg-card px-3.5 py-2 text-[13px] font-medium text-foreground/85 transition-colors hover:border-(--shell-accent) hover:text-(--shell-accent)"
         >
           {s}
         </button>

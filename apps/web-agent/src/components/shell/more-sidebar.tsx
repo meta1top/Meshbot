@@ -1,20 +1,28 @@
 "use client";
 
 import { SidebarNavItem } from "@meshbot/web-common/shell";
-import { BarChart3, Clock } from "lucide-react";
+import { BarChart3, Clock, Workflow } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 
 /**
- * 「设置」区左侧子导航（Slack 左对齐）：使用情况 + 定时任务。
+ * 「更多」区左侧二级导航：流程 + 使用情况 + 定时任务。
  * 容器范式同 messages-sidebar；当前路由高亮。
  */
 export function MoreSidebar() {
   const t = useTranslations("settingsSidebar");
+  const tRail = useTranslations("appShell");
   const router = useRouter();
   const pathname = usePathname();
 
   const items = [
+    {
+      key: "flows",
+      label: tRail("rail.flows"),
+      icon: <Workflow className="h-4 w-4" />,
+      href: "/flows",
+      active: pathname.startsWith("/flows"),
+    },
     {
       key: "usage",
       label: t("usage"),
@@ -32,11 +40,11 @@ export function MoreSidebar() {
   ];
 
   return (
-    <div className="flex h-full flex-col bg-(--shell-sidebar) text-(--shell-sidebar-fg)">
-      <div className="flex h-13 shrink-0 items-center border-b border-(--shell-sidebar-border) px-3.5 text-[15px] font-extrabold">
-        {t("title")}
+    <div className="flex h-full flex-col">
+      <div className="flex h-10 shrink-0 items-center px-3 text-[15px] font-extrabold">
+        {tRail("rail.more")}
       </div>
-      <nav className="flex flex-col gap-0.5 px-2 py-2">
+      <nav className="flex flex-col gap-0.5 px-3 py-2">
         {items.map((it) => (
           <SidebarNavItem
             key={it.key}

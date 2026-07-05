@@ -1,6 +1,6 @@
 {
   "common": {
-    "appTitle": "meshbot 云协同",
+    "appTitle": "MeshBot 云协同",
     "switchToLightTheme": "切换到浅色",
     "switchToDarkTheme": "切换到深色",
     "loading": "加载中…"
@@ -34,12 +34,12 @@
     "passwordNotMatch": ""
   },
   "authShell": {
-    "brand": "meshbot",
+    "brand": "MeshBot",
     "tagline": "让团队与 AI 一起协作",
     "subtitle": "本地 Agent + 云端协同，随时随地接管你的工作流。"
   },
   "login": {
-    "welcomeBack": "欢迎回到 meshbot",
+    "welcomeBack": "欢迎回到 MeshBot",
     "title": "登录",
     "subtitle": "云协同账号",
     "email": "邮箱",
@@ -82,7 +82,7 @@
     }
   },
   "authorize": {
-    "backToDesktop": "请回到 meshbot 桌面端重新发起登录。",
+    "backToDesktop": "请回到 MeshBot 桌面端重新发起登录。",
     "requestMissing": {
       "title": "链接不完整",
       "description": "授权链接缺少请求参数，可能是复制不完整。"

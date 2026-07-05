@@ -23,7 +23,7 @@
     "goRegister": "Sign up",
     "brandTagline": "Where your team and AI work together",
     "brandSubtitle": "Local agent + cloud collaboration — pick up your workflow anywhere.",
-    "welcomeBack": "Welcome back to meshbot",
+    "welcomeBack": "Welcome back to MeshBot",
     "validation": {
       "codeRequired": "Please enter the authorization code"
     },
@@ -94,7 +94,7 @@
       "settings": "Settings"
     },
     "search": {
-      "placeholder": "Search meshbot"
+      "placeholder": "Search MeshBot"
     },
     "userMenu": {
       "addAccount": "Add account",
@@ -111,7 +111,8 @@
       "moreTitle": "More",
       "moreBody": "Files, knowledge base and more are coming soon.",
       "goAssistant": "Go to Assistant"
-    }
+    },
+    "newTask": "New task"
   },
   "chatInput": {
     "placeholder": "Type here",
@@ -301,6 +302,7 @@
   },
   "home": {
     "title": "What's up next?",
+    "slogan": "Your work co-pilot",
     "titles": {
       "0": "What's up next?",
       "1": "What are we working on?",
@@ -320,6 +322,18 @@
       "3": "What are you working on?",
       "4": "Got an idea?"
     },
+    "scenes": {
+      "daily": "Daily work",
+      "code": "Code",
+      "design": "Design"
+    },
+    "composer": {
+      "skills": "Skills",
+      "apps": "Connect apps",
+      "permissions": "Permissions",
+      "comingSoon": "Coming soon"
+    },
+    "recent": "Recent",
     "overview": "Overview",
     "models": "Models",
     "all": "All",
@@ -384,7 +398,7 @@
   "orgJoinFailed": "Failed to join, please check the invite code",
   "getStarted": "Get started",
   "createAccount": "Create account",
-  "createAccountDescription": "Create a local account to start using meshbot",
+  "createAccountDescription": "Create a local account to start using MeshBot",
   "email": "Email",
   "emailPlaceholder": "you@example.com",
   "displayName": "Display name",

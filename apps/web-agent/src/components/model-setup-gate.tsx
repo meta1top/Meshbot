@@ -3,9 +3,9 @@
 import { Button, Card, CardContent } from "@meshbot/design";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
+import { useState } from "react";
 import { DragRegion } from "@/components/drag-region";
-import { ShellTopBar } from "@/components/shell/shell-top-bar";
-import { WorkspaceRail } from "@/components/shell/workspace-rail";
+import { WorkspaceSidebar } from "@/components/shell/workspace-sidebar";
 import { ACCENT_BTN } from "@/lib/ui";
 import { useCloudWebUrl } from "@/rest/auth";
 
@@ -20,6 +20,7 @@ export function ModelSetupGate() {
   const t = useTranslations("modelSetupGate");
   const cloudWebUrl = useCloudWebUrl();
   const queryClient = useQueryClient();
+  const [, setSlotEl] = useState<HTMLElement | null>(null);
 
   const openCloudModelSettings = () => {
     if (!cloudWebUrl.data) return;
@@ -35,13 +36,12 @@ export function ModelSetupGate() {
   };
 
   return (
-    <main className="titlebar-safe flex h-screen flex-col bg-(--shell-chrome) text-foreground">
+    <main className="titlebar-safe flex h-screen flex-col bg-(--shell-content) text-foreground">
       <DragRegion />
-      <ShellTopBar />
       <div className="flex min-h-0 flex-1">
-        <WorkspaceRail />
-        <div className="relative flex min-h-0 flex-1 overflow-hidden pr-1.5 pb-1.5">
-          <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-(--shell-radius) bg-(--shell-content)">
+        <WorkspaceSidebar sublistSlotRef={setSlotEl} />
+        <div className="relative flex min-h-0 flex-1 overflow-hidden">
+          <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-(--shell-content)">
             <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto p-4 lg:px-6">
               <Card className="w-full max-w-[480px]">
                 <CardContent className="flex flex-col items-center gap-4 pt-6 text-center">

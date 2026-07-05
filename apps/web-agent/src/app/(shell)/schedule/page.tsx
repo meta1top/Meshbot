@@ -8,6 +8,7 @@ import { sessionsAtom } from "@/atoms/sessions";
 import { ToolPage } from "@/components/layouts/tool-page";
 import { CronJobCard } from "@/components/schedule/cron-job-card";
 import { CronJobForm } from "@/components/schedule/cron-job-form";
+import { MoreSidebar } from "@/components/shell/more-sidebar";
 import {
   createCronJob,
   deleteCronJob,
@@ -66,6 +67,7 @@ export default function SchedulePage() {
 
   return (
     <ToolPage
+      sidebar={<MoreSidebar />}
       title={t("title")}
       actions={
         <button
