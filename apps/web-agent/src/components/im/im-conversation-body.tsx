@@ -1,6 +1,7 @@
 "use client";
 
 import { IM_WS_EVENTS } from "@meshbot/types";
+import { ImMessageList } from "@meshbot/web-common/im";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useTranslations } from "next-intl";
 import {
@@ -23,8 +24,8 @@ import {
   type ChatInputHandle,
 } from "@/components/common/chat-input";
 import { ConversationEmptyState } from "@/components/im/conversation-empty-state";
-import { ImMessageList } from "@/components/im/im-message-list";
 import { MessageSkeleton } from "@/components/im/message-skeleton";
+import { MarkdownContent } from "@/components/session/markdown-content";
 import { getEventsSocket } from "@/lib/events-socket";
 import { fetchMessages } from "@/rest/im";
 import { useMembers } from "@/rest/org";
@@ -245,8 +246,23 @@ export function ImConversationBody({ id, scrollRef }: ImConversationBodyProps) {
             )}
             <ImMessageList
               messages={messages}
-              members={members}
-              currentUserId={currentUserId}
+              variant="rows"
+              groupKey={(m) => m.senderId}
+              resolveSender={(m) => {
+                const dn = members[m.senderId]?.displayName ?? m.senderId;
+                return {
+                  displayName: dn,
+                  initial: dn.charAt(0).toUpperCase(),
+                  isSelf: m.senderId === currentUserId,
+                };
+              }}
+              renderContent={(m) => <MarkdownContent text={m.content} />}
+              labels={{
+                today: t("today"),
+                yesterday: t("yesterday"),
+                copy: t("copy"),
+              }}
+              onCopy={(m) => void navigator.clipboard?.writeText(m.content)}
             />
             <div ref={bottomRef} />
           </>

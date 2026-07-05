@@ -1,5 +1,4 @@
 import { cn } from "@meshbot/design";
-import Image from "next/image";
 
 type BrandLogoSize = "sm" | "md" | "lg";
 
@@ -49,12 +48,11 @@ export function BrandLogo({
           s.box,
         )}
       >
-        <Image
+        <img
           src="/logo.svg"
           alt="MeshBot"
           width={s.img}
           height={s.img}
-          unoptimized
           className={cn(spinning && "animate-[spin_1.4s_linear_infinite]")}
         />
       </span>

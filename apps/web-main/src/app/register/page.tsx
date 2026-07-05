@@ -115,7 +115,7 @@ function RegisterFlow() {
       setVerifyError(err instanceof ApiError ? err.message : t("verifyFailed"));
       return;
     }
-    router.replace(next ?? "/settings/org");
+    router.replace(next ?? "/messages");
   };
 
   const onResend = async () => {
@@ -131,12 +131,16 @@ function RegisterFlow() {
 
   return (
     <AuthShell>
-      <div className="w-full max-w-[420px]">
+      <div className="w-full">
         {step === "register" && (
           <Card className="border-0 shadow-none">
             <CardHeader className="space-y-1">
-              <CardTitle>{t("createAccount")}</CardTitle>
-              <CardDescription>{t("createAccountDescription")}</CardDescription>
+              <CardTitle className="text-center">
+                {t("createAccount")}
+              </CardTitle>
+              <CardDescription className="text-center">
+                {t("createAccountDescription")}
+              </CardDescription>
             </CardHeader>
             <CardContent className="pt-3">
               <Form {...form}>
@@ -229,7 +233,7 @@ function RegisterFlow() {
 
                   <Button
                     type="submit"
-                    className="mt-1"
+                    className="mt-1 h-11 w-full rounded-xl bg-(--shell-accent) text-white hover:bg-(--shell-accent-hover)"
                     disabled={registerMutation.isPending}
                   >
                     {registerMutation.isPending
@@ -241,7 +245,7 @@ function RegisterFlow() {
                     {t("haveAccount")}{" "}
                     <Link
                       href="/login"
-                      className="text-primary hover:underline"
+                      className="text-(--shell-accent) hover:underline"
                     >
                       {t("goLogin")}
                     </Link>
@@ -255,8 +259,8 @@ function RegisterFlow() {
         {step === "verify" && (
           <Card className="border-0 shadow-none">
             <CardHeader className="space-y-1">
-              <CardTitle>{t("verifyTitle")}</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-center">{t("verifyTitle")}</CardTitle>
+              <CardDescription className="text-center">
                 {t("verifyDescription", { email })}
               </CardDescription>
             </CardHeader>
@@ -290,7 +294,7 @@ function RegisterFlow() {
 
                 <Button
                   type="submit"
-                  className="mt-1"
+                  className="mt-1 h-11 w-full rounded-xl bg-(--shell-accent) text-white hover:bg-(--shell-accent-hover)"
                   disabled={verifyMutation.isPending || code.length !== 6}
                 >
                   {verifyMutation.isPending

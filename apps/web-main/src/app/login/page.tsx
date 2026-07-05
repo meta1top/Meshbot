@@ -53,21 +53,21 @@ function LoginForm() {
       setErrorMessage(err instanceof ApiError ? err.message : t("loginFailed"));
       return;
     }
-    router.replace(next ?? "/settings/org");
+    router.replace(next ?? "/messages");
   };
 
   return (
     <AuthShell>
-      <div className="w-full max-w-[380px]">
+      <div className="w-full">
         <Card className="border-0 shadow-none">
           <CardHeader className="space-y-0 pb-4">
-            <p className="mb-1 text-xs text-muted-foreground">
+            <p className="mb-1 text-center text-xs text-muted-foreground">
               {t("welcomeBack")}
             </p>
-            <CardTitle className="text-left text-[28px] leading-[1.15] font-semibold tracking-tight text-foreground">
+            <CardTitle className="text-center text-[28px] leading-[1.15] font-semibold tracking-tight text-foreground">
               {t("title")}
             </CardTitle>
-            <CardDescription className="mt-1 text-left text-[12px] tracking-[0.08em] text-muted-foreground">
+            <CardDescription className="mt-1 text-center text-[12px] tracking-[0.08em] text-muted-foreground">
               {t("subtitle")}
             </CardDescription>
           </CardHeader>
@@ -116,7 +116,7 @@ function LoginForm() {
 
               <Button
                 type="submit"
-                className="mt-2 w-full"
+                className="mt-2 h-11 w-full rounded-xl bg-(--shell-accent) text-white hover:bg-(--shell-accent-hover)"
                 disabled={loginMutation.isPending}
               >
                 {loginMutation.isPending ? t("signingIn") : t("signIn")}
@@ -124,7 +124,10 @@ function LoginForm() {
 
               <p className="mt-3 text-center text-xs text-muted-foreground">
                 {t("noAccount")}{" "}
-                <Link href="/register" className="text-primary hover:underline">
+                <Link
+                  href="/register"
+                  className="text-(--shell-accent) hover:underline"
+                >
                   {t("goRegister")}
                 </Link>
               </p>

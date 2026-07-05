@@ -1,10 +1,9 @@
 "use client";
 
 import type { SkillInstallSource } from "@meshbot/types-agent";
+import { SidebarNavItem, SidebarSection } from "@meshbot/web-common/shell";
 import { BookOpen, Package, Store } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { SidebarNavItem } from "@/components/shell/sidebar-nav-item";
-import { SidebarSection } from "@/components/shell/sidebar-section";
 
 /**
  * 页面市场来源仅展示「可搜索/可浏览」的来源（system / clawhub）。

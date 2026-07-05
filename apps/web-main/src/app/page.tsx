@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { useEffect } from "react";
 import { useProfile } from "@/rest/auth";
 
-/** 首页：已登录跳组织设置，未登录跳登录页。本身不渲染实质内容。 */
+/** 首页：已登录跳消息区，未登录跳登录页。本身不渲染实质内容。 */
 export default function Home() {
   const t = useTranslations("common");
   const router = useRouter();
@@ -15,7 +15,7 @@ export default function Home() {
 
   useEffect(() => {
     if (profile.isPending) return;
-    router.replace(authenticated ? "/settings/org" : "/login");
+    router.replace(authenticated ? "/messages" : "/login");
   }, [profile.isPending, authenticated, router]);
 
   return (

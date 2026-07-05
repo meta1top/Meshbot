@@ -1,3 +1,4 @@
+import { themeScript } from "@meshbot/web-common";
 import type { Metadata } from "next";
 import { Hanken_Grotesk } from "next/font/google";
 import { IntlProvider } from "@/components/intl-provider";
@@ -21,7 +22,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="zh-CN" className={hanken.variable}>
+    <html lang="zh-CN" suppressHydrationWarning className={hanken.variable}>
+      <head>
+        <script
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: themeScript
+          dangerouslySetInnerHTML={{ __html: themeScript }}
+        />
+      </head>
       <body>
         <IntlProvider>
           <Providers>{children}</Providers>

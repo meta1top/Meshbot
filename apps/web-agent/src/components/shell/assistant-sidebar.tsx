@@ -1,5 +1,6 @@
 "use client";
 
+import { SidebarSection, SidebarSkeleton } from "@meshbot/web-common/shell";
 import { useAtomValue, useSetAtom } from "jotai";
 import { SquarePen } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -7,8 +8,6 @@ import { useTranslations } from "next-intl";
 import { useEffect } from "react";
 import { sessionsAtom, sessionsStatusAtom } from "@/atoms/sessions";
 import { loadSidebarAtom } from "@/atoms/sidebar";
-import { SidebarSection } from "@/components/shell/sidebar-section";
-import { SidebarSkeleton } from "@/components/shell/sidebar-skeleton";
 import { SessionListItem } from "@/components/sidebar/session-list-item";
 
 /**

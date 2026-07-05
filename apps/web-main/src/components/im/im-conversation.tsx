@@ -1,10 +1,10 @@
 "use client";
 
 import { IM_WS_EVENTS, type ImMessage } from "@meshbot/types";
+import { ImMessageList } from "@meshbot/web-common/im";
 import { AlertCircle, Loader2, Send } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ImMessageList } from "@/components/im/im-message-list";
 import { getImSocket } from "@/lib/im-socket";
 import { fetchMessages, useConversations } from "@/rest/im";
 
@@ -263,7 +263,18 @@ export function ImConversation({ conversationId }: ImConversationProps) {
                 )}
               </div>
             )}
-            <ImMessageList messages={messages} agentName={agentName} />
+            <ImMessageList
+              messages={messages}
+              variant="bubbles"
+              groupKey={(m) => m.senderType}
+              resolveSender={(m) => ({
+                displayName: agentName,
+                initial: agentName.trim().charAt(0).toUpperCase() || "A",
+                isSelf: m.senderType !== "agent",
+              })}
+              renderContent={(m) => m.content}
+              labels={{ today: t("today"), yesterday: t("yesterday") }}
+            />
           </>
         )}
         <div ref={bottomRef} />

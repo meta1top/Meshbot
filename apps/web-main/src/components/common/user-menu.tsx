@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Button,
   cn,
   DropdownMenu,
   DropdownMenuContent,
@@ -17,8 +16,8 @@ import { useProfile } from "@/rest/auth";
 import { useSwitchOrg } from "@/rest/org";
 
 /**
- * 顶栏用户菜单：展示 displayName + 当前组织，列 memberships 可切组织，含登出。
- * `/settings` 与 `/messages` 两个壳共用，登出后跳登录页。
+ * rail 用户菜单：紧凑首字母头像触发器(h-8 w-8，配 68px 竖 rail)，
+ * 下拉展示 displayName + 当前组织，列 memberships 可切组织，含登出。
  */
 export function UserMenu() {
   const t = useTranslations("settings");
@@ -42,19 +41,20 @@ export function UserMenu() {
 
   if (!user) return null;
 
+  const initial = user.displayName.charAt(0).toUpperCase();
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-1.5">
-          <span className="max-w-[160px] truncate">{user.displayName}</span>
-          {activeOrg ? (
-            <span className="max-w-[120px] truncate text-muted-foreground">
-              · {activeOrg.name}
-            </span>
-          ) : null}
-        </Button>
+        <button
+          type="button"
+          className="flex h-8 w-8 items-center justify-center rounded-(--shell-radius) bg-[#16a34a] text-[13px] font-semibold text-white"
+          title={user.displayName}
+        >
+          {initial}
+        </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
+      <DropdownMenuContent side="right" align="end" className="w-56">
         <DropdownMenuLabel>{user.email}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="text-muted-foreground">

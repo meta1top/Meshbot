@@ -5,6 +5,23 @@
     "switchToDarkTheme": "Switch to dark theme",
     "loading": "Loading…"
   },
+  "appShell": {
+    "rail": {
+      "assistant": "Assistant",
+      "messages": "Messages",
+      "skills": "Skills",
+      "drive": "Files",
+      "flows": "Flows",
+      "settings": "Settings"
+    }
+  },
+  "shellStub": {
+    "assistant": "Assistant",
+    "skills": "Skills",
+    "drive": "Files",
+    "flows": "Flows",
+    "comingHint": "This feature is coming soon."
+  },
   "loading": "",
   "validation": {
     "required": "Required field",
@@ -130,8 +147,7 @@
       "switchOrg": "Switch organization",
       "current": "current",
       "logout": "Log out"
-    },
-    "messagesLink": "Messages"
+    }
   },
   "orgSettings": {
     "noOrg": "You haven't joined any organization yet",
@@ -377,7 +393,6 @@
   "resendFailed": "",
   "messages": {
     "title": "Messages",
-    "settingsLink": "Settings",
     "empty": {
       "title": "Pick an Agent to start chatting",
       "description": "Select a device Agent conversation on the left, or start a new one from the top-right."

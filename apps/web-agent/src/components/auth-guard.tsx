@@ -1,11 +1,11 @@
 "use client";
 
+import { BrandLogo } from "@meshbot/web-common/shell";
 import { useQuery } from "@tanstack/react-query";
 import { useAtomValue } from "jotai";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { profileQueryAtom } from "@/atoms/auth";
-import { BrandLogo } from "@/components/brand-logo";
 import { ModelSetupGate } from "@/components/model-setup-gate";
 import { ProfileUnauthorizedError } from "@/rest/auth";
 import { fetchModelConfigs } from "@/rest/model-config";

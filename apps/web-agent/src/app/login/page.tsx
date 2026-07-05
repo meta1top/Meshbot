@@ -1,22 +1,13 @@
 "use client";
 
-import {
-  Alert,
-  AlertDescription,
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  Input,
-} from "@meshbot/design";
+import { Alert, AlertDescription, Button, Input } from "@meshbot/design";
 import { Form, FormItem } from "@meshbot/design/form";
 import { useSchema } from "@meshbot/design/hooks";
 import {
   type AuthorizeCodeInput,
   authorizeCodeSchema,
 } from "@meshbot/types-agent";
+import { BrandLogo } from "@meshbot/web-common/shell";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -83,6 +74,7 @@ export default function LoginPage() {
   };
 
   const beginPolling = (requestId: string) => {
+    clearTimers();
     requestIdRef.current = requestId;
     setStage("waiting");
     pollTimerRef.current = setInterval(async () => {
@@ -143,127 +135,120 @@ export default function LoginPage() {
 
   return (
     <AuthShellLayout>
-      <div className="w-full max-w-[380px]">
-        <Card className="border-0 shadow-none">
-          <CardHeader className="space-y-0 pb-4">
-            <p className="mb-1 text-xs text-muted-foreground">
-              {t("welcomeBack")}
-            </p>
-            <CardTitle className="text-left text-[28px] leading-[1.15] font-semibold tracking-tight text-foreground">
-              {t("title")}
-            </CardTitle>
-            <CardDescription className="mt-1 text-left text-[12px] tracking-[0.08em] text-muted-foreground">
-              {t("subtitle")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="flex flex-col gap-4">
-              {stage === "waiting" ? (
-                <div className="flex flex-col items-center gap-3 rounded-md border border-border py-8 text-center">
-                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                  <p className="text-sm text-foreground">{t("waitingText")}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {t("waitingHint")}
-                  </p>
-                  <Button variant="outline" size="sm" onClick={onCancelWaiting}>
-                    {t("cancel")}
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  {stage === "timeout" && (
-                    <Alert variant="destructive">
-                      <AlertDescription>{t("timeoutMessage")}</AlertDescription>
-                    </Alert>
-                  )}
-                  {startError && (
-                    <Alert variant="destructive">
-                      <AlertDescription>{startError}</AlertDescription>
-                    </Alert>
-                  )}
-                  <Button
-                    type="button"
-                    className={`w-full ${ACCENT_BTN}`}
-                    disabled={starting}
-                    onClick={onBrowserLogin}
-                  >
-                    {starting ? t("starting") : t("browserLoginButton")}
-                  </Button>
-                </>
-              )}
+      <BrandLogo size="md" withWordmark />
 
-              <div className="mt-1">
-                <button
-                  type="button"
-                  className="flex w-full items-center justify-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                  onClick={() => setManualOpen((v) => !v)}
-                  aria-expanded={manualOpen}
-                >
-                  {t("manualToggle")}
-                  <ChevronDown
-                    className={`h-3.5 w-3.5 transition-transform ${manualOpen ? "rotate-180" : ""}`}
-                  />
-                </button>
-                {manualOpen && (
-                  <Form
-                    schema={manualSchema}
-                    defaultValues={{ code: "" }}
-                    onSubmit={onManualSubmit}
-                    disabled={manualSubmitting}
-                    className="mt-3 flex flex-col gap-3"
-                  >
-                    <FormItem
-                      name="code"
-                      label={
-                        <span className="text-[11px] tracking-[0.08em] uppercase">
-                          {t("manualLabel")}
-                        </span>
-                      }
-                    >
-                      <Input
-                        autoComplete="one-time-code"
-                        placeholder={t("manualPlaceholder")}
-                      />
-                    </FormItem>
-                    {manualError && (
-                      <Alert variant="destructive">
-                        <AlertDescription>{manualError}</AlertDescription>
-                      </Alert>
-                    )}
-                    <Button
-                      type="submit"
-                      variant="outline"
-                      disabled={manualSubmitting}
-                    >
-                      {manualSubmitting
-                        ? t("manualSubmitting")
-                        : t("manualSubmit")}
-                    </Button>
-                  </Form>
-                )}
-              </div>
+      {stage === "waiting" ? (
+        <>
+          <h1 className="text-[22px] font-extrabold tracking-tight">
+            {t("waitingHeadline")}
+          </h1>
+          <p className="-mt-2 text-[12.5px] text-(--shell-sidebar-fg)/60">
+            {t("waitingSub")}
+          </p>
+          <div className="flex items-center gap-2 text-[12px] text-(--shell-sidebar-fg)/70">
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-(--shell-accent)" />
+            {t("waitingText")}
+          </div>
+          <button
+            type="button"
+            onClick={onBrowserLogin}
+            disabled={starting}
+            className="text-[11px] text-(--shell-sidebar-fg)/55 hover:text-(--shell-accent)"
+          >
+            {t("reopen")}
+          </button>
+          <button
+            type="button"
+            onClick={onCancelWaiting}
+            className="text-[11px] text-(--shell-sidebar-fg)/45 hover:text-(--shell-sidebar-fg)"
+          >
+            {t("cancel")}
+          </button>
+        </>
+      ) : (
+        <>
+          <h1 className="text-[22px] font-extrabold tracking-tight">
+            {t("deviceHeadline")}
+          </h1>
+          <p className="-mt-2 text-[12.5px] text-(--shell-sidebar-fg)/60">
+            {t("deviceSubtitle")}
+          </p>
+          {stage === "timeout" && (
+            <Alert variant="destructive" className="text-left">
+              <AlertDescription>{t("timeoutMessage")}</AlertDescription>
+            </Alert>
+          )}
+          {startError && (
+            <Alert variant="destructive" className="text-left">
+              <AlertDescription>{startError}</AlertDescription>
+            </Alert>
+          )}
+          <Button
+            type="button"
+            className={`h-12 w-full max-w-[300px] rounded-[14px] text-[13px] ${ACCENT_BTN}`}
+            disabled={starting}
+            onClick={onBrowserLogin}
+          >
+            {starting ? t("starting") : t("browserLoginButton")}
+          </Button>
+          <p className="text-[10.5px] leading-relaxed text-(--shell-sidebar-fg)/45">
+            {t("footNote")}
+          </p>
+        </>
+      )}
 
-              <p className="mt-3 text-center text-xs text-muted-foreground">
-                {t("noAccount")}{" "}
-                {registerHref ? (
-                  <a
-                    href={registerHref}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-primary hover:underline"
-                  >
-                    {t("goRegister")}
-                  </a>
-                ) : (
-                  <span className="text-muted-foreground">
-                    {t("goRegister")}
-                  </span>
-                )}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+      {/* 手动输码：折叠兜底（loopback 失败 / 无回环场景） */}
+      <div className="w-full max-w-[300px]">
+        <button
+          type="button"
+          className="flex w-full items-center justify-center gap-1 text-[11px] text-(--shell-sidebar-fg)/45 hover:text-(--shell-sidebar-fg)"
+          onClick={() => setManualOpen((v) => !v)}
+          aria-expanded={manualOpen}
+        >
+          {t("manualToggle")}
+          <ChevronDown
+            className={`h-3.5 w-3.5 transition-transform ${manualOpen ? "rotate-180" : ""}`}
+          />
+        </button>
+        {manualOpen && (
+          <Form
+            schema={manualSchema}
+            defaultValues={{ code: "" }}
+            onSubmit={onManualSubmit}
+            disabled={manualSubmitting}
+            className="mt-3 flex flex-col gap-3 text-left"
+          >
+            <FormItem name="code" label={t("manualLabel")}>
+              <Input
+                autoComplete="one-time-code"
+                placeholder={t("manualPlaceholder")}
+              />
+            </FormItem>
+            {manualError && (
+              <Alert variant="destructive">
+                <AlertDescription>{manualError}</AlertDescription>
+              </Alert>
+            )}
+            <Button type="submit" variant="outline" disabled={manualSubmitting}>
+              {manualSubmitting ? t("manualSubmitting") : t("manualSubmit")}
+            </Button>
+          </Form>
+        )}
       </div>
+
+      {registerHref ? (
+        <p className="text-[11px] text-(--shell-sidebar-fg)/45">
+          {t("noAccount")}{" "}
+          <a
+            href={registerHref}
+            target="_blank"
+            rel="noreferrer"
+            className="text-(--shell-accent) hover:underline"
+          >
+            {t("goRegister")}
+          </a>
+        </p>
+      ) : null}
     </AuthShellLayout>
   );
 }

@@ -12,6 +12,14 @@
     "./react": {
       "types": "./dist/react.d.ts",
       "default": "./dist/react.js"
+    },
+    "./shell": {
+      "types": "./src/shell/index.ts",
+      "default": "./src/shell/index.ts"
+    },
+    "./im": {
+      "types": "./src/im/index.ts",
+      "default": "./src/im/index.ts"
     }
   },
   "scripts": {
@@ -22,10 +30,12 @@
     "test": "jest"
   },
   "dependencies": {
+    "@meshbot/design": "workspace:*",
     "@meshbot/types": "workspace:*",
     "@meshbot/types-agent": "workspace:*",
     "axios": "^1.16.0",
     "best-effort-json-parser": "^1.4.1",
+    "lucide-react": "^0.468",
     "zod": "^3"
   },
   "peerDependencies": {

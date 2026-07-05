@@ -5,6 +5,23 @@
     "switchToDarkTheme": "切换到深色",
     "loading": "加载中…"
   },
+  "appShell": {
+    "rail": {
+      "assistant": "助手",
+      "messages": "消息",
+      "skills": "技能",
+      "drive": "文件",
+      "flows": "流程",
+      "settings": "设置"
+    }
+  },
+  "shellStub": {
+    "assistant": "助手",
+    "skills": "技能",
+    "drive": "文件",
+    "flows": "流程",
+    "comingHint": "该功能正在开发中，敬请期待。"
+  },
   "loading": "",
   "validation": {
     "required": "必填字段",
@@ -130,8 +147,7 @@
       "switchOrg": "切换组织",
       "current": "当前",
       "logout": "登出"
-    },
-    "messagesLink": "消息"
+    }
   },
   "orgSettings": {
     "noOrg": "尚未加入任何组织",
@@ -377,7 +393,6 @@
   "resendFailed": "",
   "messages": {
     "title": "消息",
-    "settingsLink": "设置",
     "empty": {
       "title": "选择一个 Agent 开始对话",
       "description": "从左侧选择一个设备 Agent 会话，或点右上角新建一个。"
