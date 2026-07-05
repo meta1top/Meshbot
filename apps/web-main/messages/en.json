@@ -5,6 +5,16 @@
     "switchToDarkTheme": "Switch to dark theme",
     "loading": "Loading…"
   },
+  "appShell": {
+    "rail": {
+      "assistant": "Assistant",
+      "messages": "Messages",
+      "skills": "Skills",
+      "drive": "Drive",
+      "flows": "Flows",
+      "settings": "Settings"
+    }
+  },
   "loading": "",
   "validation": {
     "required": "Required field",

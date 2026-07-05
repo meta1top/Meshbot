@@ -5,6 +5,16 @@
     "switchToDarkTheme": "切换到深色",
     "loading": "加载中…"
   },
+  "appShell": {
+    "rail": {
+      "assistant": "助手",
+      "messages": "消息",
+      "skills": "技能",
+      "drive": "网盘",
+      "flows": "流程",
+      "settings": "设置"
+    }
+  },
   "loading": "",
   "validation": {
     "required": "必填字段",
