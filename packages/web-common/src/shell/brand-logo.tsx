@@ -3,7 +3,12 @@ import { cn } from "@meshbot/design";
 type BrandLogoSize = "sm" | "md" | "lg";
 
 const SIZE = {
-  sm: { wrap: "gap-2", box: "h-8 w-8", img: 20, text: "" },
+  sm: {
+    wrap: "gap-2",
+    box: "h-8 w-8",
+    img: 20,
+    text: "text-[16px] font-extrabold",
+  },
   md: {
     wrap: "gap-2",
     box: "h-7 w-7",
@@ -28,10 +33,9 @@ interface BrandLogoProps {
 }
 
 /**
- * 统一品牌标识：白底圆角盒 + 橙色 logo mark（+ 可选 MeshBot 文字）。
- * 白底保证 mark 在橙色品牌面板 / 深色 rail / 启动页等各种背景上对比一致；
- * 文字色继承父级（橙色面板上为白、启动页上为前景色）。
- * spinning=true 时白盒不动、仅 mark 旋转，可直接当作加载指示器。
+ * 统一品牌标识：深炭圆角盒 + 白色 logo mark（+ 可选 MeshBot 粗体文字）。
+ * 深底 + 白 mark（img 经 brightness-0 invert 反白）在浅暖侧栏 / 启动页 / 深 rail
+ * 各种背景上都清晰；文字色继承父级。spinning=true 时盒不动、仅 mark 旋转作加载指示。
  */
 export function BrandLogo({
   size = "md",
@@ -44,7 +48,7 @@ export function BrandLogo({
     <div className={cn("flex items-center", s.wrap, className)}>
       <span
         className={cn(
-          "flex shrink-0 items-center justify-center rounded-[8px] bg-white",
+          "flex shrink-0 items-center justify-center rounded-[8px] bg-(--shell-chrome)",
           s.box,
         )}
       >
@@ -53,7 +57,10 @@ export function BrandLogo({
           alt="MeshBot"
           width={s.img}
           height={s.img}
-          className={cn(spinning && "animate-[spin_1.4s_linear_infinite]")}
+          className={cn(
+            "brightness-0 invert",
+            spinning && "animate-[spin_1.4s_linear_infinite]",
+          )}
         />
       </span>
       {withWordmark && <span className={s.text}>MeshBot</span>}
