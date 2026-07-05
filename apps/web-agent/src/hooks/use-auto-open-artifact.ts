@@ -2,11 +2,7 @@
 
 import { useSetAtom } from "jotai";
 import { useEffect, useRef } from "react";
-import {
-  assistantPanelOpenAtom,
-  previewArtifactAtom,
-} from "@/atoms/assistant-panel";
-import { selectedContextTabAtom } from "@/atoms/right-zone";
+import { previewArtifactAtom } from "@/atoms/assistant-panel";
 import type { TimelineMessage } from "@/components/session/message-list";
 
 /**
@@ -22,8 +18,6 @@ export function useAutoOpenArtifact(
   running: boolean,
 ): void {
   const setArtifact = useSetAtom(previewArtifactAtom);
-  const setOpen = useSetAtom(assistantPanelOpenAtom);
-  const setTab = useSetAtom(selectedContextTabAtom);
   // 同一产物（toolCallId）只弹一次的去重集合，与 assistantPanelTypeAtom 无关。
   const seenRef = useRef<Set<string>>(new Set());
 
@@ -55,7 +49,5 @@ export function useAutoOpenArtifact(
     }
     const first = fresh[0];
     setArtifact({ path: first.path, title: first.title });
-    setTab("artifact");
-    setOpen(true);
-  }, [messages, running, setArtifact, setTab, setOpen]);
+  }, [messages, running, setArtifact]);
 }

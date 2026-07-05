@@ -12,19 +12,21 @@ import {
   useState,
 } from "react";
 import {
-  assistantPanelOpenAtom,
   assistantPanelWidthAtom,
+  previewArtifactAtom,
 } from "@/atoms/assistant-panel";
+import { ArtifactSplitPane } from "@/components/artifact/artifact-split-pane";
 import { DragRegion } from "@/components/drag-region";
-import { RightZone } from "@/components/shell/right-zone";
+import { QuickAssistantFab } from "@/components/im/quick-assistant-fab";
 import { ShellTopBar } from "@/components/shell/shell-top-bar";
 import { SidebarSlotContext } from "@/components/shell/sidebar-slot-context";
 import { WorkspaceSidebar } from "@/components/shell/workspace-sidebar";
 import { useGlobalEvents } from "@/hooks/use-global-events";
 
 function ShellInner({ children }: { children: ReactNode }) {
-  const t = useTranslations("appShell");
-  const [panelOpen, setPanelOpen] = useAtom(assistantPanelOpenAtom);
+  const t = useTranslations("rightZone");
+  const [previewArtifact, setPreviewArtifact] = useAtom(previewArtifactAtom);
+  const hasArtifact = previewArtifact != null;
   useGlobalEvents();
   const [assistantWidth, setAssistantWidth] = useAtom(assistantPanelWidthAtom);
   const [isResizing, setIsResizing] = useState(false);
@@ -65,14 +67,15 @@ function ShellInner({ children }: { children: ReactNode }) {
     return () => document.body.classList.remove("app-shell-mode");
   }, []);
 
+  // ESC 关产物分栏（随手问 FAB 自己的开关/ESC 由 FAB 自持，这里只管产物）。
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      setPanelOpen(false);
+      setPreviewArtifact(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [setPanelOpen]);
+  }, [setPreviewArtifact]);
 
   return (
     <main className="titlebar-safe flex h-screen flex-col bg-(--shell-chrome) text-foreground">
@@ -87,7 +90,7 @@ function ShellInner({ children }: { children: ReactNode }) {
           <SidebarSlotContext.Provider value={slotEl}>
             {children}
           </SidebarSlotContext.Provider>
-          {panelOpen && (
+          {hasArtifact && (
             <div
               aria-hidden
               onMouseDown={startPanelResize}
@@ -96,11 +99,11 @@ function ShellInner({ children }: { children: ReactNode }) {
               <div className="mx-auto h-12 w-1 rounded-full bg-white/20 transition-colors group-hover:bg-(--shell-accent)" />
             </div>
           )}
-          {panelOpen && (
+          {hasArtifact && (
             <button
               type="button"
-              aria-label={t("assistant")}
-              onClick={() => setPanelOpen(false)}
+              aria-label={t("artifactClose")}
+              onClick={() => setPreviewArtifact(null)}
               className="absolute top-0 right-1.5 bottom-1.5 left-0 z-30 rounded-(--shell-radius) bg-black/50 xl:hidden"
             />
           )}
@@ -109,16 +112,17 @@ function ShellInner({ children }: { children: ReactNode }) {
             className={cn(
               "z-40 flex shrink-0 overflow-hidden bg-(--shell-content)",
               "absolute top-0 bottom-1.5 right-0 max-w-[88vw] rounded-(--shell-radius) shadow-2xl transition-transform duration-200",
-              panelOpen ? "translate-x-0" : "translate-x-full",
+              hasArtifact ? "translate-x-0" : "translate-x-full",
               "xl:static xl:z-auto xl:max-w-none xl:translate-x-0 xl:rounded-(--shell-radius) xl:shadow-none xl:transition-none",
-              !panelOpen && "xl:hidden",
+              !hasArtifact && "xl:hidden",
             )}
           >
-            <RightZone />
+            <ArtifactSplitPane />
           </aside>
           {isResizing && (
             <div className="fixed inset-0 z-50 cursor-col-resize" />
           )}
+          <QuickAssistantFab />
         </div>
       </div>
     </main>
