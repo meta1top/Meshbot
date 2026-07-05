@@ -14,15 +14,17 @@ import { BrandLogo, RailIconStrip } from "@meshbot/web-common/shell";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAtomValue } from "jotai";
 import {
+  BarChart3,
   Blocks,
   Bot,
   Building2,
   Check,
+  Clock,
   Folder,
   MessageSquare,
   Moon,
+  MoreHorizontal,
   Plus,
-  Settings,
   Sun,
   Workflow,
 } from "lucide-react";
@@ -48,6 +50,7 @@ export function WorkspaceSidebar({
   const pathname = usePathname();
   const t = useTranslations("appShell");
   const tCommon = useTranslations("common");
+  const tSettings = useTranslations("settingsSidebar");
   const { theme, toggleTheme } = useTheme();
   const user = useAtomValue(currentUserAtom);
   const logoutMutation = useLogout();
@@ -124,18 +127,26 @@ export function WorkspaceSidebar({
       onClick: () => router.push("/drive"),
     },
     {
-      key: "flows",
-      icon: <Workflow />,
-      label: t("rail.flows"),
-      active: area === "flows",
-      onClick: () => router.push("/flows"),
-    },
-    {
-      key: "settings",
-      icon: <Settings />,
-      label: t("rail.settings"),
-      active: area === "settings",
-      onClick: () => router.push("/more"),
+      key: "more",
+      icon: <MoreHorizontal />,
+      label: t("rail.more"),
+      active: area === "more",
+      dropdown: (
+        <DropdownMenuContent side="right" align="end" className="min-w-[168px]">
+          <DropdownMenuItem onClick={() => router.push("/flows")}>
+            <Workflow className="mr-2 h-4 w-4" />
+            {t("rail.flows")}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => router.push("/more")}>
+            <BarChart3 className="mr-2 h-4 w-4" />
+            {tSettings("usage")}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => router.push("/schedule")}>
+            <Clock className="mr-2 h-4 w-4" />
+            {tSettings("scheduled")}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      ),
     },
   ];
 
