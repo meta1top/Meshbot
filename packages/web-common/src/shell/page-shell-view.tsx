@@ -28,7 +28,7 @@ export function PageShellView({
   children,
 }: PageShellViewProps) {
   return (
-    <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-(--shell-radius) bg-(--shell-content)">
+    <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-(--shell-content)">
       {header}
       <div
         ref={scrollContainerRef}

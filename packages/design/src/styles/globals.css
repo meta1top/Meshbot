@@ -57,6 +57,8 @@
   --shell-sidebar-fg: #241c15;
   --shell-sidebar-hover: rgba(36, 28, 21, 0.06);
   --shell-sidebar-border: #e6ded4;
+  /* 内部分隔线（图标条下 / 底部 / 子栏），比 -border 更淡，克制。 */
+  --shell-line: #efe9e0;
   --shell-content: #ffffff;
   --shell-accent: var(--brand);
   --shell-accent-hover: var(--brand-hover);
@@ -138,6 +140,7 @@
   --shell-sidebar-fg: oklch(0.96 0.005 55);
   --shell-sidebar-hover: rgba(255, 255, 255, 0.08);
   --shell-sidebar-border: oklch(0.275 0.01 55);
+  --shell-line: oklch(0.24 0.008 55);
   --shell-content: oklch(0.155 0.009 55);
   --surface-0: oklch(0.17 0.008 55);
 }

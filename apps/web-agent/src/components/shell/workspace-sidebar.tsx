@@ -140,7 +140,7 @@ export function WorkspaceSidebar({
   ];
 
   return (
-    <aside className="flex h-full w-[264px] shrink-0 flex-col bg-(--shell-sidebar) text-(--shell-sidebar-fg)">
+    <aside className="flex h-full w-[264px] shrink-0 flex-col border-r border-(--shell-sidebar-border) bg-(--shell-sidebar) text-(--shell-sidebar-fg)">
       {/* 品牌 */}
       <div className="flex items-center gap-2 px-4 pt-3 pb-2">
         <BrandLogo size="sm" withWordmark />
@@ -155,14 +155,14 @@ export function WorkspaceSidebar({
       </button>
       {/* 一级图标条 */}
       <RailIconStrip items={items} />
-      <div className="mx-3 my-1.5 h-px bg-(--shell-sidebar-border)" />
+      <div className="mx-3 my-1.5 h-px bg-(--shell-line)" />
       {/* 二级子栏插槽（各页 portal 进来） */}
       <div
         ref={sublistSlotRef}
         className="flex min-h-0 flex-1 flex-col overflow-y-auto"
       />
       {/* 底部：用户（头像+名，含 org 切换/登出）+ 主题切换 */}
-      <div className="mt-auto flex items-center gap-2 border-t border-(--shell-sidebar-border) px-3 py-2">
+      <div className="mt-auto flex items-center gap-2 border-t border-(--shell-line) px-3 py-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button

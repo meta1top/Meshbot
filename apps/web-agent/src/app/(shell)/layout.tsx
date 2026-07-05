@@ -79,11 +79,11 @@ function ShellInner({ children }: { children: ReactNode }) {
   return (
     <main className="titlebar-safe flex h-screen flex-col bg-(--surface-0) text-foreground">
       <DragRegion />
-      <div className="flex min-h-0 flex-1">
+      <div className="m-2 flex min-h-0 flex-1 overflow-hidden rounded-xl border border-(--shell-sidebar-border) bg-(--shell-content) shadow-sm">
         <WorkspaceSidebar sublistSlotRef={setSlotEl} />
         <div
           ref={contentRef}
-          className="relative flex min-h-0 flex-1 overflow-hidden pr-1.5 pb-1.5"
+          className="relative flex min-h-0 flex-1 overflow-hidden bg-(--shell-content)"
         >
           <SidebarSlotContext.Provider value={slotEl}>
             {children}
