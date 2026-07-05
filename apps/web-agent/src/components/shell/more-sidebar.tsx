@@ -32,7 +32,7 @@ export function MoreSidebar() {
   ];
 
   return (
-    <div className="flex h-full flex-col bg-(--shell-sidebar) text-(--shell-sidebar-fg)">
+    <div className="flex h-full flex-col">
       <div className="flex h-13 shrink-0 items-center border-b border-(--shell-sidebar-border) px-3.5 text-[15px] font-extrabold">
         {t("title")}
       </div>

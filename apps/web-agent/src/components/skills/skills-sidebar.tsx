@@ -35,9 +35,9 @@ export function SkillsSidebar({ activeView, onSelect }: Props) {
   const t = useTranslations("skills");
 
   return (
-    <div className="flex h-full flex-col bg-(--shell-sidebar) text-white">
+    <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex h-11 shrink-0 items-center border-b border-white/8 px-3.5">
+      <div className="flex h-13 shrink-0 items-center border-b border-white/8 px-3.5">
         <span className="text-[15px] font-extrabold">{t("title")}</span>
       </div>
 
