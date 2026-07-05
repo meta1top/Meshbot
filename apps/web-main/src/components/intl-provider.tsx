@@ -11,6 +11,7 @@ import {
 import {
   type AppLocale,
   defaultLocale,
+  defaultTimeZone,
   isAppLocale,
   localeCookieName,
 } from "@/i18n/config";
@@ -58,7 +59,11 @@ export function IntlProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <LocaleContext.Provider value={ctx}>
-      <NextIntlClientProvider locale={locale} messages={allMessages[locale]}>
+      <NextIntlClientProvider
+        locale={locale}
+        timeZone={defaultTimeZone}
+        messages={allMessages[locale]}
+      >
         {children}
       </NextIntlClientProvider>
     </LocaleContext.Provider>
