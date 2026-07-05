@@ -74,6 +74,7 @@ export default function LoginPage() {
   };
 
   const beginPolling = (requestId: string) => {
+    clearTimers();
     requestIdRef.current = requestId;
     setStage("waiting");
     pollTimerRef.current = setInterval(async () => {

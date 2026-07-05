@@ -18,7 +18,7 @@ export function AuthShell({ children, className }: AuthShellProps) {
   return (
     <PreLoginShellView className={cn("max-w-[380px]", className)}>
       <BrandLogo size="md" withWordmark />
-      {children}
+      <div className="w-full text-left">{children}</div>
     </PreLoginShellView>
   );
 }
