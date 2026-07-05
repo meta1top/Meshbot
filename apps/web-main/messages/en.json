@@ -15,6 +15,13 @@
       "settings": "Settings"
     }
   },
+  "shellStub": {
+    "assistant": "Assistant",
+    "skills": "Skills",
+    "drive": "Drive",
+    "flows": "Flows",
+    "comingHint": "This feature is coming soon."
+  },
   "loading": "",
   "validation": {
     "required": "Required field",

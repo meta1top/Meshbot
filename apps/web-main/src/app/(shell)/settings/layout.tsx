@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
-import { UserMenu } from "@/components/common/user-menu";
 
 interface NavItem {
   href: string;
@@ -46,28 +45,17 @@ function SettingsNav() {
   );
 }
 
-/** `/settings/*` 共享壳：左导航 + 顶栏（含「消息」入口 + 用户菜单）。鉴权由根 `Providers` 里的全局 `AuthGuard` 统一负责。 */
+/**
+ * `/settings/*` 共享壳:左导航(组织/设备/模型)+ 内容,套白底内容卡。
+ * 导航由 (shell) 持久壳的 rail 承担;鉴权由根 `Providers` 里的全局 `AuthGuard` 统一负责。
+ */
 export default function SettingsLayout({ children }: { children: ReactNode }) {
-  const t = useTranslations("settings");
-
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-5">
-        <div className="flex items-center gap-4">
-          <div className="text-sm font-semibold">{t("title")}</div>
-          <Link
-            href="/messages"
-            className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            {t("messagesLink")}
-          </Link>
-        </div>
-        <UserMenu />
-      </header>
-      <div className="flex min-h-0 flex-1">
-        <SettingsNav />
-        <main className="min-w-0 flex-1 overflow-auto p-6">{children}</main>
-      </div>
+    <div className="flex h-full min-h-0">
+      <SettingsNav />
+      <main className="min-w-0 flex-1 overflow-auto rounded-(--shell-radius) bg-(--shell-content) p-6">
+        {children}
+      </main>
     </div>
   );
 }
