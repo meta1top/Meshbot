@@ -22,7 +22,7 @@ export function DriveSidebar({ activeTab, onSelect }: Props) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-13 shrink-0 items-center border-b border-white/8 px-3.5 text-[15px] font-extrabold">
+      <div className="flex h-13 shrink-0 items-center border-b border-(--shell-sidebar-border) px-3.5 text-[15px] font-extrabold">
         {t("title")}
       </div>
       <nav className="flex flex-col gap-0.5 px-2 py-2">
