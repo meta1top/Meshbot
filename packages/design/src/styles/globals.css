@@ -60,6 +60,7 @@
   --shell-content: #ffffff;
   --shell-accent: var(--brand);
   --shell-accent-hover: var(--brand-hover);
+  --surface-0: #faf7f2;
   --shell-radius: 0.5rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -138,6 +139,7 @@
   --shell-sidebar-hover: rgba(255, 255, 255, 0.08);
   --shell-sidebar-border: oklch(0.275 0.01 55);
   --shell-content: oklch(0.155 0.009 55);
+  --surface-0: oklch(0.17 0.008 55);
 }
 
 @layer base {
