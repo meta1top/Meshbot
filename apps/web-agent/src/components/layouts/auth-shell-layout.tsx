@@ -2,10 +2,10 @@
 
 import { cn } from "@meshbot/design";
 import { useTheme } from "@meshbot/web-common/react";
+import { BrandLogo } from "@meshbot/web-common/shell";
 import { Moon, Sun } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
-import { BrandLogo } from "@/components/brand-logo";
 import { DragRegion } from "@/components/drag-region";
 import { LanguageToggle } from "@/components/language-toggle";
 

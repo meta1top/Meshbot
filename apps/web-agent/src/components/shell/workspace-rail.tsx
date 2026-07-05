@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@meshbot/design";
 import { useTheme } from "@meshbot/web-common/react";
-import { RailNavItem } from "@meshbot/web-common/shell";
+import { BrandLogo, RailNavItem } from "@meshbot/web-common/shell";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAtomValue } from "jotai";
 import {
@@ -29,7 +29,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useRef, useState } from "react";
 import { currentUserAtom } from "@/atoms/auth";
-import { BrandLogo } from "@/components/brand-logo";
 import { areaFromPath } from "@/lib/area-from-path";
 import { profileQueryKey } from "@/lib/profile-client";
 import { useCloudWebUrl, useLogout } from "@/rest/auth";
