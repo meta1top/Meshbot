@@ -53,7 +53,7 @@ function LoginForm() {
       setErrorMessage(err instanceof ApiError ? err.message : t("loginFailed"));
       return;
     }
-    router.replace(next ?? "/settings/org");
+    router.replace(next ?? "/messages");
   };
 
   return (

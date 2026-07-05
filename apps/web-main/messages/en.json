@@ -147,8 +147,7 @@
       "switchOrg": "Switch organization",
       "current": "current",
       "logout": "Log out"
-    },
-    "messagesLink": "Messages"
+    }
   },
   "orgSettings": {
     "noOrg": "You haven't joined any organization yet",
@@ -394,7 +393,6 @@
   "resendFailed": "",
   "messages": {
     "title": "Messages",
-    "settingsLink": "Settings",
     "empty": {
       "title": "Pick an Agent to start chatting",
       "description": "Select a device Agent conversation on the left, or start a new one from the top-right."
