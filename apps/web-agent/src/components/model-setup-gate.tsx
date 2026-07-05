@@ -3,9 +3,10 @@
 import { Button, Card, CardContent } from "@meshbot/design";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
+import { useState } from "react";
 import { DragRegion } from "@/components/drag-region";
 import { ShellTopBar } from "@/components/shell/shell-top-bar";
-import { WorkspaceRail } from "@/components/shell/workspace-rail";
+import { WorkspaceSidebar } from "@/components/shell/workspace-sidebar";
 import { ACCENT_BTN } from "@/lib/ui";
 import { useCloudWebUrl } from "@/rest/auth";
 
@@ -20,6 +21,7 @@ export function ModelSetupGate() {
   const t = useTranslations("modelSetupGate");
   const cloudWebUrl = useCloudWebUrl();
   const queryClient = useQueryClient();
+  const [, setSlotEl] = useState<HTMLElement | null>(null);
 
   const openCloudModelSettings = () => {
     if (!cloudWebUrl.data) return;
@@ -39,7 +41,7 @@ export function ModelSetupGate() {
       <DragRegion />
       <ShellTopBar />
       <div className="flex min-h-0 flex-1">
-        <WorkspaceRail />
+        <WorkspaceSidebar sublistSlotRef={setSlotEl} />
         <div className="relative flex min-h-0 flex-1 overflow-hidden pr-1.5 pb-1.5">
           <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-(--shell-radius) bg-(--shell-content)">
             <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto p-4 lg:px-6">
