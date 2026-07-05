@@ -23,7 +23,7 @@
     "goRegister": "Sign up",
     "brandTagline": "Where your team and AI work together",
     "brandSubtitle": "Local agent + cloud collaboration — pick up your workflow anywhere.",
-    "welcomeBack": "Welcome back to meshbot",
+    "welcomeBack": "Welcome back to MeshBot",
     "validation": {
       "codeRequired": "Please enter the authorization code"
     },
@@ -94,7 +94,7 @@
       "settings": "Settings"
     },
     "search": {
-      "placeholder": "Search meshbot"
+      "placeholder": "Search MeshBot"
     },
     "userMenu": {
       "addAccount": "Add account",
@@ -397,7 +397,7 @@
   "orgJoinFailed": "Failed to join, please check the invite code",
   "getStarted": "Get started",
   "createAccount": "Create account",
-  "createAccountDescription": "Create a local account to start using meshbot",
+  "createAccountDescription": "Create a local account to start using MeshBot",
   "email": "Email",
   "emailPlaceholder": "you@example.com",
   "displayName": "Display name",

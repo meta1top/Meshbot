@@ -29,7 +29,7 @@
     "goRegister": "去注册",
     "brandTagline": "让团队与 AI 一起协作",
     "brandSubtitle": "本地 Agent + 云端协同，随时随地接管你的工作流。",
-    "welcomeBack": "欢迎回到 meshbot",
+    "welcomeBack": "欢迎回到 MeshBot",
     "validation": {
       "codeRequired": "请输入授权码"
     }
@@ -94,7 +94,7 @@
       "settings": "设置"
     },
     "search": {
-      "placeholder": "搜索 meshbot"
+      "placeholder": "搜索 MeshBot"
     },
     "userMenu": {
       "addAccount": "添加账号",
@@ -397,7 +397,7 @@
   "orgJoinFailed": "加入失败，请检查邀请码",
   "getStarted": "开始使用",
   "createAccount": "创建账号",
-  "createAccountDescription": "创建一个本地账号开始使用 meshbot",
+  "createAccountDescription": "创建一个本地账号开始使用 MeshBot",
   "email": "邮箱",
   "emailPlaceholder": "you@example.com",
   "displayName": "显示名",
