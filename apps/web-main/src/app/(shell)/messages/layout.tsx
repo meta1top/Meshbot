@@ -11,7 +11,7 @@ export default function MessagesLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-full min-h-0">
       <ImSidebar />
-      <main className="min-w-0 flex-1 overflow-auto rounded-(--shell-radius) bg-(--shell-content)">
+      <main className="min-w-0 flex-1 overflow-auto rounded-r-(--shell-radius) bg-(--shell-content)">
         {children}
       </main>
     </div>

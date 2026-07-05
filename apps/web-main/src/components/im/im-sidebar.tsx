@@ -2,6 +2,11 @@
 
 import { cn } from "@meshbot/design";
 import type { ConversationSummary } from "@meshbot/types";
+import {
+  SidebarNavItem,
+  SidebarSection,
+  SidebarSkeleton,
+} from "@meshbot/web-common/shell";
 import { SquarePen } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -27,47 +32,42 @@ export function ImSidebar() {
   const agentDms = conversations.filter((c) => c.agentDeviceId != null);
 
   return (
-    <div className="flex h-full w-64 shrink-0 flex-col border-r border-border bg-muted/30">
-      <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-3.5">
-        <span className="text-sm font-semibold text-foreground">
-          {t("title")}
-        </span>
+    <div className="flex h-full w-64 shrink-0 flex-col overflow-hidden rounded-l-(--shell-radius) bg-(--shell-sidebar) text-(--shell-sidebar-fg)">
+      <div className="flex h-13 shrink-0 items-center justify-between border-b border-(--shell-sidebar-border) px-3.5">
+        <span className="text-[15px] font-extrabold">{t("title")}</span>
         <button
           type="button"
           title={t("newDm")}
           onClick={() => setPickerOpen(true)}
-          className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="flex h-7 w-7 items-center justify-center rounded-md text-(--shell-sidebar-fg)/70 transition-colors hover:bg-(--shell-sidebar-hover) hover:text-(--shell-sidebar-fg)"
         >
           <SquarePen className="h-4 w-4" />
         </button>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-2">
-        <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          {t("agentDms")}
-        </div>
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 py-2">
         {error ? (
-          <div className="px-2 py-1 text-[12px] text-muted-foreground">
+          <div className="px-2 py-1 text-[12px] text-(--shell-sidebar-fg)/60">
             {t("loadFailed")}
           </div>
         ) : isPending ? (
-          <div className="px-2 py-1 text-[12px] text-muted-foreground">
-            {t("loading")}
-          </div>
-        ) : agentDms.length === 0 ? (
-          <div className="px-2 py-1 text-[12px] text-muted-foreground">
-            {t("empty")}
-          </div>
+          <SidebarSkeleton />
         ) : (
-          <div className="mt-0.5 flex flex-col gap-0.5">
-            {agentDms.map((c) => (
-              <AgentDmItem
-                key={c.id}
-                conversation={c}
-                onClick={() => router.push(`/messages/${c.id}`)}
-              />
-            ))}
-          </div>
+          <SidebarSection title={t("agentDms")}>
+            {agentDms.length === 0 ? (
+              <div className="px-2 py-1 text-[12px] text-(--shell-sidebar-fg)/60">
+                {t("empty")}
+              </div>
+            ) : (
+              agentDms.map((c) => (
+                <AgentDmItem
+                  key={c.id}
+                  conversation={c}
+                  onClick={() => router.push(`/messages/${c.id}`)}
+                />
+              ))
+            )}
+          </SidebarSection>
         )}
       </div>
 
@@ -95,29 +95,26 @@ function AgentDmItem({ conversation, onClick }: AgentDmItemProps) {
   const name = conversation.peer?.displayName ?? "";
 
   return (
-    <button
-      type="button"
+    <SidebarNavItem
+      active={active}
       onClick={onClick}
-      className={cn(
-        "flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] transition-colors",
-        active
-          ? "bg-muted text-foreground"
-          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-      )}
-    >
-      <span
-        title={online ? t("online") : t("offline")}
-        className={cn(
-          "h-2.5 w-2.5 shrink-0 rounded-full",
-          online ? "bg-green-500" : "bg-muted-foreground/40",
-        )}
-      />
-      <span className="min-w-0 flex-1 truncate">{name}</span>
-      {conversation.unreadCount > 0 ? (
-        <span className="shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold leading-none text-primary-foreground">
-          {conversation.unreadCount > 99 ? "99+" : conversation.unreadCount}
-        </span>
-      ) : null}
-    </button>
+      icon={
+        <span
+          title={online ? t("online") : t("offline")}
+          className={cn(
+            "h-2.5 w-2.5 shrink-0 rounded-full",
+            online ? "bg-green-400" : "bg-(--shell-sidebar-fg)/30",
+          )}
+        />
+      }
+      label={name}
+      trailing={
+        conversation.unreadCount > 0 ? (
+          <span className="shrink-0 rounded-full bg-(--shell-accent) px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+            {conversation.unreadCount > 99 ? "99+" : conversation.unreadCount}
+          </span>
+        ) : undefined
+      }
+    />
   );
 }
