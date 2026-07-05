@@ -14,19 +14,16 @@ import { BrandLogo, RailIconStrip } from "@meshbot/web-common/shell";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAtomValue } from "jotai";
 import {
-  BarChart3,
   Blocks,
   Bot,
   Building2,
   Check,
-  Clock,
   Folder,
   MessageSquare,
   Moon,
   MoreHorizontal,
   Plus,
   Sun,
-  Workflow,
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -50,7 +47,6 @@ export function WorkspaceSidebar({
   const pathname = usePathname();
   const t = useTranslations("appShell");
   const tCommon = useTranslations("common");
-  const tSettings = useTranslations("settingsSidebar");
   const { theme, toggleTheme } = useTheme();
   const user = useAtomValue(currentUserAtom);
   const logoutMutation = useLogout();
@@ -131,29 +127,14 @@ export function WorkspaceSidebar({
       icon: <MoreHorizontal />,
       label: t("rail.more"),
       active: area === "more",
-      dropdown: (
-        <DropdownMenuContent side="right" align="end" className="min-w-[168px]">
-          <DropdownMenuItem onClick={() => router.push("/flows")}>
-            <Workflow className="mr-2 h-4 w-4" />
-            {t("rail.flows")}
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => router.push("/more")}>
-            <BarChart3 className="mr-2 h-4 w-4" />
-            {tSettings("usage")}
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => router.push("/schedule")}>
-            <Clock className="mr-2 h-4 w-4" />
-            {tSettings("scheduled")}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      ),
+      onClick: () => router.push("/more"),
     },
   ];
 
   return (
     <aside className="flex h-full w-[264px] shrink-0 flex-col border-r border-(--shell-sidebar-border) bg-(--shell-sidebar) text-(--shell-sidebar-fg)">
       {/* 品牌 */}
-      <div className="flex items-center gap-2 px-4 pt-3 pb-2">
+      <div className="flex items-center gap-2 px-3 pt-3 pb-2">
         <BrandLogo size="sm" withWordmark />
       </div>
       {/* 新建任务 CTA */}
@@ -165,7 +146,7 @@ export function WorkspaceSidebar({
         <Plus /> {t("newTask")}
       </button>
       {/* 一级图标条 */}
-      <RailIconStrip items={items} />
+      <RailIconStrip items={items} className="px-3" />
       <div className="mx-3 my-1.5 h-px bg-(--shell-line)" />
       {/* 二级子栏插槽（各页 portal 进来） */}
       <div

@@ -22,10 +22,10 @@ export function DriveSidebar({ activeTab, onSelect }: Props) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-10 shrink-0 items-center px-3.5 text-[15px] font-extrabold">
+      <div className="flex h-10 shrink-0 items-center px-3 text-[15px] font-extrabold">
         {t("title")}
       </div>
-      <nav className="flex flex-col gap-0.5 px-2 py-2">
+      <nav className="flex flex-col gap-0.5 px-3 py-2">
         {TABS.map(({ tab, icon, labelKey }) => (
           <SidebarNavItem
             key={tab}
