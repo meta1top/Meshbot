@@ -1,6 +1,7 @@
 "use client";
 import { useAtom, useAtomValue } from "jotai";
 import { Sparkles, X } from "lucide-react";
+import { useEffect } from "react";
 import {
   assistantPanelOpenAtom,
   quickAssistantNameAtom,
@@ -11,6 +12,15 @@ import { AssistantDock } from "@/components/im/assistant-dock";
 export function QuickAssistantFab() {
   const [open, setOpen] = useAtom(assistantPanelOpenAtom);
   const name = useAtomValue(quickAssistantNameAtom);
+  // 展开态按 ESC 收起面板（与 X 按钮同义），无展开时不挂监听。
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, setOpen]);
   if (!open) {
     return (
       <button
