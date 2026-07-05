@@ -12,7 +12,7 @@
 
 - **仅 web-agent**。不动后端、不碰 web-main、不动 Phase 1/2 的壳/右区。
 - **发送链路复用既有**：`createSession` 建会话即落首条，前端**无需**再单发首条；建完 `addSession` 本地插列表 + `router.push('/assistant?id='+sessionId)`。**不要**用 `stream.send`（那只服务已有会话）。
-- **composer 底部「技能/连应用/权限/模型」配置开关**：web-agent 现**无对应后端/atom**（模型编辑已收敛云端）——**本期不做功能开关**，只做 hero+场景分段+建议 chips+ChatInput 的起手台;配置开关记 follow-up。
+- **composer 底部「技能/连应用/权限」配置开关**：web-agent 现**无对应后端/atom**——本期做成**视觉占位**（非功能：一排 pill 按钮 + 图标 + 下拉箭头，点击暂无行为或 `title` 提示「即将上线」，对齐 mockup 观感）。真实配置写入留 follow-up（需后端）。场景分段同为视觉占位。
 - **静态导出**：`next.config.ts` 是 `output:"export"`；任何 `useSearchParams()` 客户端组件必须包 `Suspense`（起手台首屏若不读 query 则不需要）。
 - **视觉**：沿用暖炭·配橙 + 居中单列（spec §6.1）；焦橙克制（主发送/选中）。品牌文案用 `MeshBot`（大驼峰，spec §9）。
 - commit：中文 conventional，结尾 `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`；**禁 `--no-verify`**。
@@ -76,9 +76,17 @@ export function LauncherHome() {
     }
   };
 
+  // 场景分段（视觉占位，本地 state 切高亮，不接功能）
+  const [scene, setScene] = useState("daily");
+  const scenes = [
+    { key: "daily", label: t("scenes.daily") },
+    { key: "code", label: t("scenes.code") },
+    { key: "design", label: t("scenes.design") },
+  ];
+
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center px-6">
-      <div className="flex w-full max-w-[640px] flex-col items-center gap-6">
+      <div className="flex w-full max-w-[640px] flex-col items-center gap-5">
         <div className="text-center">
           <h1 className="text-[40px] font-extrabold leading-tight tracking-tight text-foreground">
             MeshBot
@@ -87,10 +95,45 @@ export function LauncherHome() {
             {t("title")}
           </p>
         </div>
+        {/* 场景分段（视觉占位） */}
+        <div className="inline-flex gap-1 rounded-xl bg-muted p-1">
+          {scenes.map((s) => (
+            <button
+              key={s.key}
+              type="button"
+              onClick={() => setScene(s.key)}
+              className={
+                scene === s.key
+                  ? "rounded-lg bg-(--shell-chrome) px-4 py-1.5 text-[13px] font-semibold text-white"
+                  : "rounded-lg px-4 py-1.5 text-[13px] font-semibold text-muted-foreground hover:text-foreground"
+              }
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
         {/* 建议 chips：点击填入草稿 */}
         <SuggestionChips onSelect={(s) => setDraft(s)} />
-        {/* 重 composer */}
+        {/* 重 composer：配置条（视觉占位）+ ChatInput */}
         <div className="w-full">
+          <div className="mb-1.5 flex items-center gap-1.5">
+            {[
+              { key: "skills", icon: <Blocks className="h-3.5 w-3.5" />, label: t("composer.skills") },
+              { key: "apps", icon: <Link2 className="h-3.5 w-3.5" />, label: t("composer.apps") },
+              { key: "perms", icon: <Shield className="h-3.5 w-3.5" />, label: t("composer.permissions") },
+            ].map((c) => (
+              <button
+                key={c.key}
+                type="button"
+                title={t("composer.comingSoon")}
+                className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-[12px] font-medium text-muted-foreground hover:text-foreground"
+              >
+                {c.icon}
+                {c.label}
+                <ChevronDown className="h-3 w-3 opacity-60" />
+              </button>
+            ))}
+          </div>
           <ChatInput
             value={draft}
             onChange={setDraft}
@@ -105,9 +148,16 @@ export function LauncherHome() {
 }
 ```
 
-> 注：`SuggestionChips` 的实际 prop 名（onSelect/onPick/onChoose 等）以其源码为准——**实现前先读 `components/common/suggestion-chips.tsx`**,按真实签名接 `setDraft`;若它内部已直接写某个输入 atom 而非回调,则改为受控回调或包一层。`home.inputPlaceholders` 是数组,取第 0 个或随机一个作 placeholder（assistant-conversation-body 已有随机用法可参考,但起手台取固定第 0 即可）。场景分段（日常办公/代码开发/设计创意）**本任务可先不做或做纯视觉三段**（不接功能）——以真实可用的建议 chips + composer 为准,场景切换留 follow-up。
+新增 import：`import { Blocks, ChevronDown, Link2, Shield } from "lucide-react";`。
 
-- [ ] **Step 2: typecheck + commit**
+> 注：`SuggestionChips` 的实际 prop 名（onSelect/onPick 等）以其源码为准——**实现前先读 `components/common/suggestion-chips.tsx`**,按真实签名接 `setDraft`;若它内部直接写某输入 atom 而非回调,则改受控回调或包一层。`home.inputPlaceholders` 是数组,取第 0 个作 placeholder。**场景分段 + 配置条(技能/连应用/权限)均为视觉占位**：场景切换只改本地高亮、配置条 pill 点击无行为(仅 `title` 提示"即将上线")——对齐 mockup 观感,功能留 follow-up。
+> **本任务须补 i18n（否则 pre-commit `sync-locales --check` 因 missing 拦住）**：`home.scenes.daily/code/design`（日常办公/代码开发/设计创意）、`home.composer.skills/apps/permissions`（技能/连应用/权限）、`home.composer.comingSoon`（即将上线）——zh + en 都加、对称。`home.recent`（最近）留 Task 2（那边 RecentSessionsSidebar 才用它）。
+
+- [ ] **Step 2: 补 i18n（本组件用到的 key）**
+
+`messages/zh.json` + `en.json` 的 `home` 段补 `scenes.{daily,code,design}`、`composer.{skills,apps,permissions,comingSoon}`（zh:日常办公/代码开发/设计创意 · 技能/连应用/权限/即将上线;en 对应英文）。跑 `pnpm sync:locales --write` 后确认 `sync:locales --check` 无 missing/asymmetric。
+
+- [ ] **Step 3: typecheck + commit**
 
 Run: `pnpm --filter web-agent typecheck` → exit 0（组件未被引用,编译通过即可）
 Commit: `feat(web-agent): 起手台中区 LauncherHome（复用 ChatInput/SuggestionChips/建会话范式）`
