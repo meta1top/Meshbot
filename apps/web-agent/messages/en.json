@@ -321,6 +321,17 @@
       "3": "What are you working on?",
       "4": "Got an idea?"
     },
+    "scenes": {
+      "daily": "Daily work",
+      "code": "Code",
+      "design": "Design"
+    },
+    "composer": {
+      "skills": "Skills",
+      "apps": "Connect apps",
+      "permissions": "Permissions",
+      "comingSoon": "Coming soon"
+    },
     "overview": "Overview",
     "models": "Models",
     "all": "All",
