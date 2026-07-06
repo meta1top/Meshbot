@@ -156,6 +156,36 @@ describe("server-main 设备授权全流程 e2e", () => {
     return registerAndVerify(app, captureSender, email);
   }
 
+  async function runAuthCycle(
+    userToken: string,
+    machineId?: string,
+  ): Promise<string> {
+    const { verifier, challenge } = makePkce();
+    const startRes = await request(app.getHttpServer())
+      .post("/api/device-auth/start")
+      .send({
+        deviceName: "Dedup Device",
+        platform: "darwin",
+        codeChallenge: challenge,
+      });
+    const requestId = startRes.body.data.requestId as string;
+    const approveRes = await request(app.getHttpServer())
+      .post("/api/device-auth/approve")
+      .set("Authorization", `Bearer ${userToken}`)
+      .send({ requestId });
+    const userCode = approveRes.body.data.userCode as string;
+    const exchangeRes = await request(app.getHttpServer())
+      .post("/api/device-auth/exchange")
+      .send({
+        requestId,
+        userCode,
+        codeVerifier: verifier,
+        ...(machineId ? { machineId } : {}),
+      });
+    expect(exchangeRes.body).toMatchObject({ success: true });
+    return exchangeRes.body.data.deviceToken as string;
+  }
+
   it("设备授权全流程：start → approve → exchange → 设备身份可用 → switch-org → revoke", async () => {
     if (maybeSkip()) return;
 
@@ -340,5 +370,47 @@ describe("server-main 设备授权全流程 e2e", () => {
         codeVerifier: "x".repeat(32),
       });
     expect(exchangeRes.body).toMatchObject({ success: false, code: 2026 });
+  });
+
+  it("同 machineId 两次授权复用同一设备行,旧 token 轮换失效", async () => {
+    if (maybeSkip()) return;
+    const carolToken = await registerAndToken("carol@device.io");
+    await request(app.getHttpServer())
+      .post("/api/orgs")
+      .set("Authorization", `Bearer ${carolToken}`)
+      .send({ name: "CarolOrg" });
+
+    const token1 = await runAuthCycle(carolToken, "machine-carol-1");
+    const token2 = await runAuthCycle(carolToken, "machine-carol-1");
+    expect(token2).not.toBe(token1);
+
+    const listRes = await request(app.getHttpServer())
+      .get("/api/devices")
+      .set("Authorization", `Bearer ${carolToken}`);
+    expect(listRes.body.data).toHaveLength(1);
+
+    const p2 = await request(app.getHttpServer())
+      .get("/api/auth/profile")
+      .set("Authorization", `Bearer ${token2}`);
+    expect(p2.status).toBe(200);
+    const p1 = await request(app.getHttpServer())
+      .get("/api/auth/profile")
+      .set("Authorization", `Bearer ${token1}`);
+    expect(p1.status).toBe(401);
+  });
+
+  it("不同 machineId 分别建行", async () => {
+    if (maybeSkip()) return;
+    const daveToken = await registerAndToken("dave@device.io");
+    await request(app.getHttpServer())
+      .post("/api/orgs")
+      .set("Authorization", `Bearer ${daveToken}`)
+      .send({ name: "DaveOrg" });
+    await runAuthCycle(daveToken, "dave-dev-machine");
+    await runAuthCycle(daveToken, "dave-pkg-machine");
+    const listRes = await request(app.getHttpServer())
+      .get("/api/devices")
+      .set("Authorization", `Bearer ${daveToken}`);
+    expect(listRes.body.data).toHaveLength(2);
   });
 });

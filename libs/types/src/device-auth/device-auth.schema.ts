@@ -32,6 +32,7 @@ export const DeviceAuthExchangeSchema = z.object({
   requestId: z.string().min(1),
   userCode: z.string().min(1).max(32),
   codeVerifier: z.string().min(16).max(128),
+  machineId: z.string().max(80).nullish(),
 });
 export type DeviceAuthExchangeInput = z.infer<typeof DeviceAuthExchangeSchema>;
 

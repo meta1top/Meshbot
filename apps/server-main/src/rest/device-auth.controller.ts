@@ -90,6 +90,7 @@ export class DeviceAuthController {
       orgId: user.activeOrgId,
       name: deviceName,
       platform,
+      machineId: dto.machineId ?? null,
     });
     return {
       deviceToken: token,

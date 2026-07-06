@@ -15,6 +15,7 @@ import { AccountRuntimeRegistry } from "../account/account-runtime.registry";
 import { CloudClientService } from "../cloud/cloud-client.service";
 import type { CloudProfileData } from "../cloud/cloud.types";
 import { AgentErrorCode } from "../errors/agent.error-codes";
+import { resolveMachineId } from "../utils/machine-id";
 import { resolveMeshbotDir } from "../utils/meshbot-dir";
 import { PREFERRED_PORT } from "../utils/resolve-port";
 import { AUTH_EVENTS } from "./auth.events";
@@ -83,7 +84,12 @@ export class DeviceAuthorizeService {
     try {
       const ex = await this.cloud.post<DeviceAuthExchangeResult>(
         "/api/device-auth/exchange",
-        { requestId, userCode, codeVerifier: p.verifier },
+        {
+          requestId,
+          userCode,
+          codeVerifier: p.verifier,
+          machineId: resolveMachineId(),
+        },
       );
       this.pending.delete(requestId);
       const profile = await this.cloud.get<CloudProfileData>(

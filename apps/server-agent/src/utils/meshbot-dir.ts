@@ -17,7 +17,7 @@ function findRepoRoot(startDir: string): string | null {
   }
 }
 
-function isPackaged(): boolean {
+export function isPackaged(): boolean {
   return __dirname.includes(".app/Contents/Resources");
 }
 

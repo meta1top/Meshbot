@@ -1,8 +1,8 @@
 import { createHash, randomBytes } from "node:crypto";
-import { AppError } from "@meshbot/common";
+import { AppError, WithLock } from "@meshbot/common";
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import type { Repository } from "typeorm";
+import { IsNull, type Repository } from "typeorm";
 import { Device } from "../entities/device.entity";
 import { MainErrorCode } from "../errors/main.error-codes";
 
@@ -21,22 +21,44 @@ export class DeviceService {
     @InjectRepository(Device) private readonly deviceRepo: Repository<Device>,
   ) {}
 
-  /** 签发新设备与 token;明文 token 仅此一次返回 */
+  /**
+   * 签发设备:按 (userId, machineId) 去重。
+   * 命中同机活跃设备则复用该行并轮换 token;machineId 为空则每次新建(降级)。
+   * 明文 token 仅此一次返回,库里只存 sha256 哈希。
+   */
+  @WithLock({ key: "device:issue:#{0.userId}:#{0.machineId}" })
   async issueDevice(input: {
     userId: string;
     orgId: string | null;
     name: string;
     platform: string;
+    machineId?: string | null;
   }): Promise<{ device: Device; token: string }> {
     const token = `${DEVICE_TOKEN_PREFIX}${randomBytes(32).toString("base64url")}`;
-    const device = await this.deviceRepo.save(
+    const tokenHash = hashDeviceToken(token);
+    const machineId = input.machineId || null;
+    const existing = machineId
+      ? await this.deviceRepo.findOne({
+          where: {
+            userId: input.userId,
+            machineId,
+            revokedAt: IsNull(),
+          },
+        })
+      : null;
+    const device =
+      existing ??
       this.deviceRepo.create({
-        ...input,
-        tokenHash: hashDeviceToken(token),
-        lastSeenAt: new Date(),
-      }),
-    );
-    return { device, token };
+        userId: input.userId,
+        machineId,
+      });
+    device.name = input.name;
+    device.platform = input.platform;
+    device.orgId = input.orgId;
+    device.tokenHash = tokenHash;
+    device.lastSeenAt = new Date();
+    const saved = await this.deviceRepo.save(device);
+    return { device: saved, token };
   }
 
   /** 校验 token,返回设备;未知/已吊销抛 DEVICE_TOKEN_INVALID;低频回写 lastSeenAt */
