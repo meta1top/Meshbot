@@ -1,21 +1,15 @@
 "use client";
 
 import { useSetAtom } from "jotai";
-import {
-  Blocks,
-  ChevronDown,
-  Coffee,
-  Link2,
-  Palette,
-  Shield,
-  Terminal,
-} from "lucide-react";
+import { Coffee, Palette, Terminal } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { addSessionAtom } from "@/atoms/sessions";
 import { ChatInput } from "@/components/common/chat-input";
+import { ComposerActions } from "@/components/common/composer-actions";
 import { SuggestionChips } from "@/components/common/suggestion-chips";
+import { ComposerTargetBar } from "@/components/home/composer-target-bar";
 import { createSession } from "@/rest/session";
 
 /** 起手台中区：品牌大标题 + 场景分段 + 建议 chips + 重 composer；发送即建会话跳转。 */
@@ -76,44 +70,16 @@ export function LauncherHome() {
         </div>
         {/* 建议 chips：点击填入草稿 */}
         <SuggestionChips onPick={(s) => setDraft(s)} />
-        {/* 重 composer：配置条（视觉占位）+ ChatInput */}
+        {/* composer：顶部选择器行 + ChatInput（动作栏内含 技能/连应用/权限 + 上传 + 发送） */}
         <div className="w-full">
-          <div className="mb-1.5 flex items-center gap-1.5">
-            {[
-              {
-                key: "skills",
-                icon: <Blocks className="h-3.5 w-3.5" />,
-                label: t("composer.skills"),
-              },
-              {
-                key: "apps",
-                icon: <Link2 className="h-3.5 w-3.5" />,
-                label: t("composer.apps"),
-              },
-              {
-                key: "perms",
-                icon: <Shield className="h-3.5 w-3.5" />,
-                label: t("composer.permissions"),
-              },
-            ].map((c) => (
-              <button
-                key={c.key}
-                type="button"
-                title={t("composer.comingSoon")}
-                className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-[12px] font-medium text-muted-foreground hover:text-foreground"
-              >
-                {c.icon}
-                {c.label}
-                <ChevronDown className="h-3 w-3 opacity-60" />
-              </button>
-            ))}
-          </div>
+          <ComposerTargetBar />
           <ChatInput
             value={draft}
             onChange={setDraft}
             onSend={(text) => void handleSend(text)}
             isLoading={sending}
             placeholder={t("inputPlaceholders.0")}
+            leadingActions={<ComposerActions />}
           />
         </div>
       </div>
