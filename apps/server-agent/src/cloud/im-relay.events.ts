@@ -14,7 +14,11 @@ export interface ImRelayConnectedEvent {
   cloudUserId: string;
 }
 
-/** L2c：入站设备查询请求本地事件负载（云端转发，供本地执行方消费并回发响应）。 */
+/**
+ * L2c：入站设备查询请求本地事件负载（云端转发，供本地执行方消费并回发响应）。
+ *
+ * @public-api Task 4（入站处理器）消费此事件负载类型；本任务只负责发出该事件。
+ */
 export interface ImRelayDeviceQueryRequestEvent {
   cloudUserId: string;
   forwarded: DeviceQueryForwarded;
