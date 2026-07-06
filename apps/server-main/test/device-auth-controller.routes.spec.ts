@@ -151,6 +151,7 @@ describe("DeviceAuthController 路由编排", () => {
       orgId: "o-1",
       name: "Mac",
       platform: "darwin",
+      machineId: null,
     });
 
     // 断言编排顺序：exchange 先于 findById，findById 先于 issueDevice
@@ -164,6 +165,26 @@ describe("DeviceAuthController 路由编排", () => {
       deviceToken: "mbd_tok123",
       user: { id: "u-1", email: "owner@x.io", displayName: "Owner" },
       orgId: "o-1",
+    });
+  });
+
+  it("POST /device-auth/exchange 带 machineId → 透传给 issueDevice", async () => {
+    await request(app.getHttpServer())
+      .post("/device-auth/exchange")
+      .send({
+        requestId: "req-1",
+        userCode: "code-1",
+        codeVerifier: "v".repeat(16),
+        machineId: "machine-abc",
+      })
+      .expect(200);
+
+    expect(devices.issueDevice).toHaveBeenCalledWith({
+      userId: "u-1",
+      orgId: "o-1",
+      name: "Mac",
+      platform: "darwin",
+      machineId: "machine-abc",
     });
   });
 });
