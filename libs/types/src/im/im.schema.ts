@@ -61,3 +61,36 @@ export type CreateDmInput = z.infer<typeof CreateDmSchema>;
 
 export const AddChannelMemberSchema = z.object({ userId: z.string() });
 export type AddChannelMemberInput = z.infer<typeof AddChannelMemberSchema>;
+
+/** 跨设备只读查询的种类:列会话 / 取某会话历史 */
+export const DeviceQueryKindSchema = z.enum(["sessions", "history"]);
+export type DeviceQueryKind = z.infer<typeof DeviceQueryKindSchema>;
+
+/** A→云 的设备查询请求(上行,需服务端校验) */
+export const DeviceQueryRequestSchema = z.object({
+  correlationId: z.string().min(1),
+  targetDeviceId: z.string().min(1),
+  kind: DeviceQueryKindSchema,
+  params: z
+    .object({
+      sessionId: z.string().optional(),
+      before: z.string().optional(),
+      limit: z.number().int().min(1).max(100).optional(),
+    })
+    .default({}),
+});
+export type DeviceQueryRequestInput = z.infer<typeof DeviceQueryRequestSchema>;
+
+/** 云网关转发给目标设备时附加发起方 deviceId */
+export interface DeviceQueryForwarded extends DeviceQueryRequestInput {
+  requesterDeviceId: string;
+}
+
+/** 设备查询响应(B→云→A);data 按 kind 由 A 侧断言(sessions→SessionSummary[] / history→HistoryResponse) */
+export interface DeviceQueryResponse {
+  correlationId: string;
+  requesterDeviceId: string;
+  ok: boolean;
+  reason?: "offline" | "cross_account" | "error";
+  data?: unknown;
+}

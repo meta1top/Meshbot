@@ -18,6 +18,8 @@ export const IM_WS_EVENTS = {
   read: "im.read",
   ping: "im.ping",
   presenceSet: "im.presence_set",
+  deviceQueryRequest: "device.query.request",
+  deviceQueryResponse: "device.query.response",
 } as const;
 
 // 下行事件 payload
