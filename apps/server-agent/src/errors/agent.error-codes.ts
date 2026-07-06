@@ -74,4 +74,14 @@ export const AgentErrorCode = defineErrorCode({
     code: 3015,
     message: "auth.noPendingRequest",
   },
+  REMOTE_QUERY_TIMEOUT: {
+    code: 3016,
+    message: "im.remoteQueryTimeout",
+    httpStatus: 504,
+  },
+  REMOTE_QUERY_UNAVAILABLE: {
+    code: 3017,
+    message: "im.remoteQueryUnavailable",
+    httpStatus: 409,
+  },
 });
