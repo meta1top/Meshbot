@@ -167,7 +167,7 @@ Expected: 确认 `test-db.ts` 应用 `migrations/*.sql`、`synchronize` 为 fals
 Rewrite `libs/main/src/services/device.service.spec.ts` 顶部导入与 `makeRepo`,并新增 `buildSvc` + 去重用例。完整文件:
 ```ts
 import { AppError, injectLockProvider, MemoryLockProvider } from "@meshbot/common";
-import { FindOperator, IsNull } from "typeorm";
+import { FindOperator } from "typeorm";
 import type { Device } from "../entities/device.entity";
 import {
   DEVICE_TOKEN_PREFIX,
@@ -312,10 +312,6 @@ describe("DeviceService", () => {
     expect(rows).toHaveLength(2);
     expect(second.device.id).not.toBe(first.device.id);
   });
-
-  it("issueDevice 显式引用 IsNull(防 tree-shaking 误删导入)", () => {
-    expect(IsNull()).toBeInstanceOf(FindOperator);
-  });
 });
 ```
 
@@ -411,7 +407,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "uq_device_user_machine"
 - [ ] **Step 7: 跑测试确认通过**
 
 Run: `pnpm exec jest libs/main/src/services/device.service.spec.ts`
-Expected: PASS(9 passed)。
+Expected: PASS(8 passed)。
 
 - [ ] **Step 8: typecheck + 静态围栏 + commit**
 
