@@ -115,7 +115,7 @@ function RegisterFlow() {
       setVerifyError(err instanceof ApiError ? err.message : t("verifyFailed"));
       return;
     }
-    router.replace(next ?? "/messages");
+    router.replace(next ?? "/assistant");
   };
 
   const onResend = async () => {

@@ -15,7 +15,7 @@ export default function Home() {
 
   useEffect(() => {
     if (profile.isPending) return;
-    router.replace(authenticated ? "/messages" : "/login");
+    router.replace(authenticated ? "/assistant" : "/login");
   }, [profile.isPending, authenticated, router]);
 
   return (
