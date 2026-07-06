@@ -70,8 +70,9 @@ export function LauncherHome() {
         </div>
         {/* 建议 chips：点击填入草稿 */}
         <SuggestionChips onPick={(s) => setDraft(s)} />
-        {/* composer：ChatInput（动作栏内含 技能/连应用/权限 + 上传 + 发送）+ 下方目标选择器行 */}
-        <div className="w-full">
+        {/* composer：暖色圆角底板（WorkBuddy 式层次）包裹 ChatInput（动作栏内含
+            技能/连应用/权限 + 上传 + 发送）+ 下方目标选择器行 */}
+        <div className="w-full rounded-2xl bg-(--shell-sidebar) p-2.5">
           <ChatInput
             value={draft}
             onChange={setDraft}
