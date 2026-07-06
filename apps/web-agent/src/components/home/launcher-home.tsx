@@ -70,9 +70,8 @@ export function LauncherHome() {
         </div>
         {/* 建议 chips：点击填入草稿 */}
         <SuggestionChips onPick={(s) => setDraft(s)} />
-        {/* composer：顶部选择器行 + ChatInput（动作栏内含 技能/连应用/权限 + 上传 + 发送） */}
+        {/* composer：ChatInput（动作栏内含 技能/连应用/权限 + 上传 + 发送）+ 下方目标选择器行 */}
         <div className="w-full">
-          <ComposerTargetBar />
           <ChatInput
             value={draft}
             onChange={setDraft}
@@ -81,6 +80,7 @@ export function LauncherHome() {
             placeholder={t("inputPlaceholders.0")}
             leadingActions={<ComposerActions />}
           />
+          <ComposerTargetBar />
         </div>
       </div>
     </div>
