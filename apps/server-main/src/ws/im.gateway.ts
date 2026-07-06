@@ -18,6 +18,8 @@ import {
   IM_WS_EVENTS,
   IM_WS_NAMESPACE,
   type ConversationSummary,
+  type DeviceQueryRequestInput,
+  type DeviceQueryResponse,
   type ImConversationReadEvent,
   type ImPresenceSetInput,
   type ImReadInput,
@@ -268,6 +270,63 @@ export class ImGateway extends BaseWebSocketGateway {
         } satisfies ImConversationReadEvent);
       }
     }
+  }
+
+  /** L2c:A 发起设备查询 → 校验同账号 + 在线 → 定向下发到目标设备 */
+  @SubscribeMessage(IM_WS_EVENTS.deviceQueryRequest)
+  @UseGuards(WsAuthGuard)
+  async handleDeviceQueryRequest(
+    @MessageBody() body: DeviceQueryRequestInput,
+    @ConnectedSocket() client: Socket,
+  ): Promise<void> {
+    const requester = client.data.user as {
+      userId?: string;
+      deviceId?: string;
+    };
+    // 提前收窄为局部 const：闭包捕获对象属性时 TS 不做跨函数边界收窄，
+    // 若直接用 requester.deviceId 会在 reply 闭包里退化回 string | undefined。
+    const requesterDeviceId = requester?.deviceId;
+    if (!requesterDeviceId) return;
+    const reply = (reason: DeviceQueryResponse["reason"]) =>
+      this.server
+        .to(`device:${requesterDeviceId}`)
+        .emit(IM_WS_EVENTS.deviceQueryResponse, {
+          correlationId: body.correlationId,
+          requesterDeviceId,
+          ok: false,
+          reason,
+        } satisfies DeviceQueryResponse);
+    const target = await this.devices.findById(body.targetDeviceId);
+    if (!target || target.userId !== requester.userId) {
+      reply("cross_account");
+      return;
+    }
+    const online = await this.devicePresence.isOnline(
+      target.orgId ?? "",
+      target.id,
+    );
+    if (!online) {
+      reply("offline");
+      return;
+    }
+    this.server
+      .to(`device:${target.id}`)
+      .emit(IM_WS_EVENTS.deviceQueryRequest, {
+        ...body,
+        requesterDeviceId,
+      });
+  }
+
+  /** L2c:目标设备回流 → 按 requesterDeviceId 定向回发起方 */
+  @SubscribeMessage(IM_WS_EVENTS.deviceQueryResponse)
+  @UseGuards(WsAuthGuard)
+  async handleDeviceQueryResponse(
+    @MessageBody() body: DeviceQueryResponse,
+    @ConnectedSocket() _client: Socket,
+  ): Promise<void> {
+    this.server
+      .to(`device:${body.requesterDeviceId}`)
+      .emit(IM_WS_EVENTS.deviceQueryResponse, body);
   }
 
   /**
