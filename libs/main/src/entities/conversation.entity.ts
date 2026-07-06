@@ -23,9 +23,6 @@ export class Conversation extends SnowflakeBaseEntity {
   @Column({ type: "varchar", length: 16, default: "public" })
   visibility!: "public" | "private";
 
-  @Column({ type: "varchar", length: 20, nullable: true })
-  agentDeviceId!: string | null;
-
   @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 }

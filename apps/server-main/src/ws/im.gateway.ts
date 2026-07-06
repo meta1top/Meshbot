@@ -18,7 +18,6 @@ import {
   IM_WS_EVENTS,
   IM_WS_NAMESPACE,
   type ConversationSummary,
-  type ImAgentInboundEvent,
   type ImConversationReadEvent,
   type ImPresenceSetInput,
   type ImReadInput,
@@ -203,17 +202,7 @@ export class ImGateway extends BaseWebSocketGateway {
   }
 
   /**
-   * 发消息：
-   * - device 连接（Agent 反向通道回流）：对象级授权——先 `getAgentDmOrThrow` 断言
-   *   该会话确是 Agent-DM（否则抛 AGENT_DEVICE_INVALID），再校验会话的
-   *   `agentDeviceId` 与本连接的 deviceId 一致（否则抛 CONVERSATION_FORBIDDEN，
-   *   防止持合法 device token 者越权向任意 conversationId 注入伪造 agent 消息）。
-   *   **不额外校验 `conv.orgId`**：`findOrCreateAgentDmLocked` 按 (userId, deviceId)
-   *   全局唯一建会话，orgId 建时固定、设备后续切换组织不换会话，`agentDeviceId` 归属
-   *   断言已完全封死越权，叠加 orgId 校验只会在设备切组织后把合法回流误判为越权。
-   *   通过后盖 senderType='agent'、senderId=deviceId，持久化后推到 conv 房间。
-   * - 用户连接：校验可见性 → 持久化（senderType='user'）→ 推到 conv 房间；
-   *   若目标会话是 Agent-DM，额外定向下发 `agentInbound` 到对应 device room。
+   * 发消息：校验可见性 → 持久化 → 推到 conv 房间。
    * WsExceptionFilter 统一处理 AppError（CONVERSATION_NOT_FOUND / FORBIDDEN）。
    */
   @UseGuards(WsAuthGuard)
@@ -222,28 +211,9 @@ export class ImGateway extends BaseWebSocketGateway {
     @MessageBody() body: ImSendInput,
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
-    const payload = client.data.user as { userId: string; deviceId?: string };
+    const payload = client.data.user as { userId: string };
     const orgId: string | undefined = client.data.orgId;
     if (!orgId) throw new AppError(MainErrorCode.CONVERSATION_FORBIDDEN);
-
-    if (payload.deviceId) {
-      const conv = await this.conversation.getAgentDmOrThrow(
-        body.conversationId,
-      );
-      if (conv.agentDeviceId !== payload.deviceId) {
-        throw new AppError(MainErrorCode.CONVERSATION_FORBIDDEN);
-      }
-      const msg = await this.message.persistMessage(
-        body.conversationId,
-        payload.deviceId,
-        body.content,
-        "agent",
-      );
-      this.server
-        .to(`conv:${body.conversationId}`)
-        .emit(IM_WS_EVENTS.message, msg);
-      return;
-    }
 
     await this.conversation.getVisibleOrThrow(
       body.conversationId,
@@ -255,25 +225,11 @@ export class ImGateway extends BaseWebSocketGateway {
       body.conversationId,
       payload.userId,
       body.content,
-      "user",
     );
 
     this.server
       .to(`conv:${body.conversationId}`)
       .emit(IM_WS_EVENTS.message, msg);
-
-    const conv = await this.conversation.findAgentDevice(body.conversationId);
-    if (conv?.agentDeviceId) {
-      const event: ImAgentInboundEvent = {
-        conversationId: body.conversationId,
-        messageId: msg.id,
-        content: body.content,
-        senderUserId: payload.userId,
-      };
-      this.server
-        .to(`device:${conv.agentDeviceId}`)
-        .emit(IM_WS_EVENTS.agentInbound, event);
-    }
   }
 
   /**

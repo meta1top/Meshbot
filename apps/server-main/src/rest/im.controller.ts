@@ -2,7 +2,6 @@ import { AppError } from "@meshbot/common";
 import {
   AddChannelMemberDto,
   ConversationService,
-  CreateAgentDmDto,
   CreateChannelDto,
   CreateDmDto,
   DevicePresenceService,
@@ -42,7 +41,6 @@ const DEFAULT_LIMIT = 30;
  * - POST /api/channels               创建公开频道，并通知所有组织成员
  * - POST /api/dms                    创建或获取与指定用户的私信
  * - GET  /api/conversations/:id/messages 分页历史消息（游标分页）
- * - POST /api/agent-dms              创建或获取与指定设备 Agent 的私信
  * - GET  /api/devices/:id/online     查设备 Agent 在线态
  *
  * Controller 只做路由接入 + 编排，业务逻辑委派给各 Service。
@@ -118,23 +116,6 @@ export class ImController {
       orgId,
     });
     return summary;
-  }
-
-  /**
-   * 创建或获取当前用户与指定设备 Agent 的私信（幂等）。
-   * 设备归属 / 吊销校验委托 `ConversationService.findOrCreateAgentDm`。
-   */
-  @Post("agent-dms")
-  async createAgentDm(
-    @CurrentUser() user: JwtMainPayload,
-    @Body() dto: CreateAgentDmDto,
-  ): Promise<ConversationSummary> {
-    const orgId = this.requireOrg(user);
-    return this.conversation.findOrCreateAgentDm(
-      orgId,
-      user.userId,
-      dto.deviceId,
-    );
   }
 
   /** 查设备 Agent 在线态（web-main 侧栏在线点首屏用，实时更新靠 presence 事件）。 */
