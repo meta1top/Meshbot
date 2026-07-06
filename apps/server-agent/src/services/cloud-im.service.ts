@@ -110,18 +110,6 @@ export class CloudImService {
     });
   }
 
-  /** 列出本设备（deviceToken 身份）参与的全部 Agent-DM 会话，供重连补处理枚举。 */
-  listAgentConversations(): Promise<
-    { conversationId: string; orgId: string }[]
-  > {
-    return this.withToken((token) =>
-      this.cloud.get<{ conversationId: string; orgId: string }[]>(
-        "/api/agent/conversations",
-        token,
-      ),
-    );
-  }
-
   private async withToken<T>(fn: (token: string) => Promise<T>): Promise<T> {
     const id = await this.identity.get(this.account.getOrThrow());
     if (!id?.deviceToken) {
