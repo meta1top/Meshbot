@@ -16,6 +16,7 @@ import {
   usageByMessageFamily,
 } from "@/atoms/session-usage";
 import { ChatInput } from "@/components/common/chat-input";
+import { ComposerActions } from "@/components/common/composer-actions";
 import { DockTabs } from "@/components/im/dock-tabs";
 import { MessageList } from "@/components/session/message-list";
 import { useChatScroll } from "@/hooks/use-chat-scroll";
@@ -198,6 +199,7 @@ export function AssistantDock({ chromeless }: { chromeless?: boolean } = {}) {
           onInterrupt={stream.interrupt}
           isLoading={stream.running}
           placeholder={t("placeholder")}
+          leadingActions={<ComposerActions />}
           tokenUsage={{
             current: sessionTotals.lastInputTokens,
             max: contextWindow,

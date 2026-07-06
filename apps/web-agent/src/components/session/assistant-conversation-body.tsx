@@ -14,6 +14,7 @@ import {
   type ChatInputHandle,
 } from "@/components/common/chat-input";
 import { CompactionBanner } from "@/components/common/compaction-banner";
+import { ComposerActions } from "@/components/common/composer-actions";
 import { MessageSkeleton } from "@/components/im/message-skeleton";
 import { MessageList } from "@/components/session/message-list";
 import { PendingList } from "@/components/session/pending-list";
@@ -229,6 +230,7 @@ export function AssistantConversationBody({
           onInterrupt={stream.interrupt}
           isLoading={stream.running}
           placeholder={inputPlaceholder}
+          leadingActions={<ComposerActions />}
           tokenUsage={{
             // 「下次请求估算 / ctx 上限」—— 用 lastInputTokens 作为代理：
             // 这是上一轮 LLM 真实计数，下一轮 input 约等于这个（用户新输入
