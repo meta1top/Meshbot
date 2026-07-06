@@ -114,6 +114,15 @@
     },
     "newTask": "New task"
   },
+  "composer": {
+    "skills": "Skills",
+    "apps": "Connect apps",
+    "permissions": "Permissions",
+    "comingSoon": "Coming soon",
+    "agentLocal": "Local",
+    "agentComingSoon": "Other devices coming soon",
+    "workspaceDefault": "Default workspace"
+  },
   "chatInput": {
     "placeholder": "Type here",
     "send": "Send",
