@@ -42,6 +42,7 @@ export class DeviceController {
       lastSeenAt: d.lastSeenAt ? d.lastSeenAt.toISOString() : null,
       revokedAt: d.revokedAt ? d.revokedAt.toISOString() : null,
       createdAt: d.createdAt.toISOString(),
+      isCurrent: d.id === u.deviceId,
     }));
   }
 

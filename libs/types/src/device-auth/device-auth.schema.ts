@@ -54,4 +54,6 @@ export interface DeviceView {
   lastSeenAt: string | null;
   revokedAt: string | null;
   createdAt: string;
+  /** 该设备是否为当前请求方设备（device token 请求时判定；用户 JWT 请求恒 false）。 */
+  isCurrent: boolean;
 }

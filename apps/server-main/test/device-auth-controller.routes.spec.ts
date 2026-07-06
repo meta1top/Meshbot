@@ -224,6 +224,7 @@ describe("DeviceController 路由编排", () => {
         lastSeenAt: "2026-07-01T00:00:00.000Z",
         revokedAt: null,
         createdAt: "2026-06-01T00:00:00.000Z",
+        isCurrent: false,
       },
     ]);
   });
