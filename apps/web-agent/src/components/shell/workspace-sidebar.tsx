@@ -134,20 +134,20 @@ export function WorkspaceSidebar({
   return (
     <aside className="flex h-full w-[264px] shrink-0 flex-col border-r border-(--shell-sidebar-border) bg-(--shell-sidebar) text-(--shell-sidebar-fg)">
       {/* 品牌 */}
-      <div className="flex items-center gap-2 px-3 pt-3 pb-2">
+      <div className="sidebar-brand flex items-center gap-2 px-3 pt-3 pb-2">
         <BrandLogo size="sm" withWordmark />
       </div>
       {/* 新建任务 CTA */}
       <button
         type="button"
         onClick={() => router.push("/")}
-        className="mx-3 mb-2 flex h-9 items-center gap-2 rounded-lg bg-(--shell-chrome) px-3 text-[13px] font-bold text-white [&_svg]:h-4 [&_svg]:w-4"
+        className="mx-3 mt-2 mb-4 flex h-9 items-center gap-2 rounded-lg bg-(--shell-chrome) px-3 text-[13px] font-bold text-white [&_svg]:h-4 [&_svg]:w-4"
       >
         <Plus /> {t("newTask")}
       </button>
       {/* 一级图标条 */}
       <RailIconStrip items={items} className="px-3" />
-      <div className="mx-3 my-1.5 h-px bg-(--shell-line)" />
+      <div className="mx-3 my-3 h-px bg-(--shell-line)" />
       {/* 二级子栏插槽（各页 portal 进来） */}
       <div
         ref={sublistSlotRef}

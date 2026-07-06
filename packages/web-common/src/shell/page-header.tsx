@@ -25,7 +25,9 @@ export function PageHeader({ title, actions, tabs }: PageHeaderProps) {
           {title}
         </h1>
         {actions && (
-          <div className="flex shrink-0 items-center gap-2">{actions}</div>
+          <div className="titlebar-no-drag flex shrink-0 items-center gap-2">
+            {actions}
+          </div>
         )}
       </div>
       {tabs && (

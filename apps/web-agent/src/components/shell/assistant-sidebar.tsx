@@ -28,7 +28,7 @@ export function AssistantSidebar() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-10 shrink-0 items-center justify-between px-3">
+      <div className="flex h-8 shrink-0 items-center justify-between px-3">
         <span className="text-[15px] font-extrabold">{t("title")}</span>
         <button
           type="button"

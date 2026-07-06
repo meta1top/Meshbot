@@ -27,7 +27,7 @@ export function ArtifactSplitPane() {
     t("artifactUntitled");
   return (
     <div className="flex h-full flex-col bg-(--shell-content)">
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-3">
+      <div className="flex h-13 shrink-0 items-center gap-2 border-b border-border px-3">
         <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground">
           {title}
         </span>
