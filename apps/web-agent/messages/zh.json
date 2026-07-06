@@ -114,6 +114,15 @@
     },
     "newTask": "新建任务"
   },
+  "composer": {
+    "skills": "技能",
+    "apps": "连应用",
+    "permissions": "权限",
+    "comingSoon": "即将上线",
+    "agentLocal": "本地",
+    "agentComingSoon": "其他设备即将支持",
+    "workspaceDefault": "默认工作区"
+  },
   "chatInput": {
     "placeholder": "请输入",
     "send": "发送",

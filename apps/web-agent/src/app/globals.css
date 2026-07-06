@@ -152,6 +152,13 @@ pre code.hljs {
   -webkit-app-region: no-drag;
 }
 
+/* 通用：把顶部拖拽条（DragRegion, z-9999）之上的浮层面板整体标为 no-drag，在拖拽区
+   上「凿洞」。app-region 默认值 none 不减去拖拽区，必须显式 no-drag；且元素需绘制在
+   拖拽条之上（面板已 z-10000）no-drag 才会盖过 drag。浏览器无 app-region，无副作用。 */
+.app-no-drag {
+  -webkit-app-region: no-drag;
+}
+
 .electron-shell .titlebar-safe {
   padding-top: calc(var(--titlebar-height) + 8px);
 }
@@ -170,6 +177,22 @@ pre code.hljs {
 
 .electron-shell.app-shell-mode.mac-shell .app-mac-controls-safe-left {
   padding-left: max(0.5rem, calc(var(--mac-controls-safe-left) - 0.75rem));
+}
+
+/* 桌面 macOS:侧栏品牌行下移到红绿灯条下方(红绿灯在左上会压住 logo)。
+   侧栏全高贴顶,故所有宽度都需此内距;Win/Linux 控件在右上,左上 logo 天然安全,不加。 */
+.electron-shell.mac-shell .sidebar-brand {
+  padding-top: var(--titlebar-height);
+}
+
+/* 桌面 macOS:内容页头右上角操作区落在顶部拖拽条(DragRegion, z-9999)下,
+   会被 -webkit-app-region:drag 吞掉点击(整块变拖窗)。给它 no-drag 并抬到拖拽层
+   之上"凿洞",点击才可达。mac 右上无原生窗口控件,抬升安全;Win/Linux 右上有窗口
+   控件(会与操作区互相遮挡)属另一议题,此处不处理,故限定 mac-shell。 */
+.electron-shell.mac-shell .titlebar-no-drag {
+  position: relative;
+  z-index: 10000;
+  -webkit-app-region: no-drag;
 }
 
 /* 桌面端：auth 品牌区下移，避开 macOS 红绿灯 / 顶部拖拽区。

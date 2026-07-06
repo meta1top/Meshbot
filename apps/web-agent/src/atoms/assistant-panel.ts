@@ -16,10 +16,19 @@ export const quickAssistantNameAtom = atom<string>(
 /** 面板当前随手问会话 id；null = 尚未开始（首条消息惰性创建）。 */
 export const currentQuickSessionIdAtom = atom<string | null>(null);
 
-/** 随手问面板宽度（px）：左缘可拖拽调整，localStorage 持久化，下次打开记住。 */
+/** 产物预览 aside 宽度（px）：xl 下停靠分栏时左缘可拖拽，localStorage 持久化。 */
 export const assistantPanelWidthAtom = atomWithStorage(
   "meshbot.assistantPanelWidth",
   340,
+);
+
+/**
+ * 随手问全高浮层面板宽度（px）：左缘可拖拽，localStorage 持久化。
+ * null = 尚未手动调过 → 用默认 30% 窗宽（最小 380px）；调过后存具体 px。
+ */
+export const assistantDockWidthAtom = atomWithStorage<number | null>(
+  "meshbot.assistantDockWidth",
+  null,
 );
 
 /** 右侧面板当前内容：助手 or 产物预览。 */

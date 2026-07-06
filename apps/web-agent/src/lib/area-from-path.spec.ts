@@ -1,8 +1,8 @@
 import { areaFromPath } from "./area-from-path";
 
 describe("areaFromPath", () => {
-  it("根路径归助手区", () => {
-    expect(areaFromPath("/")).toBe("assistant");
+  it("根路径(起手台)不归任何一级区,rail 不高亮", () => {
+    expect(areaFromPath("/")).toBe("other");
   });
   it("/assistant 与旧 /session 归助手区", () => {
     expect(areaFromPath("/assistant")).toBe("assistant");

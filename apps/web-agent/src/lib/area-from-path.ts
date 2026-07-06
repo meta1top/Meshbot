@@ -7,13 +7,10 @@ export type ShellArea =
   | "more"
   | "other";
 
-/** 由 pathname 推断当前 rail 区域。首页归助手区;/flows、/more、/schedule 归更多区(收进「更多」下拉)。 */
+/** 由 pathname 推断当前 rail 区域。首页(起手台 `/`)不归任何一级区(rail 不高亮);
+ * /flows、/more、/schedule 归更多区(收进「更多」下拉)。 */
 export function areaFromPath(pathname: string): ShellArea {
-  if (
-    pathname === "/" ||
-    pathname.startsWith("/assistant") ||
-    pathname.startsWith("/session")
-  )
+  if (pathname.startsWith("/assistant") || pathname.startsWith("/session"))
     return "assistant";
   if (pathname.startsWith("/messages")) return "messages";
   if (pathname.startsWith("/skills")) return "skills";
