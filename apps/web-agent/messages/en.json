@@ -271,7 +271,10 @@
     "thisDevice": "This device",
     "empty": "No sessions yet",
     "loadFailed": "Failed to load",
-    "emptyHint": "Pick or start a session to begin"
+    "emptyHint": "Pick or start a session to begin",
+    "offline": "Offline",
+    "remoteComingSoon": "Remote sessions coming soon",
+    "devicesLoadFailed": "Failed to load devices"
   },
   "messages": {
     "title": "Messages",

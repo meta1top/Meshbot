@@ -1,6 +1,7 @@
 import type {
   ChannelMember,
   ConversationSummary,
+  DeviceView,
   MessagePage,
 } from "@meshbot/types";
 import {
@@ -75,5 +76,17 @@ export class CloudImController {
     @Query("limit") limit?: string,
   ): Promise<MessagePage> {
     return this.cloudIm.getMessages(id, before, limit);
+  }
+
+  /** 该账号云端注册设备列表（含 isCurrent 标本机）。 */
+  @Get("devices")
+  listDevices(): Promise<DeviceView[]> {
+    return this.cloudIm.listDevices();
+  }
+
+  /** 某设备在线态。 */
+  @Get("devices/:id/online")
+  deviceOnline(@Param("id") id: string): Promise<{ online: boolean }> {
+    return this.cloudIm.deviceOnline(id);
   }
 }

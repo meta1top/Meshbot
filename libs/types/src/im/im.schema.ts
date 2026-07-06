@@ -8,7 +8,6 @@ export const ImMessageSchema = z.object({
   senderId: z.string(),
   content: z.string(),
   createdAt: z.string(), // ISO
-  senderType: z.enum(["user", "agent"]), // 发送者类型：人类用户 or 设备 Agent
 });
 export type ImMessage = z.infer<typeof ImMessageSchema>;
 
@@ -32,7 +31,6 @@ export interface ConversationSummary {
   peer: ImPeer | null; // dm 的对端；channel 为 null
   unreadCount: number;
   lastMessage: { content: string; senderId: string; createdAt: string } | null;
-  agentDeviceId: string | null; // 非空即"人↔设备 Agent"的 DM；channel/普通 dm 为 null
 }
 
 export interface PresenceState {
@@ -60,11 +58,6 @@ export type CreateChannelInput = z.infer<typeof CreateChannelSchema>;
 
 export const CreateDmSchema = z.object({ userId: z.string() });
 export type CreateDmInput = z.infer<typeof CreateDmSchema>;
-
-export const CreateAgentDmSchema = z.object({
-  deviceId: z.string().min(1, { message: "validation.required" }),
-});
-export type CreateAgentDmInput = z.infer<typeof CreateAgentDmSchema>;
 
 export const AddChannelMemberSchema = z.object({ userId: z.string() });
 export type AddChannelMemberInput = z.infer<typeof AddChannelMemberSchema>;

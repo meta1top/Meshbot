@@ -19,21 +19,16 @@ export class MessageService {
     private readonly msgRepo: Repository<Message>,
   ) {}
 
-  /**
-   * 持久化一条新消息，返回 ImMessage（createdAt 为 ISO 字符串）。
-   * senderType 默认 'user'；设备 Agent 反向下发消息时传 'agent'。
-   */
+  /** 持久化一条新消息，返回 ImMessage（createdAt 为 ISO 字符串）。 */
   async persistMessage(
     conversationId: string,
     senderId: string,
     content: string,
-    senderType: "user" | "agent" = "user",
   ): Promise<ImMessage> {
     const entity = this.msgRepo.create({
       conversationId,
       senderId,
       content,
-      senderType,
     });
     const saved = await this.msgRepo.save(entity);
     return this.toImMessage(saved);
@@ -105,7 +100,6 @@ export class MessageService {
       senderId: entity.senderId,
       content: entity.content,
       createdAt: entity.createdAt.toISOString(),
-      senderType: entity.senderType,
     };
   }
 }

@@ -1,5 +1,6 @@
 {
   "$schema": "https://v2-10-3.turborepo.dev/schema.json",
+  "cacheMaxSize": "10GB",
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

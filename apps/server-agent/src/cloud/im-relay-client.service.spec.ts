@@ -230,7 +230,7 @@ describe("ImRelayClientService", () => {
       svc.disconnect("u1");
     });
 
-    it("agent.inbound 下行事件 → emitter.emit 被调用且在 account.run 上下文内", async () => {
+    it("下行事件 → emitter.emit 被调用且在 account.run 上下文内", async () => {
       const s1 = new FakeSocket();
       const { svc, emitSpy, emitter, account } = makeService(
         { u1: { deviceToken: "tok-u1", orgId: "org1" } },
@@ -241,13 +241,13 @@ describe("ImRelayClientService", () => {
 
       // 真实监听：捕获 emit 发生时的 ALS 账号上下文（不变量：必须在 account.run 内）
       let ctxAtEmit: string | null | undefined;
-      emitter.on(IM_WS_EVENTS.agentInbound, () => {
+      emitter.on(IM_WS_EVENTS.message, () => {
         ctxAtEmit = account.get();
       });
 
       const inbound = { type: "request", id: "req1", content: "test" };
-      s1.simulateServerEvent(IM_WS_EVENTS.agentInbound, inbound);
-      expect(emitSpy).toHaveBeenCalledWith(IM_WS_EVENTS.agentInbound, inbound);
+      s1.simulateServerEvent(IM_WS_EVENTS.message, inbound);
+      expect(emitSpy).toHaveBeenCalledWith(IM_WS_EVENTS.message, inbound);
       expect(ctxAtEmit).toBe("u1");
 
       svc.disconnect("u1");

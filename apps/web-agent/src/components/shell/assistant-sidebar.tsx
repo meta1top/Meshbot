@@ -1,30 +1,38 @@
 "use client";
 
-import { SidebarSection, SidebarSkeleton } from "@meshbot/web-common/shell";
+import { SidebarSkeleton } from "@meshbot/web-common/shell";
 import { useAtomValue, useSetAtom } from "jotai";
 import { SquarePen } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect } from "react";
-import { sessionsAtom, sessionsStatusAtom } from "@/atoms/sessions";
+import {
+  deviceOnlineAtom,
+  devicesAtom,
+  devicesStatusAtom,
+  loadDevicesAtom,
+} from "@/atoms/devices";
 import { loadSidebarAtom } from "@/atoms/sidebar";
-import { SessionListItem } from "@/components/sidebar/session-list-item";
+import { DeviceNode } from "@/components/shell/device-node";
 
 /**
- * 助手二级侧栏:本机设备 Agent 的会话列表(单一「本机」分组)。
- * 跨设备分组待云端设备信息,当前 web-agent 本地只有本机一台。
- * 数据与消息侧栏共用 loadSidebarAtom(一次请求填会话+助手,带 guard 不重复拉)。
+ * 助手二级侧栏：设备两级树。一级 = 该账号所有注册设备（本机 + 其他，带在线点），
+ * 展开本机 → 本地会话；其他设备展开为占位（远程查看属 L2c）。
+ * 本地会话经 loadSidebarAtom 载入（sessionsAtom），设备列表经 loadDevicesAtom 载入。
  */
 export function AssistantSidebar() {
   const t = useTranslations("assistantSidebar");
   const router = useRouter();
-  const sessions = useAtomValue(sessionsAtom);
-  const status = useAtomValue(sessionsStatusAtom);
+  const devices = useAtomValue(devicesAtom);
+  const devicesStatus = useAtomValue(devicesStatusAtom);
+  const online = useAtomValue(deviceOnlineAtom);
+  const loadDevices = useSetAtom(loadDevicesAtom);
   const loadSidebar = useSetAtom(loadSidebarAtom);
 
   useEffect(() => {
     void loadSidebar();
-  }, [loadSidebar]);
+    void loadDevices();
+  }, [loadSidebar, loadDevices]);
 
   return (
     <div className="flex h-full flex-col">
@@ -40,22 +48,22 @@ export function AssistantSidebar() {
         </button>
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-2">
-        {status === "idle" || status === "loading" ? (
+        {devicesStatus === "idle" || devicesStatus === "loading" ? (
           <SidebarSkeleton />
+        ) : devicesStatus === "error" ? (
+          <div className="px-2 py-1 text-[12px] text-(--shell-sidebar-fg)/55">
+            {t("devicesLoadFailed")}
+          </div>
         ) : (
-          <SidebarSection title={t("thisDevice")}>
-            {status === "error" ? (
-              <div className="px-2 py-1 text-[12px] text-(--shell-sidebar-fg)/55">
-                {t("loadFailed")}
-              </div>
-            ) : sessions.length === 0 ? (
-              <div className="px-2 py-1 text-[12px] text-(--shell-sidebar-fg)/55">
-                {t("empty")}
-              </div>
-            ) : (
-              sessions.map((s) => <SessionListItem key={s.id} session={s} />)
-            )}
-          </SidebarSection>
+          devices
+            .filter((d) => !d.revokedAt)
+            .map((d) => (
+              <DeviceNode
+                key={d.id}
+                device={d}
+                online={d.isCurrent || (online[d.id] ?? false)}
+              />
+            ))
         )}
       </div>
     </div>

@@ -21,7 +21,7 @@ export class Session extends SnowflakeBaseEntity {
   titleGenerated!: boolean;
 
   @Column({ type: "varchar", default: "user" })
-  kind!: "user" | "quick" | "subagent" | "im-agent";
+  kind!: "user" | "quick" | "subagent";
 
   @Column({ name: "parent_session_id", type: "text", nullable: true })
   parentSessionId!: string | null;

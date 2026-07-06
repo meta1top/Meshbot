@@ -6,7 +6,6 @@ import {
   Blocks,
   Bot,
   Folder,
-  MessageSquare,
   Moon,
   Settings,
   Sun,
@@ -35,12 +34,6 @@ export function WorkspaceRail() {
           label={t("rail.assistant")}
           active={area === "assistant"}
           onClick={() => router.push("/assistant")}
-        />
-        <RailNavItem
-          icon={<MessageSquare className="h-5 w-5" />}
-          label={t("rail.messages")}
-          active={area === "messages"}
-          onClick={() => router.push("/messages")}
         />
         <RailNavItem
           icon={<Blocks className="h-5 w-5" />}

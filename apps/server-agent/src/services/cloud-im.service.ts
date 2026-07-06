@@ -3,6 +3,7 @@ import { AppError } from "@meshbot/common";
 import type {
   ChannelMember,
   ConversationSummary,
+  DeviceView,
   MessagePage,
 } from "@meshbot/types";
 import { Injectable } from "@nestjs/common";
@@ -27,6 +28,23 @@ export class CloudImService {
   listConversations(): Promise<ConversationSummary[]> {
     return this.withToken((token) =>
       this.cloud.get<ConversationSummary[]>("/api/conversations", token),
+    );
+  }
+
+  /** 该账号在云端注册的全部设备（含 isCurrent 标本机）。 */
+  listDevices(): Promise<DeviceView[]> {
+    return this.withToken((token) =>
+      this.cloud.get<DeviceView[]>("/api/devices", token),
+    );
+  }
+
+  /** 查某设备在线态。 */
+  deviceOnline(deviceId: string): Promise<{ online: boolean }> {
+    return this.withToken((token) =>
+      this.cloud.get<{ online: boolean }>(
+        `/api/devices/${deviceId}/online`,
+        token,
+      ),
     );
   }
 
@@ -108,18 +126,6 @@ export class CloudImService {
         : `/api/conversations/${id}/messages`;
       return this.cloud.get<MessagePage>(path, token);
     });
-  }
-
-  /** 列出本设备（deviceToken 身份）参与的全部 Agent-DM 会话，供重连补处理枚举。 */
-  listAgentConversations(): Promise<
-    { conversationId: string; orgId: string }[]
-  > {
-    return this.withToken((token) =>
-      this.cloud.get<{ conversationId: string; orgId: string }[]>(
-        "/api/agent/conversations",
-        token,
-      ),
-    );
   }
 
   private async withToken<T>(fn: (token: string) => Promise<T>): Promise<T> {
