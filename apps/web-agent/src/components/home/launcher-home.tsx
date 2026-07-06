@@ -109,7 +109,6 @@ export function LauncherHome() {
             ))}
           </div>
           <ChatInput
-            minimal
             value={draft}
             onChange={setDraft}
             onSend={(text) => void handleSend(text)}

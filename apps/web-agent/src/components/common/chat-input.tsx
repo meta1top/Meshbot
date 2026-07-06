@@ -4,22 +4,11 @@ import { cn, Tooltip, TooltipContent, TooltipTrigger } from "@meshbot/design";
 import Placeholder from "@tiptap/extension-placeholder";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { StarterKit } from "@tiptap/starter-kit";
-import {
-  Bold,
-  Code,
-  Italic,
-  Link,
-  List,
-  ListOrdered,
-  Paperclip,
-  Send,
-  Square,
-  SquareCode,
-  Strikethrough,
-} from "lucide-react";
+import { Paperclip, Send, Square } from "lucide-react";
 import { useTranslations } from "next-intl";
 import {
   forwardRef,
+  type ReactNode,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -47,8 +36,8 @@ interface ChatInputProps {
   onInterrupt?: () => void;
   isLoading?: boolean;
   placeholder?: string;
-  /** 精简模式：隐藏格式工具栏与底部附件栏（起手台等干净 composer 用）。 */
-  minimal?: boolean;
+  /** 底部动作栏左侧的前导动作（如 ComposerActions 的 技能/连应用/权限 mock 链）。 */
+  leadingActions?: ReactNode;
   modelName?: string;
   tokenUsage?: {
     /**
@@ -91,7 +80,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       onInterrupt,
       isLoading = false,
       placeholder,
-      minimal = false,
+      leadingActions,
       modelName,
       tokenUsage,
     },
@@ -189,133 +178,24 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
 
     return (
       <div className="overflow-hidden rounded-[10px] border border-border bg-card">
-        {/* 工具栏（精简模式隐藏） */}
-        {!minimal && (
-          <div className="flex items-center gap-1 border-b border-border px-2 py-1 text-muted-foreground">
-            {(
-              [
-                {
-                  key: "bold",
-                  Icon: Bold,
-                  run: () => editor?.chain().focus().toggleBold().run(),
-                  active: () => !!editor?.isActive("bold"),
-                },
-                {
-                  key: "italic",
-                  Icon: Italic,
-                  run: () => editor?.chain().focus().toggleItalic().run(),
-                  active: () => !!editor?.isActive("italic"),
-                },
-                {
-                  key: "strikethrough",
-                  Icon: Strikethrough,
-                  run: () => editor?.chain().focus().toggleStrike().run(),
-                  active: () => !!editor?.isActive("strike"),
-                },
-                {
-                  key: "code",
-                  Icon: Code,
-                  run: () => editor?.chain().focus().toggleCode().run(),
-                  active: () => !!editor?.isActive("code"),
-                },
-                {
-                  key: "codeBlock",
-                  Icon: SquareCode,
-                  run: () => editor?.chain().focus().toggleCodeBlock().run(),
-                  active: () => !!editor?.isActive("codeBlock"),
-                },
-                {
-                  key: "link",
-                  Icon: Link,
-                  run: () =>
-                    editor
-                      ?.chain()
-                      .focus()
-                      .toggleLink({ href: "https://" })
-                      .run(),
-                  active: () => !!editor?.isActive("link"),
-                },
-                {
-                  key: "bulletList",
-                  Icon: List,
-                  run: () => editor?.chain().focus().toggleBulletList().run(),
-                  active: () => !!editor?.isActive("bulletList"),
-                },
-                {
-                  key: "numberedList",
-                  Icon: ListOrdered,
-                  run: () => editor?.chain().focus().toggleOrderedList().run(),
-                  active: () => !!editor?.isActive("orderedList"),
-                },
-              ] as const
-            ).map(({ key, Icon, run, active }) => (
-              <button
-                key={key}
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={run}
-                title={tChat(`format.${key}`)}
-                aria-label={tChat(`format.${key}`)}
-                className={cn(
-                  "flex h-6 w-6 items-center justify-center rounded transition-colors",
-                  active()
-                    ? "bg-muted text-foreground"
-                    : "hover:bg-muted hover:text-foreground",
-                )}
-              >
-                <Icon className="h-3.5 w-3.5" />
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* 编辑区 */}
-        <div className="flex items-start gap-2 px-3 py-2">
+        {/* 编辑区（tiptap；StarterKit 输入规则让 markdown 边打边可视化） */}
+        <div className="px-3 pt-2.5 pb-1">
           <div className="max-h-[200px] w-full overflow-y-auto py-1.5">
             <EditorContent editor={editor} />
           </div>
-
-          <div className="flex shrink-0 items-center gap-0">
-            {isLoading && (
-              <button
-                type="button"
-                onClick={handleInterrupt}
-                className="flex h-8 w-8 shrink-0 items-center justify-center text-destructive transition-colors hover:text-destructive/80"
-                title={tChat("interrupt")}
-              >
-                <Square className="h-4 w-4 fill-current" />
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={!hasContent}
-              className={cn(
-                "flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors",
-                hasContent
-                  ? "bg-(--shell-accent) text-white"
-                  : "text-muted-foreground",
-              )}
-              title={tChat("send")}
-            >
-              <Send className="h-4 w-4" />
-            </button>
-          </div>
         </div>
 
-        {/* 底部栏（精简模式隐藏） */}
-        {!minimal && (
-          <div className="flex items-center justify-between border-t border-border px-3 py-1.5">
-            <button
-              type="button"
-              className="flex h-5 w-5 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-              title={tChat("attachment")}
-            >
-              <Paperclip className="h-3.5 w-3.5" />
-            </button>
+        {/* 底部动作栏：左=前导动作（父传 mock 链）；右=token 环 + 上传 + 发送/中断 */}
+        <div className="flex items-center gap-2 px-2.5 pb-2">
+          {leadingActions && (
+            <div className="flex min-w-0 items-center gap-1">
+              {leadingActions}
+            </div>
+          )}
 
+          <div className="ml-auto flex shrink-0 items-center gap-1.5">
             {tokenUsage && (
-              <div className="flex items-center gap-2">
+              <>
                 {modelName && (
                   <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
                     {modelName}
@@ -391,10 +271,45 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
                     )}
                   </TooltipContent>
                 </Tooltip>
-              </div>
+              </>
             )}
+
+            {/* 上传（mock 占位，点击无副作用；真实上传 L1 不做） */}
+            <button
+              type="button"
+              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              title={tChat("attachment")}
+            >
+              <Paperclip className="h-4 w-4" />
+            </button>
+
+            {/* 运行中显示中断；再显示发送键 */}
+            {isLoading && (
+              <button
+                type="button"
+                onClick={handleInterrupt}
+                className="flex h-8 w-8 shrink-0 items-center justify-center text-destructive transition-colors hover:text-destructive/80"
+                title={tChat("interrupt")}
+              >
+                <Square className="h-4 w-4 fill-current" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={!hasContent}
+              className={cn(
+                "flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors",
+                hasContent
+                  ? "bg-(--shell-accent) text-white"
+                  : "text-muted-foreground",
+              )}
+              title={tChat("send")}
+            >
+              <Send className="h-4 w-4" />
+            </button>
           </div>
-        )}
+        </div>
       </div>
     );
   },
