@@ -13,7 +13,6 @@ export const IM_WS_EVENTS = {
   conversationCreated: "im.conversation_created",
   conversationRemoved: "im.conversation_removed",
   conversationRead: "im.conversation_read",
-  agentInbound: "im.agent_inbound",
   // client → server（上行）
   send: "im.send",
   read: "im.read",
@@ -40,12 +39,4 @@ export interface MessagePage {
 /** 上行：浏览器在线状态变更（server-agent 按浏览器连接数聚合后上报）。 */
 export interface ImPresenceSetInput {
   online: boolean;
-}
-
-/** 下行：Agent-DM 会话收到用户消息，定向下发给对应设备连接（device room）。 */
-export interface ImAgentInboundEvent {
-  conversationId: string;
-  messageId: string;
-  content: string;
-  senderUserId: string;
 }
