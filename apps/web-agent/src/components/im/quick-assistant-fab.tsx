@@ -70,7 +70,7 @@ export function QuickAssistantFab() {
         onClick={() => setOpen(true)}
         aria-label={name}
         title={name}
-        className="absolute right-4 bottom-4 z-30 flex h-12 w-12 items-center justify-center rounded-full bg-(--shell-accent) text-white shadow-lg shadow-(--shell-accent)/30 transition-transform hover:scale-105"
+        className="absolute right-4 bottom-20 z-30 flex h-12 w-12 items-center justify-center rounded-full bg-(--shell-accent) text-white shadow-lg shadow-(--shell-accent)/30 transition-transform hover:scale-105"
       >
         <Sparkles className="h-5 w-5" />
       </button>
