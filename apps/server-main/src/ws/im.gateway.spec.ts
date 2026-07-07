@@ -27,6 +27,7 @@ function makeGateway(overrides: {
     setOffline?: jest.Mock;
     heartbeat?: jest.Mock;
     isOnline?: jest.Mock;
+    listOnline?: jest.Mock;
   };
 }) {
   const conversation = {
@@ -75,6 +76,8 @@ function makeGateway(overrides: {
       jest.fn().mockResolvedValue(undefined),
     isOnline:
       overrides.devicePresence?.isOnline ?? jest.fn().mockResolvedValue(true),
+    listOnline:
+      overrides.devicePresence?.listOnline ?? jest.fn().mockResolvedValue([]),
   };
   const gw = new ImGateway(
     jwt as never,
@@ -305,6 +308,30 @@ describe("ImGateway.onAuthedConnect（device 连接 orgId 直接用 payload）",
     expect(findById).toHaveBeenCalledWith("u1");
     expect(client.data.orgId).toBe("o-user");
     expect(client.join).toHaveBeenCalledWith("org:o-user");
+  });
+
+  it("回放设备级在线快照：把 devicePresence.listOnline 的设备以 agent:<id> 下发给本连接", async () => {
+    const listOnline = jest.fn().mockResolvedValue(["dX", "dY"]);
+    const { gw } = makeGateway({ devicePresence: { listOnline } });
+    const conversation = {
+      listConversations: jest.fn().mockResolvedValue([]),
+    };
+    (gw as unknown as { conversation: unknown }).conversation = conversation;
+    const client = makeClient({ userId: "u1", orgId: "o1", deviceId: "dA" });
+
+    await (
+      gw as unknown as { onAuthedConnect(c: unknown): Promise<void> }
+    ).onAuthedConnect(client);
+
+    expect(listOnline).toHaveBeenCalledWith("o1");
+    expect(client.emit).toHaveBeenCalledWith("im.presence", {
+      userId: "agent:dX",
+      online: true,
+    });
+    expect(client.emit).toHaveBeenCalledWith("im.presence", {
+      userId: "agent:dY",
+      online: true,
+    });
   });
 });
 
