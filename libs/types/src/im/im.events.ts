@@ -20,6 +20,10 @@ export const IM_WS_EVENTS = {
   presenceSet: "im.presence_set",
   deviceQueryRequest: "device.query.request",
   deviceQueryResponse: "device.query.response",
+  agentRunStart: "agent.run.start",
+  agentRunFrame: "agent.run.frame",
+  agentRunControl: "agent.run.control",
+  agentRunEnd: "agent.run.end",
 } as const;
 
 // 下行事件 payload

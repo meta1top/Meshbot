@@ -274,7 +274,7 @@
     "emptyHint": "选择或新建一个会话开始",
     "offline": "离线",
     "devicesLoadFailed": "设备列表加载失败",
-    "remoteReadOnly": "远程会话，只读",
+    "remoteSessionTitle": "远程会话",
     "remoteLoadFailed": "远程会话加载失败",
     "remoteEmpty": "该设备暂无会话"
   },

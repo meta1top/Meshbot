@@ -27,19 +27,31 @@ import { useModelConfigs } from "@/rest/model-config";
 import { deletePendingMessage } from "@/rest/session";
 
 interface AssistantConversationBodyProps {
-  /** 当前会话 ID，由 page 传入（渲染时必有）。 */
+  /** 当前会话 ID，由 page 传入（渲染时必有）。远程会话时是 B 上的会话 id。 */
   id: string;
   /** 共享滚动容器 ref，由 PageShell/page 传入。 */
   scrollRef: RefObject<HTMLDivElement | null>;
+  /**
+   * L3：非空表示这是远程设备（B）上的会话——`useSessionStream` 走远程分支
+   * （历史/send/interrupt 隧道到 B），MessageList 传 `readOnly` 隐藏反馈/重试/
+   * 编辑等写操作（这些走本地端点，对远程会话的 id 无意义，且 L3 未覆盖）；
+   * 输入框本身保持可用，走 `startRemoteRun`。
+   */
+  remoteDeviceId?: string | null;
+  /** 远程会话首轮由起手台 create 发起时的初始 streamId，见 useSessionStream 注释。 */
+  remoteInitialStreamId?: string | null;
 }
 
 /** 助手会话主体：stream、消息列表、pending、粘底输入。不含外壳/header。 */
 export function AssistantConversationBody({
   id,
   scrollRef,
+  remoteDeviceId = null,
+  remoteInitialStreamId = null,
 }: AssistantConversationBodyProps) {
   const t = useTranslations("session");
   const tHome = useTranslations("home");
+  const tRemote = useTranslations("assistantSidebar");
   const [draft, setDraft] = useState("");
   const chatInputRef = useRef<ChatInputHandle>(null);
 
@@ -62,7 +74,12 @@ export function AssistantConversationBody({
   const contextWindow = enabledModel?.contextWindow ?? 128_000;
 
   const prefix = useLlmusePrefix();
-  const stream = useSessionStream(id, scrollRef);
+  const stream = useSessionStream(
+    id,
+    scrollRef,
+    remoteDeviceId,
+    remoteInitialStreamId,
+  );
 
   const timelineMessages = useMemo(
     () => stream.messages.filter((m) => !m.pending),
@@ -151,6 +168,12 @@ export function AssistantConversationBody({
       <div className="flex w-full flex-1 flex-col">
         {stream.historyLoading ? (
           <MessageSkeleton />
+        ) : stream.historyError ? (
+          // 目前仅 remote 分支会置位（跨设备 relay 更易超时/离线）；本地
+          // 分支历史拉取失败不置位，沿用原行为（历史留空，不额外提示）。
+          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+            {tRemote("remoteLoadFailed")}
+          </div>
         ) : (
           <>
             {stream.hasMoreHistory && (
@@ -167,6 +190,7 @@ export function AssistantConversationBody({
               messages={timelineMessages}
               sessionId={id}
               running={stream.running}
+              readOnly={!!remoteDeviceId}
               onRegenerateOptimisticCut={(messageId) => {
                 // 截断到该消息（含），并清掉它的 failed 标记：
                 // 重生成就是「这条 user 即将重跑」，旧的 failed 已陈旧；

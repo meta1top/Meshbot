@@ -2,6 +2,12 @@ import { AccountContextService } from "@meshbot/agent";
 import { AppError } from "@meshbot/common";
 import { IM_WS_EVENTS, IM_WS_NAMESPACE } from "@meshbot/types";
 import type {
+  AgentRunControlForwarded,
+  AgentRunControlInput,
+  AgentRunEnd,
+  AgentRunFrame,
+  AgentRunStartForwarded,
+  AgentRunStartInput,
   DeviceQueryForwarded,
   DeviceQueryRequestInput,
   DeviceQueryResponse,
@@ -153,6 +159,43 @@ export class ImRelayClientService implements OnModuleDestroy {
           });
         },
       );
+
+      // L3 下行：入站远程 run 请求（云端转发到本设备，本设备作为 B）→ 供 Task4 入站消费。
+      socket.on(
+        IM_WS_EVENTS.agentRunStart,
+        (payload: AgentRunStartForwarded) => {
+          this.account.run(cloudUserId, () => {
+            this.emitter.emit(IM_RELAY_EVENTS.agentRunRequest, {
+              cloudUserId,
+              forwarded: payload,
+            });
+          });
+        },
+      );
+      // L3 下行：入站运行控制指令（云端转发到本设备，本设备作为 B）→ 供 Task5 入站消费。
+      socket.on(
+        IM_WS_EVENTS.agentRunControl,
+        (payload: AgentRunControlForwarded) => {
+          this.account.run(cloudUserId, () => {
+            this.emitter.emit(IM_RELAY_EVENTS.agentRunControlInbound, {
+              cloudUserId,
+              forwarded: payload,
+            });
+          });
+        },
+      );
+      // L3 下行：云端回流的运行帧（B→云→A，本设备作为发起方 A）→ 桥给 RemoteRunService.onFrame。
+      socket.on(IM_WS_EVENTS.agentRunFrame, (payload: AgentRunFrame) => {
+        this.account.run(cloudUserId, () => {
+          this.emitter.emit(IM_RELAY_EVENTS.agentRunFrame, payload);
+        });
+      });
+      // L3 下行：云端回流的流终止通知（B→云→A，本设备作为发起方 A）→ 桥给 RemoteRunService.onEnd。
+      socket.on(IM_WS_EVENTS.agentRunEnd, (payload: AgentRunEnd) => {
+        this.account.run(cloudUserId, () => {
+          this.emitter.emit(IM_RELAY_EVENTS.agentRunEnd, payload);
+        });
+      });
 
       // connect_error：认证失败 → 拆该账号 socket 防僵尸/重连风暴，置该账号 loggedOut，
       // 并发重授权事件（account.run 包裹，供 EventsGateway 路由到该账号 acct 房间）。
@@ -312,5 +355,53 @@ export class ImRelayClientService implements OnModuleDestroy {
     const conn = this.conns.get(cloudUserId);
     if (!conn?.socket.connected) return;
     conn.socket.emit(IM_WS_EVENTS.deviceQueryResponse, payload);
+  }
+
+  /**
+   * L3 A 侧：发起跨设备远程 run（上行，按账号）。
+   *
+   * @throws {AppError} IM_NOT_CONNECTED — 该账号未建立连接时抛出。
+   */
+  emitAgentRunStart(cloudUserId: string, payload: AgentRunStartInput): void {
+    const conn = this.conns.get(cloudUserId);
+    if (!conn?.socket.connected) {
+      throw new AppError(AgentErrorCode.IM_NOT_CONNECTED);
+    }
+    conn.socket.emit(IM_WS_EVENTS.agentRunStart, payload);
+  }
+
+  /**
+   * L3 A 侧：下发运行中控制指令（confirm/answer/interrupt，上行，按账号）。
+   *
+   * @throws {AppError} IM_NOT_CONNECTED — 该账号未建立连接时抛出。
+   */
+  emitAgentRunControl(
+    cloudUserId: string,
+    payload: AgentRunControlInput,
+  ): void {
+    const conn = this.conns.get(cloudUserId);
+    if (!conn?.socket.connected) {
+      throw new AppError(AgentErrorCode.IM_NOT_CONNECTED);
+    }
+    conn.socket.emit(IM_WS_EVENTS.agentRunControl, payload);
+  }
+
+  /**
+   * L3 B 侧：回发运行帧（上行，按账号；best-effort，未连接静默跳过——
+   * 发起方 A 由自身 idle 超时兜底，不需要 B 侧再抛错）。
+   */
+  emitAgentRunFrame(cloudUserId: string, payload: AgentRunFrame): void {
+    const conn = this.conns.get(cloudUserId);
+    if (!conn?.socket.connected) return;
+    conn.socket.emit(IM_WS_EVENTS.agentRunFrame, payload);
+  }
+
+  /**
+   * L3 B 侧：回发流终止通知（上行，按账号；best-effort，理由同上）。
+   */
+  emitAgentRunEnd(cloudUserId: string, payload: AgentRunEnd): void {
+    const conn = this.conns.get(cloudUserId);
+    if (!conn?.socket.connected) return;
+    conn.socket.emit(IM_WS_EVENTS.agentRunEnd, payload);
   }
 }
