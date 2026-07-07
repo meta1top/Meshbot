@@ -273,8 +273,10 @@
     "loadFailed": "Failed to load",
     "emptyHint": "Pick or start a session to begin",
     "offline": "Offline",
-    "remoteComingSoon": "Remote sessions coming soon",
-    "devicesLoadFailed": "Failed to load devices"
+    "devicesLoadFailed": "Failed to load devices",
+    "remoteReadOnly": "Remote session (read-only)",
+    "remoteLoadFailed": "Failed to load remote session",
+    "remoteEmpty": "No sessions on this device"
   },
   "messages": {
     "title": "Messages",

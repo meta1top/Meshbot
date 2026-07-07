@@ -86,6 +86,12 @@ interface MessageListProps {
   usageByMessage?: Record<string, MessageUsage>;
   /** 嵌套模式（子 Agent 卡内）：隐藏头像行/名字/重试/反馈，仅保留内容与工具块。 */
   nested?: boolean;
+  /**
+   * 只读模式（远程设备历史查看，L2c）：隐藏 AssistantMessageActions /
+   * UserMessageActions（重试/反馈/编辑等写操作），保留头像行/名字/工具块。
+   * 与 nested 语义正交——nested 是「视觉收窄」，readOnly 是「禁写」。
+   */
+  readOnly?: boolean;
 }
 
 /**
@@ -104,6 +110,7 @@ export function MessageList({
   onRegenerateOptimisticCut,
   usageByMessage,
   nested,
+  readOnly,
 }: MessageListProps) {
   const t = useTranslations("session");
   const user = useAtomValue(currentUserAtom);
@@ -197,6 +204,7 @@ export function MessageList({
                     </div>
                   )}
                 {!nested &&
+                  !readOnly &&
                   m.role === "assistant" &&
                   m.content &&
                   !m.streaming && (
@@ -208,7 +216,7 @@ export function MessageList({
                       feedback={m.feedback}
                     />
                   )}
-                {!nested && m.role === "user" && (
+                {!nested && !readOnly && m.role === "user" && (
                   <UserMessageActions
                     sessionId={sessionId}
                     messageId={m.id}
