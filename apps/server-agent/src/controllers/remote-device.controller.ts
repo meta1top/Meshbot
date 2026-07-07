@@ -39,7 +39,9 @@ export class RemoteDeviceController {
     return (await this.query.query(acct, id, "history", {
       sessionId,
       before,
-      limit: limit ? Number(limit) : undefined,
+      limit: limit
+        ? Math.min(Math.max(1, Number(limit) || 50), 100)
+        : undefined,
     })) as HistoryResponse;
   }
 }

@@ -65,6 +65,34 @@ describe("RemoteQueryInboundService", () => {
     expect(call.data.messages[0].id).toBe("m1");
   });
 
+  it("kind=history → limit 超大值被 clamp 到 100（防止拉整个会话）", async () => {
+    const { svc, messages } = make();
+    await svc.onDeviceQueryRequest(
+      fwd({
+        kind: "history",
+        params: { sessionId: "s1", limit: 100000 },
+      }) as never,
+    );
+    expect(messages.listPage).toHaveBeenCalledWith("s1", {
+      before: undefined,
+      limit: 100,
+    });
+  });
+
+  it("kind=history → limit 缺省时默认 50", async () => {
+    const { svc, messages } = make();
+    await svc.onDeviceQueryRequest(
+      fwd({
+        kind: "history",
+        params: { sessionId: "s1" },
+      }) as never,
+    );
+    expect(messages.listPage).toHaveBeenCalledWith("s1", {
+      before: undefined,
+      limit: 50,
+    });
+  });
+
   it("查询抛错 → 回 ok:false error", async () => {
     const { svc, sessions, relay } = make();
     sessions.listAllSorted.mockRejectedValueOnce(new Error("boom"));

@@ -29,6 +29,8 @@ interface RemoteRawMessage {
   reasoning?: string | null;
   /** JSON 字符串，形如 `[{id,name,args}]`（LangChain AIMessage.tool_calls 原始形状）。 */
   toolCalls?: string | null;
+  /** JSON 字符串（session_message.metadata 原始列）；压缩占位行携带 kind="compaction"。 */
+  metadata?: string | null;
   [key: string]: unknown;
 }
 
@@ -65,12 +67,21 @@ function remoteMessageToTimeline(m: RemoteRawMessage): TimelineMessage {
       toolCalls = undefined;
     }
   }
+  let metadata: TimelineMessage["metadata"];
+  if (typeof m.metadata === "string" && m.metadata) {
+    try {
+      metadata = JSON.parse(m.metadata) as TimelineMessage["metadata"];
+    } catch {
+      metadata = undefined;
+    }
+  }
   return {
     id: String(m.id),
     role: m.role === "user" || m.role === "assistant" ? m.role : "system",
     content: typeof m.content === "string" ? m.content : "",
     ...(m.reasoning ? { reasoning: m.reasoning, reasoningDurationMs: 0 } : {}),
     ...(toolCalls ? { toolCalls } : {}),
+    ...(metadata ? { metadata } : {}),
     feedback: null,
   };
 }

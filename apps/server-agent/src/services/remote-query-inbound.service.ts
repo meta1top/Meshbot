@@ -44,7 +44,7 @@ export class RemoteQueryInboundService {
             ? await this.sessions.listAllSorted()
             : await this.messages.listPage(forwarded.params.sessionId ?? "", {
                 before: forwarded.params.before,
-                limit: forwarded.params.limit ?? 50,
+                limit: Math.min(Math.max(1, forwarded.params.limit ?? 50), 100),
               });
         this.relay.emitDeviceQueryResponse(cloudUserId, {
           ...base,
