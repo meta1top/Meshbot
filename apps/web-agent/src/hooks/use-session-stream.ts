@@ -329,6 +329,7 @@ export function useSessionStream(
       if (remoteStreamIdRef.current == null) {
         fetchRemoteRun(remoteDeviceId, { sessionId })
           .then((run) => {
+            if (cancelled) return;
             if (run) remoteStreamIdRef.current = run.streamId;
           })
           .catch(() => {});
