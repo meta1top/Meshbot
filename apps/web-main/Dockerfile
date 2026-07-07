@@ -4,8 +4,7 @@
 
 # ============ Stage 1: deps ===============================================
 FROM node:24-alpine AS deps
-# 国内镜像加速依赖下载（build 用 --ignore-scripts,原生二进制不下,只走 npm tarball）。
-RUN corepack enable && pnpm config set registry https://registry.npmmirror.com
+RUN corepack enable
 WORKDIR /repo
 # lockfile + workspace 元数据 + 各 package.json,最大化 layer 缓存。
 # .pnpmfile.cjs 必须一并 copy（lockfile 记录其 checksum）。
