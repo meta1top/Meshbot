@@ -36,6 +36,8 @@ export {
 export {
   type AddChannelMemberInput,
   AddChannelMemberSchema,
+  type AgentRunAnswerItem,
+  AgentRunAnswerItemSchema,
   type AgentRunControlForwarded,
   type AgentRunControlInput,
   AgentRunControlSchema,

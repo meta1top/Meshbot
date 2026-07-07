@@ -108,6 +108,16 @@ export interface AgentRunStartForwarded extends AgentRunStartInput {
   requesterDeviceId: string;
 }
 
+/**
+ * 远程 ask_question 回答项。镜像 `@meshbot/types-agent` 的 `answerItemSchema`
+ *（libs/types 不能反向依赖 types-agent,故就地重定义;形状须与其保持一致）。
+ */
+export const AgentRunAnswerItemSchema = z.object({
+  selected: z.array(z.string()),
+  other: z.string().optional(),
+});
+export type AgentRunAnswerItem = z.infer<typeof AgentRunAnswerItemSchema>;
+
 /** L3:A→B 运行中控制(confirm/answer/interrupt)。 */
 export const AgentRunControlSchema = z.object({
   streamId: z.string().min(1),
@@ -117,7 +127,7 @@ export const AgentRunControlSchema = z.object({
   toolCallId: z.string().optional(),
   decision: z.enum(["send", "cancel"]).optional(),
   content: z.string().optional(),
-  answers: z.array(z.string()).optional(),
+  answers: z.array(AgentRunAnswerItemSchema).optional(),
 });
 export type AgentRunControlInput = z.infer<typeof AgentRunControlSchema>;
 export interface AgentRunControlForwarded extends AgentRunControlInput {
