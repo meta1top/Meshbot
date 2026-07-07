@@ -1,0 +1,72 @@
+# meshbot 云端轨 CI/CD —— shell executor,单宿主机。
+# push main → verify(typecheck + 静态围栏) → build(两镜像并行,push hub.meta1.top) → deploy(同机 compose up)。
+# 真实 secret 全在 Nacos;本流水线只经手 Nacos 引导变量 + 镜像 tag。
+
+stages:
+  - verify
+  - build
+  - deploy
+
+variables:
+  IMAGE_TAG: "$CI_COMMIT_SHORT_SHA"
+  REGISTRY_IMAGE: "$CI_REGISTRY_IMAGE"
+
+# 仅 main 触发（部署型流水线）
+workflow:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+# 轻量质量门：typecheck + 静态围栏。全量单测/e2e 由 GitHub CI 把关,此处不重复。
+verify:
+  stage: verify
+  script:
+    - >
+      docker run --rm
+      -v "$CI_PROJECT_DIR":/repo -w /repo
+      -v meshbot-pnpm-store:/root/.local/share/pnpm
+      node:22-alpine sh -c
+      "corepack enable && pnpm install --frozen-lockfile && pnpm typecheck && pnpm check"
+  after_script:
+    # verify 在容器内以 root 生成 node_modules（root 属主）；持久 shell runner 上
+    # 下次 pipeline 的 git clean 以 runner 用户执行会 Permission denied,故此处 chown 回来。
+    - docker run --rm -v "$CI_PROJECT_DIR":/repo alpine chown -R "$(id -u):$(id -g)" /repo
+
+build-server-main:
+  stage: build
+  script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - docker build -f apps/server-main/Dockerfile -t "$REGISTRY_IMAGE/server-main:$IMAGE_TAG" -t "$REGISTRY_IMAGE/server-main:latest" .
+    - docker push "$REGISTRY_IMAGE/server-main:$IMAGE_TAG"
+    - docker push "$REGISTRY_IMAGE/server-main:latest"
+
+build-web-main:
+  stage: build
+  script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - docker build -f apps/web-main/Dockerfile -t "$REGISTRY_IMAGE/web-main:$IMAGE_TAG" -t "$REGISTRY_IMAGE/web-main:latest" .
+    - docker push "$REGISTRY_IMAGE/web-main:$IMAGE_TAG"
+    - docker push "$REGISTRY_IMAGE/web-main:latest"
+
+deploy:
+  stage: deploy
+  resource_group: production   # 防并发部署
+  environment:
+    name: production
+    url: https://bot.meta1.top
+  script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    # 从 GitLab CI/CD 变量渲染 compose 的 .env.prod（NACOS_* / MESHBOT_NODE_ID 在项目变量里配好）
+    - |
+      cat > infra/prod/.env.prod <<EOF
+      REGISTRY_IMAGE=$REGISTRY_IMAGE
+      IMAGE_TAG=$IMAGE_TAG
+      NACOS_SERVER_ADDR=$NACOS_SERVER_ADDR
+      NACOS_NAMESPACE=$NACOS_NAMESPACE
+      NACOS_DATA_ID=${NACOS_DATA_ID:-meshbot-server-main.yaml}
+      NACOS_USERNAME=$NACOS_USERNAME
+      NACOS_PASSWORD=$NACOS_PASSWORD
+      MESHBOT_NODE_ID=${MESHBOT_NODE_ID:-0}
+      EOF
+    - docker compose -f infra/prod/docker-compose.prod.yml --env-file infra/prod/.env.prod pull
+    - docker compose -f infra/prod/docker-compose.prod.yml --env-file infra/prod/.env.prod up -d
+    - docker image prune -f
