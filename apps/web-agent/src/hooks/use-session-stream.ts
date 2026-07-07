@@ -36,7 +36,85 @@ import {
   claimSubagentOnTimeline,
   settleSubagentOnTimeline,
 } from "@/lib/subagent-card";
+import {
+  fetchRemoteHistory,
+  interruptRemoteRun,
+  startRemoteRun,
+} from "@/rest/remote-devices";
 import { appendMessage, fetchHistory, fetchPending } from "@/rest/session";
+
+/**
+ * B 侧 `RemoteRunInboundService`/`RemoteQueryInboundService` 直出
+ * `SessionMessageService.listPage()` 的原始 SessionMessage 行，并非真正的
+ * HistoryMessage：toolCalls / metadata 是未解析的 JSON 字符串，无 feedback
+ * 字段，且可能混入 role="tool" 行。A 侧 controller 把它 `as` 成 HistoryResponse
+ * 只是编译期类型糊弄，运行时字段对不上，这里必须防御式映射（原在
+ * assistant/page.tsx 的 RemoteSessionView，随只读→可交互升级一并挪到这里，
+ * 供 useSessionStream 的 remote 分支直接复用）。
+ */
+interface RemoteRawMessage {
+  id: string;
+  role: string;
+  content: string;
+  reasoning?: string | null;
+  /** JSON 字符串，形如 `[{id,name,args}]`（LangChain AIMessage.tool_calls 原始形状）。 */
+  toolCalls?: string | null;
+  /** JSON 字符串（session_message.metadata 原始列）；压缩占位行携带 kind="compaction"。 */
+  metadata?: string | null;
+  [key: string]: unknown;
+}
+
+interface RemoteRawHistory {
+  messages?: RemoteRawMessage[];
+  [key: string]: unknown;
+}
+
+/**
+ * 远程历史单条消息 → TimelineMessage。字段缺失/解析失败一律给默认值，
+ * 绝不假设运行时形状与本地 historyMessageToTimeline 的输入一致。
+ */
+function remoteMessageToTimeline(m: RemoteRawMessage): TimelineMessage {
+  let toolCalls: TimelineMessage["toolCalls"];
+  if (typeof m.toolCalls === "string" && m.toolCalls) {
+    try {
+      const parsed = JSON.parse(m.toolCalls) as Array<{
+        id?: string;
+        toolCallId?: string;
+        name?: string;
+        args?: unknown;
+      }>;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        toolCalls = parsed.map((tc) => ({
+          toolCallId: tc.toolCallId ?? tc.id ?? "",
+          name: tc.name ?? "",
+          args: tc.args,
+          // 只读历史无「进行中」语义：一律按终态展示，避免误触发确认卡的
+          // 可编辑分支（ImSendConfirmCard 等只在 status==="running" 时可写）。
+          status: "ok" as const,
+        }));
+      }
+    } catch {
+      toolCalls = undefined;
+    }
+  }
+  let metadata: TimelineMessage["metadata"];
+  if (typeof m.metadata === "string" && m.metadata) {
+    try {
+      metadata = JSON.parse(m.metadata) as TimelineMessage["metadata"];
+    } catch {
+      metadata = undefined;
+    }
+  }
+  return {
+    id: String(m.id),
+    role: m.role === "user" || m.role === "assistant" ? m.role : "system",
+    content: typeof m.content === "string" ? m.content : "",
+    ...(m.reasoning ? { reasoning: m.reasoning, reasoningDurationMs: 0 } : {}),
+    ...(toolCalls ? { toolCalls } : {}),
+    ...(metadata ? { metadata } : {}),
+    feedback: null,
+  };
+}
 
 /**
  * history 单条消息 → TimelineMessage 映射：首屏拉取与 loadMoreHistory 翻页
@@ -80,13 +158,16 @@ export interface SessionStream {
   hasMoreHistory: boolean;
   /** 首屏历史加载中（用于显示骨架）。 */
   historyLoading: boolean;
+  /** 首屏历史加载失败（目前仅 remote 分支会置位——跨设备 relay 更易超时/离线；
+   * 本地分支沿用历史行为，失败只 console.error，不置位）。 */
+  historyError: boolean;
   /** 单一消息写入口（同步 ref+state），供视图做局部变更（pending 删/改、重生成截断）。 */
   apply: (next: (prev: TimelineMessage[]) => TimelineMessage[]) => void;
-  /** 发送一条消息：乐观插 pending user 气泡 + append 到后端。 */
+  /** 发送一条消息：本地乐观插 pending user 气泡 + append；remote 走远程 run 隧道。 */
   send: (msg: string) => Promise<void>;
-  /** 中断当前 run。 */
+  /** 中断当前 run：本地经 WS，remote 经 relay 控制帧。 */
   interrupt: () => void;
-  /** 上拉加载更早历史（含滚动锚定，需传 scrollContainerRef）。 */
+  /** 上拉加载更早历史（含滚动锚定，需传 scrollContainerRef）。remote 分支 Phase A 暂不支持，no-op。 */
   loadMoreHistory: () => Promise<void>;
 }
 
@@ -94,10 +175,26 @@ export interface SessionStream {
  * 会话流式状态 hook：拉历史 + 订阅 SESSION_WS 事件 → 维护 TimelineMessage 列表、
  * running、compaction、历史分页，并暴露 send/interrupt/loadMoreHistory 与 apply。
  * sessionId 为 null 时惰性 inert（不请求不订阅），可安全挂载。
+ *
+ * L3 remote 分支（`remoteDeviceId` 非空）：该 sessionId 是远程设备 B 上的会话。
+ * - 首屏历史走 `fetchRemoteHistory`（防御式映射 B 侧原始行），不走本地 fetchPending
+ *   （远程无该概念）。
+ * - **session socket 订阅不变**——B 的运行帧经 A 侧 `RemoteRunService` 影子重发到
+ *   本地 SESSION_WS_EVENTS 总线，A 的 SessionGateway 照常转发到 room=sessionId，
+ *   前端订阅同一个 sessionId 即可像本地会话一样收到实时帧，本 hook 无需为 remote
+ *   改造任何 socket.on 逻辑。
+ * - send 走 `startRemoteRun(mode:"append")`，interrupt 走 `interruptRemoteRun`：
+ *   两者都要带上「当前有效的 streamId」——远程控制帧靠 streamId 在云网关路由到
+ *   正确的目标设备，interrupt 必须使用同一会话最近一次 run 的 streamId
+ *   （`remoteStreamIdRef`，初值取 `remoteInitialStreamId`：首屏由起手台刚发起
+ *   create 时带入，否则为 null——此时若用户直接中断会是 no-op，是 Phase A 已知
+ *   限制，见 task-6 报告）。
  */
 export function useSessionStream(
   sessionId: string | null,
   scrollContainerRef: React.RefObject<HTMLDivElement | null>,
+  remoteDeviceId?: string | null,
+  remoteInitialStreamId?: string | null,
 ): SessionStream {
   const [messages, setMessages] = useState<TimelineMessage[]>([]);
   const [running, setRunning] = useState(false);
@@ -107,6 +204,9 @@ export function useSessionStream(
   const loadingMoreRef = useRef(false);
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState(false);
+  /** remote 分支当前有效的 streamId（供 interrupt 路由用），见上方 hook 注释。 */
+  const remoteStreamIdRef = useRef<string | null>(null);
   /** 压缩进行中标记。null = 未压缩；string = 压缩原因（用于 banner 文案）。 */
   const [compacting, setCompacting] = useState<
     null | "threshold" | "ctx-exceeded"
@@ -201,119 +301,158 @@ export function useSessionStream(
     // 保留下来，两段对话就混在一起。
     messagesRef.current = [];
     setMessages([]);
-    setRunning(false);
+    // remote 且带初始 streamId（起手台 create 刚发起、首轮尚在跑）→ 乐观置 running；
+    // 否则（本地 / 直接进入远程会话未带 streamId）与原行为一致先置 false，
+    // 后续本地分支按 history.inflight 校正，remote 分支按实时帧校正。
+    setRunning(!!(remoteDeviceId && remoteInitialStreamId));
     oldestMessageIdRef.current = null;
     hasMoreHistoryRef.current = true;
     setHasMoreHistory(true);
+    setHistoryError(false);
+    remoteStreamIdRef.current = remoteDeviceId
+      ? (remoteInitialStreamId ?? null)
+      : null;
     resetUsage(sessionId);
     let cancelled = false;
     setHistoryLoading(true);
 
-    void Promise.all([fetchHistory(sessionId), fetchPending(sessionId)])
-      .then(([history, pending]) => {
-        if (cancelled) return;
-        const initial: TimelineMessage[] = history.messages.map(
-          historyMessageToTimeline,
-        );
-        const historyIds = new Set(history.messages.map((m) => m.id));
-        if (history.inflight) {
-          setRunning(history.inflight.status === "streaming");
-          // 只在真正 streaming 时推 inflight 气泡；done/interrupted 状态下
-          // checkpointer 已持久化对应消息，再推一条会形成「双气泡」（一个完整、
-          // 一个空带闪烁光标）。
-          if (
-            history.inflight.messageId &&
-            history.inflight.status === "streaming" &&
-            !historyIds.has(history.inflight.messageId)
-          ) {
-            // reasoning 也带上：避免「正文流中切回会话」时思考过程丢失。
-            // durationMs=0 让 UI 直接显示「已思考」（流式秒数信息没存）；
-            // 后续 ws 订阅 replay 的 reasoning chunk 会按 messageId 累加到此条上。
-            initial.push({
-              id: history.inflight.messageId,
-              role: "assistant",
-              content: history.inflight.content,
-              streaming: true,
-              ...(history.inflight.reasoning
-                ? {
-                    reasoning: history.inflight.reasoning,
-                    // 服务端记录的真实 reasoning 起始时刻；缺失时不设 startedAt
-                    // （ReasoningBlock 走 streaming + 无 startedAt 的 fallback「思考中 0.0s」分支）
-                    ...(history.inflight.reasoningStartedAt !== null &&
-                    history.inflight.reasoningStartedAt !== undefined
-                      ? {
-                          reasoningStartedAt:
-                            history.inflight.reasoningStartedAt,
-                        }
-                      : {}),
-                  }
-                : {}),
-            });
-          }
-        }
-        for (const p of pending.pending) {
-          if (p.status === "processed") {
-            continue;
-          }
-          if (historyIds.has(p.id)) {
-            if (p.status === "failed") {
-              const idx = initial.findIndex((m) => m.id === p.id);
-              if (idx !== -1) {
-                initial[idx] = { ...initial[idx], failed: true };
-              }
-            }
-            continue;
-          }
-          if (p.status === "pending") {
-            // 排队中（runner 还没认领、从未入库）→ 输入框上方 pending 区
-            initial.push({
-              id: p.id,
-              role: "user",
-              content: p.content,
-              pending: true,
-            });
-            continue;
-          }
-          // processing / failed 且不在首页历史 id 集合里：
-          // - inHistory=true → 已落入 session_messages（只是在更早的历史页）。
-          //   跳过，由历史在正确 seq 位置展示——否则会被追加到时间线末尾，造成
-          //   "失败/旧消息堆在最后面"（首页 historyIds 不含分页深处的 id）。
-          // - inHistory=false → 孤儿（如 run.human 记录前就失败）。它是最新的，
-          //   历史里没有，追加到末尾才看得到 + 可重试。
-          if (!p.inHistory) {
-            initial.push({
-              id: p.id,
-              role: "user",
-              content: p.content,
-              failed: p.status === "failed",
-            });
-          }
-        }
-        // 合并：历史快照打底，但保留 socket 已先到的消息（不被覆盖）
-        apply((current) => {
-          const initialIds = new Set(initial.map((m) => m.id));
-          const socketArrived = current.filter((m) => !initialIds.has(m.id));
-          return [...initial, ...socketArrived];
-        });
-        if (history.sessionTotals) {
-          setInitialUsage({
-            sessionId,
-            usage: {
-              sessionTotals: history.sessionTotals,
-              byMessage: history.byMessage,
-            },
+    if (remoteDeviceId) {
+      // L3 remote：首屏历史走 L2c fetchRemoteHistory（防御式映射 B 侧原始行），
+      // 不查本地 fetchPending（远程无该概念）；不支持翻页（Phase A 范围外，
+      // loadMoreHistory 对 remote 直接 no-op）。
+      fetchRemoteHistory(remoteDeviceId, sessionId)
+        .then((res) => {
+          if (cancelled) return;
+          const raw = (res as unknown as RemoteRawHistory).messages ?? [];
+          const initial: TimelineMessage[] = raw
+            // role="tool" 行是工具执行结果的落库行，不是可展示的时间线消息
+            .filter((m) => m.role !== "tool")
+            .map(remoteMessageToTimeline);
+          // 合并：历史快照打底，但保留 socket 已先到的消息（不被覆盖）
+          apply((current) => {
+            const initialIds = new Set(initial.map((m) => m.id));
+            const socketArrived = current.filter((m) => !initialIds.has(m.id));
+            return [...initial, ...socketArrived];
           });
-        } else {
-          // 防御：首次必有 sessionTotals
-          appendUsageByMessage({ sessionId, batch: history.byMessage });
-        }
-        oldestMessageIdRef.current = initial[0]?.id ?? null;
-        hasMoreHistoryRef.current = history.hasMore;
-        setHasMoreHistory(history.hasMore);
-      })
-      .finally(() => {
-        if (!cancelled) setHistoryLoading(false);
-      });
+          oldestMessageIdRef.current = initial[0]?.id ?? null;
+          hasMoreHistoryRef.current = false;
+          setHasMoreHistory(false);
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          console.error("拉取远程会话历史失败", err);
+          setHistoryError(true);
+        })
+        .finally(() => {
+          if (!cancelled) setHistoryLoading(false);
+        });
+    } else {
+      void Promise.all([fetchHistory(sessionId), fetchPending(sessionId)])
+        .then(([history, pending]) => {
+          if (cancelled) return;
+          const initial: TimelineMessage[] = history.messages.map(
+            historyMessageToTimeline,
+          );
+          const historyIds = new Set(history.messages.map((m) => m.id));
+          if (history.inflight) {
+            setRunning(history.inflight.status === "streaming");
+            // 只在真正 streaming 时推 inflight 气泡；done/interrupted 状态下
+            // checkpointer 已持久化对应消息，再推一条会形成「双气泡」（一个完整、
+            // 一个空带闪烁光标）。
+            if (
+              history.inflight.messageId &&
+              history.inflight.status === "streaming" &&
+              !historyIds.has(history.inflight.messageId)
+            ) {
+              // reasoning 也带上：避免「正文流中切回会话」时思考过程丢失。
+              // durationMs=0 让 UI 直接显示「已思考」（流式秒数信息没存）；
+              // 后续 ws 订阅 replay 的 reasoning chunk 会按 messageId 累加到此条上。
+              initial.push({
+                id: history.inflight.messageId,
+                role: "assistant",
+                content: history.inflight.content,
+                streaming: true,
+                ...(history.inflight.reasoning
+                  ? {
+                      reasoning: history.inflight.reasoning,
+                      // 服务端记录的真实 reasoning 起始时刻；缺失时不设 startedAt
+                      // （ReasoningBlock 走 streaming + 无 startedAt 的 fallback「思考中 0.0s」分支）
+                      ...(history.inflight.reasoningStartedAt !== null &&
+                      history.inflight.reasoningStartedAt !== undefined
+                        ? {
+                            reasoningStartedAt:
+                              history.inflight.reasoningStartedAt,
+                          }
+                        : {}),
+                    }
+                  : {}),
+              });
+            }
+          }
+          for (const p of pending.pending) {
+            if (p.status === "processed") {
+              continue;
+            }
+            if (historyIds.has(p.id)) {
+              if (p.status === "failed") {
+                const idx = initial.findIndex((m) => m.id === p.id);
+                if (idx !== -1) {
+                  initial[idx] = { ...initial[idx], failed: true };
+                }
+              }
+              continue;
+            }
+            if (p.status === "pending") {
+              // 排队中（runner 还没认领、从未入库）→ 输入框上方 pending 区
+              initial.push({
+                id: p.id,
+                role: "user",
+                content: p.content,
+                pending: true,
+              });
+              continue;
+            }
+            // processing / failed 且不在首页历史 id 集合里：
+            // - inHistory=true → 已落入 session_messages（只是在更早的历史页）。
+            //   跳过，由历史在正确 seq 位置展示——否则会被追加到时间线末尾，造成
+            //   "失败/旧消息堆在最后面"（首页 historyIds 不含分页深处的 id）。
+            // - inHistory=false → 孤儿（如 run.human 记录前就失败）。它是最新的，
+            //   历史里没有，追加到末尾才看得到 + 可重试。
+            if (!p.inHistory) {
+              initial.push({
+                id: p.id,
+                role: "user",
+                content: p.content,
+                failed: p.status === "failed",
+              });
+            }
+          }
+          // 合并：历史快照打底，但保留 socket 已先到的消息（不被覆盖）
+          apply((current) => {
+            const initialIds = new Set(initial.map((m) => m.id));
+            const socketArrived = current.filter((m) => !initialIds.has(m.id));
+            return [...initial, ...socketArrived];
+          });
+          if (history.sessionTotals) {
+            setInitialUsage({
+              sessionId,
+              usage: {
+                sessionTotals: history.sessionTotals,
+                byMessage: history.byMessage,
+              },
+            });
+          } else {
+            // 防御：首次必有 sessionTotals
+            appendUsageByMessage({ sessionId, batch: history.byMessage });
+          }
+          oldestMessageIdRef.current = initial[0]?.id ?? null;
+          hasMoreHistoryRef.current = history.hasMore;
+          setHasMoreHistory(history.hasMore);
+        })
+        .finally(() => {
+          if (!cancelled) setHistoryLoading(false);
+        });
+    }
 
     const socket = getSessionSocket();
     const subscribe = () =>
@@ -726,6 +865,8 @@ export function useSessionStream(
     };
   }, [
     sessionId,
+    remoteDeviceId,
+    remoteInitialStreamId,
     apply,
     upsertChunk,
     migrateHumanToTimeline,
@@ -748,6 +889,40 @@ export function useSessionStream(
   const send = useCallback(
     async (msg: string) => {
       if (!sessionId) return;
+      if (remoteDeviceId) {
+        // L3 remote 续写：不做本地乐观占位——B 侧 appendMessage 自己生成
+        // messageId（randomUUID，与本地无法对齐），乐观插入的话，等真正的
+        // run.human 帧到达时 id 对不上，会在 idx===-1 分支再建一条，形成
+        // 重复气泡。真实的 user 气泡交给 onHuman 的兜底分支新建（与「服务端
+        // 注入消息」同路径），只是要等一次 relay 往返才出现——用 setRunning(true)
+        // 提前给出「已在处理」的即时反馈，减轻等待感。
+        try {
+          const { streamId } = await startRemoteRun(remoteDeviceId, {
+            mode: "append",
+            sessionId,
+            content: msg,
+          });
+          remoteStreamIdRef.current = streamId;
+          setRunning(true);
+        } catch (err) {
+          console.error("远程续写失败", err);
+          // ChatInput onSend 后同步清空编辑器（不看成败），relay 抖动/超时时
+          // 用户输入会凭空消失、无任何痕迹。这里补一条可见的 failed 本地气泡
+          // （id 用本地雪花，不与 B 侧 run.human 的 randomUUID 冲突——本轮已
+          // 失败、不会有 run.human 到达，故不影响 onHuman 去重），让用户看到
+          // 输入还在且失败了。
+          apply((prev) => [
+            ...prev,
+            {
+              id: clientSnowflakeId(),
+              role: "user",
+              content: msg,
+              failed: true,
+            },
+          ]);
+        }
+        return;
+      }
       const messageId = clientSnowflakeId();
       apply((prev) => [
         ...prev,
@@ -759,23 +934,45 @@ export function useSessionStream(
         console.error("追加消息失败", err);
       }
     },
-    [sessionId, apply],
+    [sessionId, apply, remoteDeviceId],
   );
 
-  /** Stop 按钮：经 socket 发中断信号。 */
+  /**
+   * Stop 按钮：本地经 socket 发中断信号；remote 经 relay 控制帧
+   * （`interruptRemoteRun`），路由靠 `remoteStreamIdRef` 当前记的 streamId
+   * ——若为 null（本页尚未发起过 run，如直接刷新进入一个仍在跑的远程会话）
+   * 则无法路由到 B，no-op（Phase A 已知限制）。
+   */
   const interrupt = useCallback(() => {
     if (!sessionId) return;
+    if (remoteDeviceId) {
+      const streamId = remoteStreamIdRef.current;
+      if (!streamId) {
+        console.warn(
+          "远程会话当前无可用 streamId，无法中断（可能是刷新/直接进入一个仍在跑的远程会话）",
+        );
+        return;
+      }
+      void interruptRemoteRun(remoteDeviceId, { streamId, sessionId }).catch(
+        (err) => {
+          console.error("远程中断失败", err);
+        },
+      );
+      return;
+    }
     getSessionSocket().emit(SESSION_WS_EVENTS.interrupt, { sessionId });
-  }, [sessionId]);
+  }, [sessionId, remoteDeviceId]);
 
   /**
    * 滚动到顶部触发：拉早于当前最旧消息的下一批 history。
    * - 锚定视口：prepend 前后 scrollTop 自动补偿，使用户当前看的消息不动
    * - 并发去重：loadingMoreRef 期间忽略重复触发
+   * - remote 分支 Phase A 不支持翻页（B 侧原始行 cursor 语义未打通），no-op
    */
   // biome-ignore lint/correctness/useExhaustiveDependencies: scrollContainerRef 是 RefObject，.current 故意不进依赖（与原实现一致）
   const loadMoreHistory = useCallback(async () => {
     if (!sessionId) return;
+    if (remoteDeviceId) return;
     if (!hasMoreHistoryRef.current) return;
     if (loadingMoreRef.current) return;
     const cursor = oldestMessageIdRef.current;
@@ -811,7 +1008,7 @@ export function useSessionStream(
     } finally {
       loadingMoreRef.current = false;
     }
-  }, [sessionId, apply, appendUsageByMessage]);
+  }, [sessionId, apply, appendUsageByMessage, remoteDeviceId]);
 
   return {
     messages,
@@ -819,6 +1016,7 @@ export function useSessionStream(
     compacting,
     hasMoreHistory,
     historyLoading,
+    historyError,
     apply,
     send,
     interrupt,

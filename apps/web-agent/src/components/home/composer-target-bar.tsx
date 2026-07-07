@@ -9,31 +9,42 @@ import {
 import { useAtomValue, useSetAtom } from "jotai";
 import { ChevronRight, FolderClosed, MonitorSmartphone } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import {
   deviceOnlineAtom,
   devicesAtom,
   loadDevicesAtom,
 } from "@/atoms/devices";
 
+interface ComposerTargetBarProps {
+  /** 当前选中的 Agent 设备 id；null = 未选（走本机）。受父组件（起手台）控制，
+   * 供发送逻辑判断本次发送应走本地 createSession 还是 L3 远程 run。 */
+  selectedDeviceId: string | null;
+  onSelectDevice: (id: string) => void;
+}
+
 /**
  * 起手台 composer 下方目标选择器行：
  * 选择 Agent（默认本机，下拉列该账号所有设备，离线置灰）+ 选择工作空间（占位）。
- * 与助手侧栏共用 devicesAtom。L2b 阶段选中项仅存本地 state（远程执行属 L3）。
+ * 与助手侧栏共用 devicesAtom。选中项状态提升到父组件 LauncherHome（L3 发送
+ * 逻辑需要据此判断走本地/远程）。
  */
-export function ComposerTargetBar() {
+export function ComposerTargetBar({
+  selectedDeviceId,
+  onSelectDevice,
+}: ComposerTargetBarProps) {
   const t = useTranslations("composer");
   const devices = useAtomValue(devicesAtom);
   const online = useAtomValue(deviceOnlineAtom);
   const loadDevices = useSetAtom(loadDevicesAtom);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
     void loadDevices();
   }, [loadDevices]);
 
   const local = useMemo(() => devices.find((d) => d.isCurrent), [devices]);
-  const selected = devices.find((d) => d.id === selectedId) ?? local ?? null;
+  const selected =
+    devices.find((d) => d.id === selectedDeviceId) ?? local ?? null;
   const selectedLabel =
     selected && !selected.isCurrent ? selected.name : t("agentLocal");
 
@@ -59,7 +70,7 @@ export function ComposerTargetBar() {
                 <DropdownMenuItem
                   key={d.id}
                   disabled={!isOnline}
-                  onClick={() => setSelectedId(d.id)}
+                  onClick={() => onSelectDevice(d.id)}
                   className="flex items-center gap-2"
                 >
                   <span
