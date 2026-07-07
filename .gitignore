@@ -30,6 +30,8 @@ apps/desktop/release-stage/
 .env.*.local
 .env.development
 .env.production
+# 生产部署渲染产物（含 NACOS_PASSWORD 等,勿提交）；不带斜杠在任意层级匹配 infra/prod/.env.prod
+.env.prod
 !.env.*.example
 
 # editor
