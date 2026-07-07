@@ -273,8 +273,10 @@
     "loadFailed": "加载失败",
     "emptyHint": "选择或新建一个会话开始",
     "offline": "离线",
-    "remoteComingSoon": "远程会话查看即将支持",
-    "devicesLoadFailed": "设备列表加载失败"
+    "devicesLoadFailed": "设备列表加载失败",
+    "remoteReadOnly": "远程会话，只读",
+    "remoteLoadFailed": "远程会话加载失败",
+    "remoteEmpty": "该设备暂无会话"
   },
   "messages": {
     "title": "消息",

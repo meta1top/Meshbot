@@ -2,6 +2,9 @@ import { AccountContextService } from "@meshbot/agent";
 import { AppError } from "@meshbot/common";
 import { IM_WS_EVENTS, IM_WS_NAMESPACE } from "@meshbot/types";
 import type {
+  DeviceQueryForwarded,
+  DeviceQueryRequestInput,
+  DeviceQueryResponse,
   ImPresenceSetInput,
   ImReadInput,
   ImSendInput,
@@ -128,6 +131,28 @@ export class ImRelayClientService implements OnModuleDestroy {
           });
         });
       }
+
+      // L2c 下行：设备查询响应（B→云→A）→ 桥给 RemoteDeviceQueryService.settle。
+      socket.on(
+        IM_WS_EVENTS.deviceQueryResponse,
+        (payload: DeviceQueryResponse) => {
+          this.account.run(cloudUserId, () => {
+            this.emitter.emit(IM_RELAY_EVENTS.deviceQueryResponse, payload);
+          });
+        },
+      );
+      // L2c 下行：入站设备查询请求（云端转发到本设备）→ 供 Task4 入站消费。
+      socket.on(
+        IM_WS_EVENTS.deviceQueryRequest,
+        (payload: DeviceQueryForwarded) => {
+          this.account.run(cloudUserId, () => {
+            this.emitter.emit(IM_RELAY_EVENTS.deviceQueryRequest, {
+              cloudUserId,
+              forwarded: payload,
+            });
+          });
+        },
+      );
 
       // connect_error：认证失败 → 拆该账号 socket 防僵尸/重连风暴，置该账号 loggedOut，
       // 并发重授权事件（account.run 包裹，供 EventsGateway 路由到该账号 acct 房间）。
@@ -261,5 +286,31 @@ export class ImRelayClientService implements OnModuleDestroy {
   /** 指定账号当前是否有活跃连接。 */
   isConnected(cloudUserId: string): boolean {
     return this.conns.get(cloudUserId)?.socket.connected === true;
+  }
+
+  /**
+   * L2c：发起跨设备只读查询（上行，按账号）。
+   *
+   * @throws {AppError} IM_NOT_CONNECTED — 该账号未建立连接时抛出。
+   */
+  emitDeviceQuery(cloudUserId: string, payload: DeviceQueryRequestInput): void {
+    const conn = this.conns.get(cloudUserId);
+    if (!conn?.socket.connected) {
+      throw new AppError(AgentErrorCode.IM_NOT_CONNECTED);
+    }
+    conn.socket.emit(IM_WS_EVENTS.deviceQueryRequest, payload);
+  }
+
+  /**
+   * L2c：B 侧回发查询响应（上行，按账号；best-effort，未连接时静默跳过——
+   * 发起方已由自身超时兜底，不需要 B 侧再抛错）。
+   */
+  emitDeviceQueryResponse(
+    cloudUserId: string,
+    payload: DeviceQueryResponse,
+  ): void {
+    const conn = this.conns.get(cloudUserId);
+    if (!conn?.socket.connected) return;
+    conn.socket.emit(IM_WS_EVENTS.deviceQueryResponse, payload);
   }
 }

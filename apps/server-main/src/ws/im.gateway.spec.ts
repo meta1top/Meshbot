@@ -20,11 +20,13 @@ function makeGateway(overrides: {
   };
   devices?: {
     verifyToken?: jest.Mock;
+    findById?: jest.Mock;
   };
   devicePresence?: {
     setOnline?: jest.Mock;
     setOffline?: jest.Mock;
     heartbeat?: jest.Mock;
+    isOnline?: jest.Mock;
   };
 }) {
   const conversation = {
@@ -58,6 +60,8 @@ function makeGateway(overrides: {
   const devices = {
     verifyToken:
       overrides.devices?.verifyToken ?? jest.fn().mockResolvedValue(undefined),
+    findById:
+      overrides.devices?.findById ?? jest.fn().mockResolvedValue(undefined),
   };
   const devicePresence = {
     setOnline:
@@ -69,6 +73,8 @@ function makeGateway(overrides: {
     heartbeat:
       overrides.devicePresence?.heartbeat ??
       jest.fn().mockResolvedValue(undefined),
+    isOnline:
+      overrides.devicePresence?.isOnline ?? jest.fn().mockResolvedValue(true),
   };
   const gw = new ImGateway(
     jwt as never,
@@ -444,5 +450,130 @@ describe("终审复核 FIX B（集成：真实 PresenceService + DevicePresenceS
     // 设备级 presence 因持续 ping 续期，未过期，仍在线。
     expect(await presence.listOnline("org1")).not.toContain("u1");
     expect(await devicePresence.listOnline("org1")).toContain("d1");
+  });
+});
+
+describe("ImGateway.handleDeviceQueryRequest(L2c 路由 + 门控)", () => {
+  it("同账号 + 在线 → 定向下发到 device:target(附 requesterDeviceId)", async () => {
+    const findById = jest
+      .fn()
+      .mockResolvedValue({ id: "dB", userId: "u1", orgId: "oB" });
+    const isOnline = jest.fn().mockResolvedValue(true);
+    const { gw, toSpy, roomEmitSpy } = makeGateway({
+      devices: { findById },
+      devicePresence: { isOnline },
+    });
+    const client = {
+      data: { orgId: "oA", user: { userId: "u1", deviceId: "dA" } },
+    };
+    await gw.handleDeviceQueryRequest(
+      {
+        correlationId: "c1",
+        targetDeviceId: "dB",
+        kind: "sessions",
+        params: {},
+      } as never,
+      client as never,
+    );
+    expect(isOnline).toHaveBeenCalledWith("oB", "dB");
+    expect(toSpy).toHaveBeenCalledWith("device:dB");
+    expect(roomEmitSpy).toHaveBeenCalledWith("device.query.request", {
+      correlationId: "c1",
+      targetDeviceId: "dB",
+      kind: "sessions",
+      params: {},
+      requesterDeviceId: "dA",
+    });
+  });
+
+  it("跨账号 → 回 ok:false cross_account 给 requester,不下发", async () => {
+    const findById = jest
+      .fn()
+      .mockResolvedValue({ id: "dB", userId: "u2", orgId: "oB" });
+    const { gw, toSpy, roomEmitSpy } = makeGateway({ devices: { findById } });
+    const client = {
+      data: { orgId: "oA", user: { userId: "u1", deviceId: "dA" } },
+    };
+    await gw.handleDeviceQueryRequest(
+      {
+        correlationId: "c1",
+        targetDeviceId: "dB",
+        kind: "sessions",
+        params: {},
+      } as never,
+      client as never,
+    );
+    expect(toSpy).toHaveBeenCalledWith("device:dA");
+    expect(roomEmitSpy).toHaveBeenCalledWith("device.query.response", {
+      correlationId: "c1",
+      requesterDeviceId: "dA",
+      ok: false,
+      reason: "cross_account",
+    });
+    expect(toSpy).not.toHaveBeenCalledWith("device:dB");
+  });
+
+  it("离线 → 回 ok:false offline", async () => {
+    const findById = jest
+      .fn()
+      .mockResolvedValue({ id: "dB", userId: "u1", orgId: "oB" });
+    const isOnline = jest.fn().mockResolvedValue(false);
+    const { gw, toSpy, roomEmitSpy } = makeGateway({
+      devices: { findById },
+      devicePresence: { isOnline },
+    });
+    const client = {
+      data: { orgId: "oA", user: { userId: "u1", deviceId: "dA" } },
+    };
+    await gw.handleDeviceQueryRequest(
+      {
+        correlationId: "c1",
+        targetDeviceId: "dB",
+        kind: "sessions",
+        params: {},
+      } as never,
+      client as never,
+    );
+    expect(roomEmitSpy).toHaveBeenCalledWith("device.query.response", {
+      correlationId: "c1",
+      requesterDeviceId: "dA",
+      ok: false,
+      reason: "offline",
+    });
+  });
+
+  it("非设备连接(无 deviceId)→ 不下发", async () => {
+    const findById = jest.fn();
+    const { gw, toSpy } = makeGateway({ devices: { findById } });
+    const client = { data: { orgId: "oA", user: { userId: "u1" } } };
+    await gw.handleDeviceQueryRequest(
+      {
+        correlationId: "c1",
+        targetDeviceId: "dB",
+        kind: "sessions",
+        params: {},
+      } as never,
+      client as never,
+    );
+    expect(findById).not.toHaveBeenCalled();
+    expect(toSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("ImGateway.handleDeviceQueryResponse(L2c 回流路由)", () => {
+  it("定向回 device:requesterDeviceId", async () => {
+    const { gw, toSpy, roomEmitSpy } = makeGateway({});
+    const body = {
+      correlationId: "c1",
+      requesterDeviceId: "dA",
+      ok: true,
+      data: [],
+    };
+    await gw.handleDeviceQueryResponse(
+      body as never,
+      { data: { user: { deviceId: "dB" } } } as never,
+    );
+    expect(toSpy).toHaveBeenCalledWith("device:dA");
+    expect(roomEmitSpy).toHaveBeenCalledWith("device.query.response", body);
   });
 });

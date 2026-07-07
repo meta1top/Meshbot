@@ -14,6 +14,7 @@ import { SessionMessage } from "./entities/session-message.entity";
 import { LlmCallService } from "./services/llm-call.service";
 import { ModelConfigService } from "./services/model-config.service";
 import { ModelConfigSyncService } from "./services/model-config-sync.service";
+import { RemoteQueryInboundService } from "./services/remote-query-inbound.service";
 import { RunnerService } from "./services/runner.service";
 import { ScheduleExecutor } from "./services/schedule-executor.service";
 import { SessionMessageService } from "./services/session-message.service";
@@ -24,7 +25,13 @@ import { SuggestionService } from "./services/suggestion.service";
 import { AuthModule } from "./auth.module";
 import { SessionGateway } from "./ws/session.gateway";
 
-/** 会话模块：聚合会话相关 Entity / Service / Controller / Gateway。 */
+/**
+ * 会话模块：聚合会话相关 Entity / Service / Controller / Gateway。
+ *
+ * `RemoteQueryInboundService`（L2c B 侧入站查询处理器）注册于此：需要同时
+ * 访问本模块的 `SessionService`/`SessionMessageService` 与 `AuthModule` 导出的
+ * `ImRelayClientService`；不导出，仅作为 `@OnEvent` 监听器存在，无其他消费方。
+ */
 @Module({
   imports: [
     TxTypeOrmModule.forFeature([
@@ -52,6 +59,7 @@ import { SessionGateway } from "./ws/session.gateway";
     StatsService,
     SuggestionService,
     ScheduleExecutor,
+    RemoteQueryInboundService,
   ],
   exports: [
     CheckpointerCleanupService,

@@ -7,9 +7,11 @@ import {
   traceIdMiddleware,
 } from "@meshbot/common";
 import { NestFactory, Reflector } from "@nestjs/core";
+import type { NextFunction, Request, Response } from "express";
 import { I18nService } from "nestjs-i18n";
 import { AppModule } from "./app.module";
 import { setupSwagger } from "./app.swagger";
+import { resolveWebAgentPath } from "./static.module";
 import { resolveMeshbotDir } from "./utils/meshbot-dir";
 import { reportPort } from "./utils/report-port";
 import { resolvePort } from "./utils/resolve-port";
@@ -59,6 +61,35 @@ async function bootstrap() {
   // - ResponseInterceptor：成功响应包 envelope {success, code:0, data, ...}
   // - ErrorsFilter：异常统一为 envelope {success:false, code, message, data, ...}
   app.use(traceIdMiddleware);
+
+  // 同源伺服 web-agent（Next `output:"export"`）的页面路由：对「非 /api、无扩展名」的
+  // GET 路径，去尾斜杠后直接 sendFile 命中的 <route>.html（终止式，不重定向）。
+  // 背景：Next 导出同时产出 login.html（页面）与 login/（RSC 分段数据目录），二者同名会让
+  // serve-static 的目录重定向（/login→/login/）与任何尾斜杠归一互相成环（ERR_TOO_MANY_
+  // REDIRECTS）。直接 sendFile 绕开目录/重定向歧义：/login 与 /login/ 都命中 login.html；
+  // 带扩展名的资产（_next/*.js、*.txt、图标）与 API 交给后续 ServeStaticModule / 路由。
+  // assetPrefix "." 依赖页面处于根路径，故不能改用 trailingSlash:true。
+  const webAgentRoot = resolveWebAgentPath();
+  if (webAgentRoot) {
+    app.use((req: Request, res: Response, next: NextFunction) => {
+      if (req.method !== "GET") return next();
+      const pathPart = req.url.split("?")[0];
+      if (pathPart.startsWith("/api")) return next();
+      const clean = pathPart.replace(/\/+$/, "");
+      const lastSeg = clean.split("/").pop() ?? "";
+      if (lastSeg.includes(".")) return next();
+      const rel = clean === "" ? "index.html" : `${clean.slice(1)}.html`;
+      const file = path.join(webAgentRoot, rel);
+      // 路径穿越防护：join 归一 ".." 后必须仍在根目录内
+      if (!file.startsWith(webAgentRoot)) return next();
+      if (existsSync(file)) {
+        res.sendFile(file);
+        return;
+      }
+      next();
+    });
+  }
+
   const i18n = app.get(I18nService);
   const reflector = app.get(Reflector);
   app.useGlobalPipes(new I18nZodValidationPipe(i18n));

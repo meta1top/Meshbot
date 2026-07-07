@@ -117,7 +117,14 @@ app.on("before-quit", () => {
 
 app.on("activate", async () => {
   if (BrowserWindow.getAllWindows().length === 0) {
-    const agentUrl = await getAgentUrl();
-    mainWindow = createWindow(agentUrl);
+    // 与 whenReady 同样兜底：startAgentRuntime 已幂等（复用既有 runtime），
+    // 但重建窗口链路仍可能抛错，需捕获避免 UnhandledPromiseRejection。
+    try {
+      const agentUrl = await getAgentUrl();
+      mainWindow = createWindow(agentUrl);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      dialog.showErrorBox("无法重新打开窗口", message);
+    }
   }
 });

@@ -16,7 +16,7 @@ const logger = new Logger("StaticModule");
  * 都没命中返回 null —— StaticModule 跳过 ServeStaticModule 注册，只暴露 API。
  * 适用于 server-agent 在 Docker / 远程测试场景无内嵌 web 资源的情形。
  */
-function resolveWebAgentPath(): string | null {
+export function resolveWebAgentPath(): string | null {
   const envOverride = process.env.MESHBOT_WEB_AGENT_DIR;
   if (envOverride && existsSync(envOverride)) return envOverride;
 
