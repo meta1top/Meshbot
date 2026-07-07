@@ -15,6 +15,7 @@ import { LlmCallService } from "./services/llm-call.service";
 import { ModelConfigService } from "./services/model-config.service";
 import { ModelConfigSyncService } from "./services/model-config-sync.service";
 import { RemoteQueryInboundService } from "./services/remote-query-inbound.service";
+import { RemoteRunInboundService } from "./services/remote-run-inbound.service";
 import { RunnerService } from "./services/runner.service";
 import { ScheduleExecutor } from "./services/schedule-executor.service";
 import { SessionMessageService } from "./services/session-message.service";
@@ -28,9 +29,10 @@ import { SessionGateway } from "./ws/session.gateway";
 /**
  * 会话模块：聚合会话相关 Entity / Service / Controller / Gateway。
  *
- * `RemoteQueryInboundService`（L2c B 侧入站查询处理器）注册于此：需要同时
- * 访问本模块的 `SessionService`/`SessionMessageService` 与 `AuthModule` 导出的
- * `ImRelayClientService`；不导出，仅作为 `@OnEvent` 监听器存在，无其他消费方。
+ * `RemoteQueryInboundService`（L2c B 侧入站查询处理器）/ `RemoteRunInboundService`
+ * （L3 B 侧入站远程 run 触发处理器）注册于此：需要同时访问本模块的
+ * `SessionService`/`RunnerService` 与 `AuthModule` 导出的
+ * `ImRelayClientService`；均不导出，仅作为 `@OnEvent` 监听器存在，无其他消费方。
  */
 @Module({
   imports: [
@@ -60,6 +62,7 @@ import { SessionGateway } from "./ws/session.gateway";
     SuggestionService,
     ScheduleExecutor,
     RemoteQueryInboundService,
+    RemoteRunInboundService,
   ],
   exports: [
     CheckpointerCleanupService,
