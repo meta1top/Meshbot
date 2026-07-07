@@ -9,6 +9,7 @@ const POLL_INTERVAL_MS = 500;
 const HEALTH_PATH = "/api/health";
 
 let child: ChildProcess | null = null;
+let currentPort: number | null = null;
 let intentionalStop = false;
 
 /**
@@ -21,7 +22,11 @@ let intentionalStop = false;
  * - 子进程侧在 IPC 断开时自退（见 server-agent main.ts），壳崩溃不留孤儿
  */
 export async function startAgentRuntime(): Promise<{ port: number }> {
-  if (child) throw new Error("agent runtime already started");
+  // 幂等复用：macOS 关窗不退出、点 dock 会经 app.on("activate") 再次调用；
+  // 已就绪则直接返回既有端口，绝不重启或抛错（否则窗口无法重建）。
+  if (child && currentPort != null) return { port: currentPort };
+  // 边缘：child 残留但端口未就绪（上次启动中途失败）→ 先清理再重启。
+  if (child) stopAgentRuntime();
 
   const entry = require.resolve("@meshbot/server-agent");
   const meshbotHome = path.join(os.homedir(), ".meshbot");
@@ -49,6 +54,7 @@ export async function startAgentRuntime(): Promise<{ port: number }> {
   const exitPromise = new Promise<never>((_, reject) => {
     child?.once("exit", (code, signal) => {
       child = null;
+      currentPort = null;
       if (intentionalStop) return;
       reject(
         new Error(
@@ -79,12 +85,20 @@ export async function startAgentRuntime(): Promise<{ port: number }> {
     proc?.on("message", handler);
   });
 
-  const port = await Promise.race([portPromise, exitPromise]);
-  await Promise.race([waitForReady(port, READINESS_TIMEOUT_MS), exitPromise]);
-  return { port };
+  try {
+    const port = await Promise.race([portPromise, exitPromise]);
+    await Promise.race([waitForReady(port, READINESS_TIMEOUT_MS), exitPromise]);
+    currentPort = port;
+    return { port };
+  } catch (err) {
+    // 启动失败：清理残留子进程并重置状态，允许下次重试（不泄漏孤儿进程）。
+    stopAgentRuntime();
+    throw err;
+  }
 }
 
 export function stopAgentRuntime(): void {
+  currentPort = null;
   if (!child) return;
   intentionalStop = true;
   try {
