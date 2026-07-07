@@ -371,6 +371,66 @@ describe("ImGateway.handleDisconnect（device 连接下线）", () => {
     expect(devicePresence.setOffline).not.toHaveBeenCalled();
     expect(presence.setOffline).toHaveBeenCalledWith("o1", "u1");
   });
+
+  it("L3:target(dB)掉线 → 清理其参与的 agent.run 路由(之后 control 该 streamId 被拒)", async () => {
+    const findById = jest
+      .fn()
+      .mockResolvedValue({ id: "dB", userId: "u1", orgId: "oB" });
+    const isOnline = jest.fn().mockResolvedValue(true);
+    const { gw, toSpy, roomEmitSpy } = makeGateway({
+      devices: { findById },
+      devicePresence: { isOnline },
+    });
+    await registerRoute(gw, toSpy, roomEmitSpy);
+
+    await gw.handleDisconnect({
+      data: { orgId: "oB", user: { userId: "u1", deviceId: "dB" } },
+    } as never);
+
+    toSpy.mockClear();
+    await gw.handleAgentRunControl(
+      {
+        streamId: "s1",
+        targetDeviceId: "dB",
+        sessionId: "sess1",
+        kind: "interrupt",
+      } as never,
+      {
+        data: { orgId: "oA", user: { userId: "u1", deviceId: "dA" } },
+      } as never,
+    );
+    expect(toSpy).not.toHaveBeenCalled();
+  });
+
+  it("L3:requester(dA)掉线 → 清理其参与的 agent.run 路由(之后 control 该 streamId 被拒)", async () => {
+    const findById = jest
+      .fn()
+      .mockResolvedValue({ id: "dB", userId: "u1", orgId: "oB" });
+    const isOnline = jest.fn().mockResolvedValue(true);
+    const { gw, toSpy, roomEmitSpy } = makeGateway({
+      devices: { findById },
+      devicePresence: { isOnline },
+    });
+    await registerRoute(gw, toSpy, roomEmitSpy);
+
+    await gw.handleDisconnect({
+      data: { orgId: "oA", user: { userId: "u1", deviceId: "dA" } },
+    } as never);
+
+    toSpy.mockClear();
+    await gw.handleAgentRunControl(
+      {
+        streamId: "s1",
+        targetDeviceId: "dB",
+        sessionId: "sess1",
+        kind: "interrupt",
+      } as never,
+      {
+        data: { orgId: "oA", user: { userId: "u1", deviceId: "dA" } },
+      } as never,
+    );
+    expect(toSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe("ImGateway.handlePing（心跳续期 presence TTL）", () => {
@@ -602,5 +662,398 @@ describe("ImGateway.handleDeviceQueryResponse(L2c 回流路由)", () => {
     );
     expect(toSpy).toHaveBeenCalledWith("device:dA");
     expect(roomEmitSpy).toHaveBeenCalledWith("device.query.response", body);
+  });
+});
+
+describe("ImGateway.handleAgentRunStart(L3 Phase A 路由 + streamId 登记)", () => {
+  it("同账号 + 在线 → 登记 streamId 路由 + 定向下发 device:target(附 requesterDeviceId)", async () => {
+    const findById = jest
+      .fn()
+      .mockResolvedValue({ id: "dB", userId: "u1", orgId: "oB" });
+    const isOnline = jest.fn().mockResolvedValue(true);
+    const { gw, toSpy, roomEmitSpy } = makeGateway({
+      devices: { findById },
+      devicePresence: { isOnline },
+    });
+    const client = {
+      data: { orgId: "oA", user: { userId: "u1", deviceId: "dA" } },
+    };
+
+    await gw.handleAgentRunStart(
+      {
+        streamId: "s1",
+        targetDeviceId: "dB",
+        mode: "create",
+        content: "hi",
+      } as never,
+      client as never,
+    );
+
+    expect(findById).toHaveBeenCalledWith("dB");
+    expect(isOnline).toHaveBeenCalledWith("oB", "dB");
+    expect(toSpy).toHaveBeenCalledWith("device:dB");
+    expect(roomEmitSpy).toHaveBeenCalledWith("agent.run.start", {
+      streamId: "s1",
+      targetDeviceId: "dB",
+      mode: "create",
+      content: "hi",
+      requesterDeviceId: "dA",
+    });
+
+    // streamId 路由已登记：后续 control 帧发起方=dA 应被放行、定向到 dB
+    const controlToSpy = toSpy;
+    controlToSpy.mockClear();
+    roomEmitSpy.mockClear();
+    await gw.handleAgentRunControl(
+      {
+        streamId: "s1",
+        targetDeviceId: "dB",
+        sessionId: "sess1",
+        kind: "interrupt",
+      } as never,
+      client as never,
+    );
+    expect(controlToSpy).toHaveBeenCalledWith("device:dB");
+  });
+
+  it("跨账号 → 不下发、不登记路由", async () => {
+    const findById = jest
+      .fn()
+      .mockResolvedValue({ id: "dB", userId: "u2", orgId: "oB" });
+    const { gw, toSpy } = makeGateway({ devices: { findById } });
+    const client = {
+      data: { orgId: "oA", user: { userId: "u1", deviceId: "dA" } },
+    };
+
+    await gw.handleAgentRunStart(
+      {
+        streamId: "s1",
+        targetDeviceId: "dB",
+        mode: "create",
+        content: "hi",
+      } as never,
+      client as never,
+    );
+
+    expect(toSpy).not.toHaveBeenCalled();
+  });
+
+  it("离线 → 回 agentRunEnd{reason:offline} 给 requester,不登记路由", async () => {
+    const findById = jest
+      .fn()
+      .mockResolvedValue({ id: "dB", userId: "u1", orgId: "oB" });
+    const isOnline = jest.fn().mockResolvedValue(false);
+    const { gw, toSpy, roomEmitSpy } = makeGateway({
+      devices: { findById },
+      devicePresence: { isOnline },
+    });
+    const client = {
+      data: { orgId: "oA", user: { userId: "u1", deviceId: "dA" } },
+    };
+
+    await gw.handleAgentRunStart(
+      {
+        streamId: "s1",
+        targetDeviceId: "dB",
+        mode: "create",
+        content: "hi",
+      } as never,
+      client as never,
+    );
+
+    expect(toSpy).toHaveBeenCalledWith("device:dA");
+    expect(roomEmitSpy).toHaveBeenCalledWith("agent.run.end", {
+      streamId: "s1",
+      requesterDeviceId: "dA",
+      reason: "offline",
+    });
+    expect(toSpy).not.toHaveBeenCalledWith("device:dB");
+  });
+
+  it("非设备连接(无 deviceId)→ 不下发", async () => {
+    const findById = jest.fn();
+    const { gw, toSpy } = makeGateway({ devices: { findById } });
+    const client = { data: { orgId: "oA", user: { userId: "u1" } } };
+
+    await gw.handleAgentRunStart(
+      {
+        streamId: "s1",
+        targetDeviceId: "dB",
+        mode: "create",
+        content: "hi",
+      } as never,
+      client as never,
+    );
+
+    expect(findById).not.toHaveBeenCalled();
+    expect(toSpy).not.toHaveBeenCalled();
+  });
+});
+
+/** 用 handleAgentRunStart 登记一条 s1 路由(requester=dA, target=dB)。 */
+async function registerRoute(
+  gw: ImGateway,
+  toSpy: jest.Mock,
+  roomEmitSpy: jest.Mock,
+): Promise<void> {
+  const client = {
+    data: { orgId: "oA", user: { userId: "u1", deviceId: "dA" } },
+  };
+  await gw.handleAgentRunStart(
+    {
+      streamId: "s1",
+      targetDeviceId: "dB",
+      mode: "create",
+      content: "hi",
+    } as never,
+    client as never,
+  );
+  toSpy.mockClear();
+  roomEmitSpy.mockClear();
+}
+
+describe("ImGateway.handleAgentRunFrame(L3 Phase A 回流路由 + 发送方校验)", () => {
+  function makeGwWithRoute() {
+    const findById = jest
+      .fn()
+      .mockResolvedValue({ id: "dB", userId: "u1", orgId: "oB" });
+    const isOnline = jest.fn().mockResolvedValue(true);
+    return makeGateway({
+      devices: { findById },
+      devicePresence: { isOnline },
+    });
+  }
+
+  it("发送方=登记 target(B) → 定向回登记的 requester(device:dA)", async () => {
+    const { gw, toSpy, roomEmitSpy } = makeGwWithRoute();
+    await registerRoute(gw, toSpy, roomEmitSpy);
+    const body = {
+      streamId: "s1",
+      requesterDeviceId: "dA",
+      seq: 1,
+      sessionId: "sess1",
+      event: "session.token",
+      payload: { text: "x" },
+    };
+
+    await gw.handleAgentRunFrame(
+      body as never,
+      { data: { user: { deviceId: "dB" } } } as never,
+    );
+
+    expect(toSpy).toHaveBeenCalledWith("device:dA");
+    expect(roomEmitSpy).toHaveBeenCalledWith("agent.run.frame", body);
+  });
+
+  it("发送方≠登记 target(伪造 requesterDeviceId 冒充 B) → 不下发", async () => {
+    const { gw, toSpy, roomEmitSpy } = makeGwWithRoute();
+    await registerRoute(gw, toSpy, roomEmitSpy);
+    // 攻击者 dC 伪造一帧,body.requesterDeviceId 指向受害者 dV,企图注入其房间
+    await gw.handleAgentRunFrame(
+      {
+        streamId: "s1",
+        requesterDeviceId: "dV",
+        seq: 1,
+        sessionId: "sess1",
+        event: "session.token",
+        payload: { text: "x" },
+      } as never,
+      { data: { user: { deviceId: "dC" } } } as never,
+    );
+
+    expect(toSpy).not.toHaveBeenCalled();
+  });
+
+  it("未知 streamId → 不下发", async () => {
+    const { gw, toSpy } = makeGwWithRoute();
+    await gw.handleAgentRunFrame(
+      {
+        streamId: "unknown",
+        requesterDeviceId: "dA",
+        seq: 1,
+        sessionId: "sess1",
+        event: "session.token",
+        payload: {},
+      } as never,
+      { data: { user: { deviceId: "dB" } } } as never,
+    );
+
+    expect(toSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("ImGateway.handleAgentRunEnd(L3 Phase A 回流路由 + 发送方校验 + 路由清理)", () => {
+  function makeGwWithRoute() {
+    const findById = jest
+      .fn()
+      .mockResolvedValue({ id: "dB", userId: "u1", orgId: "oB" });
+    const isOnline = jest.fn().mockResolvedValue(true);
+    return makeGateway({
+      devices: { findById },
+      devicePresence: { isOnline },
+    });
+  }
+
+  it("发送方=登记 target(B) → 定向回 device:dA,并删除 streamId 路由", async () => {
+    const { gw, toSpy, roomEmitSpy } = makeGwWithRoute();
+    await registerRoute(gw, toSpy, roomEmitSpy);
+
+    const body = { streamId: "s1", requesterDeviceId: "dA", reason: "done" };
+    await gw.handleAgentRunEnd(
+      body as never,
+      { data: { user: { deviceId: "dB" } } } as never,
+    );
+
+    expect(toSpy).toHaveBeenCalledWith("device:dA");
+    expect(roomEmitSpy).toHaveBeenCalledWith("agent.run.end", body);
+
+    // 路由已删除：requester(dA)再发 control 应被拒(越权/未知)
+    toSpy.mockClear();
+    await gw.handleAgentRunControl(
+      {
+        streamId: "s1",
+        targetDeviceId: "dB",
+        sessionId: "sess1",
+        kind: "interrupt",
+      } as never,
+      {
+        data: { orgId: "oA", user: { userId: "u1", deviceId: "dA" } },
+      } as never,
+    );
+    expect(toSpy).not.toHaveBeenCalled();
+  });
+
+  it("发送方≠登记 target(伪造 end 提前终止) → 不下发、不删路由", async () => {
+    const { gw, toSpy, roomEmitSpy } = makeGwWithRoute();
+    await registerRoute(gw, toSpy, roomEmitSpy);
+
+    await gw.handleAgentRunEnd(
+      { streamId: "s1", requesterDeviceId: "dA", reason: "done" } as never,
+      { data: { user: { deviceId: "dC" } } } as never,
+    );
+
+    expect(toSpy).not.toHaveBeenCalled();
+
+    // 路由未被清空：合法 requester(dA)仍能发 control → 正常下发到 dB
+    await gw.handleAgentRunControl(
+      {
+        streamId: "s1",
+        targetDeviceId: "dB",
+        sessionId: "sess1",
+        kind: "interrupt",
+      } as never,
+      {
+        data: { orgId: "oA", user: { userId: "u1", deviceId: "dA" } },
+      } as never,
+    );
+    expect(toSpy).toHaveBeenCalledWith("device:dB");
+  });
+});
+
+describe("ImGateway.handleAgentRunControl(L3 Phase A 控制帧路由 + 越权拒)", () => {
+  it("已登记 streamId,发起方=登记 requester → 定向下发到 targetDevice(附 requesterDeviceId)", async () => {
+    const findById = jest
+      .fn()
+      .mockResolvedValue({ id: "dB", userId: "u1", orgId: "oB" });
+    const isOnline = jest.fn().mockResolvedValue(true);
+    const { gw, toSpy, roomEmitSpy } = makeGateway({
+      devices: { findById },
+      devicePresence: { isOnline },
+    });
+    const client = {
+      data: { orgId: "oA", user: { userId: "u1", deviceId: "dA" } },
+    };
+    await gw.handleAgentRunStart(
+      {
+        streamId: "s1",
+        targetDeviceId: "dB",
+        mode: "create",
+        content: "hi",
+      } as never,
+      client as never,
+    );
+    toSpy.mockClear();
+    roomEmitSpy.mockClear();
+
+    await gw.handleAgentRunControl(
+      {
+        streamId: "s1",
+        targetDeviceId: "dB",
+        sessionId: "sess1",
+        kind: "confirm",
+        toolCallId: "tc1",
+        decision: "send",
+      } as never,
+      client as never,
+    );
+
+    expect(toSpy).toHaveBeenCalledWith("device:dB");
+    expect(roomEmitSpy).toHaveBeenCalledWith("agent.run.control", {
+      streamId: "s1",
+      targetDeviceId: "dB",
+      sessionId: "sess1",
+      kind: "confirm",
+      toolCallId: "tc1",
+      decision: "send",
+      requesterDeviceId: "dA",
+    });
+  });
+
+  it("发起方≠登记 requester → 越权拒,不下发", async () => {
+    const findById = jest
+      .fn()
+      .mockResolvedValue({ id: "dB", userId: "u1", orgId: "oB" });
+    const isOnline = jest.fn().mockResolvedValue(true);
+    const { gw, toSpy } = makeGateway({
+      devices: { findById },
+      devicePresence: { isOnline },
+    });
+    const requesterClient = {
+      data: { orgId: "oA", user: { userId: "u1", deviceId: "dA" } },
+    };
+    await gw.handleAgentRunStart(
+      {
+        streamId: "s1",
+        targetDeviceId: "dB",
+        mode: "create",
+        content: "hi",
+      } as never,
+      requesterClient as never,
+    );
+    toSpy.mockClear();
+
+    const attackerClient = {
+      data: { orgId: "oC", user: { userId: "u3", deviceId: "dC" } },
+    };
+    await gw.handleAgentRunControl(
+      {
+        streamId: "s1",
+        targetDeviceId: "dB",
+        sessionId: "sess1",
+        kind: "interrupt",
+      } as never,
+      attackerClient as never,
+    );
+
+    expect(toSpy).not.toHaveBeenCalled();
+  });
+
+  it("未知 streamId → 不下发", async () => {
+    const { gw, toSpy } = makeGateway({});
+    const client = {
+      data: { orgId: "oA", user: { userId: "u1", deviceId: "dA" } },
+    };
+
+    await gw.handleAgentRunControl(
+      {
+        streamId: "unknown",
+        targetDeviceId: "dB",
+        sessionId: "sess1",
+        kind: "interrupt",
+      } as never,
+      client as never,
+    );
+
+    expect(toSpy).not.toHaveBeenCalled();
   });
 });

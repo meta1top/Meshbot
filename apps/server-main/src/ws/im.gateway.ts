@@ -15,6 +15,10 @@ import {
   UserService,
 } from "@meshbot/main";
 import {
+  type AgentRunControlInput,
+  type AgentRunEnd,
+  type AgentRunFrame,
+  type AgentRunStartInput,
   IM_WS_EVENTS,
   IM_WS_NAMESPACE,
   type ConversationSummary,
@@ -67,6 +71,17 @@ import type { Socket } from "socket.io";
 @UseFilters(WsExceptionFilter)
 export class ImGateway extends BaseWebSocketGateway {
   private readonly logger = new Logger(ImGateway.name);
+
+  /**
+   * L3 Phase A:agent.run.* 流的 streamId 路由表。
+   * agentRunStart 校验通过后登记 `{requesterDeviceId, targetDeviceId}`；
+   * agentRunControl 据此校验发起方身份(越权拒)并定向下发；agentRunEnd 清理。
+   * 进程内 Map，server-main 多实例部署时需迁移到共享存储(当前 Phase A 范围外)。
+   */
+  private readonly agentRunRoutes = new Map<
+    string,
+    { requesterDeviceId: string; targetDeviceId: string }
+  >();
 
   constructor(
     private readonly jwt: JwtService,
@@ -200,6 +215,19 @@ export class ImGateway extends BaseWebSocketGateway {
           userId: `agent:${deviceId}`,
           online: false,
         } satisfies PresenceState);
+      }
+
+      // L3 Phase A:设备异常掉线时清理它参与的 agent.run 路由（作为发起方或目标），
+      // 防路由表泄漏 / 悬挂 streamId。orgId 无关（路由按 deviceId 键）。
+      if (deviceId) {
+        for (const [sid, route] of this.agentRunRoutes) {
+          if (
+            route.requesterDeviceId === deviceId ||
+            route.targetDeviceId === deviceId
+          ) {
+            this.agentRunRoutes.delete(sid);
+          }
+        }
       }
 
       if (!userId || !orgId) return;
@@ -338,6 +366,113 @@ export class ImGateway extends BaseWebSocketGateway {
     this.server
       .to(`device:${body.requesterDeviceId}`)
       .emit(IM_WS_EVENTS.deviceQueryResponse, body);
+  }
+
+  /**
+   * L3 Phase A:A 发起远程 run → 校验同账号 + 在线 → 登记 streamId 路由 →
+   * 定向下发到目标设备(附 requesterDeviceId)。
+   * 离线时直接回 agentRunEnd{reason:offline} 给 requester，不登记路由
+   * （A 侧无需再靠超时兜底判定失败）。
+   */
+  @SubscribeMessage(IM_WS_EVENTS.agentRunStart)
+  @UseGuards(WsAuthGuard)
+  async handleAgentRunStart(
+    @MessageBody() body: AgentRunStartInput,
+    @ConnectedSocket() client: Socket,
+  ): Promise<void> {
+    const requester = client.data.user as {
+      userId?: string;
+      deviceId?: string;
+    };
+    const requesterDeviceId = requester?.deviceId;
+    if (!requesterDeviceId) return;
+    const target = await this.devices.findById(body.targetDeviceId);
+    if (!target || target.userId !== requester.userId) return; // 静默拒(A 侧超时兜底)
+    const online = await this.devicePresence.isOnline(
+      target.orgId ?? "",
+      target.id,
+    );
+    if (!online) {
+      this.server
+        .to(`device:${requesterDeviceId}`)
+        .emit(IM_WS_EVENTS.agentRunEnd, {
+          streamId: body.streamId,
+          requesterDeviceId,
+          reason: "offline",
+        } satisfies AgentRunEnd);
+      return;
+    }
+    this.agentRunRoutes.set(body.streamId, {
+      requesterDeviceId,
+      targetDeviceId: target.id,
+    });
+    this.server
+      .to(`device:${target.id}`)
+      .emit(IM_WS_EVENTS.agentRunStart, { ...body, requesterDeviceId });
+  }
+
+  /**
+   * L3 Phase A:B 侧运行帧回流 → 按 streamId 查路由，校验发送方确为登记的目标设备(B)，
+   * 用**登记的** requesterDeviceId 定向回发起方。
+   * 仅挂 WsAuthGuard 不够：任何已认证连接都能伪造 requesterDeviceId 向任意
+   * device 房间注入帧，故必须比对发送方 = 登记的 targetDeviceId。
+   */
+  @SubscribeMessage(IM_WS_EVENTS.agentRunFrame)
+  @UseGuards(WsAuthGuard)
+  async handleAgentRunFrame(
+    @MessageBody() body: AgentRunFrame,
+    @ConnectedSocket() client: Socket,
+  ): Promise<void> {
+    const route = this.agentRunRoutes.get(body.streamId);
+    const senderDeviceId = (client.data.user as { deviceId?: string })
+      ?.deviceId;
+    if (!route || senderDeviceId !== route.targetDeviceId) return; // 仅登记的目标设备(B)可发帧
+    this.server
+      .to(`device:${route.requesterDeviceId}`)
+      .emit(IM_WS_EVENTS.agentRunFrame, body);
+  }
+
+  /**
+   * L3 Phase A:B 侧流终止回流 → 校验发送方确为登记的目标设备(B)后，先清理该
+   * streamId 的路由登记，再用**登记的** requesterDeviceId 定向回发起方。
+   * 同 handleAgentRunFrame：防他人伪造 agent.run.end 提前终止 + 清空路由(DoS)。
+   */
+  @SubscribeMessage(IM_WS_EVENTS.agentRunEnd)
+  @UseGuards(WsAuthGuard)
+  async handleAgentRunEnd(
+    @MessageBody() body: AgentRunEnd,
+    @ConnectedSocket() client: Socket,
+  ): Promise<void> {
+    const route = this.agentRunRoutes.get(body.streamId);
+    const senderDeviceId = (client.data.user as { deviceId?: string })
+      ?.deviceId;
+    if (!route || senderDeviceId !== route.targetDeviceId) return; // 仅登记的目标设备(B)可终止
+    this.agentRunRoutes.delete(body.streamId);
+    this.server
+      .to(`device:${route.requesterDeviceId}`)
+      .emit(IM_WS_EVENTS.agentRunEnd, body);
+  }
+
+  /**
+   * L3 Phase A:A 侧运行中控制帧(confirm/answer/interrupt) → 按 streamId 查路由，
+   * 发起方必须是登记该 streamId 的 requester，否则视为越权/未知流静默拒绝；
+   * 通过后定向下发到登记的目标设备(附 requesterDeviceId)。
+   */
+  @SubscribeMessage(IM_WS_EVENTS.agentRunControl)
+  @UseGuards(WsAuthGuard)
+  async handleAgentRunControl(
+    @MessageBody() body: AgentRunControlInput,
+    @ConnectedSocket() client: Socket,
+  ): Promise<void> {
+    const requester = client.data.user as { deviceId?: string };
+    const route = this.agentRunRoutes.get(body.streamId);
+    if (!route || route.requesterDeviceId !== requester?.deviceId) return; // 越权/未知拒
+    this.server
+      .to(`device:${route.targetDeviceId}`)
+      .emit(IM_WS_EVENTS.agentRunControl, {
+        ...body,
+        requesterDeviceId: requester.deviceId,
+      });
   }
 
   /**
