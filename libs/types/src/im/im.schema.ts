@@ -94,3 +94,48 @@ export interface DeviceQueryResponse {
   reason?: "offline" | "cross_account" | "error";
   data?: unknown;
 }
+
+/** L3:A→B 触发远程 run。create 由 B 新建会话并经首帧回报 sessionId;append 带 B 上会话 id。 */
+export const AgentRunStartSchema = z.object({
+  streamId: z.string().min(1),
+  targetDeviceId: z.string().min(1),
+  mode: z.enum(["create", "append"]),
+  sessionId: z.string().optional(),
+  content: z.string(),
+});
+export type AgentRunStartInput = z.infer<typeof AgentRunStartSchema>;
+export interface AgentRunStartForwarded extends AgentRunStartInput {
+  requesterDeviceId: string;
+}
+
+/** L3:A→B 运行中控制(confirm/answer/interrupt)。 */
+export const AgentRunControlSchema = z.object({
+  streamId: z.string().min(1),
+  targetDeviceId: z.string().min(1),
+  sessionId: z.string().min(1),
+  kind: z.enum(["confirm", "answer", "interrupt"]),
+  toolCallId: z.string().optional(),
+  decision: z.enum(["send", "cancel"]).optional(),
+  content: z.string().optional(),
+  answers: z.array(z.string()).optional(),
+});
+export type AgentRunControlInput = z.infer<typeof AgentRunControlSchema>;
+export interface AgentRunControlForwarded extends AgentRunControlInput {
+  requesterDeviceId: string;
+}
+
+/** L3:B→A 运行帧(透传 SESSION_WS_EVENTS.* payload;event 用其常量字符串)。 */
+export interface AgentRunFrame {
+  streamId: string;
+  requesterDeviceId: string;
+  seq: number;
+  sessionId: string;
+  event: string;
+  payload: unknown;
+}
+/** L3:B→A 流终止。 */
+export interface AgentRunEnd {
+  streamId: string;
+  requesterDeviceId: string;
+  reason: "done" | "error" | "interrupted" | "offline";
+}
