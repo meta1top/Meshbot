@@ -3,7 +3,7 @@
 # 起动（同源部署无需注入任何 env）：docker run --rm -p 3000:3000 meshbot/web-main:local
 
 # ============ Stage 1: deps ===============================================
-FROM node:22-alpine AS deps
+FROM node:24-alpine AS deps
 RUN corepack enable
 WORKDIR /repo
 # lockfile + workspace 元数据 + 各 package.json,最大化 layer 缓存。
@@ -36,7 +36,7 @@ RUN pnpm --filter @meshbot/types build \
 RUN pnpm --filter @meshbot/web-main build
 
 # ============ Stage 3: runtime ============================================
-FROM node:22-alpine AS runtime
+FROM node:24-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
     PORT=3000 \
@@ -46,6 +46,8 @@ COPY --from=build /repo/apps/web-main/.next/standalone ./
 # standalone 不含 public,单独拷。
 COPY --from=build /repo/apps/web-main/public ./apps/web-main/public
 EXPOSE 3000
+# 用 127.0.0.1 而非 localhost：alpine 里 localhost 优先解析 IPv6 ::1,而 Next
+# 按 HOSTNAME=0.0.0.0 只绑 IPv4 → localhost 探测被拒致 unhealthy。
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD wget -qO- http://localhost:3000/ >/dev/null 2>&1 || exit 1
+  CMD wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 || exit 1
 CMD ["node", "apps/web-main/server.js"]

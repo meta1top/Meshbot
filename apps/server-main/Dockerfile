@@ -19,7 +19,7 @@
 #     meshbot/server-main:local
 
 # ============ Stage 1: deps ===============================================
-FROM node:22-alpine AS deps
+FROM node:24-alpine AS deps
 RUN corepack enable
 WORKDIR /repo
 
@@ -73,7 +73,7 @@ RUN cp -r /repo/apps/server-main/dist /out/dist \
  && cp -r /repo/libs/assets/dist      /out/node_modules/@meshbot/assets/dist
 
 # ============ Stage 3: runtime ============================================
-FROM node:22-alpine AS runtime
+FROM node:24-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
     PORT=3200
