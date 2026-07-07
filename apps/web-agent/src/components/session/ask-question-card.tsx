@@ -3,6 +3,7 @@
 import type { AskQuestion } from "@meshbot/types-agent";
 import { Check, Loader2, Send } from "lucide-react";
 import { useState } from "react";
+import { useRemoteSession } from "@/hooks/remote-session-context";
 import { confirmAnswers } from "@/rest/session";
 import type { ToolCallView } from "./message-list";
 
@@ -21,6 +22,7 @@ export function AskQuestionCard({
   const [picks, setPicks] = useState<Record<number, Set<string>>>({});
   const [others, setOthers] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState(false);
+  const remote = useRemoteSession();
 
   const pending = tool.status === "running";
   const result = parseStatus(tool.result);
@@ -52,7 +54,11 @@ export function AskQuestionCard({
       return { selected, other };
     });
     try {
-      await confirmAnswers(sessionId, tool.toolCallId, answers);
+      if (remote) {
+        await remote.answer(tool.toolCallId, answers);
+      } else {
+        await confirmAnswers(sessionId, tool.toolCallId, answers);
+      }
     } catch {
       setBusy(false);
     }
