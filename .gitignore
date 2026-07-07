@@ -50,6 +50,7 @@ Thumbs.db
 
 # worktrees
 .worktrees/
+.claude/worktrees/
 
 # debug
 npm-debug.log*
