@@ -1,71 +1,37 @@
-# meshbot 生产形态 docker-compose 编排 —— Phase 4 Track C3。
+# meshbot 云端轨生产编排 —— server-main + web-main,复用 infra 共享服务。
 #
-# 用法（在 repo root）：
-#   cp infra/prod/.env.prod.example infra/prod/.env.prod
-#   # 改 .env.prod 里的 secret
+# 前置：infra 的 pgvector/redis/nacos/minio 已在外部网络 `meta1` 常驻;
+#       Nacos 里已配 meshbot-server-main.yaml;meshbot_main 库已建 + 迁移已跑（见 DEPLOY.md）。
+#
+# 用法（deploy job 或手动,repo root）：
+#   docker compose -f infra/prod/docker-compose.prod.yml --env-file infra/prod/.env.prod pull
 #   docker compose -f infra/prod/docker-compose.prod.yml --env-file infra/prod/.env.prod up -d
-#
-# 数据库迁移：
-#   docker compose -f infra/prod/docker-compose.prod.yml exec server-main \
-#     node -e "console.log('迁移在容器启动时手动跑，见 README')"
-#   # 推荐：用 pnpm migration:run:main 在 build 节点上跑（CI 流水线），
-#   # 或在 docker-compose 加 init container（Phase 5+）
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: meshbot-prod-postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-    # 默认不暴露端口（仅容器网络内部访问）；如需 host 调试取消注释
-    # ports:
-    #   - "5432:5432"
-
-  redis:
-    image: redis:7-alpine
-    container_name: meshbot-prod-redis
-    restart: unless-stopped
-    volumes:
-      - redis-data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-    # ports:
-    #   - "6379:6379"
-
   server-main:
-    build:
-      context: ../..
-      dockerfile: apps/server-main/Dockerfile
-    container_name: meshbot-prod-server-main
+    image: ${REGISTRY_IMAGE}/server-main:${IMAGE_TAG}
+    container_name: meshbot-server-main
     restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+    networks:
+      - meta1
     environment:
       NODE_ENV: production
-      PORT: 3200
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRES: ${JWT_EXPIRES:-7d}
-    ports:
-      - "${SERVER_MAIN_PORT:-3200}:3200"
+      NACOS_SERVER_ADDR: ${NACOS_SERVER_ADDR}
+      NACOS_NAMESPACE: ${NACOS_NAMESPACE}
+      NACOS_USERNAME: ${NACOS_USERNAME}
+      NACOS_PASSWORD: ${NACOS_PASSWORD}
+      NACOS_DATA_ID: ${NACOS_DATA_ID:-meshbot-server-main.yaml}
+      MESHBOT_NODE_ID: ${MESHBOT_NODE_ID:-0}
+    # 不暴露宿主端口：nginx 在 meta1 内按容器名反代（meshbot-server-main:3200）。
 
-volumes:
-  postgres-data:
-  redis-data:
+  web-main:
+    image: ${REGISTRY_IMAGE}/web-main:${IMAGE_TAG}
+    container_name: meshbot-web-main
+    restart: unless-stopped
+    networks:
+      - meta1
+    # 不暴露宿主端口：nginx 反代 meshbot-web-main:3000。
+
+networks:
+  meta1:
+    external: true
