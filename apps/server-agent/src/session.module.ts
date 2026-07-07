@@ -17,6 +17,7 @@ import { ModelConfigSyncService } from "./services/model-config-sync.service";
 import { RemoteQueryInboundService } from "./services/remote-query-inbound.service";
 import { RemoteRunControlService } from "./services/remote-run-control.service";
 import { RemoteRunInboundService } from "./services/remote-run-inbound.service";
+import { RemoteRunRegistryService } from "./services/remote-run-registry.service";
 import { RunnerService } from "./services/runner.service";
 import { ScheduleExecutor } from "./services/schedule-executor.service";
 import { SessionMessageService } from "./services/session-message.service";
@@ -35,6 +36,8 @@ import { SessionGateway } from "./ws/session.gateway";
  * 运行控制处理器，Phase A 仅实现 interrupt）注册于此：需要同时访问本模块的
  * `SessionService`/`RunnerService` 与 `AuthModule` 导出的
  * `ImRelayClientService`；均不导出，仅作为 `@OnEvent` 监听器存在，无其他消费方。
+ * `RemoteRunRegistryService`（B 侧 streamId→sessionId 进程内注册表，Phase B
+ * M3 校验真源）与两者同列，仅供模块内注入，同样不导出。
  */
 @Module({
   imports: [
@@ -66,6 +69,7 @@ import { SessionGateway } from "./ws/session.gateway";
     RemoteQueryInboundService,
     RemoteRunInboundService,
     RemoteRunControlService,
+    RemoteRunRegistryService,
   ],
   exports: [
     CheckpointerCleanupService,

@@ -1,3 +1,4 @@
+import { ConfirmationService } from "./confirmation.service";
 import { RemoteRunControlService } from "./remote-run-control.service";
 
 function make() {
@@ -5,8 +6,15 @@ function make() {
   const account = {
     run: jest.fn((_uid: string, fn: () => void) => fn()),
   };
-  const svc = new RemoteRunControlService(runner as never, account as never);
-  return { svc, runner, account };
+  const confirmation = { resolve: jest.fn(() => true) };
+  const registry = { sessionIdOf: jest.fn(() => "sess-1") };
+  const svc = new RemoteRunControlService(
+    runner as never,
+    account as never,
+    confirmation as never,
+    registry as never,
+  );
+  return { svc, runner, account, confirmation, registry };
 }
 
 const fwd = (over: object) => ({
@@ -32,24 +40,90 @@ describe("RemoteRunControlService", () => {
       expect(runner.interrupt).toHaveBeenCalledWith("sess-1");
     });
 
-    it("kind=confirm → Phase A 暂不处理，不调用 runner.interrupt（no-op）", () => {
-      const { svc, runner, account } = make();
+    it("confirm → 用正确 key resolve，decision 映射到 action", () => {
+      const { svc, confirmation } = make();
 
-      svc.onAgentRunControl(
-        fwd({ kind: "confirm", toolCallId: "t1", decision: "send" }) as never,
+      svc.onAgentRunControl({
+        cloudUserId: "u1",
+        forwarded: {
+          streamId: "st1",
+          targetDeviceId: "d",
+          sessionId: "sess-1",
+          requesterDeviceId: "dA",
+          kind: "confirm",
+          toolCallId: "tc1",
+          decision: "send",
+          content: "改写",
+        },
+      } as never);
+
+      expect(confirmation.resolve).toHaveBeenCalledWith(
+        ConfirmationService.key("u1", "sess-1", "tc1"),
+        { action: "send", content: "改写" },
       );
-
-      expect(account.run).toHaveBeenCalledWith("u1", expect.any(Function));
-      expect(runner.interrupt).not.toHaveBeenCalled();
     });
 
-    it("kind=answer → Phase A 暂不处理，不调用 runner.interrupt（no-op）", () => {
-      const { svc, runner, account } = make();
+    it("answer → resolve 携带结构化 answers", () => {
+      const { svc, confirmation } = make();
+      const answers = [{ selected: ["A"], other: "o" }];
 
-      svc.onAgentRunControl(fwd({ kind: "answer", answers: ["a"] }) as never);
+      svc.onAgentRunControl({
+        cloudUserId: "u1",
+        forwarded: {
+          streamId: "st1",
+          targetDeviceId: "d",
+          sessionId: "sess-1",
+          requesterDeviceId: "dA",
+          kind: "answer",
+          toolCallId: "tc1",
+          answers,
+        },
+      } as never);
 
-      expect(account.run).toHaveBeenCalledWith("u1", expect.any(Function));
-      expect(runner.interrupt).not.toHaveBeenCalled();
+      expect(confirmation.resolve).toHaveBeenCalledWith(
+        ConfirmationService.key("u1", "sess-1", "tc1"),
+        { answers },
+      );
+    });
+
+    it("M3：registry 的 sessionId 与 control.sessionId 不符 → 不 resolve", () => {
+      const { svc, confirmation, registry } = make();
+      registry.sessionIdOf.mockReturnValue("OTHER-sess");
+
+      svc.onAgentRunControl({
+        cloudUserId: "u1",
+        forwarded: {
+          streamId: "st1",
+          targetDeviceId: "d",
+          sessionId: "sess-1",
+          requesterDeviceId: "dA",
+          kind: "confirm",
+          toolCallId: "tc1",
+          decision: "send",
+        },
+      } as never);
+
+      expect(confirmation.resolve).not.toHaveBeenCalled();
+    });
+
+    it("confirm 缺 toolCallId → 不 resolve、不抛", () => {
+      const { svc, confirmation } = make();
+
+      expect(() =>
+        svc.onAgentRunControl({
+          cloudUserId: "u1",
+          forwarded: {
+            streamId: "st1",
+            targetDeviceId: "d",
+            sessionId: "sess-1",
+            requesterDeviceId: "dA",
+            kind: "confirm",
+            decision: "send",
+          },
+        } as never),
+      ).not.toThrow();
+
+      expect(confirmation.resolve).not.toHaveBeenCalled();
     });
 
     it("runner.interrupt 抛错 → 不冒泡出 handler", () => {

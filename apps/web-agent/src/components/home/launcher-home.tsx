@@ -11,11 +11,7 @@ import { ChatInput } from "@/components/common/chat-input";
 import { ComposerActions } from "@/components/common/composer-actions";
 import { SuggestionChips } from "@/components/common/suggestion-chips";
 import { ComposerTargetBar } from "@/components/home/composer-target-bar";
-import {
-  fetchRemoteSessions,
-  startRemoteRun,
-  waitForNewRemoteSession,
-} from "@/rest/remote-devices";
+import { fetchRemoteRun, startRemoteRun } from "@/rest/remote-devices";
 import { createSession } from "@/rest/session";
 
 /** 起手台中区：品牌大标题 + 场景分段 + 建议 chips + 重 composer；发送即建会话跳转。 */
@@ -31,25 +27,24 @@ export function LauncherHome() {
 
   /**
    * L3：选中远程 agent（非本机）时发送 → 走远程 run 隧道（mode=create），
-   * 而非本地 createSession。B 新建的会话 id 只经 WS 影子帧回报（首帧存在
-   * session room 订阅时序缺口，见 waitForNewRemoteSession 注释），改用轮询
-   * fetchRemoteSessions 兜底发现后再导航——同时把本次 run 的 streamId 一并
-   * 带到 URL，供刚打开的远程会话视图在「尚未发送过第二条消息」前仍能中断
-   * 这第一轮 run（该 streamId 是当前唯一能路由到 B 的凭证）。
+   * 而非本地 createSession。B 新建的会话 id 不再靠轮询 B 的会话列表兜底
+   * 发现，而是轮询 A 本机的 `fetchRemoteRun`（B 首帧一到，A 端点即回填
+   * sessionId，近乎即时）——同时把本次 run 的 streamId 一并带到 URL，供
+   * 刚打开的远程会话视图在「尚未发送过第二条消息」前仍能中断这第一轮 run
+   * （该 streamId 是当前唯一能路由到 B 的凭证）。
    */
   const sendToRemoteDevice = async (deviceId: string, text: string) => {
-    // 基线快照：绝不吞异常兜成空 Set——空基线会让 waitForNewRemoteSession 把
-    // B 列表最上面的旧会话误当成"刚新建"（B 只要以前有过会话就必现，是确定性
-    // 误导航而非概率竞态），用户被导进无关历史、自己发的消息却落在另一个真正
-    // 的新会话里界面上找不到。失败直接抛，走 handleSend 已有的 catch（发送失败
-    // 提示 + 留在起手台可重试）。
-    const list = await fetchRemoteSessions(deviceId);
-    const baseline = new Set(list.map((s) => s.id));
     const { streamId } = await startRemoteRun(deviceId, {
       mode: "create",
       content: text,
     });
-    const sessionId = await waitForNewRemoteSession(deviceId, baseline);
+    // 轮询 A 本机（近乎即时：B 首帧一到 onFrame 即回填 sessionId）
+    let sessionId: string | null = null;
+    for (let i = 0; i < 40 && !sessionId; i++) {
+      const run = await fetchRemoteRun(deviceId, { streamId });
+      sessionId = run?.sessionId ?? null;
+      if (!sessionId) await new Promise((r) => setTimeout(r, 250));
+    }
     if (!sessionId) {
       throw new Error("远程会话未在预期时间内创建（目标设备可能已离线）");
     }

@@ -32,3 +32,57 @@ export class RemoteInterruptDto extends createI18nZodDto(
   RemoteInterruptSchema,
 ) {}
 export interface RemoteInterruptDto extends RemoteInterruptInput {}
+
+/** POST /remote-devices/:id/run/confirm 请求体：提交工具确认（im_send / drive_share / drive_create_share）。 */
+export const RemoteConfirmSchema = z.object({
+  streamId: z.string().min(1),
+  sessionId: z.string().min(1),
+  toolCallId: z.string().min(1),
+  decision: z.enum(["send", "cancel"]),
+  content: z.string().optional(),
+});
+export type RemoteConfirmInput = z.infer<typeof RemoteConfirmSchema>;
+
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
+export class RemoteConfirmDto extends createI18nZodDto(RemoteConfirmSchema) {}
+export interface RemoteConfirmDto extends RemoteConfirmInput {}
+
+/**
+ * 远程 ask_question 回答项。本地就地定义（不复用 `@meshbot/types` 的
+ * `AgentRunAnswerItemSchema`——那是 relay 上行的线路层 schema，此处是 A 侧
+ * HTTP 请求体，两者形状须保持一致但归属不同层）。
+ */
+export const RemoteAnswerItemSchema = z.object({
+  selected: z.array(z.string()),
+  other: z.string().optional(),
+});
+
+/** POST /remote-devices/:id/run/answer 请求体：提交 ask_question 回答。 */
+export const RemoteAnswerSchema = z.object({
+  streamId: z.string().min(1),
+  sessionId: z.string().min(1),
+  toolCallId: z.string().min(1),
+  answers: z.array(RemoteAnswerItemSchema),
+});
+export type RemoteAnswerInput = z.infer<typeof RemoteAnswerSchema>;
+
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
+export class RemoteAnswerDto extends createI18nZodDto(RemoteAnswerSchema) {}
+export interface RemoteAnswerDto extends RemoteAnswerInput {}
+
+/** GET /remote-devices/:id/runs 查询参数：streamId 或 sessionId 至少其一。 */
+export const RemoteRunsQuerySchema = z
+  .object({
+    streamId: z.string().min(1).optional(),
+    sessionId: z.string().min(1).optional(),
+  })
+  .refine((v) => !!v.streamId || !!v.sessionId, {
+    message: "streamId 或 sessionId 至少其一",
+  });
+export type RemoteRunsQueryInput = z.infer<typeof RemoteRunsQuerySchema>;
+
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
+export class RemoteRunsQueryDto extends createI18nZodDto(
+  RemoteRunsQuerySchema,
+) {}
+export interface RemoteRunsQueryDto extends RemoteRunsQueryInput {}

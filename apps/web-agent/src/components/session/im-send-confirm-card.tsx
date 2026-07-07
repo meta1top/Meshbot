@@ -4,6 +4,7 @@ import { useAtomValue } from "jotai";
 import { Check, Loader2, Send, X } from "lucide-react";
 import { useState } from "react";
 import { conversationsAtom } from "@/atoms/im";
+import { useRemoteSession } from "@/hooks/remote-session-context";
 import { confirmSend } from "@/rest/session";
 import type { ToolCallView } from "./message-list";
 
@@ -25,6 +26,7 @@ export function ImSendConfirmCard({
     target?.name ?? target?.peer?.displayName ?? args.conversationId ?? "会话";
   const [text, setText] = useState(args.content ?? "");
   const [busy, setBusy] = useState(false);
+  const remote = useRemoteSession();
 
   const pending = tool.status === "running";
   const result = parseStatus(tool.result);
@@ -32,7 +34,11 @@ export function ImSendConfirmCard({
   const act = async (decision: "send" | "cancel") => {
     setBusy(true);
     try {
-      await confirmSend(sessionId, tool.toolCallId, decision, text);
+      if (remote) {
+        await remote.confirm(tool.toolCallId, decision, text);
+      } else {
+        await confirmSend(sessionId, tool.toolCallId, decision, text);
+      }
     } catch {
       setBusy(false);
     }

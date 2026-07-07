@@ -38,6 +38,7 @@ import {
 } from "@/lib/subagent-card";
 import {
   fetchRemoteHistory,
+  fetchRemoteRun,
   interruptRemoteRun,
   startRemoteRun,
 } from "@/rest/remote-devices";
@@ -169,6 +170,10 @@ export interface SessionStream {
   interrupt: () => void;
   /** 上拉加载更早历史（含滚动锚定，需传 scrollContainerRef）。remote 分支 Phase A 暂不支持，no-op。 */
   loadMoreHistory: () => Promise<void>;
+  /** 本地会话为 null；远程会话为目标设备 id，供 RemoteSessionProvider 使用。 */
+  remoteDeviceId: string | null;
+  /** 读取当前有效的 streamId（remote 分支才有意义），供确认/作答卡片点击时取「实时」值，而非渲染时的闭包快照。 */
+  getStreamId: () => string | null;
 }
 
 /**
@@ -317,6 +322,18 @@ export function useSessionStream(
     setHistoryLoading(true);
 
     if (remoteDeviceId) {
+      // reclaim：刷新页面 / 直接进入远程会话时 remoteStreamIdRef 没有初值
+      // （非起手台 create 场景），靠 fetchRemoteRun 按 sessionId 查回 B 侧当前
+      // 活跃 run 的 streamId，回填后 confirm/interrupt 才可路由。查无 / 失败
+      // 只吞掉——不影响历史渲染，用户仍能看会话，只是深层 HITL 卡片暂不可点。
+      if (remoteStreamIdRef.current == null) {
+        fetchRemoteRun(remoteDeviceId, { sessionId })
+          .then((run) => {
+            if (cancelled) return;
+            if (run) remoteStreamIdRef.current = run.streamId;
+          })
+          .catch(() => {});
+      }
       // L3 remote：首屏历史走 L2c fetchRemoteHistory（防御式映射 B 侧原始行），
       // 不查本地 fetchPending（远程无该概念）；不支持翻页（Phase A 范围外，
       // loadMoreHistory 对 remote 直接 no-op）。
@@ -1031,5 +1048,7 @@ export function useSessionStream(
     send,
     interrupt,
     loadMoreHistory,
+    remoteDeviceId: remoteDeviceId ?? null,
+    getStreamId: () => remoteStreamIdRef.current,
   };
 }

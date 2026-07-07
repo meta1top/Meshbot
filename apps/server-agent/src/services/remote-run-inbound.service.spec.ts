@@ -1,5 +1,6 @@
 import { SESSION_WS_EVENTS } from "@meshbot/types-agent";
 import { RemoteRunInboundService } from "./remote-run-inbound.service";
+import { RemoteRunRegistryService } from "./remote-run-registry.service";
 
 /**
  * fake EventEmitter2：真实维护 event→handler 集合，支持 on/off/emit，
@@ -37,14 +38,16 @@ function make() {
     run: jest.fn(async (_uid: string, fn: () => Promise<void>) => fn()),
   };
   const emitter = makeEmitter();
+  const registry = new RemoteRunRegistryService();
   const svc = new RemoteRunInboundService(
     sessions as never,
     runner as never,
     relay as never,
     account as never,
     emitter as never,
+    registry,
   );
-  return { svc, sessions, runner, relay, account, emitter };
+  return { svc, sessions, runner, relay, account, emitter, registry };
 }
 
 const fwd = (over: object) => ({
@@ -300,6 +303,29 @@ describe("RemoteRunInboundService", () => {
         "u1",
         expect.objectContaining({ streamId: "stream-1", sessionId: "s-1" }),
       );
+    });
+  });
+
+  describe("streamId↔sessionId 注册表(M3 校验真源)", () => {
+    it("onAgentRunRequest 建订阅后 registry 可反查 sessionId", async () => {
+      const { svc, registry } = make();
+      await svc.onAgentRunRequest(fwd({}) as never); // sessionId = s-new
+
+      expect(registry.sessionIdOf("stream-1")).toBe("s-new");
+    });
+
+    it("终止事件 run.done 退订后 registry 查不到该 streamId", async () => {
+      const { svc, emitter, registry } = make();
+      await svc.onAgentRunRequest(fwd({}) as never);
+      expect(registry.sessionIdOf("stream-1")).toBe("s-new");
+
+      emitter.emit(SESSION_WS_EVENTS.runDone, {
+        sessionId: "s-new",
+        messageId: "m1",
+        content: "done",
+      });
+
+      expect(registry.sessionIdOf("stream-1")).toBeUndefined();
     });
   });
 });

@@ -2,6 +2,7 @@
 
 import { Check, Loader2, Share2, X } from "lucide-react";
 import { useState } from "react";
+import { useRemoteSession } from "@/hooks/remote-session-context";
 import { confirmSend } from "@/rest/session";
 import type { ToolCallView } from "./message-list";
 
@@ -26,13 +27,18 @@ export function DriveShareCard({
   const permission = args.permission === "editor" ? "编辑者" : "查看者";
 
   const [busy, setBusy] = useState(false);
+  const remote = useRemoteSession();
   const pending = tool.status === "running";
   const result = parseStatus(tool.result);
 
   const act = async (decision: "send" | "cancel") => {
     setBusy(true);
     try {
-      await confirmSend(sessionId, tool.toolCallId, decision);
+      if (remote) {
+        await remote.confirm(tool.toolCallId, decision);
+      } else {
+        await confirmSend(sessionId, tool.toolCallId, decision);
+      }
     } catch {
       setBusy(false);
     }

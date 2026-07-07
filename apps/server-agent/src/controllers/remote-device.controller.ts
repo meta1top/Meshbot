@@ -1,10 +1,20 @@
 import { AccountContextService } from "@meshbot/agent";
 import type { HistoryResponse, SessionSummary } from "@meshbot/types-agent";
 import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
+import { ApiOperation } from "@nestjs/swagger";
 
 import { RemoteDeviceQueryService } from "../cloud/remote-device-query.service";
-import { RemoteRunService } from "../cloud/remote-run.service";
-import { RemoteInterruptDto, RemoteRunDto } from "../dto/remote-run.dto";
+import {
+  RemoteRunService,
+  type RemoteRunView,
+} from "../cloud/remote-run.service";
+import {
+  RemoteAnswerDto,
+  RemoteConfirmDto,
+  RemoteInterruptDto,
+  RemoteRunDto,
+  RemoteRunsQueryDto,
+} from "../dto/remote-run.dto";
 
 /**
  * L2c/L3：向本地 server-agent 发起「查在线远程设备会话 / 历史」及「远程 run
@@ -81,5 +91,50 @@ export class RemoteDeviceController {
       kind: "interrupt",
     });
     return { ok: true };
+  }
+
+  /** 远程会话：提交工具确认（im_send / drive_share / drive_create_share）。 */
+  @Post("remote-devices/:id/run/confirm")
+  @ApiOperation({ summary: "远程工具确认" })
+  confirm(
+    @Param("id") id: string,
+    @Body() dto: RemoteConfirmDto,
+  ): { ok: true } {
+    this.remoteRun.sendControl(this.account.getOrThrow(), {
+      streamId: dto.streamId,
+      targetDeviceId: id,
+      sessionId: dto.sessionId,
+      kind: "confirm",
+      toolCallId: dto.toolCallId,
+      decision: dto.decision,
+      content: dto.content,
+    });
+    return { ok: true };
+  }
+
+  /** 远程会话：提交 ask_question 回答。 */
+  @Post("remote-devices/:id/run/answer")
+  @ApiOperation({ summary: "远程提问回答" })
+  answer(@Param("id") id: string, @Body() dto: RemoteAnswerDto): { ok: true } {
+    this.remoteRun.sendControl(this.account.getOrThrow(), {
+      streamId: dto.streamId,
+      targetDeviceId: id,
+      sessionId: dto.sessionId,
+      kind: "answer",
+      toolCallId: dto.toolCallId,
+      answers: dto.answers,
+    });
+    return { ok: true };
+  }
+
+  /** 查本机记录的某远程设备当前活跃 run（按 streamId 或 sessionId 反查），供 create/刷新补齐配对。 */
+  @Get("remote-devices/:id/runs")
+  @ApiOperation({ summary: "查活跃远程 run 的 streamId↔sessionId" })
+  runs(
+    @Param("id") id: string,
+    @Query() query: RemoteRunsQueryDto,
+  ): RemoteRunView | null {
+    if (query.streamId) return this.remoteRun.findRunByStreamId(query.streamId);
+    return this.remoteRun.findRunBySession(id, query.sessionId as string);
   }
 }

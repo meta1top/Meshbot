@@ -22,6 +22,12 @@ import { IM_RELAY_EVENTS } from "./im-relay.events";
 const IDLE_TIMEOUT_MS = 90_000;
 
 /**
+ * 远程 run 的只读视图(供 A 前端/controller 反查当前 streamId↔sessionId)。
+ * @public-api Task 5 controller 消费此类型与下方 findRun* 查询方法。
+ */
+export type RemoteRunView = { streamId: string; sessionId: string | null };
+
+/**
  * 单条长活流订阅：目标设备 id（守卫 (device,session) 并发用）+ B 侧会话 id
  * （create 模式首帧才知道）+ idle 超时定时器。
  */
@@ -234,5 +240,31 @@ export class RemoteRunService implements OnModuleDestroy {
     if (this.activeSessionRuns.get(key) === streamId) {
       this.activeSessionRuns.delete(key);
     }
+  }
+
+  /**
+   * 按 streamId 查活跃远程 run;未找到返 null。
+   * @public-api Task 5 controller 消费此类型与下方 findRun* 查询方法。
+   */
+  findRunByStreamId(streamId: string): RemoteRunView | null {
+    const entry = this.streams.get(streamId);
+    return entry ? { streamId, sessionId: entry.sessionId } : null;
+  }
+
+  /**
+   * 按 (targetDeviceId, sessionId) 反查活跃远程 run 的 streamId;未找到返 null。
+   * 用于刷新/直接进入正在跑的远程会话时,前端补齐 streamId 以路由 confirm/interrupt。
+   * @public-api Task 5 controller 消费此类型与下方 findRun* 查询方法。
+   */
+  findRunBySession(
+    targetDeviceId: string,
+    sessionId: string,
+  ): RemoteRunView | null {
+    const streamId = this.activeSessionRuns.get(
+      RemoteRunService.sessionKey(targetDeviceId, sessionId),
+    );
+    if (!streamId) return null;
+    const entry = this.streams.get(streamId);
+    return entry ? { streamId, sessionId: entry.sessionId } : null;
   }
 }
