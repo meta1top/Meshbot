@@ -16,7 +16,7 @@ import { CloudClientService } from "../cloud/cloud-client.service";
 import type { CloudProfileData } from "../cloud/cloud.types";
 import { AgentErrorCode } from "../errors/agent.error-codes";
 import { resolveMachineId } from "../utils/machine-id";
-import { resolveMeshbotDir } from "../utils/meshbot-dir";
+import { isPackaged, resolveMeshbotDir } from "../utils/meshbot-dir";
 import { PREFERRED_PORT } from "../utils/resolve-port";
 import { AUTH_EVENTS } from "./auth.events";
 import { CloudIdentityService } from "./cloud-identity.service";
@@ -162,7 +162,10 @@ export class DeviceAuthorizeService {
   }
 
   private deviceName(): string {
-    return `${process.env.USER ?? "meshbot"}@${os.hostname()}`;
+    // dev 与打包版在同一台机器上是两台独立设备（machineId 加 dev- 前缀区分），
+    // 但 user@hostname 相同、名字会撞。给 dev 追加 " (dev)" 后缀便于区分。
+    const base = `${process.env.USER ?? "meshbot"}@${os.hostname()}`;
+    return isPackaged() ? base : `${base} (dev)`;
   }
 
   /** 惰性清理：清过期条目；容量达上限时淘汰最旧，为即将写入的条目腾位。 */

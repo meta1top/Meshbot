@@ -167,6 +167,17 @@ export class ImGateway extends BaseWebSocketGateway {
           online: true,
         } satisfies PresenceState);
       }
+
+      // 向本连接下发当前在线【设备】快照：设备 presence 仅在连/断的瞬间广播边沿事件，
+      // 后连接的设备会错过先在线设备的上线广播且拿不到快照 → 永远看不到对方在线。
+      // 补一次快照回放消除这个不对称（agent:<deviceId> 形态，与边沿事件一致）。
+      const onlineDeviceIds = await this.devicePresence.listOnline(orgId);
+      for (const onlineDeviceId of onlineDeviceIds) {
+        client.emit(IM_WS_EVENTS.presence, {
+          userId: `agent:${onlineDeviceId}`,
+          online: true,
+        } satisfies PresenceState);
+      }
     } catch (err) {
       this.logger.error("im onAuthedConnect failed", err as Error);
       client.disconnect(true);
