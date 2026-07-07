@@ -5,6 +5,7 @@ import {
   CreateChannelDto,
   CreateDmDto,
   DevicePresenceService,
+  DeviceService,
   MainErrorCode,
   MembershipService,
   MessageService,
@@ -53,6 +54,7 @@ export class ImController {
     private readonly membership: MembershipService,
     private readonly eventEmitter: EventEmitter2,
     private readonly devicePresence: DevicePresenceService,
+    private readonly devices: DeviceService,
   ) {}
 
   /** 列出当前用户在活跃组织内可见的会话（频道 + 私信）。 */
@@ -118,14 +120,22 @@ export class ImController {
     return summary;
   }
 
-  /** 查设备 Agent 在线态（web-main 侧栏在线点首屏用，实时更新靠 presence 事件）。 */
+  /**
+   * 查设备 Agent 在线态（侧栏在线点首屏用，实时更新靠 presence 事件）。
+   * 用【目标设备自身的 org】查在线态（presence 按设备连接时的 device.orgId 存），
+   * 而非发起方的 org —— 否则两台设备 org 不同时会双向查错。
+   * 同时校验目标设备属当前账号，避免跨账号探测他人设备在线态。
+   */
   @Get("devices/:id/online")
   async deviceOnline(
     @CurrentUser() user: JwtMainPayload,
     @Param("id") id: string,
   ): Promise<{ online: boolean }> {
-    const orgId = this.requireOrg(user);
-    return { online: await this.devicePresence.isOnline(orgId, id) };
+    const target = await this.devices.findById(id);
+    if (!target || target.userId !== user.userId || !target.orgId) {
+      return { online: false };
+    }
+    return { online: await this.devicePresence.isOnline(target.orgId, id) };
   }
 
   /**

@@ -73,6 +73,17 @@ export const refreshDevicesAtom = atom(null, async (_get, set) => {
 });
 
 /**
+ * 周期重探当前列表所有设备在线态（Fix2 前端兜底）。
+ * 设备非干净退出（kill/崩溃/断网）时云端 presence 靠 45s TTL 静默过期、不发离线事件，
+ * WS 桥收不到 → 在线点会一直停在 online。定期重探把这种情况纠正过来。
+ */
+export const reprobeOnlineAtom = atom(null, async (get, set) => {
+  const devices = get(devicesAtom);
+  if (devices.length === 0) return;
+  set(deviceOnlineAtom, await probeOnline(devices));
+});
+
+/**
  * WS 设备 presence（userId="agent:<deviceId>"）→ 实时更新在线点。
  * 若该 deviceId 不在当前列表（新授权设备上线）→ 刷新设备列表把它拉进来。
  * 非设备 presence（普通用户 userId）忽略。

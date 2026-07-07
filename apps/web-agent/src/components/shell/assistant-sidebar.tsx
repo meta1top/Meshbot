@@ -11,6 +11,7 @@ import {
   devicesAtom,
   devicesStatusAtom,
   loadDevicesAtom,
+  reprobeOnlineAtom,
 } from "@/atoms/devices";
 import { loadSidebarAtom } from "@/atoms/sidebar";
 import { DeviceNode } from "@/components/shell/device-node";
@@ -28,11 +29,19 @@ export function AssistantSidebar() {
   const online = useAtomValue(deviceOnlineAtom);
   const loadDevices = useSetAtom(loadDevicesAtom);
   const loadSidebar = useSetAtom(loadSidebarAtom);
+  const reprobeOnline = useSetAtom(reprobeOnlineAtom);
 
   useEffect(() => {
     void loadSidebar();
     void loadDevices();
   }, [loadSidebar, loadDevices]);
+
+  // Fix2 兜底：设备非干净退出时云端 presence 靠 45s TTL 静默过期、不发离线事件，
+  // 侧栏可见期间周期重探在线态纠正之（真正的实时离线事件属服务端后续改进）。
+  useEffect(() => {
+    const timer = setInterval(() => void reprobeOnline(), 25_000);
+    return () => clearInterval(timer);
+  }, [reprobeOnline]);
 
   return (
     <div className="flex h-full flex-col">
