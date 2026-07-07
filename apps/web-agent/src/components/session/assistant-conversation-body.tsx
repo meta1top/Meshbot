@@ -18,6 +18,7 @@ import { ComposerActions } from "@/components/common/composer-actions";
 import { MessageSkeleton } from "@/components/im/message-skeleton";
 import { MessageList } from "@/components/session/message-list";
 import { PendingList } from "@/components/session/pending-list";
+import { RemoteSessionProvider } from "@/hooks/remote-session-context";
 import { useAutoOpenArtifact } from "@/hooks/use-auto-open-artifact";
 import { useChatScroll } from "@/hooks/use-chat-scroll";
 import { useLlmusePrefix } from "@/hooks/use-llmuse-prefix";
@@ -163,6 +164,33 @@ export function AssistantConversationBody({
     }
   };
 
+  // 提取成变量避免 remote/本地两个渲染分支各写一遍——远程会话下外面套
+  // RemoteSessionProvider（深层 HITL 卡片经 useRemoteSession 拿 confirm/answer
+  // 走远程端点），本地会话直接渲染，不包 Provider（useRemoteSession 返回 null）。
+  const messageListNode = (
+    <MessageList
+      messages={timelineMessages}
+      sessionId={id}
+      running={stream.running}
+      readOnly={!!remoteDeviceId}
+      onRegenerateOptimisticCut={(messageId) => {
+        // 截断到该消息（含），并清掉它的 failed 标记：
+        // 重生成就是「这条 user 即将重跑」，旧的 failed 已陈旧；
+        // 若新一轮再失败，onError 会重新打 failed。
+        stream.apply((prev) => {
+          const idx = prev.findIndex((m) => m.id === messageId);
+          if (idx < 0) return prev;
+          return prev
+            .slice(0, idx + 1)
+            .map((m) =>
+              m.id === messageId && m.failed ? { ...m, failed: false } : m,
+            );
+        });
+      }}
+      usageByMessage={usageByMessage}
+    />
+  );
+
   return (
     <>
       <div className="flex w-full flex-1 flex-col">
@@ -186,29 +214,17 @@ export function AssistantConversationBody({
               visible={!!stream.compacting}
               reason={stream.compacting ?? undefined}
             />
-            <MessageList
-              messages={timelineMessages}
-              sessionId={id}
-              running={stream.running}
-              readOnly={!!remoteDeviceId}
-              onRegenerateOptimisticCut={(messageId) => {
-                // 截断到该消息（含），并清掉它的 failed 标记：
-                // 重生成就是「这条 user 即将重跑」，旧的 failed 已陈旧；
-                // 若新一轮再失败，onError 会重新打 failed。
-                stream.apply((prev) => {
-                  const idx = prev.findIndex((m) => m.id === messageId);
-                  if (idx < 0) return prev;
-                  return prev
-                    .slice(0, idx + 1)
-                    .map((m) =>
-                      m.id === messageId && m.failed
-                        ? { ...m, failed: false }
-                        : m,
-                    );
-                });
-              }}
-              usageByMessage={usageByMessage}
-            />
+            {remoteDeviceId ? (
+              <RemoteSessionProvider
+                remoteDeviceId={remoteDeviceId}
+                sessionId={id}
+                getStreamId={stream.getStreamId}
+              >
+                {messageListNode}
+              </RemoteSessionProvider>
+            ) : (
+              messageListNode
+            )}
           </>
         )}
       </div>

@@ -76,6 +76,67 @@ export async function interruptRemoteRun(
 }
 
 /**
+ * L3 Phase B：对远程设备（B）上指定 streamId 的 confirm 型 HITL 卡片下发决策
+ * （发送 / 取消，可带编辑后的 content），经 A 端点转发到 B 侧同一次 run。
+ */
+export async function confirmRemote(
+  deviceId: string,
+  body: {
+    streamId: string;
+    sessionId: string;
+    toolCallId: string;
+    decision: "send" | "cancel";
+    content?: string;
+  },
+): Promise<{ ok: true }> {
+  const { data } = await apiClient.post<{ ok: true }>(
+    `/api/remote-devices/${deviceId}/run/confirm`,
+    body,
+  );
+  return data;
+}
+
+/**
+ * L3 Phase B：对远程设备（B）上指定 streamId 的 ask_question 型 HITL 卡片
+ * 下发用户作答，经 A 端点转发到 B 侧同一次 run。
+ */
+export async function answerRemote(
+  deviceId: string,
+  body: {
+    streamId: string;
+    sessionId: string;
+    toolCallId: string;
+    answers: { selected: string[]; other?: string }[];
+  },
+): Promise<{ ok: true }> {
+  const { data } = await apiClient.post<{ ok: true }>(
+    `/api/remote-devices/${deviceId}/run/answer`,
+    body,
+  );
+  return data;
+}
+
+/**
+ * L3 Phase B：查询远程设备（B）上某 streamId 或 sessionId 当前对应的活跃 run，
+ * 用于「刷新/直接进入远程会话」时回填 streamId（reclaim）——本页尚未发起过
+ * run，本地无 streamId 记忆，靠这个端点找回，使 confirm/interrupt 恢复可用。
+ * 查无结果（无活跃 run）返回 null。
+ */
+export async function fetchRemoteRun(
+  deviceId: string,
+  q: { streamId?: string; sessionId?: string },
+): Promise<{ streamId: string; sessionId: string | null } | null> {
+  const params = new URLSearchParams();
+  if (q.streamId) params.set("streamId", q.streamId);
+  if (q.sessionId) params.set("sessionId", q.sessionId);
+  const { data } = await apiClient.get<{
+    streamId: string;
+    sessionId: string | null;
+  } | null>(`/api/remote-devices/${deviceId}/runs?${params.toString()}`);
+  return data;
+}
+
+/**
  * L3 create 模式的时序缺口兜底：B 新建的会话 id 只经 WS 影子帧回报，而影子帧
  * 走「session room」广播——A 前端此刻还不知道 sessionId、来不及提前订阅该
  * room，首帧存在丢失风险（socket.io 的 room 广播不重放给迟到的订阅者）。
