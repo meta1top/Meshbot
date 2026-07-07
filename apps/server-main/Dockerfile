@@ -19,8 +19,9 @@
 #     meshbot/server-main:local
 
 # ============ Stage 1: deps ===============================================
-FROM node:22-alpine AS deps
-RUN corepack enable
+FROM node:24-alpine AS deps
+# 国内镜像加速依赖下载（build 用 --ignore-scripts,原生二进制不下,只走 npm tarball）。
+RUN corepack enable && pnpm config set registry https://registry.npmmirror.com
 WORKDIR /repo
 
 # 只 copy lockfile + workspace 元数据 + 各 package.json，最大化 layer 缓存。
@@ -73,7 +74,7 @@ RUN cp -r /repo/apps/server-main/dist /out/dist \
  && cp -r /repo/libs/assets/dist      /out/node_modules/@meshbot/assets/dist
 
 # ============ Stage 3: runtime ============================================
-FROM node:22-alpine AS runtime
+FROM node:24-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
     PORT=3200
