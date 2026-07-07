@@ -36,7 +36,7 @@ export function RemoteSessionProvider(props: {
       remoteDeviceId,
       confirm: async (toolCallId, decision, content) => {
         const streamId = getStreamId();
-        if (!streamId) return;
+        if (!streamId) throw new Error("远程会话 streamId 未就绪，请稍候重试");
         await confirmRemote(remoteDeviceId, {
           streamId,
           sessionId,
@@ -47,7 +47,7 @@ export function RemoteSessionProvider(props: {
       },
       answer: async (toolCallId, answers) => {
         const streamId = getStreamId();
-        if (!streamId) return;
+        if (!streamId) throw new Error("远程会话 streamId 未就绪，请稍候重试");
         await answerRemote(remoteDeviceId, {
           streamId,
           sessionId,
