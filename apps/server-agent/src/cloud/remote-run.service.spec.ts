@@ -1,5 +1,6 @@
 import type { AgentRunEnd, AgentRunFrame } from "@meshbot/types";
 import { SESSION_WS_EVENTS } from "@meshbot/types-agent";
+import { REMOTE_SHADOW_FRAME_EVENT } from "../ws/session-shadow.events";
 import { RemoteRunService } from "./remote-run.service";
 
 /** 构造被测服务：fake relay（记录出站调用）+ fake emitter（记录本地总线重发）。 */
@@ -63,17 +64,83 @@ describe("RemoteRunService", () => {
       const b = svc.startRun("u1", "dB", "create", null, "b");
       expect(a.streamId).not.toBe(b.streamId);
     });
+
+    it("I3：append 模式同 (device,session) 已有活跃 run → 第二次 startRun 抛 409 拒绝", () => {
+      const { svc, relay } = make();
+      svc.startRun("u1", "dB", "append", "remote-sess-1", "first");
+      relay.emitAgentRunStart.mockClear();
+
+      expect(() =>
+        svc.startRun("u1", "dB", "append", "remote-sess-1", "second"),
+      ).toThrow();
+      // 拒绝发生在生成 streamId / 下发 relay 之前，不应有第二次出站
+      expect(relay.emitAgentRunStart).not.toHaveBeenCalled();
+    });
+
+    it("I3：不同 sessionId 或不同 targetDeviceId 不受占用影响，可正常发起", () => {
+      const { svc, relay } = make();
+      svc.startRun("u1", "dB", "append", "remote-sess-1", "first");
+      relay.emitAgentRunStart.mockClear();
+
+      expect(() =>
+        svc.startRun("u1", "dB", "append", "remote-sess-2", "other session"),
+      ).not.toThrow();
+      expect(() =>
+        svc.startRun("u1", "dC", "append", "remote-sess-1", "other device"),
+      ).not.toThrow();
+      expect(relay.emitAgentRunStart).toHaveBeenCalledTimes(2);
+    });
+
+    it("I3：活跃 run 结束（onEnd）后，同 (device,session) 可再次发起", () => {
+      const { svc, relay } = make();
+      const { streamId } = svc.startRun(
+        "u1",
+        "dB",
+        "append",
+        "remote-sess-1",
+        "first",
+      );
+
+      svc.onEnd({ streamId, requesterDeviceId: "dA", reason: "done" });
+
+      expect(() =>
+        svc.startRun("u1", "dB", "append", "remote-sess-1", "second"),
+      ).not.toThrow();
+      expect(relay.emitAgentRunStart).toHaveBeenCalledTimes(2);
+    });
+
+    it("I3：create 模式首帧到达确认 B 侧 sessionId 后，同 session 的 append 也会被占用槽位拒绝", () => {
+      const { svc, relay } = make();
+      const { streamId } = svc.startRun("u1", "dB", "create", null, "hi");
+      svc.onFrame(makeFrame({ streamId, sessionId: "remote-sess-1" }));
+      relay.emitAgentRunStart.mockClear();
+
+      expect(() =>
+        svc.startRun("u1", "dB", "append", "remote-sess-1", "second"),
+      ).toThrow();
+      expect(relay.emitAgentRunStart).not.toHaveBeenCalled();
+    });
   });
 
   describe("onFrame（影子渲染）", () => {
-    it("streamId 已登记 → emitter.emit(frame.event, frame.payload) 重发本地总线", () => {
+    it("streamId 已登记 → 包成 REMOTE_SHADOW_FRAME_EVENT 重发本地总线（不复用原始事件名）", () => {
       const { svc, emitter } = make();
       const { streamId } = svc.startRun("u1", "dB", "create", null, "hi");
       const frame = makeFrame({ streamId });
 
       svc.onFrame(frame);
 
-      expect(emitter.emit).toHaveBeenCalledWith(frame.event, frame.payload);
+      expect(emitter.emit).toHaveBeenCalledWith(REMOTE_SHADOW_FRAME_EVENT, {
+        event: frame.event,
+        payload: frame.payload,
+      });
+      // 关键防回归断言：绝不能直接用原始事件名重发到共享总线——那会撞上
+      // RunnerService.onToolCallEnd 等按事件名订阅的本地落库副作用，污染
+      // A 本地 DB（I1）。
+      expect(emitter.emit).not.toHaveBeenCalledWith(
+        frame.event,
+        expect.anything(),
+      );
     });
 
     it("未知 streamId → 忽略，不 emit", () => {
@@ -137,10 +204,10 @@ describe("RemoteRunService", () => {
 
       jest.advanceTimersByTime(90_000);
 
-      expect(emitter.emit).toHaveBeenCalledWith(
-        SESSION_WS_EVENTS.runError,
-        expect.objectContaining({ sessionId: "remote-sess-1" }),
-      );
+      expect(emitter.emit).toHaveBeenCalledWith(REMOTE_SHADOW_FRAME_EVENT, {
+        event: SESSION_WS_EVENTS.runError,
+        payload: expect.objectContaining({ sessionId: "remote-sess-1" }),
+      });
 
       // 清理后旧 streamId 的帧应被忽略
       emitter.emit.mockClear();
@@ -155,8 +222,8 @@ describe("RemoteRunService", () => {
       jest.advanceTimersByTime(90_000);
 
       expect(emitter.emit).not.toHaveBeenCalledWith(
-        SESSION_WS_EVENTS.runError,
-        expect.anything(),
+        REMOTE_SHADOW_FRAME_EVENT,
+        expect.objectContaining({ event: SESSION_WS_EVENTS.runError }),
       );
     });
 
@@ -170,10 +237,10 @@ describe("RemoteRunService", () => {
 
       emitter.emit.mockClear();
       svc.onFrame(makeFrame({ streamId }));
-      expect(emitter.emit).toHaveBeenCalledWith(
-        SESSION_WS_EVENTS.runChunk,
-        expect.anything(),
-      );
+      expect(emitter.emit).toHaveBeenCalledWith(REMOTE_SHADOW_FRAME_EVENT, {
+        event: SESSION_WS_EVENTS.runChunk,
+        payload: expect.anything(),
+      });
     });
   });
 });

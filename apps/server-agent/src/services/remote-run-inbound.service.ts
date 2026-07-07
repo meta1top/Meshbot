@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { AccountContextService } from "@meshbot/agent";
 import type { AgentRunEnd, AgentRunFrame } from "@meshbot/types";
-import { SESSION_WS_EVENTS } from "@meshbot/types-agent";
+import {
+  SESSION_WS_EVENTS,
+  type RunToolCallEndEvent,
+} from "@meshbot/types-agent";
 import { Injectable, Logger } from "@nestjs/common";
 import { EventEmitter2, OnEvent } from "@nestjs/event-emitter";
 import { ImRelayClientService } from "../cloud/im-relay-client.service";
@@ -47,6 +50,19 @@ const TERMINAL_REASON_BY_EVENT: ReadonlyMap<string, AgentRunEnd["reason"]> =
     [SESSION_WS_EVENTS.runError, "error"],
     [SESSION_WS_EVENTS.runInterrupted, "interrupted"],
   ]);
+
+/**
+ * run.tool_call_end 转发前剥掉 `content` 字段（可能很大，如长文件读取结果）。
+ * 与 `session.gateway.ts` 对 A 本地前端的处理保持一致——前端只用
+ * `resultPreview` 渲染，`content` 没必要经 relay 跨设备中继一份，白白浪费
+ * 带宽/体积。
+ */
+function stripToolCallEndContent(
+  payload: RunToolCallEndEvent,
+): Omit<RunToolCallEndEvent, "content"> {
+  const { content: _content, ...rest } = payload;
+  return rest;
+}
 
 /**
  * L3 B 侧：收到云端转发的远程 run 触发请求，在发起方账号的 `account.run`
@@ -152,13 +168,20 @@ export class RemoteRunInboundService {
           return; // 别的 session 的事件——防串台
         }
         seq += 1;
+        // run.tool_call_end 转发前剥掉 content（可能很大，如长文件读取结果）：
+        // 照 session.gateway.ts 对 A 本地前端的处理——前端只用 resultPreview，
+        // content 没必要经 relay 跨设备中继，白白浪费带宽/体积。
+        const wirePayload =
+          event === SESSION_WS_EVENTS.runToolCallEnd
+            ? stripToolCallEndContent(payload as RunToolCallEndEvent)
+            : payload;
         this.relay.emitAgentRunFrame(cloudUserId, {
           streamId,
           requesterDeviceId,
           seq,
           sessionId,
           event,
-          payload,
+          payload: wirePayload,
         } satisfies AgentRunFrame);
 
         const reason = TERMINAL_REASON_BY_EVENT.get(event);

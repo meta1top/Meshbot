@@ -152,4 +152,44 @@ describe("SessionGateway", () => {
     gw.onRunUsage(payload);
     expect(toEmit[0]).toEqual([SESSION_WS_EVENTS.runUsage, payload]);
   });
+
+  describe("onRemoteShadowFrame（L3 影子渲染桥接）", () => {
+    it("解包 REMOTE_SHADOW_FRAME_EVENT，按 payload.sessionId 转发到房间", () => {
+      const runner = { getInflight: () => null, interrupt: jest.fn() };
+      const gw = new SessionGateway({} as never, runner as never);
+      const toEmit: unknown[] = [];
+      const rooms: string[] = [];
+      (gw as unknown as { server: unknown }).server = {
+        to: (room: string) => {
+          rooms.push(room);
+          return { emit: (...a: unknown[]) => toEmit.push(a) };
+        },
+      };
+      const payload = { sessionId: "s1", messageId: "m1", delta: "x" };
+
+      gw.onRemoteShadowFrame({
+        event: SESSION_WS_EVENTS.runChunk,
+        payload,
+      });
+
+      expect(rooms).toEqual(["s1"]);
+      expect(toEmit).toEqual([[SESSION_WS_EVENTS.runChunk, payload]]);
+    });
+
+    it("payload 缺 sessionId → 不转发（无房间可路由）", () => {
+      const runner = { getInflight: () => null, interrupt: jest.fn() };
+      const gw = new SessionGateway({} as never, runner as never);
+      const toEmit: unknown[] = [];
+      (gw as unknown as { server: unknown }).server = {
+        to: () => ({ emit: (...a: unknown[]) => toEmit.push(a) }),
+      };
+
+      gw.onRemoteShadowFrame({
+        event: SESSION_WS_EVENTS.runChunk,
+        payload: { messageId: "m1", delta: "x" },
+      });
+
+      expect(toEmit).toHaveLength(0);
+    });
+  });
 });

@@ -890,6 +890,16 @@ export function useSessionStream(
     async (msg: string) => {
       if (!sessionId) return;
       if (remoteDeviceId) {
+        // I3 守卫：该远程会话已有活跃 run（running=true，含首轮 create 场景）时
+        // 不再发起第二个 append——避免 B 侧同 sessionId 注册两套监听器导致
+        // 帧翻倍、第一条 run.done 提前退订两套监听器、第二条对 A 不可见。
+        // 本地会话（下方非 remote 分支）走 appendMessage 排队语义，不受影响。
+        // server 侧 RemoteRunService.startRun 对同 (device,session) 也有 409
+        // 兜底拒绝，这里提前短路只是省一次网络往返、给更快反馈。
+        if (running) {
+          console.warn("远程会话仍有 run 在进行中，请等待完成后再发送");
+          return;
+        }
         // L3 remote 续写：不做本地乐观占位——B 侧 appendMessage 自己生成
         // messageId（randomUUID，与本地无法对齐），乐观插入的话，等真正的
         // run.human 帧到达时 id 对不上，会在 idx===-1 分支再建一条，形成
@@ -934,7 +944,7 @@ export function useSessionStream(
         console.error("追加消息失败", err);
       }
     },
-    [sessionId, apply, remoteDeviceId],
+    [sessionId, apply, remoteDeviceId, running],
   );
 
   /**

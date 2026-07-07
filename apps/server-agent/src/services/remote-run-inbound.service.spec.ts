@@ -230,6 +230,53 @@ describe("RemoteRunInboundService", () => {
       });
     });
 
+    it("#2：run.tool_call_end 转发前剥掉 content（relay 只传 resultPreview，节省跨设备中继体积）", async () => {
+      const { svc, relay, emitter } = make();
+      await svc.onAgentRunRequest(fwd({}) as never); // sessionId = s-new
+
+      emitter.emit(SESSION_WS_EVENTS.runToolCallEnd, {
+        sessionId: "s-new",
+        messageId: "m1",
+        toolCallId: "tc1",
+        name: "read_file",
+        ok: true,
+        resultPreview: "前 200 字…",
+        content: "x".repeat(10_000), // 模拟大字段
+      });
+
+      expect(relay.emitAgentRunFrame).toHaveBeenCalledTimes(1);
+      const frame = relay.emitAgentRunFrame.mock.calls[0][1] as {
+        payload: Record<string, unknown>;
+      };
+      expect(frame.payload).not.toHaveProperty("content");
+      expect(frame.payload).toEqual({
+        sessionId: "s-new",
+        messageId: "m1",
+        toolCallId: "tc1",
+        name: "read_file",
+        ok: true,
+        resultPreview: "前 200 字…",
+      });
+    });
+
+    it("非 tool_call_end 事件不受剥字段影响，payload 原样转发", async () => {
+      const { svc, relay, emitter } = make();
+      await svc.onAgentRunRequest(fwd({}) as never);
+
+      emitter.emit(SESSION_WS_EVENTS.runChunk, {
+        sessionId: "s-new",
+        messageId: "m1",
+        delta: "hi",
+      });
+
+      expect(relay.emitAgentRunFrame).toHaveBeenCalledWith(
+        "u1",
+        expect.objectContaining({
+          payload: { sessionId: "s-new", messageId: "m1", delta: "hi" },
+        }),
+      );
+    });
+
     it("两个并行请求（不同 streamId/session）互不串台", async () => {
       const { svc, sessions, relay, emitter } = make();
       sessions.createSession

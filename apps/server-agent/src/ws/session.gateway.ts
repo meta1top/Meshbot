@@ -37,6 +37,10 @@ import {
 } from "@nestjs/websockets";
 import type { Socket } from "socket.io";
 import { RunnerService } from "../services/runner.service";
+import {
+  REMOTE_SHADOW_FRAME_EVENT,
+  type RemoteShadowFramePayload,
+} from "./session-shadow.events";
 
 /**
  * 会话流式 WebSocket Gateway。端点：ws://<host>/ws/session
@@ -251,5 +255,21 @@ export class SessionGateway extends BaseWebSocketGateway {
     this.server
       .to(payload.sessionId)
       .emit(SESSION_WS_EVENTS.runSubagentSettled, payload);
+  }
+
+  /**
+   * L3 影子渲染桥接：`RemoteRunService.onFrame` 把 B 侧回流的运行帧包装成
+   * `REMOTE_SHADOW_FRAME_EVENT`（而非原始 SESSION_WS_EVENTS.* 名）重发到本地
+   * 总线，本 Gateway 是这条链路上**唯一**订阅方——`RunnerService` 等本地 run
+   * 副作用消费者不监听该事件，避免 B 会话的数据污染进 A 本地 DB（详见
+   * `session-shadow.events.ts` 的 JSDoc）。解包后按 payload.sessionId 转发到
+   * 房间；event 名 / payload 形态与本地 run 完全一致（tool_call_end 的 content
+   * 已由 B 侧转发前剥掉，此处无需再处理）。
+   */
+  @OnEvent(REMOTE_SHADOW_FRAME_EVENT)
+  onRemoteShadowFrame(msg: RemoteShadowFramePayload): void {
+    const sessionId = (msg.payload as { sessionId?: string } | null)?.sessionId;
+    if (!sessionId) return;
+    this.server.to(sessionId).emit(msg.event, msg.payload);
   }
 }
