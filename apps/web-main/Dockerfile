@@ -46,6 +46,8 @@ COPY --from=build /repo/apps/web-main/.next/standalone ./
 # standalone 不含 public,单独拷。
 COPY --from=build /repo/apps/web-main/public ./apps/web-main/public
 EXPOSE 3000
+# 用 127.0.0.1 而非 localhost：alpine 里 localhost 优先解析 IPv6 ::1,而 Next
+# 按 HOSTNAME=0.0.0.0 只绑 IPv4 → localhost 探测被拒致 unhealthy。
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD wget -qO- http://localhost:3000/ >/dev/null 2>&1 || exit 1
+  CMD wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 || exit 1
 CMD ["node", "apps/web-main/server.js"]
