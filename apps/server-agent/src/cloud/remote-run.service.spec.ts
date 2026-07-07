@@ -243,4 +243,43 @@ describe("RemoteRunService", () => {
       });
     });
   });
+
+  describe("findRunByStreamId", () => {
+    it("命中返回 {streamId, sessionId}", () => {
+      const { svc } = make();
+      const { streamId } = svc.startRun("u1", "dB", "create", null, "hi");
+      expect(svc.findRunByStreamId(streamId)).toEqual({
+        streamId,
+        sessionId: null,
+      });
+    });
+
+    it("未知返 null", () => {
+      const { svc } = make();
+      expect(svc.findRunByStreamId("nope")).toBeNull();
+    });
+  });
+
+  describe("findRunBySession", () => {
+    it("create 首帧回填 sessionId 后可按 session 反查 streamId", () => {
+      const { svc } = make();
+      const { streamId } = svc.startRun("u1", "dB", "create", null, "hi");
+      svc.onFrame({
+        streamId,
+        sessionId: "sess-9",
+        seq: 0,
+        event: "run.started",
+        payload: { sessionId: "sess-9" },
+      } as any);
+      expect(svc.findRunBySession("dB", "sess-9")).toEqual({
+        streamId,
+        sessionId: "sess-9",
+      });
+    });
+
+    it("未知返 null", () => {
+      const { svc } = make();
+      expect(svc.findRunBySession("dB", "no-sess")).toBeNull();
+    });
+  });
 });
