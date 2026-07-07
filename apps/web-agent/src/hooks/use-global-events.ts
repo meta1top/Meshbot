@@ -18,6 +18,7 @@ import { clearAccessToken } from "@meshbot/web-common";
 import { useSetAtom } from "jotai";
 import { useEffect } from "react";
 import { quickAssistantNameAtom } from "@/atoms/assistant-panel";
+import { applyDevicePresenceAtom } from "@/atoms/devices";
 import {
   applyIncomingMessageAtom,
   markConversationReadAtom,
@@ -91,6 +92,7 @@ function handleReauthRequired(): void {
 export function useGlobalEvents(): void {
   const applyIncomingMessage = useSetAtom(applyIncomingMessageAtom);
   const setPresence = useSetAtom(setPresenceAtom);
+  const applyDevicePresence = useSetAtom(applyDevicePresenceAtom);
   const upsertConversation = useSetAtom(upsertConversationAtom);
   const removeConversation = useSetAtom(removeConversationAtom);
   const markConversationRead = useSetAtom(markConversationReadAtom);
@@ -101,7 +103,10 @@ export function useGlobalEvents(): void {
     const socket = getEventsSocket();
     const handlers: GlobalEventHandlers = {
       onMessage: (p) => applyIncomingMessage(p),
-      onPresence: (p) => setPresence(p),
+      onPresence: (p) => {
+        setPresence(p);
+        applyDevicePresence(p);
+      },
       onConversationCreated: (p) => upsertConversation(p),
       onConversationRemoved: (p) => removeConversation(p.conversationId),
       onConversationRead: (p) => markConversationRead(p.conversationId),
@@ -118,6 +123,7 @@ export function useGlobalEvents(): void {
   }, [
     applyIncomingMessage,
     setPresence,
+    applyDevicePresence,
     upsertConversation,
     removeConversation,
     markConversationRead,
