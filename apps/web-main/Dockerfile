@@ -3,8 +3,9 @@
 # 起动（同源部署无需注入任何 env）：docker run --rm -p 3000:3000 meshbot/web-main:local
 
 # ============ Stage 1: deps ===============================================
-FROM node:22-alpine AS deps
-RUN corepack enable
+FROM node:24-alpine AS deps
+# 国内镜像加速依赖下载（build 用 --ignore-scripts,原生二进制不下,只走 npm tarball）。
+RUN corepack enable && pnpm config set registry https://registry.npmmirror.com
 WORKDIR /repo
 # lockfile + workspace 元数据 + 各 package.json,最大化 layer 缓存。
 # .pnpmfile.cjs 必须一并 copy（lockfile 记录其 checksum）。
@@ -36,7 +37,7 @@ RUN pnpm --filter @meshbot/types build \
 RUN pnpm --filter @meshbot/web-main build
 
 # ============ Stage 3: runtime ============================================
-FROM node:22-alpine AS runtime
+FROM node:24-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
     PORT=3000 \
