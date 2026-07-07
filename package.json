@@ -24,7 +24,7 @@
     "dev:db:down": "docker compose -f infra/dev/docker-compose.dev.yml down",
     "dev:db:reset": "docker compose -f infra/dev/docker-compose.dev.yml down -v && docker compose -f infra/dev/docker-compose.dev.yml up -d",
     "dev:db:logs": "docker compose -f infra/dev/docker-compose.dev.yml logs -f postgres",
-    "pkg:app": "turbo run build --filter=@meshbot/desktop && pnpm --filter @meshbot/desktop run dist",
+    "pkg:app": "turbo run build --filter=@meshbot/desktop && pnpm --filter @meshbot/desktop run dist && pnpm rebuild:native",
     "run:local": "tsx scripts/run-local-desktop.ts",
     "rebuild:native": "tsx scripts/rebuild-native.ts",
     "lint": "biome lint .",
