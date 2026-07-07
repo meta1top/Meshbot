@@ -12,6 +12,7 @@ import {
   IM_RELAY_EVENTS,
   type ImRelayAgentRunRequestEvent,
 } from "../cloud/im-relay.events";
+import { RemoteRunRegistryService } from "./remote-run-registry.service";
 import { RunnerService } from "./runner.service";
 import { SessionService } from "./session.service";
 
@@ -79,6 +80,10 @@ function stripToolCallEndContent(
  *
  * relay 传输层保持纯净：本服务经 EventEmitter2 `@OnEvent` 桥接（镜像
  * L2c `RemoteQueryInboundService`），不让 `ImRelayClientService` 反向依赖。
+ *
+ * 建订阅时向 `RemoteRunRegistryService` 登记 streamId→sessionId（M3 校验真源，
+ * 供 `RemoteRunControlService` 校验 control 帧的 sessionId 归属），退订时一并
+ * 移除登记，避免长连接下映射泄漏。
  */
 @Injectable()
 export class RemoteRunInboundService {
@@ -90,6 +95,7 @@ export class RemoteRunInboundService {
     private readonly relay: ImRelayClientService,
     private readonly account: AccountContextService,
     private readonly emitter: EventEmitter2,
+    private readonly registry: RemoteRunRegistryService,
   ) {}
 
   /** relay 收到云端转发的 agent.run.start（B 侧入站）时触发。 */
@@ -142,7 +148,8 @@ export class RemoteRunInboundService {
   /**
    * 订阅该 sessionId 的 `SESSION_WS_EVENTS.*` 全集，按 sessionId 过滤后打包
    * 成 `AgentRunFrame` 经 relay 回发；命中终止事件则额外回发 `agentRunEnd`
-   * 并退订本次登记的全部监听器。
+   * 并退订本次登记的全部监听器。监听器就绪后向 `RemoteRunRegistryService`
+   * 登记 streamId→sessionId，退订时一并解除。
    */
   private subscribeAndForward(
     cloudUserId: string,
@@ -160,6 +167,7 @@ export class RemoteRunInboundService {
       for (const { event, handler } of registered) {
         this.emitter.off(event, handler);
       }
+      this.registry.unbind(streamId);
     };
 
     for (const event of FORWARDED_SESSION_EVENTS) {
@@ -197,5 +205,7 @@ export class RemoteRunInboundService {
       this.emitter.on(event, handler);
       registered.push({ event, handler });
     }
+
+    this.registry.bind(streamId, sessionId);
   }
 }
