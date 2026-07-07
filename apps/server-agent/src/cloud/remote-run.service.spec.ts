@@ -1,0 +1,179 @@
+import type { AgentRunEnd, AgentRunFrame } from "@meshbot/types";
+import { SESSION_WS_EVENTS } from "@meshbot/types-agent";
+import { RemoteRunService } from "./remote-run.service";
+
+/** 构造被测服务：fake relay（记录出站调用）+ fake emitter（记录本地总线重发）。 */
+function make() {
+  const relay = {
+    emitAgentRunStart: jest.fn(),
+    emitAgentRunControl: jest.fn(),
+  };
+  const emitter = { emit: jest.fn() };
+  const svc = new RemoteRunService(relay as never, emitter as never);
+  return { svc, relay, emitter };
+}
+
+/** 构造一帧运行帧，streamId/sessionId/event/payload 可覆盖。 */
+function makeFrame(overrides: Partial<AgentRunFrame> = {}): AgentRunFrame {
+  return {
+    streamId: "stream-1",
+    requesterDeviceId: "dA",
+    seq: 1,
+    sessionId: "remote-sess-1",
+    event: SESSION_WS_EVENTS.runChunk,
+    payload: { sessionId: "remote-sess-1", messageId: "m1", delta: "hi" },
+    ...overrides,
+  };
+}
+
+describe("RemoteRunService", () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  describe("startRun", () => {
+    it("生成 streamId、登记订阅、经 relay 下发 agentRunStart", () => {
+      const { svc, relay } = make();
+      const { streamId } = svc.startRun("u1", "dB", "create", null, "hello");
+
+      expect(typeof streamId).toBe("string");
+      expect(streamId.length).toBeGreaterThan(0);
+      expect(relay.emitAgentRunStart).toHaveBeenCalledWith("u1", {
+        streamId,
+        targetDeviceId: "dB",
+        mode: "create",
+        sessionId: undefined,
+        content: "hello",
+      });
+    });
+
+    it("append 模式透传已知 sessionId（B 上已存在的会话 id）", () => {
+      const { svc, relay } = make();
+      svc.startRun("u1", "dB", "append", "remote-sess-1", "continue");
+
+      expect(relay.emitAgentRunStart).toHaveBeenCalledWith(
+        "u1",
+        expect.objectContaining({ mode: "append", sessionId: "remote-sess-1" }),
+      );
+    });
+
+    it("每次调用生成不同 streamId", () => {
+      const { svc } = make();
+      const a = svc.startRun("u1", "dB", "create", null, "a");
+      const b = svc.startRun("u1", "dB", "create", null, "b");
+      expect(a.streamId).not.toBe(b.streamId);
+    });
+  });
+
+  describe("onFrame（影子渲染）", () => {
+    it("streamId 已登记 → emitter.emit(frame.event, frame.payload) 重发本地总线", () => {
+      const { svc, emitter } = make();
+      const { streamId } = svc.startRun("u1", "dB", "create", null, "hi");
+      const frame = makeFrame({ streamId });
+
+      svc.onFrame(frame);
+
+      expect(emitter.emit).toHaveBeenCalledWith(frame.event, frame.payload);
+    });
+
+    it("未知 streamId → 忽略，不 emit", () => {
+      const { svc, emitter } = make();
+      svc.onFrame(makeFrame({ streamId: "never-registered" }));
+
+      expect(emitter.emit).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("onEnd", () => {
+    it("清理订阅：清理后同 streamId 再来帧 → 视为未知，不再重发", () => {
+      const { svc, emitter } = make();
+      const { streamId } = svc.startRun("u1", "dB", "create", null, "hi");
+
+      svc.onEnd({ streamId, requesterDeviceId: "dA", reason: "done" });
+
+      emitter.emit.mockClear();
+      svc.onFrame(makeFrame({ streamId }));
+      expect(emitter.emit).not.toHaveBeenCalled();
+    });
+
+    it("未知 streamId → no-op（不抛）", () => {
+      const { svc } = make();
+      const end: AgentRunEnd = {
+        streamId: "nope",
+        requesterDeviceId: "dA",
+        reason: "offline",
+      };
+      expect(() => svc.onEnd(end)).not.toThrow();
+    });
+  });
+
+  describe("sendControl", () => {
+    it("调 relay.emitAgentRunControl 下发控制指令", () => {
+      const { svc, relay } = make();
+      const control = {
+        streamId: "stream-1",
+        targetDeviceId: "dB",
+        sessionId: "remote-sess-1",
+        kind: "interrupt" as const,
+      };
+
+      svc.sendControl("u1", control);
+
+      expect(relay.emitAgentRunControl).toHaveBeenCalledWith("u1", control);
+    });
+  });
+
+  describe("idle 超时", () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    it("90s 内无新帧 → 清理订阅 + 已知 sessionId 时发本地 run.error 收尾", () => {
+      const { svc, emitter } = make();
+      const { streamId } = svc.startRun("u1", "dB", "create", null, "hi");
+      // 首帧带来 B 侧 sessionId，并续期一次 idle 计时
+      svc.onFrame(makeFrame({ streamId, sessionId: "remote-sess-1" }));
+      emitter.emit.mockClear();
+
+      jest.advanceTimersByTime(90_000);
+
+      expect(emitter.emit).toHaveBeenCalledWith(
+        SESSION_WS_EVENTS.runError,
+        expect.objectContaining({ sessionId: "remote-sess-1" }),
+      );
+
+      // 清理后旧 streamId 的帧应被忽略
+      emitter.emit.mockClear();
+      svc.onFrame(makeFrame({ streamId, sessionId: "remote-sess-1" }));
+      expect(emitter.emit).not.toHaveBeenCalled();
+    });
+
+    it("create 模式下首帧从未到达（sessionId 未知）→ 超时静默清理，不 emit run.error", () => {
+      const { svc, emitter } = make();
+      svc.startRun("u1", "dB", "create", null, "hi");
+
+      jest.advanceTimersByTime(90_000);
+
+      expect(emitter.emit).not.toHaveBeenCalledWith(
+        SESSION_WS_EVENTS.runError,
+        expect.anything(),
+      );
+    });
+
+    it("收到新帧会续期 idle 计时（累计超过阈值但距最近一帧未超时 → 不清理）", () => {
+      const { svc, emitter } = make();
+      const { streamId } = svc.startRun("u1", "dB", "create", null, "hi");
+
+      jest.advanceTimersByTime(60_000);
+      svc.onFrame(makeFrame({ streamId })); // 续期
+      jest.advanceTimersByTime(60_000); // 累计 120s，但距上一帧仅 60s < 90s
+
+      emitter.emit.mockClear();
+      svc.onFrame(makeFrame({ streamId }));
+      expect(emitter.emit).toHaveBeenCalledWith(
+        SESSION_WS_EVENTS.runChunk,
+        expect.anything(),
+      );
+    });
+  });
+});

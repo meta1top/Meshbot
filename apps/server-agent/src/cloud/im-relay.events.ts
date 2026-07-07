@@ -1,4 +1,8 @@
-import type { DeviceQueryForwarded } from "@meshbot/types";
+import type {
+  AgentRunControlForwarded,
+  AgentRunStartForwarded,
+  DeviceQueryForwarded,
+} from "@meshbot/types";
 
 /** im-relay 本地事件（server-agent 进程内 EventEmitter2）。 */
 export const IM_RELAY_EVENTS = {
@@ -7,6 +11,14 @@ export const IM_RELAY_EVENTS = {
   deviceQueryResponse: "im.relay.device_query_response",
   /** L2c：云端转发给本设备的入站查询请求（A→云→B），供 Task4 入站消费。 */
   deviceQueryRequest: "im.relay.device_query_request",
+  /** L3：云端转发给本设备的入站远程 run 请求（A→云→B），供 Task4 入站消费。 */
+  agentRunRequest: "im.relay.agent_run_request",
+  /** L3：云端转发给本设备的入站运行控制指令（A→云→B），供 Task5 入站消费。 */
+  agentRunControlInbound: "im.relay.agent_run_control",
+  /** L3：云端回流的运行帧（B→云→A），桥给 RemoteRunService.onFrame。 */
+  agentRunFrame: "im.relay.agent_run_frame",
+  /** L3：云端回流的流终止通知（B→云→A），桥给 RemoteRunService.onEnd。 */
+  agentRunEnd: "im.relay.agent_run_end",
 } as const;
 
 /** relay 重连成功事件负载。 */
@@ -22,4 +34,24 @@ export interface ImRelayConnectedEvent {
 export interface ImRelayDeviceQueryRequestEvent {
   cloudUserId: string;
   forwarded: DeviceQueryForwarded;
+}
+
+/**
+ * L3：入站远程 run 请求本地事件负载（云端转发，供本设备执行方消费并回流运行帧）。
+ *
+ * @public-api Task 4（入站处理器）消费此事件负载类型；本任务只负责发出该事件。
+ */
+export interface ImRelayAgentRunRequestEvent {
+  cloudUserId: string;
+  forwarded: AgentRunStartForwarded;
+}
+
+/**
+ * L3：入站运行控制指令本地事件负载（云端转发，供本设备执行方消费并驱动 runner）。
+ *
+ * @public-api Task 5（入站处理器）消费此事件负载类型；本任务只负责发出该事件。
+ */
+export interface ImRelayAgentRunControlEvent {
+  cloudUserId: string;
+  forwarded: AgentRunControlForwarded;
 }
