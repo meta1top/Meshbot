@@ -6,6 +6,7 @@ export {
   type PreLoginShellViewProps,
 } from "./pre-login-shell";
 export { RailIconStrip, type RailIconStripProps } from "./rail-icon-strip";
+export { RailNav, type RailNavItemModel, type RailNavProps } from "./rail-nav";
 export { RailNavItem } from "./rail-nav-item";
 export { SidebarNavItem } from "./sidebar-nav-item";
 export { SidebarRow, type SidebarRowProps } from "./sidebar-row";
