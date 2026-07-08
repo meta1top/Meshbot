@@ -1,6 +1,6 @@
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
-import { Injectable, Optional } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
 import { AccountContextService } from "../account/account-context.service";
 import { MeshbotConfigService } from "../config/meshbot-config.service";
 import {
@@ -9,6 +9,7 @@ import {
   readActiveModelConfig,
   readModelConfigById,
 } from "../config/model-config.reader";
+import { CLOUD_TOKEN_PORT, type CloudTokenPort } from "./cloud-token.port";
 import { createChatModel } from "./llm.factory";
 import { ModelRunContext } from "./model-run-context";
 import type { ModelProvider } from "./nodes/supervisor.node";
@@ -20,12 +21,16 @@ import type { ModelProvider } from "./nodes/supervisor.node";
  * - modelMeta：当前活跃模型的 providerType/model，resolveModel() 时刷新，供 usage 事件标注。
  * - modelCache：按配置 key 缓存 BaseChatModel 实例，避免每次调用重新初始化（~200ms）。
  * - overrideProvider：测试注入的假 provider；非空时 provider() 直接返回它，跳过 DB 读取。
+ * - cloudTokenByAccount：按账号缓存的云网关 device token，resolveModel()/getTitleModel()
+ *   每次调用前经 CLOUD_TOKEN_PORT 刷新；cloudTokenProvider 闭包按**当前**账号读取（非构造时
+ *   固化的值），天然隔离并发多账号，且 chat model 命中缓存时也总能拿到最新 token。
  */
 @Injectable()
 export class ModelResolver {
   private modelMeta: { providerType: string; model: string };
   private readonly modelCache = new Map<string, BaseChatModel>();
   private readonly overrideProvider?: ModelProvider;
+  private readonly cloudTokenByAccount = new Map<string, string>();
 
   constructor(
     private readonly config: MeshbotConfigService,
@@ -33,12 +38,44 @@ export class ModelResolver {
     private readonly runCtx: ModelRunContext,
     @Optional() overrideProvider?: ModelProvider,
     @Optional() overrideMeta?: { providerType: string; model: string },
+    @Optional()
+    @Inject(CLOUD_TOKEN_PORT)
+    private readonly cloudTokenPort?: CloudTokenPort,
   ) {
     this.modelMeta = overrideMeta ?? {
       providerType: "unknown",
       model: "unknown",
     };
     this.overrideProvider = overrideProvider;
+  }
+
+  /**
+   * 传给 createChatModel 的 cloudTokenProvider：按**当前**账号（AccountContextService，
+   * ALS 同步读取）查缓存的 device token。是一个稳定引用（不随 chat model 缓存命中/未命中
+   * 而重建），闭包不固化任何值——真正的活值来自 cloudTokenByAccount，由 resolveModel() /
+   * getTitleModel() 在每次调用时刷新，实现"请求时解析、轮换透明"。
+   */
+  private readonly cloudTokenProvider = (): string | null => {
+    const acct = this.account.get();
+    return acct ? (this.cloudTokenByAccount.get(acct) ?? null) : null;
+  };
+
+  /**
+   * 若配置为云网关模型，经 CLOUD_TOKEN_PORT 刷新当前账号缓存的 device token
+   * （下次 fetch 会读到）。非云模型或未绑定端口（测试/无 server-agent 环境）静默跳过——
+   * 云模型请求会带空 Bearer，由网关侧鉴权拒绝，语义见 llm.factory.ts 的 buildCloudFetch。
+   */
+  private async refreshCloudToken(
+    acct: string,
+    cfg: ActiveModelConfig,
+  ): Promise<void> {
+    if (!cfg.isCloudModel || !this.cloudTokenPort) return;
+    const token = await this.cloudTokenPort.resolve().catch(() => null);
+    if (token) {
+      this.cloudTokenByAccount.set(acct, token);
+    } else {
+      this.cloudTokenByAccount.delete(acct);
+    }
   }
 
   /** 返回最终使用的 ModelProvider（测试注入优先，否则包装 resolveModel）。 */
@@ -74,10 +111,13 @@ export class ModelResolver {
     const meta = { providerType: cfg.providerType, model: cfg.model };
     this.modelMeta = meta;
     this.runCtx.setMeta(meta);
+    await this.refreshCloudToken(acct, cfg);
     const key = modelCacheKey(cfg);
     const cached = this.modelCache.get(key);
     if (cached) return cached;
-    const model = await createChatModel(cfg);
+    const model = await createChatModel(cfg, {
+      cloudTokenProvider: this.cloudTokenProvider,
+    });
     this.modelCache.set(key, model);
     return model;
   }
@@ -91,13 +131,12 @@ export class ModelResolver {
    * 独立 cache key 跟主 graph model 共存，避免互相覆盖。
    */
   async getTitleModel(): Promise<BaseChatModel> {
-    const cfg = readActiveModelConfig(
-      this.config.getDatabasePath(),
-      this.account.getOrThrow(),
-    );
+    const acct = this.account.getOrThrow();
+    const cfg = readActiveModelConfig(this.config.getDatabasePath(), acct);
     if (!cfg) {
       throw new Error("当前账号没有启用的模型配置，请先在设置中配置模型");
     }
+    await this.refreshCloudToken(acct, cfg);
     const key = `title|${modelCacheKey(cfg)}`;
     const cached = this.modelCache.get(key);
     if (cached) return cached;
@@ -108,6 +147,7 @@ export class ModelResolver {
     const model = await createChatModel(cfg, {
       streaming: false,
       modelKwargs,
+      cloudTokenProvider: this.cloudTokenProvider,
     });
     this.modelCache.set(key, model);
     return model;

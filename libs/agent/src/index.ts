@@ -46,6 +46,10 @@ export {
   type RuntimeContextPort,
 } from "./graph/runtime-context.port";
 export {
+  CLOUD_TOKEN_PORT,
+  type CloudTokenPort,
+} from "./graph/cloud-token.port";
+export {
   QUICK_ASSISTANT_PORT,
   type QuickAssistantPort,
 } from "./tools/quick-assistant.port";
