@@ -81,18 +81,17 @@ export class OrgModelConfigService {
     await this.configRepo.delete({ id });
   }
 
-  /** Agent 下发:解密、仅 enabled */
+  /**
+   * Agent 下发:仅可见列表,不解密、不带厂商敏感字段(apiKey/baseUrl/providerType/model)。
+   * 厂商调用改由网关侧 resolveDecrypted 持有,本地 Agent 只拿 id 做调用引用。
+   */
   async listForAgent(orgId: string): Promise<AgentModelConfig[]> {
     const rows = await this.configRepo.find({ where: { orgId } });
     return rows
       .filter((r) => r.enabled)
       .map((r) => ({
         id: r.id,
-        providerType: r.providerType,
         name: r.name,
-        model: r.model,
-        apiKey: this.crypto.decrypt(r.apiKeyEnc),
-        baseUrl: r.baseUrl,
         contextWindow: r.contextWindow,
         enabled: r.enabled,
       }));

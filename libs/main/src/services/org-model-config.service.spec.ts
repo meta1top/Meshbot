@@ -48,7 +48,7 @@ describe("OrgModelConfigService", () => {
     enabled: true,
   };
 
-  it("create 加密入库,listForAdmin 打码,listForAgent 解密", async () => {
+  it("create 加密入库,listForAdmin 打码,listForAgent 不含厂商 key", async () => {
     const rows: OrgModelConfig[] = [];
     const svc = new OrgModelConfigService(makeRepo(rows) as never, crypto);
     await svc.create("o1", input);
@@ -56,7 +56,28 @@ describe("OrgModelConfigService", () => {
     const admin = await svc.listForAdmin("o1");
     expect(admin[0].apiKeyMasked).toBe("****1234");
     const agent = await svc.listForAgent("o1");
-    expect(agent[0].apiKey).toBe("sk-abcd1234");
+    expect(agent[0]).not.toHaveProperty("apiKey");
+    expect(agent[0].name).toBe("默认");
+  });
+
+  it("listForAgent 不解密、不含厂商 key", async () => {
+    const rows: OrgModelConfig[] = [];
+    const svc = new OrgModelConfigService(makeRepo(rows) as never, crypto);
+    await svc.create("o1", input);
+    const spy = jest.spyOn(crypto, "decrypt");
+    const out = await svc.listForAgent("o1");
+    expect(out[0]).not.toHaveProperty("apiKey");
+    expect(out[0]).not.toHaveProperty("baseUrl");
+    expect(out[0]).not.toHaveProperty("providerType");
+    expect(out[0]).not.toHaveProperty("model");
+    expect(out[0]).toEqual(
+      expect.objectContaining({
+        id: expect.any(String),
+        name: expect.any(String),
+      }),
+    );
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
   });
 
   it("create 缺 apiKey 抛 VALIDATION_FAILED", async () => {
@@ -76,8 +97,9 @@ describe("OrgModelConfigService", () => {
     const svc = new OrgModelConfigService(makeRepo(rows) as never, crypto);
     const created = await svc.create("o1", input);
     await svc.update("o1", created.id, { name: "改名" });
+    const resolved = await svc.resolveDecrypted("o1", created.id);
+    expect(resolved?.apiKey).toBe("sk-abcd1234");
     const agent = await svc.listForAgent("o1");
-    expect(agent[0].apiKey).toBe("sk-abcd1234");
     expect(agent[0].name).toBe("改名");
   });
 

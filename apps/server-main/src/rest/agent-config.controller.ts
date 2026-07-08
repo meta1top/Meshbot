@@ -7,7 +7,7 @@ import { CurrentUser } from "../auth/current-user.decorator";
 import type { JwtMainPayload } from "../auth/jwt.strategy";
 
 /**
- * Agent 侧下发端点：读取组织已启用的模型配置（含明文 apiKey）。
+ * Agent 侧下发端点：读取组织已启用的模型配置可见列表（不含厂商敏感字段）。
  * 独立于 OrgModelConfigController（后者是 owner 管理视图，apiKey 打码）。
  */
 @Controller("agent")
