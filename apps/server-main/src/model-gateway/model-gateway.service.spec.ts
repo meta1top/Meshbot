@@ -1,4 +1,4 @@
-import { AIMessage } from "@langchain/core/messages";
+import { AIMessage, AIMessageChunk } from "@langchain/core/messages";
 import type { OrgModelConfigService } from "@meshbot/main";
 import { initChatModel } from "langchain/chat_models/universal";
 import {
@@ -73,5 +73,52 @@ describe("ModelGatewayService", () => {
       ),
     ).rejects.toBeInstanceOf(GatewayModelNotFoundError);
     expect(initChatModel).not.toHaveBeenCalled();
+  });
+
+  it("流式：逐 chunk yield OpenAI 帧", async () => {
+    orgSvc.resolveDecrypted.mockResolvedValue({
+      providerType: "openai",
+      model: "gpt-4o",
+      baseUrl: null,
+      apiKey: "sk",
+      contextWindow: null,
+    });
+    (initChatModel as jest.Mock).mockResolvedValue({
+      stream: async function* () {
+        yield new AIMessageChunk("he");
+        yield new AIMessageChunk("llo");
+      },
+    });
+
+    const frames: any[] = [];
+    for await (const f of service.stream(
+      "o1",
+      {
+        model: "m1",
+        messages: [{ role: "user", content: "hi" }],
+        stream: true,
+      },
+      "id",
+    )) {
+      frames.push(f);
+    }
+
+    expect(frames[0].choices[0].delta.content).toBe("he");
+    expect(frames[1].choices[0].delta.content).toBe("llo");
+    expect(frames.at(-1).choices[0].finish_reason).toBe("stop");
+  });
+
+  it("流式：模型不存在 → 抛 GatewayModelNotFoundError", async () => {
+    orgSvc.resolveDecrypted.mockResolvedValue(null);
+
+    await expect(async () => {
+      for await (const _f of service.stream(
+        "o1",
+        { model: "nope", messages: [] },
+        "id",
+      )) {
+        // no-op
+      }
+    }).rejects.toBeInstanceOf(GatewayModelNotFoundError);
   });
 });

@@ -44,7 +44,10 @@ export type {
   OrgModelConfigInput,
   OrgModelConfigView,
 } from "@meshbot/types";
-export { OrgModelConfigService } from "./services/org-model-config.service";
+export {
+  type ResolvedModel,
+  OrgModelConfigService,
+} from "./services/org-model-config.service";
 export { PresenceService } from "./services/presence.service";
 export { DevicePresenceService } from "./services/device-presence.service";
 export { SkillMarketService } from "./services/skill-market.service";

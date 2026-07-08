@@ -1,10 +1,12 @@
 import { Injectable } from "@nestjs/common";
 import type { OpenAIChatRequest } from "@meshbot/types";
-import { OrgModelConfigService } from "@meshbot/main";
+import { type ResolvedModel, OrgModelConfigService } from "@meshbot/main";
 import { initChatModel } from "langchain/chat_models/universal";
+import type { ToolCallChunk } from "@langchain/core/messages/tool";
 import {
   toLangchainMessages,
   toModelParams,
+  toOpenAIChunk,
   toOpenAICompletion,
 } from "./openai-adapter";
 
@@ -16,6 +18,26 @@ const PROVIDER_MODEL_NAME: Record<string, string> = {
   google: "google-genai",
   "openai-compatible": "openai",
 };
+
+/**
+ * langchain `AIMessageChunk.tool_call_chunks` → OpenAI 流式 `delta.tool_calls` 映射。
+ * 实测校准：langchain 每帧携带 `{name?, args?, id?, index}`（增量片段，按 index 累加），
+ * OpenAI 线上格式为 `{index, id?, type:"function", function:{name?, arguments}}`。
+ */
+function toOpenAIToolCallDeltas(
+  chunks: ToolCallChunk[] | undefined,
+): object[] | undefined {
+  if (!chunks?.length) return undefined;
+  return chunks.map((c) => ({
+    index: c.index ?? 0,
+    ...(c.id ? { id: c.id } : {}),
+    type: "function" as const,
+    function: {
+      ...(c.name ? { name: c.name } : {}),
+      arguments: c.args ?? "",
+    },
+  }));
+}
 
 /** 云端模型网关：编排 org 模型解析 → langchain 厂商调用 → OpenAI 兼容响应。 */
 @Injectable()
@@ -35,9 +57,36 @@ export class ModelGatewayService {
     return toOpenAICompletion(result, req.model, id);
   }
 
+  /** 流式：解析 org 模型 → 解密 → 调厂商 stream → 逐 chunk 产出 OpenAI chat.completion.chunk。 */
+  async *stream(
+    orgId: string,
+    req: OpenAIChatRequest,
+    id: string,
+  ): AsyncGenerator<object> {
+    const resolved = await this.orgModels.resolveDecrypted(orgId, req.model);
+    if (!resolved) throw new GatewayModelNotFoundError(req.model);
+    const model = await this.build(resolved, req, true);
+    for await (const chunk of await model.stream(toLangchainMessages(req))) {
+      const content = typeof chunk.content === "string" ? chunk.content : "";
+      const toolCalls = toOpenAIToolCallDeltas(
+        (chunk as { tool_call_chunks?: ToolCallChunk[] }).tool_call_chunks,
+      );
+      if (content || toolCalls) {
+        yield toOpenAIChunk({ content, toolCalls }, req.model, id);
+      }
+    }
+    yield {
+      id,
+      object: "chat.completion.chunk",
+      created: 0,
+      model: req.model,
+      choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+    };
+  }
+
   /** 内部：按 resolved 建 langchain 模型（Task 5 流式复用）。 */
   private async build(
-    resolved: Awaited<ReturnType<OrgModelConfigService["resolveDecrypted"]>>,
+    resolved: ResolvedModel,
     req: OpenAIChatRequest,
     streaming: boolean,
   ) {

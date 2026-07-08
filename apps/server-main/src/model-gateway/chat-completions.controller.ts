@@ -23,7 +23,7 @@ class ChatCompletionDto extends createZodDto(openAIChatRequestSchema) {}
 export class ChatCompletionsController {
   constructor(private readonly gateway: ModelGatewayService) {}
 
-  /** stream=false 走非流式；stream=true 由 Task 5 补 SSE。 */
+  /** stream=false 走非流式 JSON；stream=true 走 SSE 逐帧转发。 */
   @Post("chat/completions")
   async completions(
     @Body() body: ChatCompletionDto,
@@ -40,8 +40,34 @@ export class ChatCompletionsController {
       return;
     }
     const id = `chatcmpl-${user.orgId}-${process.hrtime.bigint()}`;
+
+    if (body.stream) {
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+      try {
+        for await (const frame of this.gateway.stream(user.orgId, body, id)) {
+          res.write(`data: ${JSON.stringify(frame)}\n\n`);
+        }
+        res.write("data: [DONE]\n\n");
+      } catch (err) {
+        if (err instanceof GatewayModelNotFoundError) {
+          res.write(
+            `data: ${JSON.stringify({
+              error: { message: `model not found: ${body.model}` },
+            })}\n\n`,
+          );
+        } else {
+          res.write(
+            `data: ${JSON.stringify({ error: { message: "gateway error" } })}\n\n`,
+          );
+        }
+      }
+      res.end();
+      return;
+    }
+
     try {
-      // Task 5 在此按 body.stream 分流；Phase 1 只做非流式
       const out = await this.gateway.complete(user.orgId, body, id);
       res.status(200).json(out);
     } catch (err) {
