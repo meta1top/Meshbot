@@ -5,6 +5,7 @@ import {
 } from "@langchain/core/messages";
 import {
   toLangchainMessages,
+  toModelParams,
   toOpenAIChunk,
   toOpenAICompletion,
 } from "./openai-adapter";
@@ -39,5 +40,33 @@ describe("openai-adapter", () => {
     const c = toOpenAIChunk({ content: "he" }, "m1", "cmpl-1") as any;
     expect(c.object).toBe("chat.completion.chunk");
     expect(c.choices[0].delta.content).toBe("he");
+  });
+
+  describe("toModelParams", () => {
+    it("提取 temperature/max_tokens 为顶层 temperature/maxTokens", () => {
+      expect(
+        toModelParams({
+          model: "m1",
+          messages: [],
+          temperature: 0.7,
+          max_tokens: 256,
+        }),
+      ).toEqual({ temperature: 0.7, maxTokens: 256 });
+    });
+
+    it("未传 temperature/max_tokens → 返回空对象", () => {
+      expect(toModelParams({ model: "m1", messages: [] })).toEqual({});
+    });
+
+    it("tools 不出现在结果里（走 bindTools，而非顶层参数）", () => {
+      const out = toModelParams({
+        model: "m1",
+        messages: [],
+        tools: [{ type: "function", function: { name: "foo" } }],
+        temperature: 0.2,
+      });
+      expect(out).toEqual({ temperature: 0.2 });
+      expect(out).not.toHaveProperty("tools");
+    });
   });
 });
