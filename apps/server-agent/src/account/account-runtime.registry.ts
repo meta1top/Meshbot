@@ -2,7 +2,7 @@ import {
   AccountContextService,
   McpService,
   PromptService,
-} from "@meshbot/agent";
+} from "@meshbot/lib-agent";
 import { Injectable, Logger } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { ImRelayClientService } from "../cloud/im-relay-client.service";

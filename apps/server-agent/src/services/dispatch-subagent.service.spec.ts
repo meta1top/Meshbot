@@ -1,4 +1,4 @@
-import { AccountContextService } from "@meshbot/agent";
+import { AccountContextService } from "@meshbot/lib-agent";
 import { DispatchSubagentService } from "./dispatch-subagent.service";
 
 /** 反复 await Promise.resolve() 排空微任务队列，供 fire-and-forget 分支的断言用。 */

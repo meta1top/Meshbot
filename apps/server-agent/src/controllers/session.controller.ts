@@ -1,5 +1,5 @@
 import { computeToolCallStatus } from "./session-history-status";
-import { AccountContextService } from "@meshbot/agent";
+import { AccountContextService } from "@meshbot/lib-agent";
 import {
   type CreateSessionResponse,
   type DeletePendingResponse,

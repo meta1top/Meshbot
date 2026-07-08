@@ -1,4 +1,4 @@
-import type { ThreadStateService } from "@meshbot/agent";
+import type { ThreadStateService } from "@meshbot/lib-agent";
 import { CheckpointerCleanupService } from "./checkpointer-cleanup.service";
 
 describe("CheckpointerCleanupService", () => {

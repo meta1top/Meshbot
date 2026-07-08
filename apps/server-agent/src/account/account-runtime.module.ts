@@ -1,5 +1,5 @@
 import { Global, Module } from "@nestjs/common";
-import { AgentModule } from "@meshbot/agent";
+import { AgentModule } from "@meshbot/lib-agent";
 import { AuthModule } from "../auth.module";
 import { AccountBootstrapService } from "./account-bootstrap.service";
 import { AccountRuntimeRegistry } from "./account-runtime.registry";

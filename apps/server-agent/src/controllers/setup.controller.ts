@@ -1,4 +1,4 @@
-import { AccountContextService } from "@meshbot/agent";
+import { AccountContextService } from "@meshbot/lib-agent";
 import { PROVIDERS } from "@meshbot/types-agent";
 import { Controller, Get, Headers } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { AccountContextService } from "@meshbot/agent";
+import { AccountContextService } from "@meshbot/lib-agent";
 import { NotFoundException } from "@nestjs/common";
 import { DataSource } from "typeorm";
 import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";

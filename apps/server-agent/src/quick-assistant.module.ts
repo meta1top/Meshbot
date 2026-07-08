@@ -1,4 +1,7 @@
-import { QUICK_ASSISTANT_PORT, type QuickAssistantPort } from "@meshbot/agent";
+import {
+  QUICK_ASSISTANT_PORT,
+  type QuickAssistantPort,
+} from "@meshbot/lib-agent";
 import { TxTypeOrmModule } from "@meshbot/common";
 import { Global, Module } from "@nestjs/common";
 import { QuickAssistantController } from "./controllers/quick-assistant.controller";

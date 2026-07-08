@@ -196,8 +196,7 @@ function shouldSkipFile(filePath: string): boolean {
     return true;
   // 作用域 Entity 只在 server-agent；其余应用不跑 Agent 业务逻辑，跳过。
   if (rel.startsWith("apps/web-") || rel.includes("/apps/web-")) return true;
-  if (rel.startsWith("apps/cli-agent") || rel.includes("/apps/cli-agent/"))
-    return true;
+  if (rel.startsWith("apps/cli") || rel.includes("/apps/cli/")) return true;
   if (rel.startsWith("apps/desktop") || rel.includes("/apps/desktop/"))
     return true;
   if (rel.startsWith("apps/server-main") || rel.includes("/apps/server-main/"))

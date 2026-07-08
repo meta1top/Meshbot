@@ -1,6 +1,6 @@
 import { createReadStream, existsSync, statSync } from "node:fs";
 import path from "node:path";
-import { MeshbotConfigService } from "@meshbot/agent";
+import { MeshbotConfigService } from "@meshbot/lib-agent";
 import {
   Controller,
   ForbiddenException,

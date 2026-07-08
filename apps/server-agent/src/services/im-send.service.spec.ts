@@ -1,4 +1,4 @@
-import type { AccountContextService } from "@meshbot/agent";
+import type { AccountContextService } from "@meshbot/lib-agent";
 import type { ImRelayClientService } from "../cloud/im-relay-client.service";
 import { type AwaitOutcome, ConfirmationService } from "./confirmation.service";
 import { ImSendService } from "./im-send.service";

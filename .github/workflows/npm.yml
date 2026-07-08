@@ -1,6 +1,6 @@
 name: npm (changesets publish)
 
-# changesets 版本发布 + npm 发包 + 打 tag（cli-agent / server-agent 公共包，desktop 私有只打 tag）。
+# changesets 版本发布 + npm 发包 + 打 tag（cli / server-agent 公共包，desktop 私有只打 tag）。
 # 当前暂不启用自动发布：改为手动触发（Actions 页 "Run workflow"）。
 # 要恢复"合并到 main 自动发版"，把下面换回：
 #   on:
@@ -38,7 +38,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build
-        # 发布前先 build；cli-agent / server-agent 都是 publish dist 目录
+        # 发布前先 build；cli / server-agent 都是 publish dist 目录
         run: pnpm build
 
       # changesets/action：

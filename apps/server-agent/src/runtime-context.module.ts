@@ -1,4 +1,7 @@
-import { RUNTIME_CONTEXT_PORT, AccountContextService } from "@meshbot/agent";
+import {
+  RUNTIME_CONTEXT_PORT,
+  AccountContextService,
+} from "@meshbot/lib-agent";
 import { TxTypeOrmModule } from "@meshbot/common";
 import { QUICK_ASSISTANT_DEFAULT_NAME } from "@meshbot/types-agent";
 import { Global, Module } from "@nestjs/common";
@@ -7,7 +10,7 @@ import { Setting } from "./entities/setting.entity";
 import { CloudIdentityService } from "./services/cloud-identity.service";
 import { QUICK_ASSISTANT_NAME_KEY } from "./services/quick-assistant.service";
 import { SettingService } from "./services/setting.service";
-import type { RuntimeContextPort } from "@meshbot/agent";
+import type { RuntimeContextPort } from "@meshbot/lib-agent";
 
 /**
  * @Global RuntimeContextModule：为 AgentModule 的 GraphService 提供 RUNTIME_CONTEXT_PORT 绑定。

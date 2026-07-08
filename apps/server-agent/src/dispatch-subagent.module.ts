@@ -1,4 +1,4 @@
-import { DISPATCH_SUBAGENT_PORT } from "@meshbot/agent";
+import { DISPATCH_SUBAGENT_PORT } from "@meshbot/lib-agent";
 import { Global, Module } from "@nestjs/common";
 import { DispatchSubagentService } from "./services/dispatch-subagent.service";
 import { SessionModule } from "./session.module";

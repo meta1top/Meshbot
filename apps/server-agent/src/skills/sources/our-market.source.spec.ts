@@ -1,7 +1,7 @@
 import { AgentErrorCode } from "../../errors/agent.error-codes";
 import type { CloudClientService } from "../../cloud/cloud-client.service";
 import type { CloudIdentityService } from "../../services/cloud-identity.service";
-import type { AccountContextService } from "@meshbot/agent";
+import type { AccountContextService } from "@meshbot/lib-agent";
 import type { ConfigService } from "@nestjs/config";
 import { OurMarketSource } from "./our-market.source";
 

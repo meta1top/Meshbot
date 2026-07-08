@@ -1,4 +1,4 @@
-import { AccountContextService } from "@meshbot/agent";
+import { AccountContextService } from "@meshbot/lib-agent";
 import { AgentErrorCode } from "../errors/agent.error-codes";
 import { CloudOrgService } from "./cloud-org.service";
 

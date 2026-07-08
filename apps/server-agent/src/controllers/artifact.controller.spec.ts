@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { ForbiddenException, NotFoundException } from "@nestjs/common";
-import type { MeshbotConfigService } from "@meshbot/agent";
+import type { MeshbotConfigService } from "@meshbot/lib-agent";
 import { ArtifactController } from "./artifact.controller";
 
 function make(ws: string) {

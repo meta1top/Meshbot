@@ -44,7 +44,7 @@ RUN pnpm --filter @meshbot/types build \
  && pnpm --filter @meshbot/common build \
  && pnpm --filter @meshbot/types-agent build \
  && pnpm --filter @meshbot/assets build \
- && pnpm --filter @meshbot/agent build \
+ && pnpm --filter @meshbot/lib-agent build \
  && pnpm --filter @meshbot/server-agent build
 
 # 用 pnpm deploy 提取 server-agent 单包的 prod 闭包到 /out
@@ -55,7 +55,7 @@ RUN pnpm --filter @meshbot/server-agent deploy \
 RUN cp -r /repo/apps/server-agent/dist /out/dist \
  && cp -r /repo/apps/server-agent/i18n /out/i18n \
  && cp -r /repo/libs/common/dist       /out/node_modules/@meshbot/common/dist \
- && cp -r /repo/libs/agent/dist        /out/node_modules/@meshbot/agent/dist \
+ && cp -r /repo/libs/agent/dist        /out/node_modules/@meshbot/lib-agent/dist \
  && cp -r /repo/libs/types/dist        /out/node_modules/@meshbot/types/dist \
  && cp -r /repo/libs/types-agent/dist  /out/node_modules/@meshbot/types-agent/dist \
  && cp -r /repo/libs/assets/dist       /out/node_modules/@meshbot/assets/dist

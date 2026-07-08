@@ -48,7 +48,7 @@ meshbot (CLI)           server-agent (NestJS)
 
 | 组件 | 职责 | 部署方式 |
 |------|------|----------|
-| `apps/cli-agent` | 进程管理、系统服务注册、配置文件管理 | `npm install -g @meshbot/cli-agent` |
+| `apps/cli-agent` | 进程管理、系统服务注册、配置文件管理 | `npm install -g @meshbot/agent` |
 | `apps/server-agent` | NestJS HTTP 服务：Agent 业务 API、静态 UI 托管、本地用户认证 | `cli-agent` 启动的子进程 |
 | `apps/web-agent` | Next.js 前端，构建为静态文件 | 构建产物被 `server-agent` 内嵌托管 |
 | `apps/desktop` | 远程客户端壳：保存 Agent 连接地址、加载远程 UI | 独立的 Electron 安装包 |
@@ -304,7 +304,7 @@ test('start -> health check -> stop', async () => {
 
 ```json
 {
-  "name": "@meshbot/cli-agent",
+  "name": "@meshbot/agent",
   "version": "0.0.1",
   "bin": { "meshbot": "./dist/cli.js" },
   "files": ["dist"],
@@ -317,17 +317,17 @@ test('start -> health check -> stop', async () => {
 ### 发布流程
 
 1. 先发布 `@meshbot/server-agent`
-2. 再发布 `@meshbot/cli-agent`（`workspace:*` 会被 pnpm 自动替换为实际版本号）
+2. 再发布 `@meshbot/agent`（`workspace:*` 会被 pnpm 自动替换为实际版本号）
 
 ```bash
 pnpm --filter @meshbot/server-agent publish --access public
-pnpm --filter @meshbot/cli-agent publish --access public
+pnpm --filter @meshbot/agent publish --access public
 ```
 
 ### 用户安装
 
 ```bash
-npm install -g @meshbot/cli-agent
+npm install -g @meshbot/agent
 
 # npm 自动：
 # 1. 下载 cli-agent

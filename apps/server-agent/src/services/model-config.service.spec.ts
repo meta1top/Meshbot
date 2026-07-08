@@ -1,5 +1,5 @@
 import { NotFoundException } from "@nestjs/common";
-import { AccountContextService } from "@meshbot/agent";
+import { AccountContextService } from "@meshbot/lib-agent";
 import type { AgentModelConfig } from "@meshbot/types";
 import { DataSource } from "typeorm";
 import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";

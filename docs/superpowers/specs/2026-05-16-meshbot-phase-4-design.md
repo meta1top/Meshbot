@@ -82,7 +82,7 @@
 
 | # | 资产 | Phase 4 动作 |
 |---|------|--------------|
-| D1 | `.changeset/config.json` + `pnpm changeset` 流程 | 版本号策略：`fixed: ["@meshbot/cli-agent", "@meshbot/desktop"]`（保持同 tag）；其它包 `linked`；private 包 `ignore` |
+| D1 | `.changeset/config.json` + `pnpm changeset` 流程 | 版本号策略：`fixed: ["@meshbot/agent", "@meshbot/desktop"]`（保持同 tag）；其它包 `linked`；private 包 `ignore` |
 | D2 | `.github/workflows/release.yml` | PR-driven：merge changeset PR → workflow 跑 `changeset version` + 自动 PR；tag push 触发实际发布 |
 | D3 | `package-desktop.yml` / `publish-cli.yml` 重构 | 复用 CI 的 install/test/build 步骤；触发器与 changesets 对齐；artifact 上传 GitHub Release |
 | D4 | `CHANGELOG.md` 模板 + `README.md` 安装说明 | 每个发布包一份 CHANGELOG；README 加最新 release 链接 |
@@ -384,7 +384,7 @@ volumes:
   "$schema": "https://unpkg.com/@changesets/config/schema.json",
   "changelog": "@changesets/cli/changelog",
   "commit": false,
-  "fixed": [["@meshbot/cli-agent", "@meshbot/desktop"]],
+  "fixed": [["@meshbot/agent", "@meshbot/desktop"]],
   "linked": [],
   "access": "public",
   "baseBranch": "main",
@@ -404,7 +404,7 @@ volumes:
 }
 ```
 
-`fixed: [["@meshbot/cli-agent", "@meshbot/desktop"]]` —— 两者锁同一 version（meshbot 桌面 + cli 同步发版）。
+`fixed: [["@meshbot/agent", "@meshbot/desktop"]]` —— 两者锁同一 version（meshbot 桌面 + cli 同步发版）。
 
 `ignore` 列私有包（不发 npm）。
 
@@ -444,14 +444,14 @@ jobs:
 
 ### 6.3 重构 `package-desktop.yml` / `publish-cli.yml`
 
-- 触发器对齐 changesets 生成的 tag 格式（`@meshbot/cli-agent@x.y.z` 或自定义短 tag）
+- 触发器对齐 changesets 生成的 tag 格式（`@meshbot/agent@x.y.z` 或自定义短 tag）
 - 复用 CI 的 install/build/test step（用 reusable workflow 或 composite action）
 - artifact 上传 GitHub Release（dmg/exe/AppImage）
 
 ### 6.4 文档
 
 - 根 `CHANGELOG.md`（changesets 自维护，加链接到 release page）
-- `README.md` 加「下载最新版」section（含 desktop 下载链接 + `npm i -g @meshbot/cli-agent`）
+- `README.md` 加「下载最新版」section（含 desktop 下载链接 + `npm i -g @meshbot/agent`）
 - `CONTRIBUTING.md` 写「如何提交 changeset」
 
 ---

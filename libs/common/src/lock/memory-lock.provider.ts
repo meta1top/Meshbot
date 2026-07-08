@@ -16,7 +16,7 @@ import type {
 /**
  * 进程内互斥锁实现。
  *
- * 适用于本地轨（server-agent / cli-agent / desktop fork 出的子进程）。
+ * 适用于本地轨（server-agent / cli / desktop fork 出的子进程）。
  * 严格说不是"分布式锁"，只是同一 Node 进程内对同 key 的串行化。
  *
  * 当上层切到云端轨（多节点）时，应替换为 RedisLockProvider。

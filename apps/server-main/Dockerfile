@@ -2,7 +2,7 @@
 #
 # 关键技巧：runtime 用 `pnpm deploy --filter @meshbot/server-main` 把 server-main
 # 单包的 prod deps（含 workspace 依赖）拷成独立 node_modules，避免拉入 server-agent
-# 的 better-sqlite3 / cli-agent 的 swc / 根 dev 依赖 typescript 等。
+# 的 better-sqlite3 / cli 的 swc / 根 dev 依赖 typescript 等。
 #
 # 构建（在 repo root）：
 #   docker build -f apps/server-main/Dockerfile -t meshbot/server-main:local .

@@ -1,6 +1,6 @@
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import type { BaseMessage } from "@langchain/core/messages";
-import { ModelResolver, ThreadStateService } from "@meshbot/agent";
+import { ModelResolver, ThreadStateService } from "@meshbot/lib-agent";
 import { SESSION_WS_EVENTS } from "@meshbot/types-agent";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { Test } from "@nestjs/testing";

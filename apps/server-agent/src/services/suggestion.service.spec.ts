@@ -1,5 +1,5 @@
-import type { ModelResolver } from "@meshbot/agent";
-import type { PromptService } from "@meshbot/agent";
+import type { ModelResolver } from "@meshbot/lib-agent";
+import type { PromptService } from "@meshbot/lib-agent";
 import type { SessionService } from "./session.service";
 import { SuggestionService } from "./suggestion.service";
 

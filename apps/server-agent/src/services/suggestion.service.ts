@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { ModelResolver, PromptService } from "@meshbot/agent";
+import { ModelResolver, PromptService } from "@meshbot/lib-agent";
 import { Injectable } from "@nestjs/common";
 import { SessionService } from "./session.service";
 import { parseSuggestions } from "./suggestion.util";

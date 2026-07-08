@@ -1,4 +1,4 @@
-import type { AccountContextService } from "@meshbot/agent";
+import type { AccountContextService } from "@meshbot/lib-agent";
 import { ConfirmationService } from "../services/confirmation.service";
 import { SessionController } from "./session.controller";
 

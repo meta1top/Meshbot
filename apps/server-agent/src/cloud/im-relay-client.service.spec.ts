@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { AccountContextService } from "@meshbot/agent";
+import { AccountContextService } from "@meshbot/lib-agent";
 import { IM_WS_EVENTS } from "@meshbot/types";
 import type { ImReadInput, ImSendInput } from "@meshbot/types";
 import { EventEmitter2 } from "@nestjs/event-emitter";

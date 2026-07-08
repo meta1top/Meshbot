@@ -14,7 +14,7 @@ import {
   AccountContextService,
   MeshbotConfigService,
   SkillService,
-} from "@meshbot/agent";
+} from "@meshbot/lib-agent";
 import { AgentErrorCode } from "../errors/agent.error-codes";
 import { CloudClientService } from "../cloud/cloud-client.service";
 import { CloudIdentityService } from "../services/cloud-identity.service";

@@ -1,13 +1,16 @@
-import { AccountContextService } from "@meshbot/agent";
+import { AccountContextService } from "@meshbot/lib-agent";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { ACCOUNT_EVENTS } from "./account.events";
 import { AccountRuntimeRegistry } from "./account-runtime.registry";
 
 type StubMcp = jest.Mocked<
-  Pick<import("@meshbot/agent").McpService, "initAccount" | "teardownAccount">
+  Pick<
+    import("@meshbot/lib-agent").McpService,
+    "initAccount" | "teardownAccount"
+  >
 >;
 type StubPrompt = jest.Mocked<
-  Pick<import("@meshbot/agent").PromptService, "evict">
+  Pick<import("@meshbot/lib-agent").PromptService, "evict">
 >;
 type StubRelay = jest.Mocked<
   Pick<
@@ -44,8 +47,8 @@ describe("AccountRuntimeRegistry", () => {
 
     registry = new AccountRuntimeRegistry(
       ctx,
-      mcp as unknown as import("@meshbot/agent").McpService,
-      prompt as unknown as import("@meshbot/agent").PromptService,
+      mcp as unknown as import("@meshbot/lib-agent").McpService,
+      prompt as unknown as import("@meshbot/lib-agent").PromptService,
       relay as unknown as import("../cloud/im-relay-client.service").ImRelayClientService,
       emitter,
     );

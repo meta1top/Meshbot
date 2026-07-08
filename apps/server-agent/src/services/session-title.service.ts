@@ -2,7 +2,7 @@ import {
   AccountContextService,
   ModelResolver,
   PromptService,
-} from "@meshbot/agent";
+} from "@meshbot/lib-agent";
 import {
   SESSION_WS_EVENTS,
   stripLlmuse,

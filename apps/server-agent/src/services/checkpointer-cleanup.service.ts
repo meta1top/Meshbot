@@ -1,4 +1,4 @@
-import { ThreadStateService } from "@meshbot/agent";
+import { ThreadStateService } from "@meshbot/lib-agent";
 import { Injectable } from "@nestjs/common";
 
 /**

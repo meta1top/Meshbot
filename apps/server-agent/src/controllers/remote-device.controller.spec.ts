@@ -1,4 +1,4 @@
-import type { AccountContextService } from "@meshbot/agent";
+import type { AccountContextService } from "@meshbot/lib-agent";
 import type { RemoteDeviceQueryService } from "../cloud/remote-device-query.service";
 import type { RemoteRunService } from "../cloud/remote-run.service";
 import { RemoteDeviceController } from "./remote-device.controller";
