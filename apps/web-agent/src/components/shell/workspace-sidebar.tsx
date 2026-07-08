@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@meshbot/design";
 import { useTheme } from "@meshbot/web-common/react";
-import { BrandLogo, RailIconStrip } from "@meshbot/web-common/shell";
+import { BrandLogo, RailNav } from "@meshbot/web-common/shell";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAtomValue } from "jotai";
 import {
@@ -130,6 +130,7 @@ export function WorkspaceSidebar({
       onClick: () => router.push("/more"),
     },
   ];
+  const activeKey = items.find((i) => i.active)?.key;
 
   return (
     <aside className="flex h-full w-[264px] shrink-0 flex-col border-r border-(--shell-sidebar-border) bg-(--shell-sidebar) text-(--shell-sidebar-fg)">
@@ -146,7 +147,13 @@ export function WorkspaceSidebar({
         <Plus /> {t("newTask")}
       </button>
       {/* 一级图标条 */}
-      <RailIconStrip items={items} className="px-3" />
+      <RailNav
+        orientation="horizontal"
+        className="px-3"
+        items={items.map(({ key, icon, label }) => ({ key, icon, label }))}
+        activeKey={activeKey}
+        onSelect={(key) => items.find((i) => i.key === key)?.onClick?.()}
+      />
       <div className="mx-3 my-3 h-px bg-(--shell-line)" />
       {/* 二级子栏插槽（各页 portal 进来） */}
       <div
