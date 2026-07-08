@@ -2,9 +2,9 @@
 
 import type { SkillInstallSource } from "@meshbot/types-agent";
 import {
+  type NavGroup,
   SidebarHeader,
-  SidebarNavItem,
-  SidebarSection,
+  SidebarNav,
 } from "@meshbot/web-common/shell";
 import { BookOpen, Package, Store } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -22,21 +22,43 @@ interface Props {
   onSelect: (view: SkillsView) => void;
 }
 
-const MARKET_SOURCES: {
-  view: MarketView;
-  icon: React.ReactNode;
-  labelKey: string;
-}[] = [
-  { view: "system", icon: <Store />, labelKey: "sourceOurMarket" },
-  { view: "clawhub", icon: <BookOpen />, labelKey: "sourceClawhub" },
-];
-
 /**
  * 技能页侧栏：「已安装」单行入口（技能清单在主区展示）+ 「市场来源」段
- * （system / clawhub 入口切换主区视图）。一级项与文件/更多页共用 SidebarNavItem。
+ * （system / clawhub 入口切换主区视图）。数据驱动 SidebarNav + NavGroup。
  */
 export function SkillsSidebar({ activeView, onSelect }: Props) {
   const t = useTranslations("skills");
+  const groups: NavGroup[] = [
+    {
+      key: "installed",
+      items: [
+        {
+          key: "installed",
+          label: t("installed"),
+          icon: <Package />,
+          onClick: () => onSelect("installed"),
+        },
+      ],
+    },
+    {
+      key: "market",
+      title: t("market"),
+      items: [
+        {
+          key: "system",
+          label: t("sourceOurMarket"),
+          icon: <Store />,
+          onClick: () => onSelect("system"),
+        },
+        {
+          key: "clawhub",
+          label: t("sourceClawhub"),
+          icon: <BookOpen />,
+          onClick: () => onSelect("clawhub"),
+        },
+      ],
+    },
+  ];
 
   return (
     <div className="flex h-full flex-col">
@@ -45,28 +67,11 @@ export function SkillsSidebar({ activeView, onSelect }: Props) {
 
       {/* Body */}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-2">
-        {/* 已安装入口（单行） */}
-        <div className="mb-1.5">
-          <SidebarNavItem
-            icon={<Package />}
-            label={t("installed")}
-            active={activeView === "installed"}
-            onClick={() => onSelect("installed")}
-          />
-        </div>
-
-        {/* 市场来源段 */}
-        <SidebarSection title={t("market")}>
-          {MARKET_SOURCES.map(({ view, icon, labelKey }) => (
-            <SidebarNavItem
-              key={view}
-              icon={icon}
-              label={t(labelKey as "sourceOurMarket" | "sourceClawhub")}
-              active={activeView === view}
-              onClick={() => onSelect(view)}
-            />
-          ))}
-        </SidebarSection>
+        <SidebarNav
+          groups={groups}
+          activeKey={activeView}
+          onSelect={(n) => onSelect(n.key as SkillsView)}
+        />
       </div>
     </div>
   );
