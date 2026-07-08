@@ -8,6 +8,13 @@ export {
 export { RailIconStrip, type RailIconStripProps } from "./rail-icon-strip";
 export { RailNav, type RailNavItemModel, type RailNavProps } from "./rail-nav";
 export { RailNavItem } from "./rail-nav-item";
+export {
+  isNavNodeActive,
+  type NavGroup,
+  type NavNode,
+  SidebarNav,
+  type SidebarNavProps,
+} from "./sidebar-nav";
 export { SidebarNavItem } from "./sidebar-nav-item";
 export { SidebarRow, type SidebarRowProps } from "./sidebar-row";
 export { SidebarSection } from "./sidebar-section";
