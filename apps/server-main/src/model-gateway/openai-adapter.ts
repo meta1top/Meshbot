@@ -5,6 +5,10 @@ import {
   SystemMessage,
   ToolMessage,
 } from "@langchain/core/messages";
+import {
+  convertLangChainToolCallToOpenAI,
+  parseToolCall,
+} from "@langchain/core/output_parsers/openai_tools";
 import type { OpenAIChatRequest } from "@meshbot/types";
 
 /** OpenAI messages → langchain BaseMessage[]。 */
@@ -19,9 +23,14 @@ export function toLangchainMessages(req: OpenAIChatRequest): BaseMessage[] {
       case "tool":
         return new ToolMessage({ content, tool_call_id: m.tool_call_id ?? "" });
       default:
+        // assistant：入站 tool_calls 是 OpenAI 线格式（function.name/function.arguments<string>），
+        // langchain AIMessage.tool_calls 要求顶层 name/args<object>——用 langchain 自带转换，
+        // 否则 @langchain/openai 读 toolCall.name/.args 全是 undefined，多轮工具调用第二轮发给厂商 400。
         return new AIMessage({
           content,
-          tool_calls: (m.tool_calls as never) ?? undefined,
+          tool_calls: (m.tool_calls ?? [])
+            .map((tc) => parseToolCall(tc, { returnId: true }))
+            .filter((tc): tc is NonNullable<typeof tc> => tc != null),
         });
     }
   });
@@ -57,7 +66,15 @@ export function toOpenAICompletion(msg: AIMessage, model: string, id: string) {
         message: {
           role: "assistant",
           content: textOf(msg.content),
-          ...(msg.tool_calls?.length ? { tool_calls: msg.tool_calls } : {}),
+          // langchain tool_calls 是 {name,args,id} 顶层形状，OpenAI 响应要 {id,type,function:{name,arguments<string>}}——
+          // 同样用 langchain 自带转换（C-1 的镜像），否则端侧 SDK 读不到 .function，工具调用丢失。
+          ...(msg.tool_calls?.length
+            ? {
+                tool_calls: msg.tool_calls.map((tc) =>
+                  convertLangChainToolCallToOpenAI(tc),
+                ),
+              }
+            : {}),
         },
         finish_reason: msg.tool_calls?.length ? "tool_calls" : "stop",
       },
