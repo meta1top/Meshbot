@@ -73,3 +73,7 @@ export type {
   OrgModelConfigInput,
   OrgModelConfigView,
 } from "./model-config/model-config.types";
+export {
+  type OpenAIChatRequest,
+  openAIChatRequestSchema,
+} from "./model-gateway/openai-chat.schema";

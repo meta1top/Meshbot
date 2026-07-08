@@ -283,6 +283,9 @@ importers:
       '@alicloud/tea-util':
         specifier: ^1.4.11
         version: 1.4.11
+      '@langchain/core':
+        specifier: ^0.3
+        version: 0.3.80(openai@5.12.2(ws@8.18.3)(zod@3.25.76))
       '@meshbot/assets':
         specifier: workspace:*
         version: link:../../libs/assets
