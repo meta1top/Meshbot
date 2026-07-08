@@ -158,7 +158,7 @@ const SKIP_PATH_FRAGMENTS = [
   "/scripts/",
   "/e2b/",
   "/apps/web-",
-  "/apps/cli-agent/",
+  "/apps/cli/",
   "/apps/desktop/",
   "/libs/agent/",
   "/packages/",

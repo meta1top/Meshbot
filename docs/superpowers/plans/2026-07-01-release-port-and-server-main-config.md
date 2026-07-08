@@ -863,7 +863,7 @@ describe("port-file", () => {
 
 - [ ] **Step 3: 运行确认两组单测失败**
 
-Run: `pnpm --filter @meshbot/cli-agent test`
+Run: `pnpm --filter @meshbot/agent test`
 Expected: FAIL，报找不到 `cloud-url` / `port-file` 模块。
 
 - [ ] **Step 4: 实现 cloud-url.ts**
@@ -1137,7 +1137,7 @@ export async function getAgentStatus(): Promise<void> {
 
 - [ ] **Step 10: 运行 CLI 全部单测**
 
-Run: `pnpm --filter @meshbot/cli-agent test`
+Run: `pnpm --filter @meshbot/agent test`
 Expected: PASS（cloud-url 3 + port-file 4 + 既有 config / pid-file / path-resolver / cli-binary 集成测试全绿）。读完整输出；若集成测试 `cli-binary.test.ts` 因端口/启动行为变化失败，按实际报错修正（多为断言里的端口或启动日志文案）。
 
 - [ ] **Step 11: 提交**

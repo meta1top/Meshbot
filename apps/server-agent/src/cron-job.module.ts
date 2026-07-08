@@ -1,4 +1,4 @@
-import { SCHEDULE_TOOLS_PORT } from "@meshbot/agent";
+import { SCHEDULE_TOOLS_PORT } from "@meshbot/lib-agent";
 import { TxTypeOrmModule } from "@meshbot/common";
 import { Global, Module } from "@nestjs/common";
 import { CronJobController } from "./controllers/cron-job.controller";

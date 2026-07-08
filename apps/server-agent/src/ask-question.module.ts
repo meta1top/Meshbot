@@ -1,4 +1,4 @@
-import { ASK_QUESTION_PORT } from "@meshbot/agent";
+import { ASK_QUESTION_PORT } from "@meshbot/lib-agent";
 import { Global, Module } from "@nestjs/common";
 import { AskQuestionService } from "./services/ask-question.service";
 

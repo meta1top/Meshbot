@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { AccountContextService } from "@meshbot/agent";
+import { AccountContextService } from "@meshbot/lib-agent";
 import type { AgentRunEnd, AgentRunFrame } from "@meshbot/types";
 import {
   SESSION_WS_EVENTS,

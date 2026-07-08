@@ -1,4 +1,4 @@
-import { AccountContextService, ModelRunContext } from "@meshbot/agent";
+import { AccountContextService, ModelRunContext } from "@meshbot/lib-agent";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { SESSION_WS_EVENTS } from "@meshbot/types-agent";
 import type { PendingMessage } from "../entities/pending-message.entity";

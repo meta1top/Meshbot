@@ -1,11 +1,14 @@
-import { AccountContextService, MeshbotConfigService } from "@meshbot/agent";
+import {
+  AccountContextService,
+  MeshbotConfigService,
+} from "@meshbot/lib-agent";
 import { AppError } from "@meshbot/common";
 import { Injectable } from "@nestjs/common";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import type { DrivePort } from "@meshbot/agent";
+import type { DrivePort } from "@meshbot/lib-agent";
 
 import { AgentErrorCode } from "../errors/agent.error-codes";
 import { CloudIdentityService } from "./cloud-identity.service";

@@ -2,7 +2,7 @@ import {
   AgentModule,
   SKILL_TOOLS_PORT,
   type SkillToolsPort,
-} from "@meshbot/agent";
+} from "@meshbot/lib-agent";
 import { Global, Module } from "@nestjs/common";
 import { AuthModule } from "./auth.module";
 import { SkillController } from "./controllers/skill.controller";

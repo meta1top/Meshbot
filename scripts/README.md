@@ -37,7 +37,7 @@
 围栏只针对 NestJS 服务层代码（`libs/**/src/**` + `apps/server-*/src/**`）。
 以下路径被显式排除：
 - `libs/agent/**` —— Agent 域内部不挂 NestJS 装饰器（用 vitest）
-- `apps/cli-agent/**` —— CLI 工具，非 NestJS 服务
+- `apps/cli/**` —— CLI 工具，非 NestJS 服务
 - `apps/desktop/**` —— Electron 桌面壳，非 NestJS
 - `apps/web-*/**` —— 前端 Next.js 应用
 - `packages/**` —— 前端共享包

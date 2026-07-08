@@ -1,4 +1,7 @@
-import { AccountContextService, MeshbotConfigService } from "@meshbot/agent";
+import {
+  AccountContextService,
+  MeshbotConfigService,
+} from "@meshbot/lib-agent";
 import { AppError } from "@meshbot/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import {

@@ -13,7 +13,7 @@
 | `pnpm dev:web-agent` | 桌面端 UI（Next.js，端口 3001） |
 | `pnpm dev:web-main` | 云协同前端（Next.js，端口 3002） |
 | `pnpm dev:desktop` | Electron 桌面壳 |
-| `pnpm dev:cli-agent` | 命令行 Agent |
+| `pnpm dev:cli` | 命令行 Agent |
 
 ### 构建与测试
 
@@ -47,7 +47,7 @@ apps/
 ├── web-agent/      Next.js 桌面端 UI
 ├── web-main/       Next.js 云协同前端
 ├── desktop/        Electron 壳（fork server-agent）
-└── cli-agent/      命令行 Agent 工具
+└── cli/      命令行 Agent 工具
 
 libs/
 ├── common/         NestJS 基础设施（装饰器 / TxTypeOrmModule / Lock / Cache / Dto）
@@ -64,7 +64,7 @@ packages/
 **依赖方向**：`apps/server-*` → `libs/<domain>` → `libs/types-<domain>` → `libs/common`。只允许从上到下、从右到左，禁止反向。
 
 **两轨**：
-- **本地轨**（server-agent + cli-agent + desktop + web-agent）：单进程 + SQLite + 单用户，跑全部 Agent 业务逻辑
+- **本地轨**（server-agent + cli + desktop + web-agent）：单进程 + SQLite + 单用户，跑全部 Agent 业务逻辑
 - **云端轨**（server-main + web-main）：Postgres + Redis + 多租户，只跑协同元数据 CRUD，**不跑 Agent 逻辑**
 - **IM 反向通道**（子项目 B）：云端轨 `server-main` 的 IM 消息经 `ws/im` device room 定向下发到已注册设备的本地轨 `server-agent`（`AgentInboxService` 触发本地 run），回复异步回流云端会话——是云端轨触发本地轨 Agent 逻辑的唯一例外通道，云端轨自身仍不跑 Agent 逻辑。
 

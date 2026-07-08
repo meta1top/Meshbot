@@ -1,5 +1,5 @@
-import { AccountContextService } from "@meshbot/agent";
-import type { ImSendPort } from "@meshbot/agent";
+import { AccountContextService } from "@meshbot/lib-agent";
+import type { ImSendPort } from "@meshbot/lib-agent";
 import { Injectable } from "@nestjs/common";
 import { ImRelayClientService } from "../cloud/im-relay-client.service";
 import { ConfirmationService } from "./confirmation.service";

@@ -1,5 +1,5 @@
-import { AccountContextService } from "@meshbot/agent";
-import type { AskQuestionPort } from "@meshbot/agent";
+import { AccountContextService } from "@meshbot/lib-agent";
+import type { AskQuestionPort } from "@meshbot/lib-agent";
 import type { AnswerItem } from "@meshbot/types-agent";
 import { Injectable } from "@nestjs/common";
 import { ConfirmationService } from "./confirmation.service";

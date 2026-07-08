@@ -1,4 +1,4 @@
-import { AccountContextService } from "@meshbot/agent";
+import { AccountContextService } from "@meshbot/lib-agent";
 import { CloudAuthService } from "./cloud-auth.service";
 
 const makeRuntime = () => ({

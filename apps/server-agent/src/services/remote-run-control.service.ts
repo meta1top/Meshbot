@@ -1,4 +1,4 @@
-import { AccountContextService } from "@meshbot/agent";
+import { AccountContextService } from "@meshbot/lib-agent";
 import { Injectable, Logger } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
 import {

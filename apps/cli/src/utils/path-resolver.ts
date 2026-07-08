@@ -27,7 +27,7 @@ export function resolveServerAgentPath(): string {
     return path.dirname(pkgPath);
   } catch {
     throw new Error(
-      "Could not find server-agent. Install with: npm install -g @meshbot/cli-agent",
+      "Could not find server-agent. Install with: npm install -g @meshbot/agent",
     );
   }
 }

@@ -1,4 +1,4 @@
-import { AccountContextService } from "@meshbot/agent";
+import { AccountContextService } from "@meshbot/lib-agent";
 import type { AgentModelConfig } from "@meshbot/types";
 import {
   Injectable,

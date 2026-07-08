@@ -1,4 +1,4 @@
-import { AccountContextService } from "@meshbot/agent";
+import { AccountContextService } from "@meshbot/lib-agent";
 import { AUTH_WS_EVENTS, IM_WS_EVENTS } from "@meshbot/types";
 import { SCHEDULE_EVENTS } from "@meshbot/types-agent";
 

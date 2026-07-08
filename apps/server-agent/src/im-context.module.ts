@@ -1,4 +1,4 @@
-import { IM_CONTEXT_PORT, type ImContextPort } from "@meshbot/agent";
+import { IM_CONTEXT_PORT, type ImContextPort } from "@meshbot/lib-agent";
 import { Global, Module } from "@nestjs/common";
 import { ImModule } from "./im.module";
 import { CloudImService } from "./services/cloud-im.service";

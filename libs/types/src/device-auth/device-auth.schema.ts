@@ -2,7 +2,7 @@ import { z } from "zod";
 
 /**
  * 设备授权(device authorization grant)跨域 schema —— 云端(server-main REST)
- * 与本地轨(server-agent/cli-agent 消费 REST 响应)共享同一套字段约定。
+ * 与本地轨(server-agent/cli 消费 REST 响应)共享同一套字段约定。
  */
 
 export const DeviceAuthStartSchema = z.object({

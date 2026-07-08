@@ -1,4 +1,4 @@
-import { AccountContextService } from "@meshbot/agent";
+import { AccountContextService } from "@meshbot/lib-agent";
 import type { HistoryResponse, SessionSummary } from "@meshbot/types-agent";
 import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
 import { ApiOperation } from "@nestjs/swagger";

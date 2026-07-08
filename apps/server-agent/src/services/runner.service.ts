@@ -2,7 +2,7 @@ import {
   AccountContextService,
   GraphRunner,
   ModelRunContext,
-} from "@meshbot/agent";
+} from "@meshbot/lib-agent";
 import {
   type RunToolCallEndEvent,
   SESSION_WS_EVENTS,

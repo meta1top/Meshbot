@@ -1,4 +1,4 @@
-import { AccountContextService } from "@meshbot/agent";
+import { AccountContextService } from "@meshbot/lib-agent";
 import { type SessionSummary, SESSION_WS_EVENTS } from "@meshbot/types-agent";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { SessionTitleService } from "./session-title.service";

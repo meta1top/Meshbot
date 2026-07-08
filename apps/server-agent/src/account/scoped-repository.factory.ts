@@ -1,4 +1,4 @@
-import { AccountContextService } from "@meshbot/agent";
+import { AccountContextService } from "@meshbot/lib-agent";
 import { Injectable } from "@nestjs/common";
 import type { ObjectLiteral, Repository } from "typeorm";
 import { ScopedRepository } from "./scoped-repository";

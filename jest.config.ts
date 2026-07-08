@@ -6,12 +6,12 @@ const config: Config = {
   rootDir: ".",
   roots: ["<rootDir>/libs", "<rootDir>/apps", "<rootDir>/scripts"],
   testMatch: ["**/?(*.)+(spec|test).ts"],
-  // 排除 libs/agent / apps/cli-agent（用 vitest）和 packages/*（前端，不在 jest 范围）
+  // 排除 libs/agent / apps/cli（用 vitest）和 packages/*（前端，不在 jest 范围）
   testPathIgnorePatterns: [
     "/node_modules/",
     "/dist/",
     "<rootDir>/libs/agent/",
-    "<rootDir>/apps/cli-agent/",
+    "<rootDir>/apps/cli/",
     "<rootDir>/packages/",
     // 前端集成测试：为测 dispatchGlobalEvent 纯函数却传递性引入整条 atom 图
     // （@/atoms/im → auth → jotai-tanstack-query）。jotai/jotai-tanstack-query 是

@@ -18,7 +18,7 @@ import {
   type ScheduleToolsPort,
   SKILL_TOOLS_PORT,
   type SkillToolsPort,
-} from "@meshbot/agent";
+} from "@meshbot/lib-agent";
 import { TxTypeOrmModule } from "@meshbot/common";
 import { Global, type INestApplication, Module } from "@nestjs/common";
 import { APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";

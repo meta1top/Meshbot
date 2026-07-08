@@ -6,7 +6,7 @@ import type {
   SessionSummary,
 } from "@meshbot/types-agent";
 import { stripLlmuse } from "@meshbot/types-agent";
-import { ThreadStateService } from "@meshbot/agent";
+import { ThreadStateService } from "@meshbot/lib-agent";
 import {
   BadRequestException,
   ConflictException,

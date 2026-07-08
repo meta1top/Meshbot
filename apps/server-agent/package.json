@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@langchain/core": "^0.3",
-    "@meshbot/agent": "workspace:^",
+    "@meshbot/lib-agent": "workspace:^",
     "@meshbot/assets": "workspace:*",
     "@meshbot/common": "workspace:*",
     "@meshbot/types": "workspace:*",

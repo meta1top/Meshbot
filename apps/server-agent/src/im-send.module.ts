@@ -1,4 +1,4 @@
-import { IM_SEND_PORT } from "@meshbot/agent";
+import { IM_SEND_PORT } from "@meshbot/lib-agent";
 import { Global, Module } from "@nestjs/common";
 import { AuthModule } from "./auth.module";
 import { ConfirmationService } from "./services/confirmation.service";

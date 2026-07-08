@@ -3,7 +3,7 @@ import {
   type DispatchSubagentPort,
   AccountContextService,
   capForLlm,
-} from "@meshbot/agent";
+} from "@meshbot/lib-agent";
 import { SESSION_WS_EVENTS } from "@meshbot/types-agent";
 import {
   Injectable,

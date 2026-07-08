@@ -1,6 +1,6 @@
 import "reflect-metadata";
 import path from "node:path";
-import { AccountContextService } from "@meshbot/agent";
+import { AccountContextService } from "@meshbot/lib-agent";
 import { ErrorsFilter, TxTypeOrmModule } from "@meshbot/common";
 import { type INestApplication } from "@nestjs/common";
 import { APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";

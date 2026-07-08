@@ -2,7 +2,7 @@ import {
   ThreadStateService,
   ModelResolver,
   COMPACTION_SYSTEM_PROMPT,
-} from "@meshbot/agent";
+} from "@meshbot/lib-agent";
 import { SESSION_WS_EVENTS } from "@meshbot/types-agent";
 import { Injectable, Logger } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";

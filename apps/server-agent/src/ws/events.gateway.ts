@@ -34,7 +34,7 @@ import {
   WsException,
 } from "@nestjs/websockets";
 import type { Socket } from "socket.io";
-import { AccountContextService } from "@meshbot/agent";
+import { AccountContextService } from "@meshbot/lib-agent";
 import { ImRelayClientService } from "../cloud/im-relay-client.service";
 import { AUTH_EVENTS } from "../services/auth.events";
 

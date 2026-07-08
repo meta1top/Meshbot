@@ -852,7 +852,7 @@ E2（pre-commit 并行化，最后收尾）
     "$schema": "https://unpkg.com/@changesets/config/schema.json",
     "changelog": "@changesets/cli/changelog",
     "commit": false,
-    "fixed": [["@meshbot/cli-agent", "@meshbot/desktop"]],
+    "fixed": [["@meshbot/agent", "@meshbot/desktop"]],
     "linked": [],
     "access": "public",
     "baseBranch": "main",
@@ -972,7 +972,7 @@ E2（pre-commit 并行化，最后收尾）
 
 - [ ] **Step 1: tag 格式对齐**
 
-  Changesets 默认生成的 tag 是 `@meshbot/cli-agent@1.2.0` 形式（含 `@` 与 `/`，shell 不友好），可在 `config.json` 加 `"tag": "tagPrefix"` 选项或在 release workflow 里用 `changeset tag` + 自定义 mapper。
+  Changesets 默认生成的 tag 是 `@meshbot/agent@1.2.0` 形式（含 `@` 与 `/`，shell 不友好），可在 `config.json` 加 `"tag": "tagPrefix"` 选项或在 release workflow 里用 `changeset tag` + 自定义 mapper。
 
   推荐做法：保留现有 `cli@X.Y.Z` / `app@X.Y.Z` 短 tag 格式，release workflow 里手工生成短 tag 推上去（一行 shell）：
 
@@ -1028,7 +1028,7 @@ E2（pre-commit 并行化，最后收尾）
     - macOS: `meshbot-<version>-arm64.dmg` / `meshbot-<version>-x64.dmg`
     - Windows: `meshbot-<version>-x64.exe`
     - Linux: `meshbot-<version>.AppImage`
-  - **CLI（cli-agent）**：`npm i -g @meshbot/cli-agent`
+  - **CLI（cli-agent）**：`npm i -g @meshbot/agent`
   ```
 
 - [ ] **Step 2: CHANGELOG.md 占位**
@@ -1042,7 +1042,7 @@ E2（pre-commit 并行化，最后收尾）
 
   本仓库使用 [changesets](https://github.com/changesets/changesets) 管理变更。各包 changelog：
 
-  - [@meshbot/cli-agent](apps/cli-agent/CHANGELOG.md)
+  - [@meshbot/agent](apps/cli-agent/CHANGELOG.md)
   - [@meshbot/desktop](apps/desktop/CHANGELOG.md)
   ```
 

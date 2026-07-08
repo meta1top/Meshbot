@@ -5,7 +5,7 @@ import {
   NestInterceptor,
 } from "@nestjs/common";
 import { Observable } from "rxjs";
-import { AccountContextService } from "@meshbot/agent";
+import { AccountContextService } from "@meshbot/lib-agent";
 
 /**
  * 全局拦截器：在 JwtAuthGuard 之后运行，把 request.user.id（= JWT sub = cloudUserId）

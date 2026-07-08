@@ -4,7 +4,7 @@ import {
   ConflictException,
   NotFoundException,
 } from "@nestjs/common";
-import { AccountContextService, ThreadStateService } from "@meshbot/agent";
+import { AccountContextService, ThreadStateService } from "@meshbot/lib-agent";
 import { DataSource } from "typeorm";
 import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
 import { LlmCall } from "../entities/llm-call.entity";

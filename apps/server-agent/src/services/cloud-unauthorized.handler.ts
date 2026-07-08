@@ -1,4 +1,4 @@
-import type { AccountContextService } from "@meshbot/agent";
+import type { AccountContextService } from "@meshbot/lib-agent";
 import type { EventEmitter2 } from "@nestjs/event-emitter";
 
 import { AUTH_EVENTS } from "./auth.events";

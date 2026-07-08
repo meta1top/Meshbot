@@ -1,4 +1,4 @@
-import { DRIVE_PORT, MeshbotConfigModule } from "@meshbot/agent";
+import { DRIVE_PORT, MeshbotConfigModule } from "@meshbot/lib-agent";
 import { Global, Module } from "@nestjs/common";
 import { AuthModule } from "./auth.module";
 import { DriveToolService } from "./services/drive-tool.service";

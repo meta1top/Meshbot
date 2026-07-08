@@ -1,4 +1,4 @@
-import { AccountContextService } from "@meshbot/agent";
+import { AccountContextService } from "@meshbot/lib-agent";
 import { generateSnowflakeId } from "@meshbot/common";
 import type { HeatmapCell } from "@meshbot/types-agent";
 import { Injectable, NotFoundException } from "@nestjs/common";

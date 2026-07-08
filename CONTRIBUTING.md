@@ -23,7 +23,7 @@ pnpm dev:server-main          # :3200，Postgres，云协同后端
 pnpm dev:web-agent            # :3001，桌面端 UI
 pnpm dev:web-main             # :3002，云协同前端
 pnpm dev:desktop              # Electron 桌面壳
-pnpm dev:cli-agent            # CLI Agent 工具
+pnpm dev:cli            # CLI Agent 工具
 ```
 
 ## 提交 PR 前本地检查
@@ -89,12 +89,12 @@ pnpm build
 ## 发布流程
 
 仓库通过 [changesets](https://github.com/changesets/changesets) 管理对外发布的版本号 + changelog。
-`@meshbot/cli-agent` / `@meshbot/server-agent` / `@meshbot/desktop` 在 `.changeset/config.json` 的 `fixed`
+`@meshbot/agent` / `@meshbot/server-agent` / `@meshbot/desktop` 在 `.changeset/config.json` 的 `fixed`
 组里，共享同一版本号，统一节奏发版。
 
 ### 提交 PR 前加 changeset
 
-涉及 cli-agent / server-agent / desktop 改动的 PR 必须含 changeset：
+涉及 cli / server-agent / desktop 改动的 PR 必须含 changeset：
 
 ```bash
 pnpm changeset
@@ -109,7 +109,7 @@ git add .changeset/*.md && git commit
 1. PR 合并到 `main` → [`release.yml`](.github/workflows/release.yml) 自动开 **"Version Packages" PR**
    （把累计 changeset 合成 `package.json` bump + CHANGELOG 追加）
 2. 合并 Version PR → `release.yml` 跑：
-   - `pnpm release`（`changeset publish`）—— `cli-agent` / `server-agent` npm publish + 自动打 git tag
+   - `pnpm release`（`changeset publish`）—— `cli` / `server-agent` npm publish + 自动打 git tag
    - 末尾手工推 `@meshbot/desktop@<v>` tag（desktop 是 private 包，changesets 不自动 tag）
 3. `@meshbot/desktop@<v>` tag → [`package-desktop.yml`](.github/workflows/package-desktop.yml)
    跨平台（macOS / Windows / Linux）构建安装包 + 附到同一 GitHub Release

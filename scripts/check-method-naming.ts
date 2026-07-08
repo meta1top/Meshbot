@@ -188,8 +188,7 @@ function shouldSkipFile(filePath: string): boolean {
   if (rel.includes("/openspec/")) return true;
   // meshbot 非 NestJS 服务层代码：前端、CLI、Agent 域（vitest）、桌面端
   if (rel.startsWith("apps/web-") || rel.includes("/apps/web-")) return true;
-  if (rel.startsWith("apps/cli-agent") || rel.includes("/apps/cli-agent/"))
-    return true;
+  if (rel.startsWith("apps/cli") || rel.includes("/apps/cli/")) return true;
   if (rel.startsWith("apps/desktop") || rel.includes("/apps/desktop/"))
     return true;
   if (rel.startsWith("libs/agent/") || rel.includes("/libs/agent/"))

@@ -1,4 +1,4 @@
-import { AgentModule } from "@meshbot/agent";
+import { AgentModule } from "@meshbot/lib-agent";
 import { TxTypeOrmModule } from "@meshbot/common";
 import { Module } from "@nestjs/common";
 import { CheckpointerCleanupService } from "./services/checkpointer-cleanup.service";

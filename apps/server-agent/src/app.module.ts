@@ -1,5 +1,5 @@
 import path from "node:path";
-import { AgentModule } from "@meshbot/agent";
+import { AgentModule } from "@meshbot/lib-agent";
 import {
   CommonModule,
   createEnvValidator,
