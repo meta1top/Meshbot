@@ -6,17 +6,24 @@ import {
   type OnApplicationBootstrap,
   type OnModuleDestroy,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { OnEvent } from "@nestjs/event-emitter";
 import { ACCOUNT_EVENTS } from "../account/account.events";
 import type { AccountRuntimeEvent } from "../account/account.events";
 import { CloudClientService } from "../cloud/cloud-client.service";
 import { CloudIdentityService } from "./cloud-identity.service";
+import type { CloudModelConfigRow } from "./model-config.service";
 import { ModelConfigService } from "./model-config.service";
 
 /** 定时全量同步周期：30 分钟。 */
 const SYNC_INTERVAL_MS = 30 * 60 * 1000;
 /** 失败退避基数：1 分钟起，指数翻倍，封顶到 SYNC_INTERVAL_MS。 */
 const BACKOFF_BASE_MS = 60 * 1000;
+/**
+ * 云端网关代理 apiKey 占位符——真实厂商 key 只在云端持有，不落地本地库；
+ * 网关请求时按 device token 换发（见 Task 8），这里只是坐标行的占位值。
+ */
+const CLOUD_GATEWAY_API_KEY_PLACEHOLDER = "__cloud__";
 
 /**
  * 云端组织模型配置同步服务——登录 / 启动 / 定时从云端拉组织模型配置，
@@ -39,6 +46,7 @@ export class ModelConfigSyncService
     private readonly identity: CloudIdentityService,
     private readonly account: AccountContextService,
     private readonly modelConfig: ModelConfigService,
+    private readonly config: ConfigService,
   ) {}
 
   /** 启动时对全部已登录账号逐个同步一次，随后挂定时器。 */
@@ -74,8 +82,9 @@ export class ModelConfigSyncService
         "/api/agent/model-configs",
         id.deviceToken,
       );
+      const rows = configs.map((c) => this.toGatewayRow(c));
       await this.account.run(cloudUserId, () =>
-        this.modelConfig.replaceCloudConfigs(configs),
+        this.modelConfig.replaceCloudConfigs(rows),
       );
       this.failCounts.delete(cloudUserId);
       return true;
@@ -100,6 +109,26 @@ export class ModelConfigSyncService
       this.schedule(this.nextDelay(identities.length, roundOk));
     }, delay);
     this.timer.unref();
+  }
+
+  /**
+   * 把云端下发的"可见列表" `AgentModelConfig` 映射为指向本地网关代理的
+   * openai-compatible 坐标行：`model` 用云端配置 id 做调用引用，真实
+   * provider/model 名与厂商 apiKey 只在云端网关内部解密持有，本地不落地
+   * 明文（`apiKey` 写占位符，Task 8 会用 fetch 包装在请求时注入真实
+   * device token）。
+   */
+  private toGatewayRow(config: AgentModelConfig): CloudModelConfigRow {
+    const cloudUrl = this.config.getOrThrow<string>("MESHBOT_CLOUD_URL");
+    return {
+      providerType: "openai-compatible",
+      baseUrl: `${cloudUrl.replace(/\/$/, "")}/api/v1`,
+      model: config.id,
+      apiKey: CLOUD_GATEWAY_API_KEY_PLACEHOLDER,
+      name: config.name,
+      contextWindow: config.contextWindow,
+      enabled: config.enabled,
+    };
   }
 
   /**
