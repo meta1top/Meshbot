@@ -1,6 +1,10 @@
 "use client";
 
-import { SidebarNavItem } from "@meshbot/web-common/shell";
+import {
+  type NavGroup,
+  SidebarHeader,
+  SidebarNav,
+} from "@meshbot/web-common/shell";
 import { BarChart3, Clock, Workflow } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -15,45 +19,45 @@ export function MoreSidebar() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const items = [
+  const activeKey = pathname.startsWith("/flows")
+    ? "flows"
+    : pathname.startsWith("/schedule")
+      ? "scheduled"
+      : pathname === "/more"
+        ? "usage"
+        : undefined;
+
+  const groups: NavGroup[] = [
     {
-      key: "flows",
-      label: tRail("rail.flows"),
-      icon: <Workflow className="h-4 w-4" />,
-      href: "/flows",
-      active: pathname.startsWith("/flows"),
-    },
-    {
-      key: "usage",
-      label: t("usage"),
-      icon: <BarChart3 className="h-4 w-4" />,
-      href: "/more",
-      active: pathname === "/more",
-    },
-    {
-      key: "scheduled",
-      label: t("scheduled"),
-      icon: <Clock className="h-4 w-4" />,
-      href: "/schedule",
-      active: pathname.startsWith("/schedule"),
+      key: "more",
+      items: [
+        {
+          key: "flows",
+          label: tRail("rail.flows"),
+          icon: <Workflow />,
+          onClick: () => router.push("/flows"),
+        },
+        {
+          key: "usage",
+          label: t("usage"),
+          icon: <BarChart3 />,
+          onClick: () => router.push("/more"),
+        },
+        {
+          key: "scheduled",
+          label: t("scheduled"),
+          icon: <Clock />,
+          onClick: () => router.push("/schedule"),
+        },
+      ],
     },
   ];
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-10 shrink-0 items-center px-3 text-[15px] font-extrabold">
-        {tRail("rail.more")}
-      </div>
-      <nav className="flex flex-col gap-0.5 px-3 py-2">
-        {items.map((it) => (
-          <SidebarNavItem
-            key={it.key}
-            icon={it.icon}
-            label={it.label}
-            active={it.active}
-            onClick={() => router.push(it.href)}
-          />
-        ))}
+      <SidebarHeader title={tRail("rail.more")} />
+      <nav className="flex flex-col px-3 py-2">
+        <SidebarNav groups={groups} activeKey={activeKey} />
       </nav>
     </div>
   );

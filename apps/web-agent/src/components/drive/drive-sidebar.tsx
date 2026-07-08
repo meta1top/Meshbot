@@ -1,6 +1,10 @@
 "use client";
 
-import { SidebarNavItem } from "@meshbot/web-common/shell";
+import {
+  type NavGroup,
+  SidebarHeader,
+  SidebarNav,
+} from "@meshbot/web-common/shell";
 import { HardDrive, Users } from "lucide-react";
 import { useTranslations } from "next-intl";
 
@@ -11,30 +15,32 @@ interface Props {
   onSelect: (tab: DriveTab) => void;
 }
 
-const TABS = [
-  { tab: "mine" as const, icon: <HardDrive />, labelKey: "tabMine" as const },
-  { tab: "shared" as const, icon: <Users />, labelKey: "tabShared" as const },
-];
-
-/** 文件页侧栏：我的文件 / 共享给我的（与更多/技能页同款一级导航项）。 */
 export function DriveSidebar({ activeTab, onSelect }: Props) {
   const t = useTranslations("drive");
-
+  const groups: NavGroup[] = [
+    {
+      key: "tabs",
+      items: [
+        {
+          key: "mine",
+          label: t("tabMine"),
+          icon: <HardDrive />,
+          onClick: () => onSelect("mine"),
+        },
+        {
+          key: "shared",
+          label: t("tabShared"),
+          icon: <Users />,
+          onClick: () => onSelect("shared"),
+        },
+      ],
+    },
+  ];
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-10 shrink-0 items-center px-3 text-[15px] font-extrabold">
-        {t("title")}
-      </div>
-      <nav className="flex flex-col gap-0.5 px-3 py-2">
-        {TABS.map(({ tab, icon, labelKey }) => (
-          <SidebarNavItem
-            key={tab}
-            icon={icon}
-            label={t(labelKey)}
-            active={activeTab === tab}
-            onClick={() => onSelect(tab)}
-          />
-        ))}
+      <SidebarHeader title={t("title")} />
+      <nav className="flex flex-col px-3 py-2">
+        <SidebarNav groups={groups} activeKey={activeTab} />
       </nav>
     </div>
   );
