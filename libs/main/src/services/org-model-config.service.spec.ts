@@ -101,3 +101,54 @@ describe("OrgModelConfigService", () => {
     });
   });
 });
+
+describe("resolveDecrypted", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  function makeRow(overrides: Partial<OrgModelConfig> = {}): OrgModelConfig {
+    return {
+      id: "m1",
+      orgId: "o1",
+      name: "默认",
+      providerType: "openai",
+      model: "gpt-4o",
+      apiKeyEnc: "ENC",
+      baseUrl: null,
+      contextWindow: 128000,
+      enabled: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...overrides,
+    } as OrgModelConfig;
+  }
+
+  it("按 id+orgId 命中并解密", async () => {
+    const rows: OrgModelConfig[] = [makeRow()];
+    const svc = new OrgModelConfigService(makeRepo(rows) as never, crypto);
+    jest.spyOn(crypto, "decrypt").mockReturnValue("sk-real");
+    const r = await svc.resolveDecrypted("o1", "m1");
+    expect(r).toEqual({
+      providerType: "openai",
+      model: "gpt-4o",
+      baseUrl: null,
+      apiKey: "sk-real",
+      contextWindow: 128000,
+    });
+  });
+
+  it("跨 org 不命中 → null", async () => {
+    const rows: OrgModelConfig[] = [makeRow()];
+    const svc = new OrgModelConfigService(makeRepo(rows) as never, crypto);
+    const r = await svc.resolveDecrypted("other-org", "m1");
+    expect(r).toBeNull();
+  });
+
+  it("id 不存在 → null", async () => {
+    const rows: OrgModelConfig[] = [makeRow()];
+    const svc = new OrgModelConfigService(makeRepo(rows) as never, crypto);
+    const r = await svc.resolveDecrypted("o1", "missing");
+    expect(r).toBeNull();
+  });
+});

@@ -10,6 +10,15 @@ import type { Repository } from "typeorm";
 import { OrgModelConfig } from "../entities/org-model-config.entity";
 import { SecretCryptoService } from "./secret-crypto.service";
 
+/** 网关内部解析结果:归属校验通过后的厂商真实调用参数(apiKey 已解密明文) */
+export interface ResolvedModel {
+  providerType: string;
+  model: string;
+  baseUrl: string | null;
+  apiKey: string;
+  contextWindow: number | null;
+}
+
 /** 组织级模型配置归属 Service;写侧仅 owner(controller 断言),apiKey 加密存储 */
 @Injectable()
 export class OrgModelConfigService {
@@ -87,6 +96,24 @@ export class OrgModelConfigService {
         contextWindow: r.contextWindow,
         enabled: r.enabled,
       }));
+  }
+
+  /** 网关内部用:按 orgId + 模型 id 查归属并解密厂商 apiKey;不存在/不归属返回 null */
+  async resolveDecrypted(
+    orgId: string,
+    modelId: string,
+  ): Promise<ResolvedModel | null> {
+    const row = await this.configRepo.findOne({
+      where: { id: modelId, orgId, enabled: true },
+    });
+    if (!row) return null;
+    return {
+      providerType: row.providerType,
+      model: row.model,
+      baseUrl: row.baseUrl ?? null,
+      apiKey: this.crypto.decrypt(row.apiKeyEnc),
+      contextWindow: row.contextWindow ?? null,
+    };
   }
 
   private async findOwned(orgId: string, id: string): Promise<OrgModelConfig> {
