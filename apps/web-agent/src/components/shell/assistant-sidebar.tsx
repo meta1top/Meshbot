@@ -1,6 +1,6 @@
 "use client";
 
-import { SidebarSkeleton } from "@meshbot/web-common/shell";
+import { SidebarHeader, SidebarSkeleton } from "@meshbot/web-common/shell";
 import { useAtomValue, useSetAtom } from "jotai";
 import { SquarePen } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -45,17 +45,19 @@ export function AssistantSidebar() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-8 shrink-0 items-center justify-between px-3">
-        <span className="text-[15px] font-extrabold">{t("title")}</span>
-        <button
-          type="button"
-          title={t("newSession")}
-          onClick={() => router.push("/assistant")}
-          className="flex h-7 w-7 items-center justify-center rounded-md text-(--shell-sidebar-fg)/70 transition-colors hover:bg-(--shell-sidebar-hover) hover:text-(--shell-sidebar-fg)"
-        >
-          <SquarePen className="h-4 w-4" />
-        </button>
-      </div>
+      <SidebarHeader
+        title={t("title")}
+        action={
+          <button
+            type="button"
+            title={t("newSession")}
+            onClick={() => router.push("/assistant")}
+            className="flex h-7 w-7 items-center justify-center rounded-md text-(--shell-sidebar-fg)/70 transition-colors hover:bg-(--shell-sidebar-hover) hover:text-(--shell-sidebar-fg)"
+          >
+            <SquarePen className="h-4 w-4" />
+          </button>
+        }
+      />
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-2">
         {devicesStatus === "idle" || devicesStatus === "loading" ? (
           <SidebarSkeleton />

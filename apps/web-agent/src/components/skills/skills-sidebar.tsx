@@ -1,7 +1,11 @@
 "use client";
 
 import type { SkillInstallSource } from "@meshbot/types-agent";
-import { SidebarNavItem, SidebarSection } from "@meshbot/web-common/shell";
+import {
+  SidebarHeader,
+  SidebarNavItem,
+  SidebarSection,
+} from "@meshbot/web-common/shell";
 import { BookOpen, Package, Store } from "lucide-react";
 import { useTranslations } from "next-intl";
 
@@ -37,9 +41,7 @@ export function SkillsSidebar({ activeView, onSelect }: Props) {
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex h-10 shrink-0 items-center px-3">
-        <span className="text-[15px] font-extrabold">{t("title")}</span>
-      </div>
+      <SidebarHeader title={t("title")} />
 
       {/* Body */}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-2">

@@ -1,6 +1,6 @@
 "use client";
 
-import { SidebarNavItem } from "@meshbot/web-common/shell";
+import { SidebarHeader, SidebarNavItem } from "@meshbot/web-common/shell";
 import { BarChart3, Clock, Workflow } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -41,9 +41,7 @@ export function MoreSidebar() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-10 shrink-0 items-center px-3 text-[15px] font-extrabold">
-        {tRail("rail.more")}
-      </div>
+      <SidebarHeader title={tRail("rail.more")} />
       <nav className="flex flex-col gap-0.5 px-3 py-2">
         {items.map((it) => (
           <SidebarNavItem
