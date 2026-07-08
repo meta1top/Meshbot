@@ -1,5 +1,5 @@
 import { openAIChatRequestSchema } from "@meshbot/types";
-import { Body, Controller, Post, Res } from "@nestjs/common";
+import { Body, Controller, Logger, Post, Res } from "@nestjs/common";
 import type { Response } from "express";
 import { createZodDto } from "nestjs-zod";
 
@@ -21,6 +21,8 @@ class ChatCompletionDto extends createZodDto(openAIChatRequestSchema) {}
  */
 @Controller("v1")
 export class ChatCompletionsController {
+  private readonly logger = new Logger(ChatCompletionsController.name);
+
   constructor(private readonly gateway: ModelGatewayService) {}
 
   /** stream=false 走非流式 JSON；stream=true 走 SSE 逐帧转发。 */
@@ -54,12 +56,25 @@ export class ChatCompletionsController {
         if (err instanceof GatewayModelNotFoundError) {
           res.write(
             `data: ${JSON.stringify({
-              error: { message: `model not found: ${body.model}` },
+              error: {
+                message: `model not found: ${body.model}`,
+                type: "invalid_request_error",
+              },
             })}\n\n`,
           );
         } else {
+          // 流式期最易在生产失败的路径（厂商超时/限流/网络）：只 log 净化后的
+          // message，绝不 log 原始 err 对象——部分 HTTP client SDK 会把含
+          // apiKey 的 request header 挂在 err 上。
+          this.logger.error(
+            `chat/completions 流式转发失败：${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
           res.write(
-            `data: ${JSON.stringify({ error: { message: "gateway error" } })}\n\n`,
+            `data: ${JSON.stringify({
+              error: { message: "gateway error", type: "api_error" },
+            })}\n\n`,
           );
         }
       }
