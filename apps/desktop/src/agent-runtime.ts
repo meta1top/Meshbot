@@ -3,7 +3,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 
-const PROD_CLOUD_URL = "https://api.meshbot.app";
+const PROD_CLOUD_URL = "https://api-bot.meta1.top";
 const READINESS_TIMEOUT_MS = 30_000;
 const POLL_INTERVAL_MS = 500;
 const HEALTH_PATH = "/api/health";

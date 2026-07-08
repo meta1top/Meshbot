@@ -16,7 +16,6 @@ import { clearPortFile, readPortInfo, waitForPortFile } from "./port-file.js";
 
 export interface StartOptions {
   port?: number;
-  dataDir?: string;
   daemon?: boolean;
 }
 
@@ -62,7 +61,7 @@ export async function startAgent(options: StartOptions = {}): Promise<void> {
 
   const config = readConfig();
   const explicitPort = options.port ?? config.port;
-  const dataDir = options.dataDir ?? config.dataDir;
+  const dataDir = config.dataDir;
   const serverAgentRoot = resolveServerAgentPath();
   const serverAgentMain = getServerAgentMainPath();
 
@@ -73,13 +72,13 @@ export async function startAgent(options: StartOptions = {}): Promise<void> {
 
   clearPortFile(dataDir);
 
-  const child = spawn("node", [serverAgentMain], {
+  const child = spawn(process.execPath, [serverAgentMain], {
     cwd: serverAgentRoot,
     stdio: options.daemon ? "ignore" : "inherit",
     env: {
       ...process.env,
       MESHBOT_HOME: dataDir,
-      MESHBOT_CLOUD_URL: resolveCloudUrl(),
+      MESHBOT_CLOUD_URL: resolveCloudUrl({ configCloudUrl: config.cloudUrl }),
       ...(explicitPort ? { MESHBOT_PORT: String(explicitPort) } : {}),
     },
     detached: options.daemon ?? false,

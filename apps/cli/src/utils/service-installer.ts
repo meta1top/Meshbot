@@ -27,6 +27,7 @@ export function installService(userOnly = true): void {
   <string>com.meshbot.agent</string>
   <key>ProgramArguments</key>
   <array>
+    <string>${process.execPath}</string>
     <string>${cliPath}</string>
     <string>start</string>
     <string>--daemon</string>
@@ -60,7 +61,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=${cliPath} start --daemon
+ExecStart=${process.execPath} ${cliPath} start --daemon
 Restart=on-failure
 RestartSec=5
 
@@ -77,7 +78,7 @@ WantedBy=default.target`;
   } else if (process.platform === "win32") {
     try {
       execSync(
-        `sc create MeshBotAgent binPath= "${cliPath} start --daemon" start= auto`,
+        `sc create MeshBotAgent binPath= "${process.execPath} ${cliPath} start --daemon" start= auto`,
         {
           stdio: "inherit",
         },

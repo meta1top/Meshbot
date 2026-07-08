@@ -9,13 +9,11 @@ export function registerStartCommand(program: Command): void {
       "-p, --port <number>",
       "Port to listen on (default: auto-detect 7727)",
     )
-    .option("-d, --data-dir <path>", "Data directory")
     .option("--daemon", "Run in background")
     .action(async (options) => {
       try {
         await startAgent({
           port: options.port ? Number(options.port) : undefined,
-          dataDir: options.dataDir,
           daemon: options.daemon,
         });
       } catch (err) {

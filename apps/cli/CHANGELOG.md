@@ -1,4 +1,4 @@
-# @meshbot/cli-agent
+# @meshbot/agent
 
 ## 0.0.2
 
