@@ -32,7 +32,13 @@ import { ConfirmDialog } from "@/components/common/confirm-dialog";
  * 三点菜单：修改标题 / 固定·取消固定 / 删除 —— 使用 shadcn DropdownMenu，
  * 触发按钮放进 SidebarRow 的 actions 插槽（hover 显示由 SidebarRow 统一负责）。
  */
-export function SessionListItem({ session }: { session: SessionSummary }) {
+export function SessionListItem({
+  session,
+  depth = 0,
+}: {
+  session: SessionSummary;
+  depth?: number;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -116,11 +122,12 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
         // 的 <button> 主体），与迁移前逻辑/class 完全一致
         <div
           className={cn(
-            "group flex h-7 w-full items-center gap-2 rounded-md px-2 text-[13px] transition-colors",
+            "group flex h-7 w-full items-center gap-2 rounded-md pr-2 text-[13px] transition-colors",
             active
               ? "bg-(--shell-content) text-(--shell-sidebar-fg) shadow-sm"
               : "text-(--shell-sidebar-fg)/85 hover:bg-(--shell-sidebar-hover)",
           )}
+          style={{ paddingLeft: `${8 + depth * 14}px` }}
         >
           <Sparkles
             className={cn(
@@ -151,6 +158,7 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
           }
           label={<span title={session.title}>{session.title}</span>}
           active={active}
+          depth={depth}
           onClick={handleNavigate}
           trailing={
             hasActivity &&
