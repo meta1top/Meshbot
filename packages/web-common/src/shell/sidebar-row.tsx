@@ -53,7 +53,7 @@ export function SidebarRow({
         {trailing}
       </button>
       {actions && (
-        <span className="shrink-0 opacity-0 transition-opacity group-hover/row:opacity-100">
+        <span className="shrink-0 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100 has-data-[state=open]:opacity-100">
           {actions}
         </span>
       )}
