@@ -179,7 +179,7 @@ describe("server-main 组织模型配置权限 e2e", () => {
     return exchangeRes.body.data.deviceToken as string;
   }
 
-  it("owner 建配置 → 打码列表 → 成员 403 → agent 端点解密 apiKey → disable 后为空", async () => {
+  it("owner 建配置 → 打码列表 → 成员 403 → agent 端点下发不含厂商 key → disable 后为空", async () => {
     if (maybeSkip()) return;
 
     // owner 建组织
@@ -243,7 +243,7 @@ describe("server-main 组织模型配置权限 e2e", () => {
     expect(forbiddenRes.status).toBe(403);
     expect(forbiddenRes.body).toMatchObject({ success: false, code: 2004 });
 
-    // agent 端点用 device token 拿到解密后的 apiKey
+    // agent 端点用 device token 拿到可见列表：仅 id/name/contextWindow/enabled，不含厂商敏感字段
     const deviceToken = await issueDeviceToken(ownerToken);
     const agentListRes = await request(app.getHttpServer())
       .get("/api/agent/model-configs")
@@ -252,9 +252,15 @@ describe("server-main 组织模型配置权限 e2e", () => {
     expect(agentListRes.body.data).toHaveLength(1);
     expect(agentListRes.body.data[0]).toMatchObject({
       id: configId,
-      apiKey: "sk-secret-value-1234",
-      model: "gpt-4o",
+      name: "GPT-4o",
+      contextWindow: 128_000,
+      enabled: true,
     });
+    // 锁死「下发无厂商明文」这个安全保证：apiKey/providerType/model/baseUrl 均不下发
+    expect(agentListRes.body.data[0].apiKey).toBeUndefined();
+    expect(agentListRes.body.data[0].providerType).toBeUndefined();
+    expect(agentListRes.body.data[0].model).toBeUndefined();
+    expect(agentListRes.body.data[0].baseUrl).toBeUndefined();
 
     // disable 后 agent 列表为空
     const updateRes = await request(app.getHttpServer())
