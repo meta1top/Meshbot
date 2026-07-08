@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@meshbot/design";
 import type { SessionSummary } from "@meshbot/types-agent";
+import { SidebarRow } from "@meshbot/web-common/shell";
 import { useAtomValue, useSetAtom } from "jotai";
 import { MoreHorizontal, Pencil, Sparkles, Trash2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -22,11 +23,14 @@ import { ConfirmDialog } from "@/components/common/confirm-dialog";
 
 /**
  * 单条会话。三态：
- *  - 默认：图标 + 标题 + 三点（hover 显）
- *  - 编辑：图标 + Input（autofocus + 全选）；Enter/blur 保存、Esc 取消、IME 期 Enter 忽略
- *  - 激活：路由匹配则高亮（半透明白选中）
+ *  - 默认：组合共享 SidebarRow（图标 + 标题 + 三点 hover 显 + 选中态），
+ *    与其它侧栏行统一 h-7/间距/高亮 class
+ *  - 编辑：不套 SidebarRow，原样渲染图标 + Input 行（autofocus + 全选）；
+ *    Enter/blur 保存、Esc 取消、IME 期 Enter 忽略
+ *  - 激活：路由匹配则高亮（SidebarRow 统一的选中态背景）
  *
- * 三点菜单：修改标题 / 固定·取消固定 / 删除 —— 使用 shadcn DropdownMenu。
+ * 三点菜单：修改标题 / 固定·取消固定 / 删除 —— 使用 shadcn DropdownMenu，
+ * 触发按钮放进 SidebarRow 的 actions 插槽（hover 显示由 SidebarRow 统一负责）。
  */
 export function SessionListItem({ session }: { session: SessionSummary }) {
   const router = useRouter();
@@ -100,25 +104,32 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
     }
   }, [removeSession, session.id, active, router]);
 
+  const handleNavigate = useCallback(() => {
+    clearScheduleActivity(session.id);
+    router.push(`/assistant?id=${session.id}`);
+  }, [clearScheduleActivity, router, session.id]);
+
   return (
     <>
-      <div
-        className={cn(
-          "group flex h-7 w-full items-center gap-2 rounded-md px-2 text-[13px] transition-colors",
-          active
-            ? "bg-(--shell-content) text-(--shell-sidebar-fg) shadow-sm"
-            : "text-(--shell-sidebar-fg)/85 hover:bg-(--shell-sidebar-hover)",
-        )}
-      >
-        <Sparkles
+      {editing ? (
+        // 改名态：不套 SidebarRow，原样保留手写行（input 无法塞进 SidebarRow
+        // 的 <button> 主体），与迁移前逻辑/class 完全一致
+        <div
           className={cn(
-            "h-3.5 w-3.5 shrink-0",
+            "group flex h-7 w-full items-center gap-2 rounded-md px-2 text-[13px] transition-colors",
             active
-              ? "text-(--shell-accent)"
-              : "text-(--shell-sidebar-fg)/60 group-hover:text-(--shell-sidebar-fg)",
+              ? "bg-(--shell-content) text-(--shell-sidebar-fg) shadow-sm"
+              : "text-(--shell-sidebar-fg)/85 hover:bg-(--shell-sidebar-hover)",
           )}
-        />
-        {editing ? (
+        >
+          <Sparkles
+            className={cn(
+              "h-3.5 w-3.5 shrink-0",
+              active
+                ? "text-(--shell-accent)"
+                : "text-(--shell-sidebar-fg)/60 group-hover:text-(--shell-sidebar-fg)",
+            )}
+          />
           <input
             ref={inputRef}
             defaultValue={session.title}
@@ -126,60 +137,62 @@ export function SessionListItem({ session }: { session: SessionSummary }) {
             onBlur={(e) => submitTitle(e.target.value)}
             className="min-w-0 flex-1 bg-transparent text-inherit outline-none"
           />
-        ) : (
-          <button
-            type="button"
-            onClick={() => {
-              clearScheduleActivity(session.id);
-              router.push(`/assistant?id=${session.id}`);
-            }}
-            className="min-w-0 flex-1 truncate text-left"
-            title={session.title}
-          >
-            {session.title}
-          </button>
-        )}
-        {hasActivity && !active && !editing && (
-          <span
-            className="mr-1 h-1.5 w-1.5 shrink-0 rounded-full bg-(--shell-accent)"
-            aria-hidden
-          />
-        )}
-        {!editing && (
-          <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className={cn(
-                  "opacity-0 transition-opacity group-hover:opacity-100",
-                  menuOpen && "opacity-100",
-                  "text-(--shell-sidebar-fg)/70 hover:text-(--shell-sidebar-fg)",
-                )}
-                aria-label="menu"
+        </div>
+      ) : (
+        <SidebarRow
+          icon={
+            <Sparkles
+              className={cn(
+                active
+                  ? "text-(--shell-accent)"
+                  : "text-(--shell-sidebar-fg)/60 group-hover/row:text-(--shell-sidebar-fg)",
+              )}
+            />
+          }
+          label={<span title={session.title}>{session.title}</span>}
+          active={active}
+          onClick={handleNavigate}
+          trailing={
+            hasActivity &&
+            !active && (
+              <span
+                className="h-1.5 w-1.5 shrink-0 rounded-full bg-(--shell-accent)"
+                aria-hidden
+              />
+            )
+          }
+          actions={
+            <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="text-(--shell-sidebar-fg)/70 hover:text-(--shell-sidebar-fg)"
+                  aria-label="menu"
+                >
+                  <MoreHorizontal className="h-3.5 w-3.5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                sideOffset={4}
+                className="min-w-[140px]"
               >
-                <MoreHorizontal className="h-3.5 w-3.5" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              sideOffset={4}
-              className="min-w-[140px]"
-            >
-              <DropdownMenuItem onSelect={() => startEditing()}>
-                <Pencil className="h-3.5 w-3.5" />
-                {t("rename")}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                destructive
-                onSelect={() => setConfirmOpen(true)}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                {t("delete")}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </div>
+                <DropdownMenuItem onSelect={() => startEditing()}>
+                  <Pencil className="h-3.5 w-3.5" />
+                  {t("rename")}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  destructive
+                  onSelect={() => setConfirmOpen(true)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  {t("delete")}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          }
+        />
+      )}
       <ConfirmDialog
         open={confirmOpen}
         title={tDelete("title", { title: session.title })}
