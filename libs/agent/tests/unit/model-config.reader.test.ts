@@ -3,7 +3,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { readActiveModelConfig } from "../../src/config/model-config.reader";
+import {
+  CLOUD_GATEWAY_API_KEY_PLACEHOLDER,
+  readActiveModelConfig,
+} from "../../src/config/model-config.reader";
 
 describe("readActiveModelConfig", () => {
   let dir: string;
@@ -61,7 +64,18 @@ describe("readActiveModelConfig", () => {
       model: "gpt-4o",
       apiKey: "sk-a",
       baseUrl: "",
+      isCloudModel: false,
     });
+  });
+
+  it("apiKey 为云网关占位符时 isCloudModel=true", () => {
+    insert({
+      id: "1",
+      cloudUserId: "user-a",
+      model: "cfg-1",
+      apiKey: CLOUD_GATEWAY_API_KEY_PLACEHOLDER,
+    });
+    expect(readActiveModelConfig(dbPath, "user-a")?.isCloudModel).toBe(true);
   });
 
   it("disabled 行（enabled=0）不返回", () => {

@@ -13,6 +13,7 @@ export { COMPACTION_SYSTEM_PROMPT } from "./prompt/compactor.prompt";
 export { GraphRunner } from "./graph/graph-runner.service";
 export { ModelResolver } from "./graph/model-resolver.service";
 export { ModelRunContext } from "./graph/model-run-context";
+export { CLOUD_GATEWAY_API_KEY_PLACEHOLDER } from "./config/model-config.reader";
 export { ThreadStateService } from "./graph/thread-state.service";
 export { capForLlm } from "./graph/nodes/tools.node";
 export type { ModelProvider } from "./graph/nodes/supervisor.node";

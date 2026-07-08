@@ -4,6 +4,8 @@ import { Injectable, Optional } from "@nestjs/common";
 import { AccountContextService } from "../account/account-context.service";
 import { MeshbotConfigService } from "../config/meshbot-config.service";
 import {
+  type ActiveModelConfig,
+  CLOUD_GATEWAY_API_KEY_PLACEHOLDER,
   readActiveModelConfig,
   readModelConfigById,
 } from "../config/model-config.reader";
@@ -72,7 +74,7 @@ export class ModelResolver {
     const meta = { providerType: cfg.providerType, model: cfg.model };
     this.modelMeta = meta;
     this.runCtx.setMeta(meta);
-    const key = `${cfg.providerType}|${cfg.model}|${cfg.baseUrl ?? ""}|${cfg.apiKey ?? ""}`;
+    const key = modelCacheKey(cfg);
     const cached = this.modelCache.get(key);
     if (cached) return cached;
     const model = await createChatModel(cfg);
@@ -96,7 +98,7 @@ export class ModelResolver {
     if (!cfg) {
       throw new Error("当前账号没有启用的模型配置，请先在设置中配置模型");
     }
-    const key = `title|${cfg.providerType}|${cfg.model}|${cfg.baseUrl ?? ""}|${cfg.apiKey ?? ""}`;
+    const key = `title|${modelCacheKey(cfg)}`;
     const cached = this.modelCache.get(key);
     if (cached) return cached;
     const modelKwargs =
@@ -136,4 +138,17 @@ export class ModelResolver {
       clearTimeout(timer);
     }
   }
+}
+
+/**
+ * 按配置算 model 缓存 key。云网关模型（`isCloudModel`）固定拼占位符而非
+ * `cfg.apiKey`——虽然该字段本就只存占位符、从不落地真实 device token，但
+ * 显式排除能防住"万一 apiKey 字段将来意外携带真实 token"的缓存串号风险，
+ * 语义上也更清楚地表达"token 轮换不该使 client 缓存复用错误的实例"。
+ */
+function modelCacheKey(cfg: ActiveModelConfig): string {
+  const apiKeyPart = cfg.isCloudModel
+    ? CLOUD_GATEWAY_API_KEY_PLACEHOLDER
+    : (cfg.apiKey ?? "");
+  return `${cfg.providerType}|${cfg.model}|${cfg.baseUrl ?? ""}|${apiKeyPart}`;
 }
