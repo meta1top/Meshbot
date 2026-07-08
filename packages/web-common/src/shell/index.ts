@@ -8,5 +8,6 @@ export {
 export { RailIconStrip, type RailIconStripProps } from "./rail-icon-strip";
 export { RailNavItem } from "./rail-nav-item";
 export { SidebarNavItem } from "./sidebar-nav-item";
+export { SidebarRow, type SidebarRowProps } from "./sidebar-row";
 export { SidebarSection } from "./sidebar-section";
 export { SidebarSkeleton } from "./sidebar-skeleton";
