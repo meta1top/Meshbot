@@ -220,7 +220,6 @@
     "delete": "Delete",
     "createTitle": "New model configuration",
     "editTitle": "Edit model configuration",
-    "fieldName": "Name",
     "fieldNamePlaceholder": "e.g. Production GPT-4o",
     "fieldNameOptional": "Name (optional)",
     "fieldNameHint": "Leave blank to auto-generate from provider and model",

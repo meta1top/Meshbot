@@ -49,7 +49,8 @@ const ProviderSelect = forwardRef<
     }
     onChange?.(next);
     const preset = resolveProviderPreset(next);
-    setValue("model", preset?.models[0] ?? "", { shouldValidate: true });
+    const nextModel = preset?.models[0] ?? "";
+    setValue("model", nextModel, { shouldValidate: Boolean(nextModel) });
     setValue("baseUrl", preset?.default_base_url ?? "");
   };
   return (

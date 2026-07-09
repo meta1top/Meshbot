@@ -42,4 +42,12 @@ describe("deriveModelName", () => {
       "acme - x",
     );
   });
+
+  it("name 空 + 生成名超 64 → 截断到 64", () => {
+    const result = deriveModelName({
+      providerType: "openai",
+      model: "x".repeat(100),
+    });
+    expect(result.length).toBe(64);
+  });
 });

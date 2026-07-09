@@ -220,7 +220,6 @@
     "delete": "删除",
     "createTitle": "新建模型配置",
     "editTitle": "编辑模型配置",
-    "fieldName": "名称",
     "fieldNamePlaceholder": "例如：生产环境 GPT-4o",
     "fieldNameOptional": "名称（可选）",
     "fieldNameHint": "留空将按供应商与模型自动生成",

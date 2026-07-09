@@ -1,5 +1,7 @@
 import { PROVIDERS, type ProviderDef } from "@meshbot/web-common";
 
+const MAX_MODEL_NAME_LENGTH = 64;
+
 /** 从 PROVIDERS 预设清单按 type 查供应商定义;未命中返回 undefined。 */
 export function resolveProviderPreset(
   providerType: string,
@@ -22,5 +24,5 @@ export function deriveModelName(input: {
   }
   const label =
     resolveProviderPreset(input.providerType)?.name ?? input.providerType;
-  return `${label} - ${input.model}`;
+  return `${label} - ${input.model}`.slice(0, MAX_MODEL_NAME_LENGTH);
 }
