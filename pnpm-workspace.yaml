@@ -23,6 +23,14 @@ overrides:
   # 编译错误）。12.x 对 checkpointer 用到的 API 兼容且能编到 Electron ABI，避免树里
   # 同时存在两个版本、其中老版本打包时崩。
   better-sqlite3: ^12.9.0
+  # NativeWind v5 用 lightningcss 解析 apps/mobile/global.css；1.32.0 解析该文件会报
+  # "failed to deserialize; expected an object-like struct named Specifier"
+  # (NativeWind v5 官方文档已知问题)，钉 1.30.1 规避。
+  # 影响面：hoisted 单副本 → 此 override 全仓生效。web-agent / web-main 的 Tailwind v4
+  # (@tailwindcss/node 原本精确钉 1.32.0) 也随之降到 1.30.1；已 --force 全量构建两端
+  # 验证 CSS 产出正常（Tailwind 走 lightningcss 的 JS transform API，与出问题的 AST
+  # 反序列化路径无关）。升级 NativeWind 到 v5 稳定版时应复核此钉。
+  lightningcss: 1.30.1
 
 peerDependencyRules:
   ignoreMissing:
