@@ -1,4 +1,5 @@
 import "../../global.css";
+import "@/i18n/config";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { Provider as JotaiProvider } from "jotai";
