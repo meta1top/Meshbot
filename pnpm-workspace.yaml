@@ -23,6 +23,10 @@ overrides:
   # 编译错误）。12.x 对 checkpointer 用到的 API 兼容且能编到 Electron ABI，避免树里
   # 同时存在两个版本、其中老版本打包时崩。
   better-sqlite3: ^12.9.0
+  # NativeWind v5 用 lightningcss 解析 apps/mobile/global.css；新版 lightningcss
+  # 解析该文件会报 "failed to deserialize; expected an object-like struct named
+  # Specifier" (NativeWind v5 官方文档已知问题)，钉 1.30.1 规避。
+  lightningcss: 1.30.1
 
 peerDependencyRules:
   ignoreMissing:
