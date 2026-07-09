@@ -44,6 +44,9 @@ const ProviderSelect = forwardRef<
 >(({ value, onChange, placeholder }, ref) => {
   const { setValue } = useFormContext<ModelFormValues>();
   const handleChange = (next: string) => {
+    if (next === value) {
+      return;
+    }
     onChange?.(next);
     const preset = resolveProviderPreset(next);
     setValue("model", preset?.models[0] ?? "", { shouldValidate: true });
