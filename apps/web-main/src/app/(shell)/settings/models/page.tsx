@@ -24,6 +24,7 @@ import {
   type ModelFormValues,
   modelFormValuesToCreateInput,
 } from "@/components/models/model-form-panel";
+import { deriveModelName } from "@/components/models/model-form-panel.helpers";
 import { ApiError } from "@/lib/api";
 import { useProfile } from "@/rest/auth";
 import {
@@ -75,7 +76,11 @@ export default function ModelsSettingsPage() {
         await updateConfig.mutateAsync({
           configId: panel.id,
           input: {
-            name: values.name,
+            name: deriveModelName({
+              name: values.name,
+              providerType: values.providerType,
+              model: values.model,
+            }),
             providerType: values.providerType,
             model: values.model,
             apiKey: values.apiKey || undefined,
