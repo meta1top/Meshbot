@@ -4,6 +4,7 @@ const base = {
   profileLoading: false,
   activeOrg: null as { role: "owner" | "member" } | null,
   modelConfigsLoading: false,
+  modelConfigsError: false,
   modelConfigCount: 0,
 };
 
@@ -24,6 +25,15 @@ describe("resolveOnboardingStep", () => {
         modelConfigsLoading: true,
       }),
     ).toBe("loading");
+  });
+  it("有 org 但模型列表加载出错 → error（不误落建模型/拦截步）", () => {
+    expect(
+      resolveOnboardingStep({
+        ...base,
+        activeOrg: { role: "owner" },
+        modelConfigsError: true,
+      }),
+    ).toBe("error");
   });
   it("有 org 且有模型 → ready", () => {
     expect(

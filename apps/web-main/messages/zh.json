@@ -333,6 +333,8 @@
     "modelStepDesc": "为你的组织添加一个模型配置，即可开始使用 MeshBot。",
     "modelBlockedTitle": "尚未配置模型",
     "modelBlockedDesc": "请联系组织 owner 配置模型后刷新。",
+    "modelLoadErrorTitle": "模型配置加载失败",
+    "modelLoadErrorDesc": "加载组织模型配置时出错，请重试。",
     "refresh": "刷新"
   },
   "userMenu": {

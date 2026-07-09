@@ -333,6 +333,8 @@
     "modelStepDesc": "Add a model configuration for your organization to start using MeshBot.",
     "modelBlockedTitle": "No model configured yet",
     "modelBlockedDesc": "Ask your organization owner to configure a model, then refresh.",
+    "modelLoadErrorTitle": "Couldn't load model configuration",
+    "modelLoadErrorDesc": "Something went wrong while loading your organization's model configuration. Please retry.",
     "refresh": "Refresh"
   },
   "userMenu": {

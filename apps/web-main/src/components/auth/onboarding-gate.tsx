@@ -44,7 +44,7 @@ function ModelOwnerStep({ orgId }: { orgId: string }) {
   };
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-xl flex-col justify-center gap-4 px-4">
+    <div className="mx-auto flex min-h-full max-w-xl flex-col justify-center gap-4 overflow-y-auto px-4">
       <div>
         <h1 className="text-lg font-semibold">{t("modelStepTitle")}</h1>
         <p className="text-sm text-muted-foreground">{t("modelStepDesc")}</p>
@@ -65,12 +65,30 @@ function ModelOwnerStep({ orgId }: { orgId: string }) {
 function ModelBlocked() {
   const t = useTranslations("onboarding");
   return (
-    <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-3 px-4 text-center">
+    <div className="mx-auto flex min-h-full max-w-md flex-col items-center justify-center gap-3 overflow-y-auto px-4 text-center">
       <h1 className="text-lg font-semibold">{t("modelBlockedTitle")}</h1>
       <p className="text-sm text-muted-foreground">{t("modelBlockedDesc")}</p>
       <button
         type="button"
         onClick={() => window.location.reload()}
+        className="rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-muted"
+      >
+        {t("refresh")}
+      </button>
+    </div>
+  );
+}
+
+/** 模型列表加载出错（如瞬时网络故障）：错误态 + 重试，避免误落建模型/拦截步。 */
+function ModelLoadError({ onRetry }: { onRetry: () => void }) {
+  const t = useTranslations("onboarding");
+  return (
+    <div className="mx-auto flex min-h-full max-w-md flex-col items-center justify-center gap-3 overflow-y-auto px-4 text-center">
+      <h1 className="text-lg font-semibold">{t("modelLoadErrorTitle")}</h1>
+      <p className="text-sm text-muted-foreground">{t("modelLoadErrorDesc")}</p>
+      <button
+        type="button"
+        onClick={onRetry}
         className="rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-muted"
       >
         {t("refresh")}
@@ -92,6 +110,7 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
     profileLoading: profile.isPending,
     activeOrg: activeOrg ? { role: activeOrg.role } : null,
     modelConfigsLoading: activeOrg != null && models.isPending,
+    modelConfigsError: activeOrg != null && models.isError,
     modelConfigCount: models.data?.length ?? 0,
   });
 
@@ -99,7 +118,13 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
     case "loading":
       return <GateLoading />;
     case "org":
-      return <OrgOnboarding />;
+      return (
+        <div className="mx-auto flex min-h-full max-w-xl flex-col justify-center overflow-y-auto px-4">
+          <OrgOnboarding />
+        </div>
+      );
+    case "error":
+      return <ModelLoadError onRetry={() => void models.refetch()} />;
     case "model-owner":
       // activeOrg 必非空（step 为 model-owner 时）
       return <ModelOwnerStep orgId={activeOrg!.id} />;
