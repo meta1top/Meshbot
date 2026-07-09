@@ -57,6 +57,7 @@ import { OrgController } from "./rest/org.controller";
 import { OrgModelConfigController } from "./rest/org-model-config.controller";
 import { PublicShareController } from "./rest/public-share.controller";
 import { SkillController } from "./rest/skill.controller";
+import { ModelGatewayModule } from "./model-gateway/model-gateway.module";
 import { HealthGateway } from "./ws/health.gateway";
 import { ImGateway } from "./ws/im.gateway";
 
@@ -126,6 +127,10 @@ export class AppModule {
   static forRoot(config: AppConfig): DynamicModule {
     const isProd = process.env.NODE_ENV === "production";
     const redis = buildRedis(config);
+    // 复用同一个 DynamicModule 对象引用传给 ModelGatewayModule.forRoot()——
+    // NestJS 默认按引用（非深比较配置值）做动态模块去重，重新调一次
+    // MainModule.forRoot(...) 会额外实例化一份 OrgModelConfigService 等 Service。
+    const mainModule = MainModule.forRoot(config.invitation, config.security);
 
     return {
       module: AppModule,
@@ -196,9 +201,10 @@ export class AppModule {
         // 结构化健康检查（DB + Redis 分组上报）
         TerminusModule,
         EmailModule,
-        MainModule.forRoot(config.invitation, config.security),
+        mainModule,
         EventEmitterModule.forRoot(),
         AssetsModule.forRoot({ provider: "minio", minio: config.assets.minio }),
+        ModelGatewayModule.forRoot(mainModule),
       ],
       controllers: [
         HealthController,

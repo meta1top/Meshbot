@@ -1,9 +1,9 @@
 import { NotFoundException } from "@nestjs/common";
 import { AccountContextService } from "@meshbot/lib-agent";
-import type { AgentModelConfig } from "@meshbot/types";
 import { DataSource } from "typeorm";
 import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
 import { ModelConfig } from "../entities/model-config.entity";
+import type { CloudModelConfigRow } from "./model-config.service";
 import { ModelConfigService } from "./model-config.service";
 
 /** 默认测试账号：作用域仓库要求每次调用都处于账号上下文内。 */
@@ -60,17 +60,16 @@ async function seedModelConfig(
   return repo.save(entity);
 }
 
-/** 造一条云端下发的 AgentModelConfig 样例。 */
-function agentModelConfig(
-  overrides: Partial<AgentModelConfig> = {},
-): AgentModelConfig {
+/** 造一条网关坐标行样例（sync service 已完成 AgentModelConfig → 网关行映射）。 */
+function cloudConfigRow(
+  overrides: Partial<CloudModelConfigRow> = {},
+): CloudModelConfigRow {
   return {
-    id: "cloud-cfg-1",
-    providerType: "openai",
+    providerType: "openai-compatible",
     name: "Cloud GPT-4o",
-    model: "gpt-4o",
-    apiKey: "sk-cloud",
-    baseUrl: "",
+    model: "cloud-cfg-1",
+    apiKey: "__cloud__",
+    baseUrl: "http://127.0.0.1:3200/api/v1",
     contextWindow: 128_000,
     enabled: true,
     ...overrides,
@@ -232,7 +231,7 @@ describe("ModelConfigService", () => {
       });
 
       await ctx.run("u1", () =>
-        rawService.replaceCloudConfigs([agentModelConfig({ name: "Cloud A" })]),
+        rawService.replaceCloudConfigs([cloudConfigRow({ name: "Cloud A" })]),
       );
 
       const all = await ctx.run("u1", () => rawService.findAll());
@@ -252,12 +251,8 @@ describe("ModelConfigService", () => {
 
       await ctx.run("u1", () =>
         rawService.replaceCloudConfigs([
-          agentModelConfig({ id: "cfg-1", name: "New Cloud 1" }),
-          agentModelConfig({
-            id: "cfg-2",
-            name: "New Cloud 2",
-            model: "deepseek-chat",
-          }),
+          cloudConfigRow({ model: "cfg-1", name: "New Cloud 1" }),
+          cloudConfigRow({ model: "cfg-2", name: "New Cloud 2" }),
         ]),
       );
 
@@ -280,14 +275,44 @@ describe("ModelConfigService", () => {
       });
 
       await ctx.run("u1", () =>
-        rawService.replaceCloudConfigs([
-          agentModelConfig({ name: "U1 Cloud" }),
-        ]),
+        rawService.replaceCloudConfigs([cloudConfigRow({ name: "U1 Cloud" })]),
       );
 
       const u2All = await ctx.run("u2", () => rawService.findAll());
       expect(u2All).toHaveLength(1);
       expect(u2All[0].name).toBe("U2 Cloud");
+    });
+
+    it("云配置写成指向网关的 openai-compatible 行（不落厂商明文）", async () => {
+      await ctx.run("u1", () =>
+        rawService.replaceCloudConfigs([
+          cloudConfigRow({
+            model: "m1",
+            name: "GPT4o",
+            baseUrl: "http://127.0.0.1:3200/api/v1",
+          }),
+        ]),
+      );
+
+      const [row] = await ctx.run("u1", () => rawService.findAll());
+      expect(row).toMatchObject({
+        providerType: "openai-compatible",
+        baseUrl: expect.stringMatching(/\/api\/v1$/),
+        model: "m1",
+        apiKey: "__cloud__",
+        source: "cloud",
+      });
+    });
+
+    it("contextWindow 为 null 时落库兜底为默认值（entity 列非空）", async () => {
+      await ctx.run("u1", () =>
+        rawService.replaceCloudConfigs([
+          cloudConfigRow({ contextWindow: null }),
+        ]),
+      );
+
+      const [row] = await ctx.run("u1", () => rawService.findAll());
+      expect(row.contextWindow).toBe(128_000);
     });
   });
 });

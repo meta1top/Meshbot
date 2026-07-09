@@ -1,4 +1,5 @@
 import {
+  CLOUD_TOKEN_PORT,
   RUNTIME_CONTEXT_PORT,
   AccountContextService,
 } from "@meshbot/lib-agent";
@@ -10,13 +11,15 @@ import { Setting } from "./entities/setting.entity";
 import { CloudIdentityService } from "./services/cloud-identity.service";
 import { QUICK_ASSISTANT_NAME_KEY } from "./services/quick-assistant.service";
 import { SettingService } from "./services/setting.service";
-import type { RuntimeContextPort } from "@meshbot/lib-agent";
+import type { CloudTokenPort, RuntimeContextPort } from "@meshbot/lib-agent";
 
 /**
- * @Global RuntimeContextModule：为 AgentModule 的 GraphService 提供 RUNTIME_CONTEXT_PORT 绑定。
+ * @Global RuntimeContextModule：为 AgentModule 提供 RUNTIME_CONTEXT_PORT / CLOUD_TOKEN_PORT 绑定。
  *
- * resolve() 在账号上下文内被调（GraphService.run 内），AccountContextService.getOrThrow() 安全。
- * 全 best-effort：displayName 无身份返 null、language/timezone 无设置返 null。
+ * 两个端口的 resolve() 都在账号上下文内被调（GraphService.run / ModelResolver.resolveModel 内），
+ * AccountContextService.getOrThrow() 安全。全 best-effort：displayName 无身份返 null、
+ * language/timezone 无设置返 null、device token 未登录/查无身份返 null（云模型请求带空 Bearer，
+ * 由网关侧鉴权拒绝）。
  */
 @Global()
 @Module({
@@ -53,7 +56,23 @@ import type { RuntimeContextPort } from "@meshbot/lib-agent";
       }),
       inject: [AccountContextService, CloudIdentityService, SettingService],
     },
+    {
+      provide: CLOUD_TOKEN_PORT,
+      useFactory: (
+        account: AccountContextService,
+        cloudIdentity: CloudIdentityService,
+      ): CloudTokenPort => ({
+        async resolve() {
+          const cloudUserId = account.getOrThrow();
+          const identity = await cloudIdentity
+            .get(cloudUserId)
+            .catch(() => null);
+          return identity?.deviceToken ?? null;
+        },
+      }),
+      inject: [AccountContextService, CloudIdentityService],
+    },
   ],
-  exports: [RUNTIME_CONTEXT_PORT],
+  exports: [RUNTIME_CONTEXT_PORT, CLOUD_TOKEN_PORT],
 })
 export class RuntimeContextModule {}

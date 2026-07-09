@@ -28,12 +28,15 @@ import request from "supertest";
 import { JwtAuthGuard } from "../../src/auth/jwt-auth.guard";
 import { JwtMainStrategy } from "../../src/auth/jwt.strategy";
 import { type AppConfig, APP_CONFIG } from "../../src/config/app-config.schema";
-import { AgentConfigController } from "../../src/rest/agent-config.controller";
 import { AuthController } from "../../src/rest/auth.controller";
 import { DeviceAuthController } from "../../src/rest/device-auth.controller";
 import { DeviceController } from "../../src/rest/device.controller";
 import { OrgController } from "../../src/rest/org.controller";
-import { OrgModelConfigController } from "../../src/rest/org-model-config.controller";
+import { ModelGatewayModule } from "../../src/model-gateway/model-gateway.module";
+import {
+  GatewayModelNotFoundError,
+  ModelGatewayService,
+} from "../../src/model-gateway/model-gateway.service";
 import {
   buildCaptureEmailModule,
   CaptureEmailSender,
@@ -62,7 +65,34 @@ function makePkce(): { verifier: string; challenge: string } {
   return { verifier, challenge };
 }
 
-describe("server-main 组织模型配置权限 e2e", () => {
+/**
+ * `ModelGatewayService` 的测试替身：避免真调 langchain/厂商 API。
+ * `model === "m1"` 模拟归属当前 org 的模型；其余一律当"归属解析失败"
+ * （对应真实 `OrgModelConfigService.resolveDecrypted` 找不到时的行为），
+ * 覆盖跨 org 模型 id 场景，不必在 Postgres 里真建第二个 org 的配置。
+ */
+class FakeModelGatewayService {
+  async complete(orgId: string, req: { model: string }, id: string) {
+    if (req.model !== "m1") {
+      throw new GatewayModelNotFoundError(req.model);
+    }
+    return {
+      id,
+      object: "chat.completion",
+      created: 0,
+      model: req.model,
+      choices: [
+        {
+          index: 0,
+          message: { role: "assistant", content: `echo:${orgId}` },
+          finish_reason: "stop",
+        },
+      ],
+    };
+  }
+}
+
+describe("server-main 云端模型网关 chat/completions e2e", () => {
   let app: INestApplication;
   let dbCtx: TestDbContext | null = null;
   let skipReason: string | null = null;
@@ -70,10 +100,19 @@ describe("server-main 组织模型配置权限 e2e", () => {
   beforeAll(async () => {
     if (!(await isPostgresReachable())) {
       skipReason = "Postgres unreachable; run `pnpm dev:db:up`";
-      console.warn(`[org-model-config-flow] ${skipReason}`);
+      console.warn(`[model-gateway] ${skipReason}`);
       return;
     }
     dbCtx = await createTestDb();
+
+    // 与 AppModule.forRoot() 同一手法：MainModule.forRoot() 只调一次，
+    // 同一个 DynamicModule 对象引用同时喂给测试模块自身的 imports 和
+    // ModelGatewayModule.forRoot()，避免 NestJS 按引用去重导致重复实例化
+    // OrgModelConfigService 等 Service（见 model-gateway.module.ts 注释）。
+    const mainModule = MainModule.forRoot(
+      { expiresDays: 7 },
+      { encryptionKey: "e2e-encryption-key-0123456789abcdef" },
+    );
 
     const moduleRef = await Test.createTestingModule({
       imports: [
@@ -107,25 +146,26 @@ describe("server-main 组织模型配置权限 e2e", () => {
             bucket: "test",
           },
         }),
-        MainModule.forRoot(
-          { expiresDays: 7 },
-          { encryptionKey: "e2e-encryption-key-0123456789abcdef" },
-        ),
+        mainModule,
+        // 真实模块装配（app.module.ts 同款 forRoot(mainModule) 用法），
+        // 只在下方 overrideProvider 把内部 ModelGatewayService 换成测试替身。
+        ModelGatewayModule.forRoot(mainModule),
       ],
       controllers: [
         AuthController,
         OrgController,
         DeviceAuthController,
         DeviceController,
-        OrgModelConfigController,
-        AgentConfigController,
       ],
       providers: [
         { provide: APP_CONFIG, useValue: TEST_APP_CONFIG },
         JwtMainStrategy,
         { provide: APP_GUARD, useClass: JwtAuthGuard },
       ],
-    }).compile();
+    })
+      .overrideProvider(ModelGatewayService)
+      .useClass(FakeModelGatewayService)
+      .compile();
 
     app = moduleRef.createNestApplication();
     app.setGlobalPrefix("api");
@@ -145,7 +185,7 @@ describe("server-main 组织模型配置权限 e2e", () => {
 
   function maybeSkip(): boolean {
     if (skipReason) {
-      console.warn(`[org-model-config-flow] skipping: ${skipReason}`);
+      console.warn(`[model-gateway] skipping: ${skipReason}`);
       return true;
     }
     return false;
@@ -161,7 +201,7 @@ describe("server-main 组织模型配置权限 e2e", () => {
     const startRes = await request(app.getHttpServer())
       .post("/api/device-auth/start")
       .send({
-        deviceName: "Agent Box",
+        deviceName: "Gateway Box",
         platform: "linux",
         codeChallenge: challenge,
       });
@@ -179,102 +219,49 @@ describe("server-main 组织模型配置权限 e2e", () => {
     return exchangeRes.body.data.deviceToken as string;
   }
 
-  it("owner 建配置 → 打码列表 → 成员 403 → agent 端点下发不含厂商 key → disable 后为空", async () => {
+  it("带有效 device token + 非流式 → 200 且返回 completion", async () => {
     if (maybeSkip()) return;
 
-    // owner 建组织
-    const ownerToken = await registerAndToken("owner@modelcfg.io");
-    const orgRes = await request(app.getHttpServer())
+    const ownerToken = await registerAndToken("owner@gateway.io");
+    await request(app.getHttpServer())
       .post("/api/orgs")
       .set("Authorization", `Bearer ${ownerToken}`)
-      .send({ name: "ModelCfgOrg" });
-    const orgId = orgRes.body.data.id as string;
-
-    // 邀请成员并接受
-    const inviteRes = await request(app.getHttpServer())
-      .post(`/api/orgs/${orgId}/invitations`)
-      .set("Authorization", `Bearer ${ownerToken}`)
-      .send({ email: "member@modelcfg.io" });
-    const inviteCode = inviteRes.body.data.token as string;
-    const memberToken = await registerAndToken("member@modelcfg.io");
-    await request(app.getHttpServer())
-      .post("/api/orgs/invitations/accept")
-      .set("Authorization", `Bearer ${memberToken}`)
-      .send({ token: inviteCode });
-
-    // owner 新建模型配置
-    const createRes = await request(app.getHttpServer())
-      .post(`/api/orgs/${orgId}/model-configs`)
-      .set("Authorization", `Bearer ${ownerToken}`)
-      .send({
-        name: "GPT-4o",
-        providerType: "openai",
-        model: "gpt-4o",
-        apiKey: "sk-secret-value-1234",
-        baseUrl: "https://api.openai.com/v1",
-        contextWindow: 128_000,
-        enabled: true,
-      });
-    expect(createRes.body).toMatchObject({ success: true });
-    const configId = createRes.body.data.id as string;
-    expect(createRes.body.data.apiKeyMasked).toBe("****1234");
-    expect(createRes.body.data.apiKeyMasked).not.toContain("sk-secret-value");
-    // 锁死 raw apiKey 字段缺席（toMatchObject 是部分匹配，防未来序列化泄露明文）
-    expect(createRes.body.data.apiKey).toBeUndefined();
-
-    // owner 列表：打码
-    const listRes = await request(app.getHttpServer())
-      .get(`/api/orgs/${orgId}/model-configs`)
-      .set("Authorization", `Bearer ${ownerToken}`);
-    expect(listRes.body.data).toHaveLength(1);
-    expect(listRes.body.data[0].apiKeyMasked).toBe("****1234");
-    expect(listRes.body.data[0].apiKey).toBeUndefined();
-
-    // 成员 POST 被 403 ORG_FORBIDDEN
-    const forbiddenRes = await request(app.getHttpServer())
-      .post(`/api/orgs/${orgId}/model-configs`)
-      .set("Authorization", `Bearer ${memberToken}`)
-      .send({
-        name: "Should Fail",
-        providerType: "openai",
-        model: "gpt-4o-mini",
-        apiKey: "sk-should-not-be-created",
-      });
-    expect(forbiddenRes.status).toBe(403);
-    expect(forbiddenRes.body).toMatchObject({ success: false, code: 2004 });
-
-    // agent 端点用 device token 拿到可见列表：仅 id/name/contextWindow/enabled，不含厂商敏感字段
+      .send({ name: "GatewayOrg" });
     const deviceToken = await issueDeviceToken(ownerToken);
-    const agentListRes = await request(app.getHttpServer())
-      .get("/api/agent/model-configs")
-      .set("Authorization", `Bearer ${deviceToken}`);
-    expect(agentListRes.body).toMatchObject({ success: true });
-    expect(agentListRes.body.data).toHaveLength(1);
-    expect(agentListRes.body.data[0]).toMatchObject({
-      id: configId,
-      name: "GPT-4o",
-      contextWindow: 128_000,
-      enabled: true,
-    });
-    // 锁死「下发无厂商明文」这个安全保证：apiKey/providerType/model/baseUrl 均不下发
-    expect(agentListRes.body.data[0].apiKey).toBeUndefined();
-    expect(agentListRes.body.data[0].providerType).toBeUndefined();
-    expect(agentListRes.body.data[0].model).toBeUndefined();
-    expect(agentListRes.body.data[0].baseUrl).toBeUndefined();
 
-    // disable 后 agent 列表为空
-    const updateRes = await request(app.getHttpServer())
-      .patch(`/api/orgs/${orgId}/model-configs/${configId}`)
+    const res = await request(app.getHttpServer())
+      .post("/api/v1/chat/completions")
+      .set("Authorization", `Bearer ${deviceToken}`)
+      .send({ model: "m1", messages: [{ role: "user", content: "hi" }] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.object).toBe("chat.completion");
+    expect(res.body.choices[0].message.content).toContain("echo:");
+  });
+
+  it("无 token → 401", async () => {
+    if (maybeSkip()) return;
+
+    const res = await request(app.getHttpServer())
+      .post("/api/v1/chat/completions")
+      .send({ model: "m1", messages: [] });
+    expect(res.status).toBe(401);
+  });
+
+  it("跨 org 模型 id → 404", async () => {
+    if (maybeSkip()) return;
+
+    const ownerToken = await registerAndToken("owner2@gateway.io");
+    await request(app.getHttpServer())
+      .post("/api/orgs")
       .set("Authorization", `Bearer ${ownerToken}`)
-      .send({ enabled: false });
-    expect(updateRes.body).toMatchObject({
-      success: true,
-      data: { enabled: false },
-    });
+      .send({ name: "GatewayOrg2" });
+    const deviceToken = await issueDeviceToken(ownerToken);
 
-    const agentListAfterDisable = await request(app.getHttpServer())
-      .get("/api/agent/model-configs")
-      .set("Authorization", `Bearer ${deviceToken}`);
-    expect(agentListAfterDisable.body.data).toEqual([]);
+    const res = await request(app.getHttpServer())
+      .post("/api/v1/chat/completions")
+      .set("Authorization", `Bearer ${deviceToken}`)
+      .send({ model: "other-org-model", messages: [] });
+    expect(res.status).toBe(404);
   });
 });

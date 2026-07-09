@@ -133,6 +133,12 @@ export async function createChatModel(
      * `{ thinking: { type: "disabled" } }` 关思考；其他 provider 按各自约定。
      */
     modelKwargs?: Record<string, unknown>;
+    /**
+     * 云网关模型（`config.isCloudModel`）取当前 device token 的回调。
+     * 每次请求都会重新调用，token 轮换无需重建 client；不传时云模型请求
+     * 会带空 Bearer（server-agent 侧接线见后续任务）。
+     */
+    cloudTokenProvider?: () => string | null;
   },
 ): Promise<BaseChatModel> {
   const configuration: Record<string, unknown> = {};
@@ -142,6 +148,15 @@ export async function createChatModel(
   // 消息补一个空字段，验证占位能否绕过 deepseek 服务端校验。
   if (config.providerType === "deepseek") {
     configuration.fetch = patchedFetchForDeepseek(globalThis.fetch);
+  }
+  // 云网关模型：apiKey 落地的是占位符（真实厂商 key 只在云端持有），client
+  // 用占位 key 建一次即可；每次请求靠 fetch 包装把 Authorization 换成当前
+  // device token，避免把易失效的 token 提前烘进 client 实例。
+  if (config.isCloudModel) {
+    configuration.fetch = buildCloudFetch(
+      globalThis.fetch,
+      options?.cloudTokenProvider ?? (() => null),
+    );
   }
   return (await initChatModel(config.model, {
     modelProvider:
@@ -187,5 +202,38 @@ function patchedFetchForDeepseek(base: typeof fetch): typeof fetch {
       `[deepseek-patch] injected reasoning_content="" into ${body.messages.filter((m) => m.role === "assistant").length} assistant message(s)`,
     );
     return base(input, { ...init, body: JSON.stringify(body) });
+  };
+}
+
+/**
+ * 云网关 fetch 包装：每次请求前把 `Authorization` 覆盖为
+ * `Bearer <tokenProvider()>`。client 建好后 apiKey 固定是占位符
+ * （`__cloud__`），真实 device token 只在这里、每次请求现取现用——token
+ * 轮换（重新登录换发新 token）时无需重建/重新缓存 client。
+ *
+ * clone `init.headers` 再覆盖，不直接改调用方传入的 headers 引用。兼容两种
+ * 形状：普通 record（测试 / 多数手写调用）与原生 `Headers` 实例——
+ * `@langchain/openai` 底层用的 `openai` SDK 组装请求头时用的就是真实
+ * `Headers` 对象，对它做 `{...headers}` 浅展开拿不到任何字段（`Headers`
+ * 不暴露可枚举自有属性），会把 User-Agent / Accept 等头静默丢光。
+ * 导出以便单测直接验证覆盖行为。
+ */
+export function buildCloudFetch(
+  base: typeof fetch,
+  tokenProvider: () => string | null,
+): typeof fetch {
+  return async function cloudFetch(input, init) {
+    const authorization = `Bearer ${tokenProvider() ?? ""}`;
+    const rawHeaders = init?.headers;
+    if (rawHeaders instanceof Headers) {
+      const headers = new Headers(rawHeaders);
+      headers.set("Authorization", authorization);
+      return base(input, { ...init, headers });
+    }
+    const headers = {
+      ...(rawHeaders as Record<string, string> | undefined),
+      Authorization: authorization,
+    };
+    return base(input, { ...init, headers });
   };
 }

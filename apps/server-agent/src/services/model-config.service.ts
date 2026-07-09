@@ -1,11 +1,30 @@
 import { Transactional } from "@meshbot/common";
-import type { AgentModelConfig } from "@meshbot/types";
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { ScopedRepository } from "../account/scoped-repository";
 import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
 import { ModelConfig } from "../entities/model-config.entity";
+
+/** ModelConfig.contextWindow 的兜底值（entity 列默认值），行映射未给出时使用。 */
+const DEFAULT_CONTEXT_WINDOW = 128_000;
+
+/**
+ * 云端网关坐标行——「云端模型网关」下发的 `AgentModelConfig`（仅 id/name/
+ * contextWindow/enabled，不含厂商敏感字段）已由 ModelConfigSyncService 映射
+ * 为该形状：`providerType` 固定 `openai-compatible`、`baseUrl` 指向本地网关
+ * 代理端点、`model` 用云端配置 id 做调用引用、`apiKey` 是占位符（真实厂商
+ * key 只在云端持有，网关请求时按 device token 换发，见 Task 8）。
+ */
+export interface CloudModelConfigRow {
+  providerType: string;
+  name: string;
+  model: string;
+  apiKey: string;
+  baseUrl: string;
+  enabled: boolean;
+  contextWindow: number | null;
+}
 
 /** ModelConfig 表的归属 Service —— 模型配置的数据层（按账号隔离）。 */
 @Injectable()
@@ -67,8 +86,8 @@ export class ModelConfigService {
    * 本地手工维护的 source='local' 行不受影响——本地模型配置写 REST 已下线，
    * 云端组织模型配置是唯一的写入来源，登录/启动/定时同步调用本方法。
    */
-  async replaceCloudConfigs(configs: AgentModelConfig[]): Promise<void> {
-    return this.persistCloudConfigs(configs);
+  async replaceCloudConfigs(rows: CloudModelConfigRow[]): Promise<void> {
+    return this.persistCloudConfigs(rows);
   }
 
   /**
@@ -77,18 +96,18 @@ export class ModelConfigService {
    */
   @Transactional()
   private async persistCloudConfigs(
-    configs: AgentModelConfig[],
+    rows: CloudModelConfigRow[],
   ): Promise<void> {
     await this.repo.delete({ source: "cloud" });
-    for (const c of configs) {
+    for (const r of rows) {
       await this.repo.save({
-        providerType: c.providerType,
-        name: c.name,
-        model: c.model,
-        apiKey: c.apiKey,
-        baseUrl: c.baseUrl,
-        enabled: c.enabled,
-        contextWindow: c.contextWindow,
+        providerType: r.providerType,
+        name: r.name,
+        model: r.model,
+        apiKey: r.apiKey,
+        baseUrl: r.baseUrl,
+        enabled: r.enabled,
+        contextWindow: r.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
         source: "cloud",
       } as ModelConfig);
     }

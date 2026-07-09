@@ -283,6 +283,21 @@ importers:
       '@alicloud/tea-util':
         specifier: ^1.4.11
         version: 1.4.11
+      '@langchain/anthropic':
+        specifier: 0.3.34
+        version: 0.3.34(@langchain/core@0.3.80(openai@5.12.2(ws@8.18.3)(zod@3.25.76)))(zod@3.25.76)
+      '@langchain/core':
+        specifier: ^0.3
+        version: 0.3.80(openai@5.12.2(ws@8.18.3)(zod@3.25.76))
+      '@langchain/google-genai':
+        specifier: 0.2.18
+        version: 0.2.18(@langchain/core@0.3.80(openai@5.12.2(ws@8.18.3)(zod@3.25.76)))
+      '@langchain/ollama':
+        specifier: 0.2.4
+        version: 0.2.4(@langchain/core@0.3.80(openai@5.12.2(ws@8.18.3)(zod@3.25.76)))
+      '@langchain/openai':
+        specifier: 0.6.17
+        version: 0.6.17(@langchain/core@0.3.80(openai@5.12.2(ws@8.18.3)(zod@3.25.76)))(ws@8.18.3)
       '@meshbot/assets':
         specifier: workspace:*
         version: link:../../libs/assets
@@ -349,6 +364,9 @@ importers:
       ioredis:
         specifier: ^5.10.1
         version: 5.10.1(supports-color@5.5.0)
+      langchain:
+        specifier: ^0.3.37
+        version: 0.3.37(@langchain/anthropic@0.3.34(@langchain/core@0.3.80(openai@5.12.2(ws@8.18.3)(zod@3.25.76)))(zod@3.25.76))(@langchain/core@0.3.80(openai@5.12.2(ws@8.18.3)(zod@3.25.76)))(@langchain/deepseek@0.1.0(@langchain/core@0.3.80(openai@5.12.2(ws@8.18.3)(zod@3.25.76)))(ws@8.18.3))(@langchain/google-genai@0.2.18(@langchain/core@0.3.80(openai@5.12.2(ws@8.18.3)(zod@3.25.76))))(@langchain/ollama@0.2.4(@langchain/core@0.3.80(openai@5.12.2(ws@8.18.3)(zod@3.25.76))))(axios@1.16.0)(handlebars@4.7.9)(openai@5.12.2(ws@8.18.3)(zod@3.25.76))(typeorm@0.3.28(ts-node@10.9.2(@swc/core@1.15.33)(@types/node@22.19.17)(typescript@5.9.3)))(ws@8.18.3)
       nanoid:
         specifier: ^5
         version: 5.1.11
