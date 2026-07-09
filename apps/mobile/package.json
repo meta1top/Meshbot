@@ -1,14 +1,13 @@
 {
-  "name": "mobile",
+  "name": "@meshbot/mobile",
   "main": "expo-router/entry",
-  "version": "1.0.0",
+  "version": "0.0.0",
   "scripts": {
-    "start": "expo start",
-    "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
+    "dev": "expo start",
     "ios": "expo start --ios",
-    "web": "expo start --web",
-    "lint": "expo lint"
+    "android": "expo start --android",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf .expo dist"
   },
   "dependencies": {
     "@react-navigation/bottom-tabs": "^7.15.5",
