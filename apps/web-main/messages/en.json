@@ -328,7 +328,12 @@
     "inviteToken": "",
     "inviteTokenPlaceholder": "",
     "joining": "",
-    "join": ""
+    "join": "",
+    "modelStepTitle": "Configure a model",
+    "modelStepDesc": "Add a model configuration for your organization to start using MeshBot.",
+    "modelBlockedTitle": "No model configured yet",
+    "modelBlockedDesc": "Ask your organization owner to configure a model, then refresh.",
+    "refresh": "Refresh"
   },
   "userMenu": {
     "switchOrg": "",

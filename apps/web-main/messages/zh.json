@@ -328,7 +328,12 @@
     "inviteToken": "",
     "inviteTokenPlaceholder": "",
     "joining": "",
-    "join": ""
+    "join": "",
+    "modelStepTitle": "配置模型",
+    "modelStepDesc": "为你的组织添加一个模型配置，即可开始使用 MeshBot。",
+    "modelBlockedTitle": "尚未配置模型",
+    "modelBlockedDesc": "请联系组织 owner 配置模型后刷新。",
+    "refresh": "刷新"
   },
   "userMenu": {
     "switchOrg": "",
