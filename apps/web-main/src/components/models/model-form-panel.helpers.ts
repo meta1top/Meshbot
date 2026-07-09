@@ -1,4 +1,4 @@
-import { PROVIDERS, type ProviderDef } from "@meshbot/types-agent";
+import { PROVIDERS, type ProviderDef } from "@meshbot/web-common";
 
 /** 从 PROVIDERS 预设清单按 type 查供应商定义;未命中返回 undefined。 */
 export function resolveProviderPreset(
