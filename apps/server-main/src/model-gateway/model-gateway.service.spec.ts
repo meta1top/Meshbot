@@ -112,6 +112,11 @@ describe("ModelGatewayService", () => {
     }
 
     expect(frames[0].choices[0].delta.content).toBe("he");
+    // 首帧必须带 role:"assistant"（OpenAI 流式约定）；缺 role 时端侧 langchain
+    // 会把 chunk 解析成 generic ChatMessageChunk 而非 AIMessageChunk，agent 图层
+    // 的 instanceof AIMessageChunk 过滤会把整段回复丢弃（chunks=0）。
+    expect(frames[0].choices[0].delta.role).toBe("assistant");
+    expect(frames[1].choices[0].delta.role).toBeUndefined();
     expect(frames[1].choices[0].delta.content).toBe("llo");
     expect(frames.at(-1).choices[0].finish_reason).toBe("stop");
   });

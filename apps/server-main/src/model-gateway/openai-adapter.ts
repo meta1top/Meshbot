@@ -84,7 +84,7 @@ export function toOpenAICompletion(msg: AIMessage, model: string, id: string) {
 
 /** 流式 delta → OpenAI chat.completion.chunk。 */
 export function toOpenAIChunk(
-  delta: { content?: string; toolCalls?: unknown },
+  delta: { role?: string; content?: string; toolCalls?: unknown },
   model: string,
   id: string,
 ) {
@@ -97,6 +97,10 @@ export function toOpenAIChunk(
       {
         index: 0,
         delta: {
+          // OpenAI 流式约定：首帧 delta 带 role:"assistant"。端侧 langchain 据此
+          // 把 chunk 建成 AIMessageChunk（后续无 role 的帧沿用该角色）；缺 role 会
+          // 退化成 generic ChatMessageChunk，被消费方的 instanceof AIMessageChunk 丢弃。
+          ...(delta.role ? { role: delta.role } : {}),
           ...(delta.content != null ? { content: delta.content } : {}),
           ...(delta.toolCalls ? { tool_calls: delta.toolCalls } : {}),
         },

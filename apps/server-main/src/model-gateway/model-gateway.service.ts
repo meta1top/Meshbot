@@ -67,13 +67,21 @@ export class ModelGatewayService {
     const resolved = await this.orgModels.resolveDecrypted(orgId, req.model);
     if (!resolved) throw new GatewayModelNotFoundError(req.model);
     const model = await this.build(resolved, req, true);
+    // 首个产出帧带 role:"assistant"（OpenAI 流式约定），后续帧不再带——见
+    // openai-adapter.toOpenAIChunk 注释：缺 role 端侧会解析成 generic chunk 而丢弃。
+    let firstDelta = true;
     for await (const chunk of await model.stream(toLangchainMessages(req))) {
       const content = typeof chunk.content === "string" ? chunk.content : "";
       const toolCalls = toOpenAIToolCallDeltas(
         (chunk as { tool_call_chunks?: ToolCallChunk[] }).tool_call_chunks,
       );
       if (content || toolCalls) {
-        yield toOpenAIChunk({ content, toolCalls }, req.model, id);
+        yield toOpenAIChunk(
+          { ...(firstDelta ? { role: "assistant" } : {}), content, toolCalls },
+          req.model,
+          id,
+        );
+        firstDelta = false;
       }
     }
     yield {
