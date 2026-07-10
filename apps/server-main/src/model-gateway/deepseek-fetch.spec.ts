@@ -2,7 +2,10 @@ import { deepseekReasoningFetch } from "./deepseek-fetch";
 
 /** base fetch 打桩：不关心返回，只断言被调用时的入参。 */
 function makeBase() {
-  return jest.fn(async () => ({}) as unknown as Response);
+  return jest.fn(
+    (..._args: Parameters<typeof fetch>): Promise<Response> =>
+      Promise.resolve({} as unknown as Response),
+  );
 }
 
 describe("deepseekReasoningFetch", () => {
