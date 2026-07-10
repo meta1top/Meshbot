@@ -93,6 +93,22 @@ describe("openai-adapter", () => {
     });
   });
 
+  describe("toOpenAICompletion · usage 映射（total_tokens 兜底）", () => {
+    it("usage_metadata 无 total_tokens → total 由 input+output 兜底相加", () => {
+      const ai = new AIMessage({
+        content: "hi",
+        // 刻意不传 total_tokens：验证 toOpenAIUsage 的 total_tokens ?? input+output 兜底分支
+        usage_metadata: { input_tokens: 5, output_tokens: 3 } as any,
+      });
+      const out = toOpenAICompletion(ai, "m", "id") as any;
+      expect(out.usage).toEqual({
+        prompt_tokens: 5,
+        completion_tokens: 3,
+        total_tokens: 8,
+      });
+    });
+  });
+
   describe("round trip：OpenAI → langchain → OpenAI（C-1 + I-1 无损）", () => {
     it("name/args/id 往返无损", () => {
       const openaiToolCalls = [

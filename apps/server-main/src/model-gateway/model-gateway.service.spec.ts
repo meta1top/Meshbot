@@ -170,6 +170,15 @@ describe("ModelGatewayService", () => {
       completion_tokens: 2,
       total_tokens: 5,
     });
+    // usage 帧必须在 finish 帧之后（OpenAI include_usage 约定：finish 先于 usage）
+    const finishIdx = frames.findIndex(
+      (f) => f.choices[0]?.finish_reason === "stop",
+    );
+    const usageIdx = frames.findIndex(
+      (f) => Array.isArray(f.choices) && f.choices.length === 0 && f.usage,
+    );
+    expect(finishIdx).toBeGreaterThanOrEqual(0);
+    expect(usageIdx).toBeGreaterThan(finishIdx);
   });
 
   it("流式：上游无 usage_metadata → 不产出 usage 帧", async () => {
