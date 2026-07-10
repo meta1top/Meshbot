@@ -25,13 +25,24 @@ describe("ModelGatewayService", () => {
     });
   });
 
-  it("解析 → 调 provider → 返回 OpenAI completion", async () => {
+  it("解析 → 调 provider → 返回 OpenAI completion（含 usage）", async () => {
     orgSvc.resolveDecrypted.mockResolvedValue({
       providerType: "openai",
       model: "gpt-4o",
       baseUrl: null,
       apiKey: "sk-x",
       contextWindow: 128000,
+    });
+    (initChatModel as jest.Mock).mockResolvedValue({
+      invoke: async () =>
+        new AIMessage({
+          content: "hi from provider",
+          usage_metadata: {
+            input_tokens: 11,
+            output_tokens: 7,
+            total_tokens: 18,
+          },
+        }),
     });
 
     const out: any = await service.complete(
@@ -41,11 +52,36 @@ describe("ModelGatewayService", () => {
     );
 
     expect(out.choices[0].message.content).toBe("hi from provider");
-    // 断言用真实模型名 gpt-4o 调 initChatModel，而非端侧传的 id "m1"
     expect(initChatModel).toHaveBeenCalledWith(
       "gpt-4o",
       expect.objectContaining({ apiKey: "sk-x" }),
     );
+    // langchain usage_metadata → OpenAI usage 映射
+    expect(out.usage).toEqual({
+      prompt_tokens: 11,
+      completion_tokens: 7,
+      total_tokens: 18,
+    });
+  });
+
+  it("非流式：上游无 usage_metadata → completion 不含 usage", async () => {
+    orgSvc.resolveDecrypted.mockResolvedValue({
+      providerType: "openai",
+      model: "gpt-4o",
+      baseUrl: null,
+      apiKey: "sk",
+      contextWindow: null,
+    });
+    (initChatModel as jest.Mock).mockResolvedValue({
+      invoke: async () => new AIMessage("no-usage"),
+    });
+
+    const out: any = await service.complete(
+      "o1",
+      { model: "m1", messages: [] },
+      "id",
+    );
+    expect(out.usage).toBeUndefined();
   });
 
   it("模型不存在 → 抛 GatewayModelNotFoundError", async () => {

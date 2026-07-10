@@ -53,6 +53,24 @@ function textOf(content: unknown): string {
   return typeof content === "string" ? content : JSON.stringify(content);
 }
 
+/**
+ * langchain UsageMetadata → OpenAI usage。字段缺失按 0 兜底；
+ * total_tokens 缺失时用 input+output 兜底。
+ */
+function toOpenAIUsage(u: {
+  input_tokens?: number;
+  output_tokens?: number;
+  total_tokens?: number;
+}) {
+  const prompt = u.input_tokens ?? 0;
+  const completion = u.output_tokens ?? 0;
+  return {
+    prompt_tokens: prompt,
+    completion_tokens: completion,
+    total_tokens: u.total_tokens ?? prompt + completion,
+  };
+}
+
 /** 非流式 AIMessage → OpenAI chat.completion。 */
 export function toOpenAICompletion(msg: AIMessage, model: string, id: string) {
   return {
@@ -79,6 +97,7 @@ export function toOpenAICompletion(msg: AIMessage, model: string, id: string) {
         finish_reason: msg.tool_calls?.length ? "tool_calls" : "stop",
       },
     ],
+    ...(msg.usage_metadata ? { usage: toOpenAIUsage(msg.usage_metadata) } : {}),
   };
 }
 
