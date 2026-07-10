@@ -119,22 +119,32 @@ zod / nestjs-zod / zod-to-json-schema 全部保持现状。
 
 ### 4.1 清 dev checkpoint
 
-对 `<repoRoot>/.meshbot/accounts/*/agent.db` 执行：
+**勘查修正（2026-07-10 执行时实测）：** 源码态 dev 下，checkpoint 与业务数据是**物理分离的两个文件**
+（`meshbot-config.service.ts:98-108` 坐实）：
 
-```sql
-DELETE FROM checkpoints;
-DELETE FROM writes;
+- `$MESHBOT_HOME/accounts/<id>/agent.db` —— **纯 checkpoint 库**，只有 `checkpoints` / `writes` 两张表，
+  由 SqliteSaver 建/管
+- `$MESHBOT_HOME/main.db` —— TypeORM 业务库，所有账号共享，含 `cloud_identity`（device_token）/
+  `model_configs` / `sessions` / `session_messages` / `llm_calls` / `settings` / `pending_messages` /
+  `cron_jobs`
+
+`sqlite-checkpointer.ts` 那句「与 TypeORM DataSource（同一 agent.db）并发写」的注释描述的是**打包态**
+（`isPackaged()` 走 `~/.meshbot/agent.db`，checkpoint + 业务同库）。dev 用源码态，两者已拆分。
+
+因此清 checkpoint 的正确做法（源码态）是**直接删纯 checkpoint 文件**，最彻底（连 WAL 里的旧事务、
+blob serde 残留一起清），SqliteSaver 下次启动 `setup()` 重建空表：
+
+```bash
+MESHBOT_HOME=/Users/grant/Meta1/meshbot/.meshbot   # 源码态 dev 数据根
+rm -f "$MESHBOT_HOME"/accounts/*/agent.db "$MESHBOT_HOME"/accounts/*/agent.db-wal "$MESHBOT_HOME"/accounts/*/agent.db-shm
 ```
 
-**绝不能 `rm agent.db`。** 同一个 SQLite 文件里还住着 `CloudIdentity`（含 device_token）、
-`Setting`、`ModelConfig`、`Session`、`SessionMessage`、`LlmCall`、`PendingMessage`、`ImAgentSession`
-——`sqlite-checkpointer.ts` 的注释明写「与 TypeORM DataSource（同一 agent.db）并发写」。删库等于
-dev 环境重新走浏览器授权 + 丢掉全部会话历史。
+`main.db` 完全不碰——device_token / 会话历史都安全。删前先 tar 备份 `accounts/` 目录。
 
-跨大版本不兼容的是 checkpoint blob 的 serde，不是表结构（表名与列定义已核实一致），所以**清行足矣，
-不必 DROP**。
+（打包态若要清则不能 `rm agent.db`——同库有业务表；但 dev 不走打包态。）
 
-脚本一次性执行，写在 scratchpad，不入库。同一趟顺带做 5.2.2 的残留行体检。
+同一趟做 5.2.2 的残留行体检，体检对象是 **`main.db`**（`model_configs` 表在那，不在 account 的
+checkpoint 库）。
 
 ### 4.2 建 worktree 与分支
 
@@ -191,16 +201,19 @@ model-gateway 正是靠它选真实厂商。删掉会砍掉云端配置 Anthropi
 
 ### 5.2.2 dev 库残留行体检（S0 顺带）
 
-删包后，`.meshbot/accounts/*/agent.db` 的 `model_config` 表里若残留 `source='local'` 且
+`$MESHBOT_HOME/main.db` 的 `model_configs` 表里若残留 `source='local'` 且
 `provider_type ∉ {openai, openai-compatible}` 的旧行，选中它就会走进 5.2.1 的炸点。S0 清 checkpoint 时
-一并查询：
+一并查询 **`main.db`**（表名 `model_configs` 复数；business 库，不是 account 的 checkpoint 库）：
 
 ```sql
-SELECT id, provider_type, source FROM model_config
+SELECT id, provider_type, source FROM model_configs
 WHERE source = 'local' AND provider_type NOT IN ('openai', 'openai-compatible');
 ```
 
-有残留则删行（dev 环境，云端配置会重新同步下来）。
+**S0 执行时实测**：dev `main.db` 有 2 行 `source='local'` + `provider_type='deepseek'` + `enabled=1`，
+且无任何 `source='cloud'` 行（dev 当时靠本地直连 DeepSeek 在跑，云网关尚未配置）。经与用户确认：
+云网关将在 Task 4 眼验前配好，这 2 行**已在 S0 删除**（备份在 scratchpad）。删后 dev 在配好云网关前
+无可用模型（启动会报「没有启用的模型配置」），这是预期。
 
 ### 5.3 保持不变（S1 是纯升级）
 
@@ -265,7 +278,7 @@ WHERE source = 'local' AND provider_type NOT IN ('openai', 'openai-compatible');
 - `pnpm typecheck` 全包绿
 - 针对性 jest 绿：`libs/agent/tests/unit`、`apps/server-agent`、`apps/server-main/src/model-gateway`
   （全量 `pnpm test` 有既存无关失败：vitest 文件被根 jest 误拾）
-- `pnpm check` 六个静态围栏绿
+- `pnpm check` 九个静态围栏绿（tx / naming / lock-tx / repo / scope / dead / error-code / pk / dev-script）
 - `libs/agent` vitest **对齐既存基线**——`main` 上已有 9 个预存在失败（agent.module DI + graph/supervisor mock），
   判回归要 diff 失败集合，不是看是否全绿
 - desktop 构建跑一次，验 `better-sqlite3` 12.10+ 的 Electron ABI

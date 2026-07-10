@@ -81,45 +81,30 @@ WHERE source = 'local' AND provider_type NOT IN ('openai', 'openai-compatible');
 - `pnpm check` 九个静态围栏绿（tx / naming / lock-tx / repo / scope / dead / error-code / pk / dev-script）
 ```
 
-- [ ] **Step 2: 备份并盘点 dev checkpoint（只读，先不删）**
+- [x] **Step 2: 盘点（已执行，实测推翻「同库」假设）**
 
-用 `.backup` 而不是 `cp`：这些库开着 `journal_mode=WAL`（`sqlite-checkpointer.ts:16`），
-`cp` 只拷 `.db` 主文件，会丢掉 `-wal` 里尚未 checkpoint 的事务，备份不完整。
+**实测结论**：源码态 dev 里 checkpoint 与业务库物理分离（`meshbot-config.service.ts:98-108`）：
+- `$MESHBOT_HOME/accounts/<id>/agent.db` = 纯 checkpoint 库（只有 `checkpoints`/`writes` 两表）
+- `$MESHBOT_HOME/main.db` = TypeORM 业务库（`cloud_identity`/`model_configs`/`sessions`/...）
 
-```bash
-MESHBOT_HOME=/Users/grant/Meta1/meshbot/.meshbot
-for db in "$MESHBOT_HOME"/accounts/*/agent.db; do
-  echo "=== $db"
-  sqlite3 "$db" ".backup '${db}.bak-langchain1x'"
-  sqlite3 "$db" "SELECT 'checkpoints', COUNT(*) FROM checkpoints;" 2>&1 | sed 's/^/  /'
-  sqlite3 "$db" "SELECT 'writes', COUNT(*) FROM writes;" 2>&1 | sed 's/^/  /'
-  echo "  -- 残留本地直连行（应为空）："
-  sqlite3 "$db" "SELECT id, provider_type, source FROM model_configs WHERE source='local' AND provider_type NOT IN ('openai','openai-compatible');" 2>&1 | sed 's/^/  /'
-done
-```
+盘点数据（`MESHBOT_HOME=/Users/grant/Meta1/meshbot/.meshbot`）：
+- 三个账号 checkpoint 库合计约 3000+ checkpoints、5000+ writes
+- **`main.db` 残留行体检非空**：2 行 `source='local'` + `provider_type='deepseek'` + `enabled=1`，
+  且无任何 `source='cloud'` 行。经与用户确认（云网关眼验前配好），这 2 行**现在就删**。
+- 备份：`accounts/` tar（272MB）+ `main.db` 的 `model_configs` dump，均在 scratchpad
+  `checkpoint-backup-langchain1x/`。
 
-预期：每个库打印 checkpoints/writes 行数；`no such table` 说明该账号还没跑过 graph，正常。
-「残留本地直连行」一节**应当为空**。若非空，记进 `baseline.md`——Task 2 的守卫会让这些行在运行时抛错，需要在 Step 3 一并删掉。
+- [x] **Step 3: 清库（已执行）**
 
-- [ ] **Step 3: 清 checkpoint（破坏性，已在 Step 2 备份）**
-
-只删两张 checkpoint 表的行。**绝不能 `rm agent.db`**——同库还住着 `CloudIdentity`（device_token）、`Session`、`SessionMessage`、`ModelConfig`，删库等于 dev 重新走浏览器授权 + 丢全部会话。表结构在 0.1.5 → 1.0.3 逐列一致，清行即可，不必 DROP。
+删纯 checkpoint 文件（比 DELETE 更彻底，SqliteSaver 下次 `setup()` 重建），并删 main.db 的 2 行残留：
 
 ```bash
 MESHBOT_HOME=/Users/grant/Meta1/meshbot/.meshbot
-for db in "$MESHBOT_HOME"/accounts/*/agent.db; do
-  echo "=== $db"
-  sqlite3 "$db" "DELETE FROM checkpoints;" 2>&1 | sed 's/^/  /'
-  sqlite3 "$db" "DELETE FROM writes;" 2>&1 | sed 's/^/  /'
-  sqlite3 "$db" "SELECT COUNT(*) FROM checkpoints;" 2>&1 | sed 's/^/  after checkpoints=/'
-done
+rm -f "$MESHBOT_HOME"/accounts/*/agent.db "$MESHBOT_HOME"/accounts/*/agent.db-wal "$MESHBOT_HOME"/accounts/*/agent.db-shm
+sqlite3 "$MESHBOT_HOME/main.db" "DELETE FROM model_configs WHERE source='local' AND provider_type NOT IN ('openai','openai-compatible');"
 ```
 
-若 Step 2 发现残留本地直连行，追加：
-
-```bash
-sqlite3 "$db" "DELETE FROM model_configs WHERE source='local' AND provider_type NOT IN ('openai','openai-compatible');"
-```
+已验证：`main.db` 的 `cloud_identity`（device_token）2 行、`sessions` 8 行完好，`model_configs` 清零。
 
 - [ ] **Step 4: 在 worktree 安装 0.x 基线依赖**
 
@@ -150,12 +135,14 @@ pnpm check                                       # 预期：九个围栏全绿
 ```bash
 cd /Users/grant/Meta1/meshbot/.claude/worktrees/langchain-1x
 git add docs/superpowers/specs/2026-07-10-langchain-1x-s0-s1-design.md
-git commit --no-verify -m "docs: 修正 langchain 1.x spec 的三处事实错误
+git commit --no-verify -m "docs: 修正 langchain 1.x spec+plan 的实测偏差
 
-- 表名 model_config → model_configs
+- checkpoint 与业务库物理分离：源码态 dev 下 accounts/<id>/agent.db 是纯
+  checkpoint 库，业务数据在 main.db，清 checkpoint 直接 rm 文件即可，
+  main.db 的 device_token/会话不碰（原「同库绝不能 rm」是打包态才成立）
+- 残留行体检对象是 main.db 的 model_configs（复数），不是 account agent.db
 - pnpm check 是九个围栏不是六个
-- 清 checkpoint 的目标库是 MESHBOT_HOME 指向的主仓 .meshbot，
-  不是 worktree 内 findRepoRoot 自动新建的那份"
+- 记录 S0 实测：删了 2 行 local deepseek 残留配置，dev 云网关眼验前配好"
 ```
 
 > `--no-verify`：worktree 的 husky pre-commit 走 lint-staged，纯 docs 提交无需 Biome。后续含源码的提交**不要**加这个标志。
