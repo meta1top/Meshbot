@@ -54,4 +54,17 @@ describe("deepseekReasoningFetch", () => {
     await f("u", { body: "not json" });
     expect(base).toHaveBeenCalledWith("u", { body: "not json" });
   });
+
+  it("messages 含非对象项（null/字符串）→ 不抛，仅给 assistant 注入", async () => {
+    const base = makeBase();
+    const f = deepseekReasoningFetch(base as unknown as typeof fetch);
+    const body = JSON.stringify({
+      messages: [null, "weird", { role: "assistant", content: "hey" }],
+    });
+    await f("u", { method: "POST", body });
+    const sent = JSON.parse(
+      (base.mock.calls[0][1] as RequestInit).body as string,
+    );
+    expect(sent.messages[2].reasoning_content).toBe("");
+  });
 });

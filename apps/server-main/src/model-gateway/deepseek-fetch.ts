@@ -19,14 +19,19 @@ export function deepseekReasoningFetch(base: typeof fetch): typeof fetch {
     if (!Array.isArray(body.messages)) {
       return base(input, init);
     }
-    let patched = false;
+    let mutated = false;
     for (const msg of body.messages) {
-      if (msg.role === "assistant" && msg.reasoning_content === undefined) {
+      if (
+        typeof msg === "object" &&
+        msg !== null &&
+        msg.role === "assistant" &&
+        msg.reasoning_content === undefined
+      ) {
         msg.reasoning_content = "";
-        patched = true;
+        mutated = true;
       }
     }
-    if (!patched) {
+    if (!mutated) {
       return base(input, init);
     }
     return base(input, { ...init, body: JSON.stringify(body) });
