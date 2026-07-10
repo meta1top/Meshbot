@@ -128,3 +128,26 @@ export function toOpenAIChunk(
     ],
   };
 }
+
+/**
+ * OpenAI include_usage 约定的末尾帧：choices 空、带 usage。
+ * 端侧 langchain ChatOpenAI 会把它解析进最终 AIMessageChunk 的 usage_metadata。
+ */
+export function toOpenAIUsageChunk(
+  usage: {
+    input_tokens?: number;
+    output_tokens?: number;
+    total_tokens?: number;
+  },
+  model: string,
+  id: string,
+) {
+  return {
+    id,
+    object: "chat.completion.chunk",
+    created: 0,
+    model,
+    choices: [],
+    usage: toOpenAIUsage(usage),
+  };
+}

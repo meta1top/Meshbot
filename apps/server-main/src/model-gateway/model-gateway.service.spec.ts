@@ -119,7 +119,60 @@ describe("ModelGatewayService", () => {
     );
   });
 
-  it("流式：逐 chunk yield OpenAI 帧", async () => {
+  it("流式：逐 chunk yield OpenAI 帧 + 末尾 usage 帧", async () => {
+    orgSvc.resolveDecrypted.mockResolvedValue({
+      providerType: "openai",
+      model: "gpt-4o",
+      baseUrl: null,
+      apiKey: "sk",
+      contextWindow: null,
+    });
+    (initChatModel as jest.Mock).mockResolvedValue({
+      stream: async function* () {
+        yield new AIMessageChunk("he");
+        yield new AIMessageChunk({
+          content: "llo",
+          usage_metadata: {
+            input_tokens: 3,
+            output_tokens: 2,
+            total_tokens: 5,
+          },
+        });
+      },
+    });
+
+    const frames: any[] = [];
+    for await (const f of service.stream(
+      "o1",
+      {
+        model: "m1",
+        messages: [{ role: "user", content: "hi" }],
+        stream: true,
+      },
+      "id",
+    )) {
+      frames.push(f);
+    }
+
+    expect(frames[0].choices[0].delta.role).toBe("assistant");
+    expect(frames[0].choices[0].delta.content).toBe("he");
+    expect(frames[1].choices[0].delta.content).toBe("llo");
+    // finish 帧仍在（content 帧之后）
+    expect(frames.some((f) => f.choices[0]?.finish_reason === "stop")).toBe(
+      true,
+    );
+    // 末尾 usage 帧：choices 空、带映射后的 usage（OpenAI include_usage 约定）
+    const usageFrame = frames.find(
+      (f) => Array.isArray(f.choices) && f.choices.length === 0 && f.usage,
+    );
+    expect(usageFrame.usage).toEqual({
+      prompt_tokens: 3,
+      completion_tokens: 2,
+      total_tokens: 5,
+    });
+  });
+
+  it("流式：上游无 usage_metadata → 不产出 usage 帧", async () => {
     orgSvc.resolveDecrypted.mockResolvedValue({
       providerType: "openai",
       model: "gpt-4o",
@@ -137,24 +190,15 @@ describe("ModelGatewayService", () => {
     const frames: any[] = [];
     for await (const f of service.stream(
       "o1",
-      {
-        model: "m1",
-        messages: [{ role: "user", content: "hi" }],
-        stream: true,
-      },
+      { model: "m1", messages: [], stream: true },
       "id",
     )) {
       frames.push(f);
     }
-
-    expect(frames[0].choices[0].delta.content).toBe("he");
-    // 首帧必须带 role:"assistant"（OpenAI 流式约定）；缺 role 时端侧 langchain
-    // 会把 chunk 解析成 generic ChatMessageChunk 而非 AIMessageChunk，agent 图层
-    // 的 instanceof AIMessageChunk 过滤会把整段回复丢弃（chunks=0）。
-    expect(frames[0].choices[0].delta.role).toBe("assistant");
-    expect(frames[1].choices[0].delta.role).toBeUndefined();
-    expect(frames[1].choices[0].delta.content).toBe("llo");
-    expect(frames.at(-1).choices[0].finish_reason).toBe("stop");
+    const usageFrame = frames.find(
+      (f) => Array.isArray(f.choices) && f.choices.length === 0 && f.usage,
+    );
+    expect(usageFrame).toBeUndefined();
   });
 
   it("流式：模型不存在 → 抛 GatewayModelNotFoundError", async () => {

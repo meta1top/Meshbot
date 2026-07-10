@@ -8,6 +8,7 @@ import {
   toModelParams,
   toOpenAIChunk,
   toOpenAICompletion,
+  toOpenAIUsageChunk,
 } from "./openai-adapter";
 import { deepseekReasoningFetch } from "./deepseek-fetch";
 
@@ -70,11 +71,27 @@ export class ModelGatewayService {
     // 首个产出帧带 role:"assistant"（OpenAI 流式约定），后续帧不再带——见
     // openai-adapter.toOpenAIChunk 注释：缺 role 端侧会解析成 generic chunk 而丢弃。
     let firstDelta = true;
+    let usage:
+      | { input_tokens?: number; output_tokens?: number; total_tokens?: number }
+      | undefined;
     for await (const chunk of await model.stream(toLangchainMessages(req))) {
       const content = typeof chunk.content === "string" ? chunk.content : "";
       const toolCalls = toOpenAIToolCallDeltas(
         (chunk as { tool_call_chunks?: ToolCallChunk[] }).tool_call_chunks,
       );
+      const chunkUsage = (
+        chunk as {
+          usage_metadata?: {
+            input_tokens?: number;
+            output_tokens?: number;
+            total_tokens?: number;
+          };
+        }
+      ).usage_metadata;
+      // langchain streamUsage 默认开：末帧携带 usage_metadata，取末个非空的
+      if (chunkUsage) {
+        usage = chunkUsage;
+      }
       if (content || toolCalls) {
         yield toOpenAIChunk(
           { ...(firstDelta ? { role: "assistant" } : {}), content, toolCalls },
@@ -91,6 +108,9 @@ export class ModelGatewayService {
       model: req.model,
       choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
     };
+    if (usage) {
+      yield toOpenAIUsageChunk(usage, req.model, id);
+    }
   }
 
   /** 内部：按 resolved 建 langchain 模型（Task 5 流式复用）。 */
