@@ -9,8 +9,9 @@ import {
   toOpenAIChunk,
   toOpenAICompletion,
 } from "./openai-adapter";
+import { deepseekReasoningFetch } from "./deepseek-fetch";
 
-/** 网关内部：按 orgId+modelId 找不到归属模型（含 deepseek v1 不经网关）时抛出，Controller 映射 404/403。 */
+/** 网关内部：按 orgId+modelId 找不到归属模型时抛出，Controller 映射 404/403。 */
 export class GatewayModelNotFoundError extends Error {}
 
 // provider 名映射与 libs/agent llm.factory.ts:15-22 保持一致
@@ -91,12 +92,13 @@ export class ModelGatewayService {
     streaming: boolean,
   ) {
     if (!resolved) throw new GatewayModelNotFoundError(req.model);
-    // DeepSeek v1 不经网关，仍端侧直连——网关侧一律当作"模型不存在"拒绝。
-    if (resolved.providerType === "deepseek") {
-      throw new GatewayModelNotFoundError(req.model);
-    }
     const configuration: Record<string, unknown> = {};
     if (resolved.baseUrl) configuration.baseURL = resolved.baseUrl;
+    // DeepSeek thinking 模式要求历史 assistant 消息带 reasoning_content，
+    // @langchain/openai 序列化时不回写——拦 fetch 补空字段（详见 deepseek-fetch.ts）。
+    if (resolved.providerType === "deepseek") {
+      configuration.fetch = deepseekReasoningFetch(globalThis.fetch);
+    }
     const model = await initChatModel(resolved.model, {
       modelProvider:
         PROVIDER_MODEL_NAME[resolved.providerType] ?? resolved.providerType,

@@ -56,23 +56,31 @@ describe("ModelGatewayService", () => {
     ).rejects.toBeInstanceOf(GatewayModelNotFoundError);
   });
 
-  it("deepseek 模型 → 抛 GatewayModelNotFoundError（v1 不经网关，端侧直连）", async () => {
+  it("deepseek 模型 → 正常构建并调 provider（不再拒绝）", async () => {
     orgSvc.resolveDecrypted.mockResolvedValue({
       providerType: "deepseek",
       model: "deepseek-chat",
-      baseUrl: null,
+      baseUrl: "https://api.deepseek.com",
       apiKey: "sk-x",
       contextWindow: 64000,
     });
 
-    await expect(
-      service.complete(
-        "o1",
-        { model: "m-deepseek", messages: [{ role: "user", content: "hi" }] },
-        "cmpl-2",
-      ),
-    ).rejects.toBeInstanceOf(GatewayModelNotFoundError);
-    expect(initChatModel).not.toHaveBeenCalled();
+    const out: any = await service.complete(
+      "o1",
+      { model: "m-deepseek", messages: [{ role: "user", content: "hi" }] },
+      "cmpl-2",
+    );
+
+    expect(out.choices[0].message.content).toBe("hi from provider");
+    // 用真实模型名 deepseek-chat + deepseek provider + 注入 reasoning 的 fetch
+    expect(initChatModel).toHaveBeenCalledWith(
+      "deepseek-chat",
+      expect.objectContaining({
+        modelProvider: "deepseek",
+        apiKey: "sk-x",
+        configuration: expect.objectContaining({ fetch: expect.any(Function) }),
+      }),
+    );
   });
 
   it("流式：逐 chunk yield OpenAI 帧", async () => {
