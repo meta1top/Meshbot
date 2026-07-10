@@ -53,6 +53,24 @@ function textOf(content: unknown): string {
   return typeof content === "string" ? content : JSON.stringify(content);
 }
 
+/**
+ * langchain UsageMetadata → OpenAI usage。字段缺失按 0 兜底；
+ * total_tokens 缺失时用 input+output 兜底。
+ */
+function toOpenAIUsage(u: {
+  input_tokens?: number;
+  output_tokens?: number;
+  total_tokens?: number;
+}) {
+  const prompt = u.input_tokens ?? 0;
+  const completion = u.output_tokens ?? 0;
+  return {
+    prompt_tokens: prompt,
+    completion_tokens: completion,
+    total_tokens: u.total_tokens ?? prompt + completion,
+  };
+}
+
 /** 非流式 AIMessage → OpenAI chat.completion。 */
 export function toOpenAICompletion(msg: AIMessage, model: string, id: string) {
   return {
@@ -79,12 +97,13 @@ export function toOpenAICompletion(msg: AIMessage, model: string, id: string) {
         finish_reason: msg.tool_calls?.length ? "tool_calls" : "stop",
       },
     ],
+    ...(msg.usage_metadata ? { usage: toOpenAIUsage(msg.usage_metadata) } : {}),
   };
 }
 
 /** 流式 delta → OpenAI chat.completion.chunk。 */
 export function toOpenAIChunk(
-  delta: { content?: string; toolCalls?: unknown },
+  delta: { role?: string; content?: string; toolCalls?: unknown },
   model: string,
   id: string,
 ) {
@@ -97,11 +116,38 @@ export function toOpenAIChunk(
       {
         index: 0,
         delta: {
+          // OpenAI 流式约定：首帧 delta 带 role:"assistant"。端侧 langchain 据此
+          // 把 chunk 建成 AIMessageChunk（后续无 role 的帧沿用该角色）；缺 role 会
+          // 退化成 generic ChatMessageChunk，被消费方的 instanceof AIMessageChunk 丢弃。
+          ...(delta.role ? { role: delta.role } : {}),
           ...(delta.content != null ? { content: delta.content } : {}),
           ...(delta.toolCalls ? { tool_calls: delta.toolCalls } : {}),
         },
         finish_reason: null,
       },
     ],
+  };
+}
+
+/**
+ * OpenAI include_usage 约定的末尾帧：choices 空、带 usage。
+ * 端侧 langchain ChatOpenAI 会把它解析进最终 AIMessageChunk 的 usage_metadata。
+ */
+export function toOpenAIUsageChunk(
+  usage: {
+    input_tokens?: number;
+    output_tokens?: number;
+    total_tokens?: number;
+  },
+  model: string,
+  id: string,
+) {
+  return {
+    id,
+    object: "chat.completion.chunk",
+    created: 0,
+    model,
+    choices: [],
+    usage: toOpenAIUsage(usage),
   };
 }
