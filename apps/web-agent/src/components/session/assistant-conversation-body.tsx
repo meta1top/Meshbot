@@ -1,11 +1,14 @@
 "use client";
 
 import { stripLlmuse } from "@meshbot/types-agent";
-import { useAtomValue } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import { ArrowDown } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
-import { remoteSessionsAtom } from "@/atoms/remote-sessions";
+import {
+  loadRemoteSessionsAtom,
+  remoteSessionsAtom,
+} from "@/atoms/remote-sessions";
 import {
   sessionTotalsFamily,
   usageByMessageFamily,
@@ -83,6 +86,12 @@ export function AssistantConversationBody({
   // 模型配置云端统一下发且本地行 id=云端配置 id，跨设备 id 一致，本地下拉
   // 列表可直接用于远端会话的显示与写入。
   const remoteSessions = useAtomValue(remoteSessionsAtom);
+  const loadRemoteSessions = useSetAtom(loadRemoteSessionsAtom);
+  // 进入远程会话时强制刷新对端会话列表：modelConfigId 可能已在对端被改
+  // （侧栏懒加载的缓存不会自己失效），选择器初值需要新鲜快照。
+  useEffect(() => {
+    if (remoteDeviceId) void loadRemoteSessions(remoteDeviceId, true);
+  }, [remoteDeviceId, loadRemoteSessions]);
   const sessionModelId =
     modelOverride ??
     (remoteDeviceId

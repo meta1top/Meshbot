@@ -58,6 +58,9 @@ type NodeMeta =
 export function AssistantSidebar() {
   const t = useTranslations("assistantSidebar");
   const router = useRouter();
+  // 当前路由若指向远程会话（?remoteDevice=…&id=…），据此定向展开该设备节点
+  // 并主动触发其会话列表懒加载——否则刷新后设备折叠、列表未拉，无从高亮。
+  const urlRemoteDevice = useSearchParams().get("remoteDevice");
   const devices = useAtomValue(devicesAtom);
   const devicesStatus = useAtomValue(devicesStatusAtom);
   const online = useAtomValue(deviceOnlineAtom);
@@ -74,6 +77,12 @@ export function AssistantSidebar() {
     void loadSidebar();
     void loadDevices();
   }, [loadSidebar, loadDevices]);
+
+  // URL 指向的远程设备：主动拉会话列表（defaultOpen 只影响树的展开态，
+  // 不会走用户交互的 onExpand 回调，懒加载需在此显式触发）。
+  useEffect(() => {
+    if (urlRemoteDevice) void loadRemoteSessions(urlRemoteDevice);
+  }, [urlRemoteDevice, loadRemoteSessions]);
 
   // Fix2 兜底：设备非干净退出时云端 presence 靠 45s TTL 静默过期、不发离线事件，
   // 侧栏可见期间周期重探在线态纠正之（真正的实时离线事件属服务端后续改进）。
@@ -146,7 +155,7 @@ export function AssistantSidebar() {
       return {
         key: `dev:${d.id}`,
         label: d.isCurrent ? `${d.name}（${t("thisDevice")}）` : d.name,
-        defaultOpen: d.isCurrent,
+        defaultOpen: d.isCurrent || d.id === urlRemoteDevice,
         children,
       };
     });
