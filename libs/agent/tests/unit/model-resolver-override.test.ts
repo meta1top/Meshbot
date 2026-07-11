@@ -23,7 +23,7 @@ describe("ModelResolver 覆盖解析", () => {
     db.prepare(
       `INSERT INTO model_configs (id, cloud_user_id, provider_type, name, model, api_key, enabled)
        VALUES ('mc-default','u1','openai','默认','gpt-a','k',1),
-              ('mc-alt','u1','deepseek','备用','ds-b','k',0)`,
+              ('mc-alt','u1','openai-compatible','备用','ds-b','k',0)`,
     ).run();
     db.close();
   });
@@ -58,7 +58,7 @@ describe("ModelResolver 覆盖解析", () => {
       runCtx.run("mc-alt", async () => {
         await resolver.resolveModel();
         expect(resolver.getMeta()).toEqual({
-          providerType: "deepseek",
+          providerType: "openai-compatible",
           model: "ds-b",
         });
       }),

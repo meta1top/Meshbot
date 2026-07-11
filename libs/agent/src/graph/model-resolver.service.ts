@@ -140,13 +140,8 @@ export class ModelResolver {
     const key = `title|${modelCacheKey(cfg)}`;
     const cached = this.modelCache.get(key);
     if (cached) return cached;
-    const modelKwargs =
-      cfg.providerType === "deepseek"
-        ? { thinking: { type: "disabled" } }
-        : undefined;
     const model = await createChatModel(cfg, {
       streaming: false,
-      modelKwargs,
       cloudTokenProvider: this.cloudTokenProvider,
     });
     this.modelCache.set(key, model);
