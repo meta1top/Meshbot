@@ -13,6 +13,7 @@ import {
   useEffect,
   useImperativeHandle,
   useRef,
+  useState,
 } from "react";
 import { Markdown } from "tiptap-markdown";
 import { formatTokens } from "@/lib/format-tokens";
@@ -96,6 +97,10 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     // 始终能调用到最新的 handleSend，绕开闭包陈旧问题。
     const sendFnRef = useRef<() => void>(() => {});
 
+    // 编辑器空态镜像：驱动发送按钮 disabled。不能直接读 editor.isEmpty——
+    // 受控同步走 emitUpdate:false 不触发重渲，直读会拿到陈旧渲染帧的值。
+    const [isEmpty, setIsEmpty] = useState(true);
+
     const editor = useEditor({
       immediatelyRender: false,
       extensions: [
@@ -131,6 +136,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       },
       onUpdate: ({ editor: e }) => {
         onChange(getMarkdown(e.storage));
+        setIsEmpty(e.isEmpty);
       },
     });
 
@@ -148,12 +154,21 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       sendFnRef.current = handleSend;
     }, [handleSend]);
 
-    // 受控 value 同步守卫：防自身 onChange 回环 + 光标跳
+    // 编辑器就绪时校准一次空态（初始 content 与 value 一致时下方同步不会跑）
+    useEffect(() => {
+      if (editor) setIsEmpty(editor.isEmpty);
+    }, [editor]);
+
+    // 受控 value 同步守卫：防自身 onChange 回环 + 光标跳。
+    // emitUpdate:false 不触发 onUpdate → React 不重渲，isEmpty 必须手动刷新，
+    // 否则外部填入草稿（建议 chips）后发送按钮仍按旧空态禁用（快捷键路径
+    // 直读编辑器所以能发，恰好掩盖此 bug）。
     useEffect(() => {
       if (!editor) return;
       const current = getMarkdown(editor.storage);
       if (value !== current) {
         editor.commands.setContent(value, { emitUpdate: false });
+        setIsEmpty(editor.isEmpty);
       }
     }, [value, editor]);
 
@@ -173,7 +188,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       onInterrupt?.();
     }, [onInterrupt]);
 
-    const hasContent = !!editor && !editor.isEmpty;
+    const hasContent = !!editor && !isEmpty;
 
     const tokenPercent = tokenUsage
       ? Math.min((tokenUsage.current / tokenUsage.max) * 100, 100)
