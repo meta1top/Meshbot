@@ -20,7 +20,7 @@
     "migration:archive": "tsx ../../scripts/archive-migrations.ts ."
   },
   "dependencies": {
-    "@langchain/core": "^0.3",
+    "@langchain/core": "^1.2.2",
     "@meshbot/lib-agent": "workspace:^",
     "@meshbot/assets": "workspace:*",
     "@meshbot/common": "workspace:*",

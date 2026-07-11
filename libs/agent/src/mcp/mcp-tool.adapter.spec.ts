@@ -51,11 +51,11 @@ describe("buildMcpToolAdapter", () => {
     expect(JSON.parse(out)).toEqual({ value: 42, items: [1, 2] });
   });
 
-  it("ctx.signal 透传：abort 触发后 lc tool 看得到 signal.aborted", async () => {
-    let seenAborted = false;
+  it("调用前已 abort：不执行工具，execute 直接抛（core 1.x 下透传已 abort 的 signal 会挂起）", async () => {
+    let toolRan = false;
     const lc = createLcTool(
-      async (_input: unknown, config?: { signal?: AbortSignal }) => {
-        seenAborted = config?.signal?.aborted === true;
+      async () => {
+        toolRan = true;
         return "done";
       },
       {
@@ -67,7 +67,33 @@ describe("buildMcpToolAdapter", () => {
     const ctrl = new AbortController();
     ctrl.abort();
     const { meshbot } = buildMcpToolAdapter(lc);
-    await meshbot.execute({}, { ...makeCtx(), signal: ctrl.signal });
-    expect(seenAborted).toBe(true);
+    await expect(
+      meshbot.execute({}, { ...makeCtx(), signal: ctrl.signal }),
+    ).rejects.toThrow(/未执行：调用前已被取消/);
+    expect(toolRan).toBe(false);
+  });
+
+  it("ctx.signal 透传：未 abort 的 signal 原样传到 lc tool 的 config", async () => {
+    let seenSignal: AbortSignal | undefined;
+    const lc = createLcTool(
+      async (_input: unknown, config?: { signal?: AbortSignal }) => {
+        seenSignal = config?.signal;
+        return "done";
+      },
+      {
+        name: "signal_tool",
+        description: "",
+        schema: z.object({}),
+      },
+    );
+    const ctrl = new AbortController();
+    const { meshbot } = buildMcpToolAdapter(lc);
+    const out = await meshbot.execute(
+      {},
+      { ...makeCtx(), signal: ctrl.signal },
+    );
+    expect(out).toBe("done");
+    expect(seenSignal).toBe(ctrl.signal);
+    expect(seenSignal?.aborted).toBe(false);
   });
 });

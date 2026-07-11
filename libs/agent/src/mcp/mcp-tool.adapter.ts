@@ -22,6 +22,11 @@ export function buildMcpToolAdapter(lcTool: StructuredToolInterface): {
     // schema 走 passthrough：实际校验交给 lcTool.invoke 内部。
     schema: z.any() as unknown as z.ZodType<unknown>,
     async execute(args: unknown, ctx: ToolContext): Promise<string> {
+      // core 1.x：把已 abort 的 signal 传给 lcTool.invoke 会执行工具但 promise
+      // 永不 settle（挂起泄漏）。入口先查 aborted——已取消就不该执行工具，直接抛。
+      if (ctx.signal.aborted) {
+        throw new Error(`工具 ${lcTool.name} 未执行：调用前已被取消`);
+      }
       const result = await lcTool.invoke(args as never, {
         signal: ctx.signal,
       });
