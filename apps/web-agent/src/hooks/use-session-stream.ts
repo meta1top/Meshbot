@@ -623,12 +623,36 @@ export function useSessionStream(
         ),
       );
     };
+    /**
+     * 把所有未终态（streaming/running）的工具块置为 error 终态。
+     * 中断/失败后 tool_call_end 永远不会到达，不收尾这些块会永久转圈。
+     */
+    const settleUnfinishedToolCalls = (
+      list: TimelineMessage[],
+    ): TimelineMessage[] =>
+      list.map((m) =>
+        m.toolCalls?.some(
+          (t) => t.status === "streaming" || t.status === "running",
+        )
+          ? {
+              ...m,
+              toolCalls: m.toolCalls.map((t) =>
+                t.status === "streaming" || t.status === "running"
+                  ? { ...t, status: "error" as const, argsText: undefined }
+                  : t,
+              ),
+            }
+          : m,
+      );
+
     const onInterrupted = (e: RunInterruptedEvent) => {
       if (e.sessionId !== sessionId) return;
       setRunning(false);
       apply((prev) =>
-        prev.map((m) =>
-          m.id === e.messageId ? { ...m, streaming: false } : m,
+        settleUnfinishedToolCalls(
+          prev.map((m) =>
+            m.id === e.messageId ? { ...m, streaming: false } : m,
+          ),
         ),
       );
     };
@@ -646,13 +670,15 @@ export function useSessionStream(
       const loadingIdsToDrop = new Set<string>();
       for (const id of failedIds) loadingIdsToDrop.add(`loading-${id}`);
       apply((prev) =>
-        prev
-          .filter((m) => !loadingIdsToDrop.has(m.id))
-          .map((m) =>
-            failedIds.has(m.id)
-              ? { ...m, failed: true, pending: false, streaming: false }
-              : m,
-          ),
+        settleUnfinishedToolCalls(
+          prev
+            .filter((m) => !loadingIdsToDrop.has(m.id))
+            .map((m) =>
+              failedIds.has(m.id)
+                ? { ...m, failed: true, pending: false, streaming: false }
+                : m,
+            ),
+        ),
       );
     };
     const onUsage = (e: RunUsageEvent) => {
