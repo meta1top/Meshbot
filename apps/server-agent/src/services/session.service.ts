@@ -577,5 +577,9 @@ export class SessionService {
       sessionId,
       msg.langgraphId ?? messageId,
     );
+    // 该消息若曾 run 失败（pending 行 status=failed），重生成即用户对这次失败
+    // 的处置——置回 processed。否则重生成走 resume（batch=0）永远不清 failed，
+    // 前端拉 pending 后消息恒标红、失败态无法退出。幂等：已 processed 不受影响。
+    await this.markProcessed([messageId]);
   }
 }
