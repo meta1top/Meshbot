@@ -26,20 +26,42 @@ const PROVIDER_MODEL_NAME: Record<string, string> = {
  * langchain `AIMessageChunk.tool_call_chunks` → OpenAI 流式 `delta.tool_calls` 映射。
  * 实测校准：langchain 每帧携带 `{name?, args?, id?, index}`（增量片段，按 index 累加），
  * OpenAI 线上格式为 `{index, id?, type:"function", function:{name?, arguments}}`。
+ *
+ * index 不能直接信上游：ChatOllama 1.x 给**并行多工具**的每个 chunk 都标 index=0
+ * （实测 qwen3 双工具两帧同 index、不同 id）。OpenAI 增量语义按 index 分桶拼接，
+ * 同 index 会让端侧把两个调用拼成一个（首帧 name 生效、arguments 变成
+ * `{}{"city":…}` 脏串，第二个工具调用整个丢失）。带 id 的帧按「id 首现顺序」
+ * 重新编号（indexById 由调用方按 stream 维护）；无 id 的纯增量续帧（OpenAI/
+ * DeepSeek 风格）沿用上游 index——上游 index 正确时重编号是恒等映射，续帧
+ * 与首帧仍然对齐。
  */
 function toOpenAIToolCallDeltas(
   chunks: ToolCallChunk[] | undefined,
+  indexById: Map<string, number>,
 ): object[] | undefined {
   if (!chunks?.length) return undefined;
-  return chunks.map((c) => ({
-    index: c.index ?? 0,
-    ...(c.id ? { id: c.id } : {}),
-    type: "function" as const,
-    function: {
-      ...(c.name ? { name: c.name } : {}),
-      arguments: c.args ?? "",
-    },
-  }));
+  return chunks.map((c) => {
+    let index: number;
+    if (c.id) {
+      let assigned = indexById.get(c.id);
+      if (assigned === undefined) {
+        assigned = indexById.size;
+        indexById.set(c.id, assigned);
+      }
+      index = assigned;
+    } else {
+      index = c.index ?? 0;
+    }
+    return {
+      index,
+      ...(c.id ? { id: c.id } : {}),
+      type: "function" as const,
+      function: {
+        ...(c.name ? { name: c.name } : {}),
+        arguments: c.args ?? "",
+      },
+    };
+  });
 }
 
 /** 云端模型网关：编排 org 模型解析 → langchain 厂商调用 → OpenAI 兼容响应。 */
@@ -72,6 +94,8 @@ export class ModelGatewayService {
     // 首个产出帧带 role:"assistant"（OpenAI 流式约定），后续帧不再带——见
     // openai-adapter.toOpenAIChunk 注释：缺 role 端侧会解析成 generic chunk 而丢弃。
     let firstDelta = true;
+    // 本次 stream 内 tool call id → 输出 index 的分配表（见 toOpenAIToolCallDeltas）。
+    const toolCallIndexById = new Map<string, number>();
     let usage:
       | { input_tokens?: number; output_tokens?: number; total_tokens?: number }
       | undefined;
@@ -79,6 +103,7 @@ export class ModelGatewayService {
       const content = typeof chunk.content === "string" ? chunk.content : "";
       const toolCalls = toOpenAIToolCallDeltas(
         (chunk as { tool_call_chunks?: ToolCallChunk[] }).tool_call_chunks,
+        toolCallIndexById,
       );
       const chunkUsage = (
         chunk as {
