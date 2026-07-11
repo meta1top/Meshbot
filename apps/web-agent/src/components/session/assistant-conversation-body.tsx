@@ -288,7 +288,7 @@ export function AssistantConversationBody({
           onInterrupt={stream.interrupt}
           isLoading={stream.running}
           placeholder={inputPlaceholder}
-          topLeading={
+          trailingActions={
             <ModelSelect value={sessionModelId} onChange={handleModelChange} />
           }
           leadingActions={<ComposerActions />}
