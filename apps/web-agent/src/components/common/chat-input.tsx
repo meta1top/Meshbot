@@ -141,13 +141,16 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     });
 
     const handleSend = useCallback(() => {
+      // 运行中禁止发送（与发送按钮隐藏一致）：Enter 快捷键与按钮同一守卫，
+      // 避免「按钮没了但快捷键还能发」的不一致。
+      if (isLoading) return;
       if (!editor) return;
       const md = getMarkdown(editor.storage).trim();
       if (!md) return;
       onSend?.(md);
       editor.commands.clearContent();
       onChange("");
-    }, [editor, onSend, onChange]);
+    }, [editor, onSend, onChange, isLoading]);
 
     // 每次 handleSend 更新时同步到 ref，让 handleKeyDown 读到最新版本
     useEffect(() => {
@@ -302,8 +305,10 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               <Paperclip className="h-4 w-4" />
             </button>
 
-            {/* 运行中显示中断；再显示发送键 */}
-            {isLoading && (
+            {/* 运行中只显示中断（发送隐藏，Enter 同步禁用——见 handleSend
+                守卫）；想发新消息先停止当前 run。排队追加的后端能力保留，
+                仅不再从此入口暴露。 */}
+            {isLoading ? (
               <button
                 type="button"
                 onClick={handleInterrupt}
@@ -312,21 +317,22 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               >
                 <Square className="h-4 w-4 fill-current" />
               </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={!hasContent}
+                className={cn(
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors",
+                  hasContent
+                    ? "bg-(--shell-accent) text-white"
+                    : "text-muted-foreground",
+                )}
+                title={tChat("send")}
+              >
+                <Send className="h-4 w-4" />
+              </button>
             )}
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={!hasContent}
-              className={cn(
-                "flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors",
-                hasContent
-                  ? "bg-(--shell-accent) text-white"
-                  : "text-muted-foreground",
-              )}
-              title={tChat("send")}
-            >
-              <Send className="h-4 w-4" />
-            </button>
           </div>
         </div>
       </div>
