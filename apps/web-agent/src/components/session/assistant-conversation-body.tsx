@@ -289,7 +289,15 @@ export function AssistantConversationBody({
           isLoading={stream.running}
           placeholder={inputPlaceholder}
           trailingActions={
-            <ModelSelect value={sessionModelId} onChange={handleModelChange} />
+            // 远程会话（L3 relay）不渲染模型选择器：该 session 在对端设备上，
+            // 本地 PATCH /api/sessions/:id 必 404；且本地模型列表对远端会话
+            // 无意义。远端模型选择属 V1 边界外，后续经 relay 通道另做。
+            remoteDeviceId ? undefined : (
+              <ModelSelect
+                value={sessionModelId}
+                onChange={handleModelChange}
+              />
+            )
           }
           leadingActions={<ComposerActions />}
           tokenUsage={{
