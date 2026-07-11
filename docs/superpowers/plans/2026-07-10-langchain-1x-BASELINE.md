@@ -25,6 +25,14 @@ npx jest apps/server-agent libs/common
 rm -rf libs/agent/dist
 pnpm --filter @meshbot/lib-agent test
 
+# 3b) ⚠️ vitest 跑完想恢复 dist 时，必须连 tsbuildinfo 一起删再 build：
+#     tsc 增量缓存在包根 libs/agent/tsconfig.tsbuildinfo（不在 dist 里），
+#     只 rm dist 后再 build，tsc 判定 up-to-date 什么都不 emit → dist 残缺
+#     → server-agent typecheck/build 报"缺导出/implicit any/找不到模块"的幽灵错误。
+#     turbo cache hit 同样不回填被手删的 dist。
+rm -f libs/agent/tsconfig.tsbuildinfo
+pnpm --filter @meshbot/lib-agent build
+
 # 4) 九个静态围栏
 pnpm check
 ```
