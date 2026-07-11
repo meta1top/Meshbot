@@ -5,6 +5,7 @@ import { useAtomValue } from "jotai";
 import { ArrowDown } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { remoteSessionsAtom } from "@/atoms/remote-sessions";
 import {
   sessionTotalsFamily,
   usageByMessageFamily,
@@ -27,6 +28,7 @@ import { useLlmusePrefix } from "@/hooks/use-llmuse-prefix";
 import { useSessionStream } from "@/hooks/use-session-stream";
 import { toI18nList } from "@/lib/i18n-list";
 import { useModelConfigs } from "@/rest/model-config";
+import { patchRemoteSessionModel } from "@/rest/remote-devices";
 import { deletePendingMessage, patchSession } from "@/rest/session";
 
 interface AssistantConversationBodyProps {
@@ -77,13 +79,24 @@ export function AssistantConversationBody({
   // 下一条消息由后端 runner 读列生效。
   const allSessions = useAtomValue(sessionsAtom);
   const [modelOverride, setModelOverride] = useState<string | null>(null);
+  // 远程会话的摘要在 remoteSessionsAtom（本地 sessionsAtom 不含对端会话）；
+  // 模型配置云端统一下发且本地行 id=云端配置 id，跨设备 id 一致，本地下拉
+  // 列表可直接用于远端会话的显示与写入。
+  const remoteSessions = useAtomValue(remoteSessionsAtom);
   const sessionModelId =
     modelOverride ??
-    allSessions.find((s) => s.id === id)?.modelConfigId ??
-    null;
+    (remoteDeviceId
+      ? (remoteSessions[remoteDeviceId]?.sessions.find((s) => s.id === id)
+          ?.modelConfigId ?? null)
+      : (allSessions.find((s) => s.id === id)?.modelConfigId ?? null));
   const handleModelChange = async (mid: string) => {
     try {
-      await patchSession(id, { modelConfigId: mid });
+      if (remoteDeviceId) {
+        // 经 device query 通道写对端 session（本地 PATCH 会 404）
+        await patchRemoteSessionModel(remoteDeviceId, id, mid);
+      } else {
+        await patchSession(id, { modelConfigId: mid });
+      }
       setModelOverride(mid);
     } catch (err) {
       console.error("切换模型失败", err);
@@ -289,15 +302,7 @@ export function AssistantConversationBody({
           isLoading={stream.running}
           placeholder={inputPlaceholder}
           trailingActions={
-            // 远程会话（L3 relay）不渲染模型选择器：该 session 在对端设备上，
-            // 本地 PATCH /api/sessions/:id 必 404；且本地模型列表对远端会话
-            // 无意义。远端模型选择属 V1 边界外，后续经 relay 通道另做。
-            remoteDeviceId ? undefined : (
-              <ModelSelect
-                value={sessionModelId}
-                onChange={handleModelChange}
-              />
-            )
+            <ModelSelect value={sessionModelId} onChange={handleModelChange} />
           }
           leadingActions={<ComposerActions />}
           tokenUsage={{

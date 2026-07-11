@@ -1,6 +1,14 @@
 import { AccountContextService } from "@meshbot/lib-agent";
 import type { HistoryResponse, SessionSummary } from "@meshbot/types-agent";
-import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from "@nestjs/common";
 import { ApiOperation } from "@nestjs/swagger";
 
 import { RemoteDeviceQueryService } from "../cloud/remote-device-query.service";
@@ -14,6 +22,7 @@ import {
   RemoteInterruptDto,
   RemoteRunDto,
   RemoteRunsQueryDto,
+  RemotePatchSessionModelDto,
 } from "../dto/remote-run.dto";
 
 /**
@@ -79,6 +88,22 @@ export class RemoteDeviceController {
   }
 
   /** 中断目标设备上指定 streamId 对应的远程 run。 */
+  /** 远程会话：切换会话绑定模型（经 device query 通道写对端 session）。 */
+  @Patch("remote-devices/:id/sessions/:sessionId/model")
+  @ApiOperation({ summary: "切换远程会话的模型配置" })
+  async patchSessionModel(
+    @Param("id") id: string,
+    @Param("sessionId") sessionId: string,
+    @Body() dto: RemotePatchSessionModelDto,
+  ): Promise<SessionSummary> {
+    return (await this.query.query(
+      this.account.getOrThrow(),
+      id,
+      "patch-session-model",
+      { sessionId, modelConfigId: dto.modelConfigId },
+    )) as SessionSummary;
+  }
+
   @Post("remote-devices/:id/run/interrupt")
   async interrupt(
     @Param("id") id: string,

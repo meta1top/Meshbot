@@ -135,3 +135,15 @@ export async function fetchRemoteRun(
   } | null>(`/api/remote-devices/${deviceId}/runs?${params.toString()}`);
   return data;
 }
+
+/** 切换远程会话绑定的模型（写对端 session；模型 id 云端下发跨设备一致）。 */
+export async function patchRemoteSessionModel(
+  deviceId: string,
+  sessionId: string,
+  modelConfigId: string,
+): Promise<void> {
+  await apiClient.patch(
+    `/api/remote-devices/${deviceId}/sessions/${sessionId}/model`,
+    { modelConfigId },
+  );
+}
