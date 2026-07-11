@@ -99,15 +99,18 @@ CommonJS）无法解析 export map（同 memory「@vscode/ripgrep ESM-only 需 j
 `feat/langchain-1x-migration` 隔离**。判回归时若发现 HEAD/文件异常回退，先 `git worktree list`
 + `git rev-parse --abbrev-ref HEAD` 确认没被其他 session 影响。
 
-## S1 修正后的 vitest 失败集合（isAIMessageChunk 修复后，2026-07-11）
+## S1 修正后的 vitest 失败集合（两轮修复后，2026-07-11）
 
-基线 9 → **7**，每条进出可归因：
+最终失败集合与基线 9 条**逐条一致**（diff = 空），但 graph 类 5 条的红因已变：
 
-- **-3 治愈**（graph-runner：逐 chunk / usage / resumeStream）——根因与生产 bug 同源：
-  instanceof AIMessageChunk 在 core 1.x ESM/CJS 双构建下恒 false，改
-  isAIMessageChunk() 结构判定后测试与生产一并恢复。
-- **+1 新增**（graph-runner：同一轮 messageId 收口为雪花）——mock 的 BaseChatModel
-  走 handleLLMNewToken 旧通道，1.x 基类包装时 chunk.id 丢失 → 每 chunk randomUUID
-  被判两轮。**生产路径已探针证实 id 保留、单轮正确**（真实流全 chunk 同
-  chatcmpl-… id）。与 supervisor×2 同属 mock 机制错位，S2 修测试 mock。
-- 其余 6（agent.module×4 + supervisor×2）与基线一致。
+- 修复①（isAIMessageChunk 替换 instanceof）短暂治愈 chunk/usage/resumeStream 三条，
+  同时暴露「收口为雪花」新红——isAIMessageChunk 连完整 AIMessage 也放行（type 同为
+  "ai"），langgraph 1.x 会把节点写入 state 的完整消息经 messages 通道再 yield 一次，
+  被误当新轮 → assistant 双写落库（生产实测）。
+- 修复②（追加 concat 结构判别，chunk 独有）：完整消息回落非 chunk 兜底分支，
+  生产 assistant_done=1（探针证实）、「收口为雪花」转绿；chunk/usage/resumeStream
+  回红——mock 的 BaseChatModel 走 1.x 基类旧包装通道，产物丢 id 且非真 chunk，
+  被过滤挡下（chunks=0，与基线红同表象）。生产真实模型走 _streamChatModelEvents
+  透传真 chunk，四层探针（网关 SSE / 端侧 stream / graph id / done 次数）全部证实。
+- S2 待办：用 core 1.x 官方 FakeStreamingChatModel 重写这批 mock，一次清掉
+  graph 类 5 条 + agent.module 4 条 mock 债务。

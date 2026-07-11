@@ -496,7 +496,18 @@ export class GraphRunner {
       // 结构判定而非 instanceof：core 1.x 双构建（ESM/CJS）下，langgraph（ESM）
       // 重建的 AIMessageChunk 与本包（CJS）require 的类不同源，instanceof 恒 false，
       // 会把全部流式 chunk 静默丢弃（chunks=0、零输出「正常」结束）。
-      if (!isAIMessageChunk(msg)) {
+      //
+      // 同时必须验 concat（chunk 独有方法）：langgraph 1.x 在节点完成时会把写进
+      // state 的**完整 AIMessage**（id 已被 supervisor 替换成雪花）也从 messages
+      // 通道 yield 一次，而 isAIMessageChunk 的结构判定连 AIMessage 也放行
+      // （两者 type 都是 "ai"）。不挡住它会被当成"新一轮"：先触发轮切换 flush、
+      // 再把整条消息二次累积并以新雪花 id 重复 flush → assistant 双写落库。
+      // 让它走下面的非 chunk 兜底分支（flush 当前轮后忽略），与 0.x instanceof
+      // 时代的行为一致。
+      const isStreamChunk =
+        isAIMessageChunk(msg) &&
+        typeof (msg as { concat?: unknown }).concat === "function";
+      if (!isStreamChunk) {
         // 非 AIMessageChunk（ToolMessage 等）：上面 updates 路径已经把 supervisor 出口
         // flush 过了；这里保留为 backup 兜底，防 updates 事件意外缺失。
         if (currentId !== null && currentAcc !== undefined) {
