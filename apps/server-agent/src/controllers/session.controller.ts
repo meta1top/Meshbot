@@ -63,6 +63,7 @@ export class SessionController {
     const result = await this.sessions.createSession({
       content: dto.content,
       kind: dto.kind,
+      modelConfigId: dto.modelConfigId,
     });
     this.runner.kick(result.sessionId);
     this.titleService.schedule(result.sessionId, dto.content);

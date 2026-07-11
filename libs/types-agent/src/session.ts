@@ -38,10 +38,16 @@ export const SessionPatchSchema = z
   .object({
     title: z.string().min(1).max(200).optional(),
     pinned: z.boolean().optional(),
+    /** 切换会话模型（下一条消息生效）；须为当前账号存在的 ModelConfig id。 */
+    modelConfigId: z.string().optional(),
   })
-  .refine((d) => d.title !== undefined || d.pinned !== undefined, {
-    message: "至少传 title 或 pinned 之一",
-  });
+  .refine(
+    (d) =>
+      d.title !== undefined ||
+      d.pinned !== undefined ||
+      d.modelConfigId !== undefined,
+    { message: "至少传 title / pinned / modelConfigId 之一" },
+  );
 export type SessionPatchInput = z.infer<typeof SessionPatchSchema>;
 
 /** DELETE /api/sessions/:id 出参。 */
@@ -64,6 +70,8 @@ export const CreateSessionSchema = z.object({
   content: z.string().min(1),
   /** "quick" = 随手问临时会话（不进侧栏）；缺省 "user"。 */
   kind: z.enum(["user", "quick"]).optional(),
+  /** 会话使用的模型配置 id；缺省走账号默认（首个 enabled）。 */
+  modelConfigId: z.string().optional(),
 });
 export type CreateSessionInput = z.infer<typeof CreateSessionSchema>;
 

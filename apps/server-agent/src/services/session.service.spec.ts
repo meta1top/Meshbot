@@ -98,6 +98,19 @@ describe("SessionService", () => {
         this.__deletions.push(sessionId);
       },
     };
+    // 假 ModelConfigService：白名单内的 id 视为存在，其余抛 NotFoundException
+    // （真实实现按账号作用域查询，他账号 id 同样命中「不存在」路径）。
+    const fakeModelConfigs = {
+      __known: new Set<string>(["mc-exists"]),
+      async findOneOrFail(id: string) {
+        if (!this.__known.has(id)) {
+          throw new (require("@nestjs/common").NotFoundException)(
+            `ModelConfig ${id} not found`,
+          );
+        }
+        return { id } as never;
+      },
+    };
     rawService = new SessionService(
       ds.getRepository(Session),
       ds.getRepository(PendingMessage),
@@ -107,6 +120,7 @@ describe("SessionService", () => {
       checkpointer,
       fakeGraph as unknown as ThreadStateService,
       fakeSchedules as unknown as any,
+      fakeModelConfigs as unknown as any,
     );
     // 暴露给 deleteSession / regenerateAfter 测试用
     (
@@ -130,6 +144,46 @@ describe("SessionService", () => {
 
   afterEach(async () => {
     await ds.destroy();
+  });
+
+  it("createSession 带 modelConfigId 落列；不带则为 NULL", async () => {
+    const { sessionId } = await service.createSession({
+      content: "选模型",
+      modelConfigId: "mc-exists",
+    });
+    const repo = (
+      rawService as unknown as { __ds: DataSource }
+    ).__ds.getRepository(Session);
+    const row = await repo.findOneByOrFail({ id: sessionId });
+    expect(row.modelConfigId).toBe("mc-exists");
+
+    const { sessionId: sid2 } = await service.createSession({
+      content: "默认",
+    });
+    const row2 = await repo.findOneByOrFail({ id: sid2 });
+    expect(row2.modelConfigId).toBeNull();
+  });
+
+  it("patch modelConfigId 合法 → 落列（下一条消息生效的会话级切换）", async () => {
+    const { sessionId } = await service.createSession({ content: "hi" });
+    await service.patch(sessionId, { modelConfigId: "mc-exists" });
+    const repo = (
+      rawService as unknown as { __ds: DataSource }
+    ).__ds.getRepository(Session);
+    const row = await repo.findOneByOrFail({ id: sessionId });
+    expect(row.modelConfigId).toBe("mc-exists");
+  });
+
+  it("patch modelConfigId 不存在 → NotFoundException 且不落列", async () => {
+    const { sessionId } = await service.createSession({ content: "hi" });
+    await expect(
+      service.patch(sessionId, { modelConfigId: "mc-ghost" }),
+    ).rejects.toThrow(/not found/);
+    const repo = (
+      rawService as unknown as { __ds: DataSource }
+    ).__ds.getRepository(Session);
+    const row = await repo.findOneByOrFail({ id: sessionId });
+    expect(row.modelConfigId).toBeNull();
   });
 
   it("createSession 建会话(running) + 写首条 pending 消息", async () => {
