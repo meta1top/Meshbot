@@ -933,6 +933,26 @@ git commit -m "test: S1 全量回归与端到端眼验通过
 
 ---
 
-## S1 回归结论
+## S1 回归结论（2026-07-11，全部通过）
 
-<!-- Task 4 Step 4 填写 -->
+**自动化回归**：typecheck 27/27 · gateway jest 28 绿（含 provider 冒烟 7 断言子进程跑）·
+server-agent+libs/common 88 suite 0 失败 · lib-agent vitest 失败集=基线 9 条逐条一致 ·
+九围栏绿 · desktop better-sqlite3@12.10 Electron 重编 ✓。
+
+**端到端眼验**（真实云 DeepSeek，用户逐项确认）：流式出话 ✓ · token 气泡非 0 ✓ ·
+多轮上下文 ✓ · 会话标题 ✓ · 工具调用（检索记忆/当前时间/未读概览）✓ ·
+HITL 确认卡 ✓ · ask_question ✓ · 子 agent dispatch ✓ · MCP 工具 ✓ ·
+assistant 单条落库无双写 ✓ · reasoning 不显示（S1 预期，S3 做）✓。
+
+**眼验揪出的 3 个修复**（全部提交）：
+1. `b7287ab8` instanceof AIMessageChunk 双构建假阴性 → isAIMessageChunk()
+   结构判定（62/62 chunk 曾被静默丢弃，「有回复但零输出」）。S2 提前项。
+2. `0f37cc80` langgraph 1.x 把节点写入 state 的完整 AIMessage 经 messages 通道
+   再 yield 一次，isAIMessageChunk 连 AIMessage 也放行 → assistant 双写。
+   追加 concat（chunk 独有）结构判别。
+3. `48f1fa44` 决策轮 loading 占位悬置（预存在瑕疵，0.x 云网关同样触发，
+   被本地直连时代的 reasoning 流掩盖）→ 工具轮首个事件清占位。
+
+**S2 遗留**：graph 类 5 条 vitest mock 债务（mock 走 1.x 基类旧包装通道，
+丢 id 且非真 chunk）→ 用 core 官方 FakeStreamingChatModel 重写；agent.module
+DI 4 条为基线既有。

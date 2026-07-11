@@ -14,9 +14,17 @@ import { initChatModel } from "langchain/chat_models/universal";
 
 const PROVIDER_CASES = [
   { modelProvider: "openai", model: "gpt-4o", apiKey: "sk-fake" },
-  { modelProvider: "anthropic", model: "claude-sonnet-4-5", apiKey: "sk-ant-fake" },
+  {
+    modelProvider: "anthropic",
+    model: "claude-sonnet-4-5",
+    apiKey: "sk-ant-fake",
+  },
   { modelProvider: "deepseek", model: "deepseek-chat", apiKey: "sk-fake" },
-  { modelProvider: "google-genai", model: "gemini-2.0-flash", apiKey: "fake-key" },
+  {
+    modelProvider: "google-genai",
+    model: "gemini-2.0-flash",
+    apiKey: "fake-key",
+  },
   { modelProvider: "ollama", model: "llama3.2", apiKey: "unused" },
 ];
 
@@ -94,12 +102,16 @@ for (const modelProvider of ["openai", "deepseek"]) {
         modelProvider,
         apiKey: "sk-fake",
         streaming: false,
-        configuration: { baseURL: "https://provider.invalid/v1", fetch: fetchSpy },
+        configuration: {
+          baseURL: "https://provider.invalid/v1",
+          fetch: fetchSpy,
+        },
       },
     );
     const res = await chat.invoke([new HumanMessage("ping")]);
     if (calls !== 1) throw new Error(`fetch 被调用 ${calls} 次，期望 1`);
-    if (res.content !== "pong") throw new Error(`content=${JSON.stringify(res.content)}，期望 "pong"`);
+    if (res.content !== "pong")
+      throw new Error(`content=${JSON.stringify(res.content)}，期望 "pong"`);
     report(`fetch:${modelProvider}`);
   } catch (e) {
     report(`fetch:${modelProvider}`, e);
