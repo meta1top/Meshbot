@@ -17,6 +17,12 @@
 | 2 | 手造 `delta.reasoning_content` SSE 喂 `ChatOpenAI@1.5.5` | **原生解析**进 `additional_kwargs.reasoning_content`（0.6.17 不解析——当年上 ChatDeepSeek hack 的根因，1.x 官方修了）；completions 线 `contentBlocks` **无** reasoning block |
 | 3 | 带 reasoning 历史喂 `ChatDeepSeek@1.1.5` 抓请求体 | **不回写** `reasoning_content` 到历史 assistant → 网关 `deepseekReasoningFetch`（补空串过 DeepSeek 校验）**保留** |
 | 4 | 手造 Anthropic thinking SSE 喂 `ChatAnthropic@1.5.1` | thinking **只落** `contentBlocks` reasoning（`additional_kwargs` 无）——standard blocks 是跨厂商唯一统一视图 |
+| 5 | 手造 Gemini thought part SSE 喂 `ChatGoogleGenerativeAI@2.2.0` | thought **只落** `contentBlocks` reasoning（AK 仅 thought_signatures 内部键）——提取器天然覆盖 |
+| 6 | 手造 Ollama thinking NDJSON 喂 `ChatOllama@1.3.0` | **双路都有**（contentBlocks reasoning + AK.reasoning_content）——提取器覆盖且双路去重生效 |
+
+**实验矩阵结论：四大厂商（DeepSeek/Anthropic/Google/Ollama）的思考输出在 1.x 下
+100% 落在 contentBlocks 标准视图——extractReasoningDelta 的 ① 路通吃，② 路
+（AK 兜底）覆盖未来仅走 DeepSeek 风格扩展的 openai-compatible 上游。**
 
 ## 2. 架构：三层各一个不变量
 
