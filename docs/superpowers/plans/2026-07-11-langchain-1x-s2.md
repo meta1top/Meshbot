@@ -448,6 +448,14 @@ dev 三端在跑的话直接发一条消息（流式正常）→ 删除该会话
 `docs/superpowers/plans/2026-07-11-langchain-1x-s2.md` 末尾追加「S2 回归结论」，
 账本与记忆更新，commit。
 
-## S2 回归结论
+## S2 回归结论（2026-07-11，自动化全过）
 
-<!-- 终验通过后填写 -->
+- typecheck 27/27 · jest 93 suites / 748 passed / 0 failed（socket.io-client 5 个
+  suite 恢复后全绿）· 九围栏绿
+- **lib-agent vitest 282/282 全绿（基线 9 → 0），今后判回归不再减基线**
+- 运行时探针（真实云 DeepSeek）：Annotation 图流式 chunks=10、唯一 id、
+  assistant_done=1（与迁移前逐项一致）；deleteThread checkpoints 3→0
+- 实施中修正的计划偏差：D 项 overrideProvider/根 providers 均进不了模块封装，
+  改 @Global stub module（计划的 fallback 再 fallback）；F 项 7 个 libs 全部
+  同病（incremental 继承自 base），一并设置
+- 用户眼验：发消息流式正常 + 删会话（走 deleteThread）后再发正常
