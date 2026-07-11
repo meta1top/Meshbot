@@ -28,6 +28,7 @@ function sampleConfigs(): AgentModelConfig[] {
 /** 按当前实现规则，把 AgentModelConfig 映射为期望的网关坐标行，供断言复用。 */
 function expectedGatewayRow(config: AgentModelConfig): CloudModelConfigRow {
   return {
+    id: config.id,
     providerType: "openai-compatible",
     baseUrl: `${CLOUD_URL}/api/v1`,
     model: config.id,

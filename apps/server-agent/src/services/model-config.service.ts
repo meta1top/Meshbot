@@ -17,6 +17,13 @@ const DEFAULT_CONTEXT_WINDOW = 128_000;
  * key 只在云端持有，网关请求时按 device token 换发，见 Task 8）。
  */
 export interface CloudModelConfigRow {
+  /**
+   * 本地行主键，直接采用云端 OrgModelConfig 的 id（雪花，显式赋值时
+   * SnowflakeBaseEntity 的 @BeforeInsert 不覆盖）。跨同步稳定——同步是
+   * 先删后插的全量替换，若让 hook 每轮生成新雪花，sessions.model_config_id
+   * 的会话级模型引用会在下一轮同步后全部变成死 id（run 时报「模型配置不存在」）。
+   */
+  id: string;
   providerType: string;
   name: string;
   model: string;
@@ -101,6 +108,7 @@ export class ModelConfigService {
     await this.repo.delete({ source: "cloud" });
     for (const r of rows) {
       await this.repo.save({
+        id: r.id,
         providerType: r.providerType,
         name: r.name,
         model: r.model,

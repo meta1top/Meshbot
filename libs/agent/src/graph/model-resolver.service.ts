@@ -98,15 +98,19 @@ export class ModelResolver {
     const dbPath = this.config.getDatabasePath();
     const acct = this.account.getOrThrow();
     const overrideId = this.runCtx.getOverrideId();
-    const cfg = overrideId
+    let cfg = overrideId
       ? readModelConfigById(dbPath, acct, overrideId)
       : readActiveModelConfig(dbPath, acct);
-    if (!cfg) {
-      throw new Error(
-        overrideId
-          ? `指定的模型配置不存在：${overrideId}（可能已被删除）`
-          : "当前账号没有启用的模型配置，请先在设置中配置模型",
+    if (!cfg && overrideId) {
+      // 会话绑定的模型可能已被云端删除（同步后行消失）。回退账号默认模型
+      // 继续跑而不是抛死——否则该会话永久卡在「runOnce 失败停止消费循环」。
+      console.warn(
+        `[ModelResolver] 会话指定的模型配置不存在：${overrideId}（可能已被云端删除），回退默认模型`,
       );
+      cfg = readActiveModelConfig(dbPath, acct);
+    }
+    if (!cfg) {
+      throw new Error("当前账号没有启用的模型配置，请先在设置中配置模型");
     }
     const meta = { providerType: cfg.providerType, model: cfg.model };
     this.modelMeta = meta;

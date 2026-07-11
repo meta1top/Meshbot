@@ -65,12 +65,17 @@ describe("ModelResolver 覆盖解析", () => {
     );
   });
 
-  it("覆盖 id 不存在 → 抛错（含 id）", async () => {
+  it("覆盖 id 不存在 → 回退账号默认模型（云端删模型后会话不卡死）", async () => {
     const { account, runCtx, resolver } = make();
-    await expect(
-      account.run("u1", () =>
-        runCtx.run("mc-404", () => resolver.resolveModel()),
-      ),
-    ).rejects.toThrow(/mc-404/);
+    await account.run("u1", () =>
+      runCtx.run("mc-404", async () => {
+        await resolver.resolveModel();
+        // 回退 enabled 默认配置（mc-default），而不是抛错卡死消费循环
+        expect(resolver.getMeta()).toEqual({
+          providerType: "openai",
+          model: "gpt-a",
+        });
+      }),
+    );
   });
 });

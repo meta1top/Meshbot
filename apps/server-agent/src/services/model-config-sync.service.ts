@@ -119,6 +119,8 @@ export class ModelConfigSyncService
   private toGatewayRow(config: AgentModelConfig): CloudModelConfigRow {
     const cloudUrl = this.config.getOrThrow<string>("MESHBOT_CLOUD_URL");
     return {
+      // 本地行 id 复用云端配置 id：跨同步稳定，会话级模型引用不失效。
+      id: config.id,
       providerType: "openai-compatible",
       baseUrl: `${cloudUrl.replace(/\/$/, "")}/api/v1`,
       model: config.id,
