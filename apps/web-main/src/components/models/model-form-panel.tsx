@@ -207,6 +207,14 @@ export interface ModelFormPanelProps {
   error: string | null;
 }
 
+/** 上下文窗口快捷值：未知模型手填时的常用档位（点击填入，可再手改）。 */
+const CONTEXT_WINDOW_PRESETS = [
+  { label: "32k", value: 32_768 },
+  { label: "128k", value: 131_072 },
+  { label: "256k", value: 262_144 },
+  { label: "1M", value: 1_048_576 },
+] as const;
+
 /**
  * 表单字段体——拆成 `<Form>` 子组件,用 `useFormContext` 读 `providerType`
  * 联动 model 字段（下拉/手填 + key 重挂）。
@@ -219,7 +227,7 @@ function ModelFormFields({
   initial: OrgModelConfigView | null;
 }) {
   const t = useTranslations("models");
-  const { watch } = useFormContext<ModelFormValues>();
+  const { watch, setValue } = useFormContext<ModelFormValues>();
   const providerType = watch("providerType");
   const models = resolveProviderPreset(providerType)?.models ?? [];
 
@@ -271,6 +279,24 @@ function ModelFormFields({
           placeholder={t("fieldContextWindowPlaceholder")}
         />
       </FormItem>
+      {/* 未知模型的常用档位快捷填入（schema 收字符串，setValue 用字符串） */}
+      <div className="-mt-2 flex items-center gap-1.5">
+        {CONTEXT_WINDOW_PRESETS.map((p) => (
+          <button
+            key={p.label}
+            type="button"
+            onClick={() =>
+              setValue("contextWindow", String(p.value), {
+                shouldValidate: true,
+                shouldDirty: true,
+              })
+            }
+            className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
     </>
   );
 }
