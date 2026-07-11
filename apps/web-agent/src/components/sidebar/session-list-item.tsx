@@ -174,7 +174,7 @@ export function SessionListItem({
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className="text-(--shell-sidebar-fg)/70 hover:text-(--shell-sidebar-fg)"
+                  className="flex h-5 w-5 items-center justify-center rounded text-(--shell-sidebar-fg)/70 hover:text-(--shell-sidebar-fg)"
                   aria-label="menu"
                 >
                   <MoreHorizontal className="h-3.5 w-3.5" />
