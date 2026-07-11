@@ -25,10 +25,12 @@ interface AppendMessagePayload {
 export async function createSession(
   content: string,
   kind?: "user" | "quick",
+  /** 会话模型配置 id；缺省走账号默认（首个 enabled）。 */
+  modelConfigId?: string,
 ): Promise<CreateSessionResponse> {
   const { data } = await apiClient.post<CreateSessionResponse>(
     "/api/sessions",
-    { content, kind },
+    { content, kind, ...(modelConfigId ? { modelConfigId } : {}) },
   );
   return data;
 }
@@ -118,10 +120,10 @@ export async function listSessions(): Promise<SessionSummary[]> {
   return data.sessions;
 }
 
-/** 更新会话 title / pinned。 */
+/** 更新会话 title / pinned / modelConfigId（切模型下一条消息生效）。 */
 export async function patchSession(
   id: string,
-  patch: { title?: string; pinned?: boolean },
+  patch: { title?: string; pinned?: boolean; modelConfigId?: string },
 ): Promise<SessionSummary> {
   const { data } = await apiClient.patch<SessionSummary>(
     `/api/sessions/${id}`,

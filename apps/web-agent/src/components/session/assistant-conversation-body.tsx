@@ -9,12 +9,14 @@ import {
   sessionTotalsFamily,
   usageByMessageFamily,
 } from "@/atoms/session-usage";
+import { sessionsAtom } from "@/atoms/sessions";
 import {
   ChatInput,
   type ChatInputHandle,
 } from "@/components/common/chat-input";
 import { CompactionBanner } from "@/components/common/compaction-banner";
 import { ComposerActions } from "@/components/common/composer-actions";
+import { ModelSelect } from "@/components/common/model-select";
 import { MessageSkeleton } from "@/components/im/message-skeleton";
 import { MessageList } from "@/components/session/message-list";
 import { PendingList } from "@/components/session/pending-list";
@@ -25,7 +27,7 @@ import { useLlmusePrefix } from "@/hooks/use-llmuse-prefix";
 import { useSessionStream } from "@/hooks/use-session-stream";
 import { toI18nList } from "@/lib/i18n-list";
 import { useModelConfigs } from "@/rest/model-config";
-import { deletePendingMessage } from "@/rest/session";
+import { deletePendingMessage, patchSession } from "@/rest/session";
 
 interface AssistantConversationBodyProps {
   /** 当前会话 ID，由 page 传入（渲染时必有）。远程会话时是 B 上的会话 id。 */
@@ -71,6 +73,22 @@ export function AssistantConversationBody({
   const sessionTotals = useAtomValue(sessionTotalsFamily(id));
   const { data: modelConfigs } = useModelConfigs();
   const enabledModel = modelConfigs?.find((c) => c.enabled);
+  // 会话级模型：初值取会话摘要里的 modelConfigId，切换 PATCH 后本地覆盖，
+  // 下一条消息由后端 runner 读列生效。
+  const allSessions = useAtomValue(sessionsAtom);
+  const [modelOverride, setModelOverride] = useState<string | null>(null);
+  const sessionModelId =
+    modelOverride ??
+    allSessions.find((s) => s.id === id)?.modelConfigId ??
+    null;
+  const handleModelChange = async (mid: string) => {
+    try {
+      await patchSession(id, { modelConfigId: mid });
+      setModelOverride(mid);
+    } catch (err) {
+      console.error("切换模型失败", err);
+    }
+  };
   // contextWindow 由后端在配置入库时按 MODEL_SPECS 解析后固化（用户可覆盖），前端直接读
   const contextWindow = enabledModel?.contextWindow ?? 128_000;
 
@@ -270,7 +288,15 @@ export function AssistantConversationBody({
           onInterrupt={stream.interrupt}
           isLoading={stream.running}
           placeholder={inputPlaceholder}
-          leadingActions={<ComposerActions />}
+          leadingActions={
+            <>
+              <ModelSelect
+                value={sessionModelId}
+                onChange={handleModelChange}
+              />
+              <ComposerActions />
+            </>
+          }
           tokenUsage={{
             // 「下次请求估算 / ctx 上限」—— 用 lastInputTokens 作为代理：
             // 这是上一轮 LLM 真实计数，下一轮 input 约等于这个（用户新输入

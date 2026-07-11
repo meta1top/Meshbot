@@ -9,6 +9,7 @@ import { devicesAtom } from "@/atoms/devices";
 import { addSessionAtom } from "@/atoms/sessions";
 import { ChatInput } from "@/components/common/chat-input";
 import { ComposerActions } from "@/components/common/composer-actions";
+import { ModelSelect } from "@/components/common/model-select";
 import { SuggestionChips } from "@/components/common/suggestion-chips";
 import { ComposerTargetBar } from "@/components/home/composer-target-bar";
 import { fetchRemoteRun, startRemoteRun } from "@/rest/remote-devices";
@@ -21,6 +22,8 @@ export function LauncherHome() {
   const addSession = useSetAtom(addSessionAtom);
   const devices = useAtomValue(devicesAtom);
   const [draft, setDraft] = useState("");
+  /** 起手台选中的模型配置 id；null = 默认（首个 enabled）。 */
+  const [modelConfigId, setModelConfigId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [targetDeviceId, setTargetDeviceId] = useState<string | null>(null);
   const targetDevice = devices.find((d) => d.id === targetDeviceId) ?? null;
@@ -61,7 +64,11 @@ export function LauncherHome() {
         await sendToRemoteDevice(targetDevice.id, text);
         return;
       }
-      const res = await createSession(text);
+      const res = await createSession(
+        text,
+        undefined,
+        modelConfigId ?? undefined,
+      );
       addSession(res.session);
       router.push(`/assistant?id=${res.sessionId}`);
     } catch (err) {
@@ -120,6 +127,9 @@ export function LauncherHome() {
             leadingActions={<ComposerActions />}
           />
           <ComposerTargetBar
+            trailing={
+              <ModelSelect value={modelConfigId} onChange={setModelConfigId} />
+            }
             selectedDeviceId={targetDeviceId}
             onSelectDevice={setTargetDeviceId}
           />

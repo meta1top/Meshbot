@@ -18,6 +18,8 @@ export const SessionSummarySchema = z.object({
    * false = title 仍是创会话时的「首条前 30 字」fallback。
    */
   titleGenerated: z.boolean(),
+  /** 会话绑定的模型配置 id；null = 走账号默认（首个 enabled）。 */
+  modelConfigId: z.string().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
