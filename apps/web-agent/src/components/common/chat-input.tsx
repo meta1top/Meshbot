@@ -38,6 +38,8 @@ interface ChatInputProps {
   placeholder?: string;
   /** 底部动作栏左侧的前导动作（如 ComposerActions 的 技能/连应用/权限 mock 链）。 */
   leadingActions?: ReactNode;
+  /** 输入区上方左侧的选择器行（如模型选择）；不传不渲染。 */
+  topLeading?: ReactNode;
   modelName?: string;
   tokenUsage?: {
     /**
@@ -81,6 +83,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       isLoading = false,
       placeholder,
       leadingActions,
+      topLeading,
       modelName,
       tokenUsage,
     },
@@ -178,6 +181,10 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
 
     return (
       <div className="overflow-hidden rounded-[10px] border border-border bg-card">
+        {/* 顶部左侧选择器行（如模型选择）：输入区上方，左对齐 */}
+        {topLeading && (
+          <div className="flex items-center gap-2 px-3 pt-2">{topLeading}</div>
+        )}
         {/* 编辑区（tiptap；StarterKit 输入规则让 markdown 边打边可视化） */}
         <div className="px-3 pt-2.5 pb-1">
           <div className="max-h-[200px] w-full overflow-y-auto py-1.5">

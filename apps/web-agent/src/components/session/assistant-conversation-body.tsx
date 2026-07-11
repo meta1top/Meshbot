@@ -288,15 +288,10 @@ export function AssistantConversationBody({
           onInterrupt={stream.interrupt}
           isLoading={stream.running}
           placeholder={inputPlaceholder}
-          leadingActions={
-            <>
-              <ModelSelect
-                value={sessionModelId}
-                onChange={handleModelChange}
-              />
-              <ComposerActions />
-            </>
+          topLeading={
+            <ModelSelect value={sessionModelId} onChange={handleModelChange} />
           }
+          leadingActions={<ComposerActions />}
           tokenUsage={{
             // 「下次请求估算 / ctx 上限」—— 用 lastInputTokens 作为代理：
             // 这是上一轮 LLM 真实计数，下一轮 input 约等于这个（用户新输入

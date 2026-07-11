@@ -119,6 +119,9 @@ export function LauncherHome() {
             技能/连应用/权限 + 上传 + 发送）+ 下方目标选择器行 */}
         <div className="w-full rounded-2xl bg-(--shell-sidebar) p-2.5">
           <ChatInput
+            topLeading={
+              <ModelSelect value={modelConfigId} onChange={setModelConfigId} />
+            }
             value={draft}
             onChange={setDraft}
             onSend={(text) => void handleSend(text)}
@@ -127,9 +130,6 @@ export function LauncherHome() {
             leadingActions={<ComposerActions />}
           />
           <ComposerTargetBar
-            trailing={
-              <ModelSelect value={modelConfigId} onChange={setModelConfigId} />
-            }
             selectedDeviceId={targetDeviceId}
             onSelectDevice={setTargetDeviceId}
           />

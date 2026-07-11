@@ -21,8 +21,6 @@ interface ComposerTargetBarProps {
    * 供发送逻辑判断本次发送应走本地 createSession 还是 L3 远程 run。 */
   selectedDeviceId: string | null;
   onSelectDevice: (id: string) => void;
-  /** 行内追加的兄弟选择器（如模型选择），与设备/工作空间同一行排布。 */
-  trailing?: React.ReactNode;
 }
 
 /**
@@ -34,7 +32,6 @@ interface ComposerTargetBarProps {
 export function ComposerTargetBar({
   selectedDeviceId,
   onSelectDevice,
-  trailing,
 }: ComposerTargetBarProps) {
   const t = useTranslations("composer");
   const devices = useAtomValue(devicesAtom);
@@ -98,8 +95,6 @@ export function ComposerTargetBar({
         {t("workspaceDefault")}
         <ChevronRight className="h-3 w-3 opacity-60" />
       </button>
-
-      {trailing}
     </div>
   );
 }
