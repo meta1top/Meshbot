@@ -4,6 +4,7 @@ import { type ResolvedModel, OrgModelConfigService } from "@meshbot/main";
 import { initChatModel } from "langchain/chat_models/universal";
 import type { ToolCallChunk } from "@langchain/core/messages/tool";
 import {
+  extractReasoningDelta,
   toLangchainMessages,
   toModelParams,
   toOpenAIChunk,
@@ -92,9 +93,18 @@ export class ModelGatewayService {
       if (chunkUsage) {
         usage = chunkUsage;
       }
-      if (content || toolCalls) {
+      // 思考增量归一提取（contentBlocks 标准视图优先，additional_kwargs 兜底）。
+      // 纯思考帧也要下发——reasoning 模型的前半程只有思考没有 content/toolCalls，
+      // 原条件会把整段思考静默吞掉。
+      const reasoning = extractReasoningDelta(chunk as never);
+      if (content || toolCalls || reasoning) {
         yield toOpenAIChunk(
-          { ...(firstDelta ? { role: "assistant" } : {}), content, toolCalls },
+          {
+            ...(firstDelta ? { role: "assistant" } : {}),
+            ...(reasoning ? { reasoning } : {}),
+            content,
+            toolCalls,
+          },
           req.model,
           id,
         );

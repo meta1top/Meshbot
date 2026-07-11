@@ -1,5 +1,6 @@
 import {
   AIMessage,
+  type AIMessageChunk,
   type BaseMessage,
   HumanMessage,
   SystemMessage,
@@ -10,6 +11,24 @@ import {
   parseToolCall,
 } from "@langchain/core/output_parsers/openai_tools";
 import type { OpenAIChatRequest } from "@meshbot/types";
+
+/**
+ * 从各厂商 chunk/message 归一提取思考增量。
+ * 读序：① contentBlocks 标准视图里 type:"reasoning"（1.x 跨厂商统一：DeepSeek/
+ * Anthropic 实测在此路）② 兜底 additional_kwargs.reasoning_content（DeepSeek 兼容
+ * 路；双路同时存在时只取 ①，防重复）。
+ */
+export function extractReasoningDelta(msg: AIMessage | AIMessageChunk): string {
+  let fromBlocks = "";
+  for (const block of msg.contentBlocks ?? []) {
+    if (block.type === "reasoning" && typeof block.reasoning === "string") {
+      fromBlocks += block.reasoning;
+    }
+  }
+  if (fromBlocks) return fromBlocks;
+  const ak = msg.additional_kwargs?.reasoning_content;
+  return typeof ak === "string" ? ak : "";
+}
 
 /** OpenAI messages → langchain BaseMessage[]。 */
 export function toLangchainMessages(req: OpenAIChatRequest): BaseMessage[] {
@@ -84,6 +103,10 @@ export function toOpenAICompletion(msg: AIMessage, model: string, id: string) {
         message: {
           role: "assistant",
           content: textOf(msg.content),
+          // 非流式同样带思考过程（字段语义同 toOpenAIChunk 的 delta.reasoning_content）。
+          ...(extractReasoningDelta(msg)
+            ? { reasoning_content: extractReasoningDelta(msg) }
+            : {}),
           // langchain tool_calls 是 {name,args,id} 顶层形状，OpenAI 响应要 {id,type,function:{name,arguments<string>}}——
           // 同样用 langchain 自带转换（C-1 的镜像），否则端侧 SDK 读不到 .function，工具调用丢失。
           ...(msg.tool_calls?.length
@@ -103,7 +126,12 @@ export function toOpenAICompletion(msg: AIMessage, model: string, id: string) {
 
 /** 流式 delta → OpenAI chat.completion.chunk。 */
 export function toOpenAIChunk(
-  delta: { role?: string; content?: string; toolCalls?: unknown },
+  delta: {
+    role?: string;
+    content?: string;
+    toolCalls?: unknown;
+    reasoning?: string;
+  },
   model: string,
   id: string,
 ) {
@@ -120,6 +148,10 @@ export function toOpenAIChunk(
           // 把 chunk 建成 AIMessageChunk（后续无 role 的帧沿用该角色）；缺 role 会
           // 退化成 generic ChatMessageChunk，被消费方的 instanceof AIMessageChunk 丢弃。
           ...(delta.role ? { role: delta.role } : {}),
+          // OpenAI 官方 chat completions 无思考字段（OpenAI 不下发思考原文）；
+          // reasoning_content 是 DeepSeek 开头、多家跟进、端侧 ChatOpenAI 1.x
+          // 原生解析的行业事实标准扩展。标准客户端会忽略未知字段。
+          ...(delta.reasoning ? { reasoning_content: delta.reasoning } : {}),
           ...(delta.content != null ? { content: delta.content } : {}),
           ...(delta.toolCalls ? { tool_calls: delta.toolCalls } : {}),
         },

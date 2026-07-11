@@ -119,6 +119,49 @@ describe("ModelGatewayService", () => {
     );
   });
 
+  it("流式：纯 reasoning 帧也下发（reasoning_content），role 落在首个思考帧", async () => {
+    orgSvc.resolveDecrypted.mockResolvedValue({
+      providerType: "deepseek",
+      model: "deepseek-reasoner",
+      baseUrl: null,
+      apiKey: "sk-x",
+      contextWindow: null,
+    });
+    (initChatModel as jest.Mock).mockResolvedValue({
+      stream: async function* () {
+        yield new AIMessageChunk({
+          content: "",
+          additional_kwargs: { reasoning_content: "想一下" },
+        });
+        yield new AIMessageChunk({ content: "答案" });
+      },
+    });
+
+    const frames: any[] = [];
+    for await (const f of service.stream(
+      "o1",
+      {
+        model: "m1",
+        messages: [{ role: "user", content: "hi" }],
+        stream: true,
+      },
+      "id1",
+    )) {
+      frames.push(f);
+    }
+    const deltas = frames
+      .map((f) => f.choices?.[0]?.delta)
+      .filter((d) => d && Object.keys(d).length > 0);
+    // 首帧 = 纯思考帧：带 role + reasoning_content（端侧 ChatOpenAI 1.x 原生解析此形态）
+    expect(deltas[0].role).toBe("assistant");
+    expect(deltas[0].reasoning_content).toBe("想一下");
+    expect(deltas[0].tool_calls).toBeUndefined();
+    // 次帧 = 正文帧：无 role、无 reasoning_content
+    expect(deltas[1].content).toBe("答案");
+    expect(deltas[1].role).toBeUndefined();
+    expect(deltas[1].reasoning_content).toBeUndefined();
+  });
+
   it("流式：逐 chunk yield OpenAI 帧 + 末尾 usage 帧", async () => {
     orgSvc.resolveDecrypted.mockResolvedValue({
       providerType: "openai",

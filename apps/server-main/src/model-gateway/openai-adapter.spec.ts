@@ -1,9 +1,11 @@
 import {
   AIMessage,
+  AIMessageChunk,
   HumanMessage,
   SystemMessage,
 } from "@langchain/core/messages";
 import {
+  extractReasoningDelta,
   toLangchainMessages,
   toModelParams,
   toOpenAIChunk,
@@ -161,6 +163,37 @@ describe("openai-adapter", () => {
       });
       expect(out).toEqual({ temperature: 0.2 });
       expect(out).not.toHaveProperty("tools");
+    });
+  });
+  describe("extractReasoningDelta", () => {
+    it("contentBlocks 的 reasoning 优先（Anthropic 形态：仅 blocks 路）", () => {
+      const chunk = new AIMessageChunk({
+        content: [{ type: "reasoning", reasoning: "想一下" } as never],
+      });
+      expect(extractReasoningDelta(chunk)).toBe("想一下");
+    });
+
+    it("DeepSeek 双路只取 contentBlocks 一路，不重复", () => {
+      // ChatDeepSeek 1.1.5 实测：additional_kwargs 与 contentBlocks 同时携带
+      const chunk = new AIMessageChunk({
+        content: [{ type: "reasoning", reasoning: "想" } as never],
+        additional_kwargs: { reasoning_content: "想" },
+      });
+      expect(extractReasoningDelta(chunk)).toBe("想");
+    });
+
+    it("仅 additional_kwargs 路时兜底取用", () => {
+      const chunk = new AIMessageChunk({
+        content: "",
+        additional_kwargs: { reasoning_content: "兜底思考" },
+      });
+      expect(extractReasoningDelta(chunk)).toBe("兜底思考");
+    });
+
+    it("无思考时返回空串", () => {
+      expect(extractReasoningDelta(new AIMessageChunk({ content: "hi" }))).toBe(
+        "",
+      );
     });
   });
 });
