@@ -1,8 +1,9 @@
 import { AppError, CommonErrorCode } from "@meshbot/common";
-import type {
-  AgentModelConfig,
-  OrgModelConfigInput,
-  OrgModelConfigView,
+import {
+  type AgentModelConfig,
+  type OrgModelConfigInput,
+  type OrgModelConfigView,
+  resolveContextWindow,
 } from "@meshbot/types";
 import { Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -50,7 +51,8 @@ export class OrgModelConfigService {
         model: input.model,
         apiKeyEnc: this.crypto.encrypt(input.apiKey),
         baseUrl: input.baseUrl ?? "",
-        contextWindow: input.contextWindow ?? 128_000,
+        // 用户显式值 > MODEL_SPECS 查表 > 128k 兜底（resolveContextWindow 内建优先级）
+        contextWindow: resolveContextWindow(input.model, input.contextWindow),
         enabled: input.enabled ?? true,
       }),
     );
@@ -68,8 +70,14 @@ export class OrgModelConfigService {
     if (input.providerType !== undefined) row.providerType = input.providerType;
     if (input.model !== undefined) row.model = input.model;
     if (input.baseUrl !== undefined) row.baseUrl = input.baseUrl;
-    if (input.contextWindow !== undefined)
+    // contextWindow 语义：本次请求显式传值 → 用户值优先；只改 model 不传
+    // contextWindow → 按新 model 重查 specs（库里旧值是"上次解析结果"，不享有
+    // 用户优先级——否则手填一次后永远无法回到自动解析）。
+    if (input.contextWindow !== undefined) {
       row.contextWindow = input.contextWindow;
+    } else if (input.model !== undefined) {
+      row.contextWindow = resolveContextWindow(input.model, undefined);
+    }
     if (input.enabled !== undefined) row.enabled = input.enabled;
     if (input.apiKey) row.apiKeyEnc = this.crypto.encrypt(input.apiKey);
     return this.toView(await this.configRepo.save(row));

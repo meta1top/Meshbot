@@ -1,3 +1,4 @@
+import { resolveContextWindow } from "@meshbot/types";
 import { CommonErrorCode } from "@meshbot/common";
 import { SecretCryptoService } from "./secret-crypto.service";
 import { OrgModelConfigService } from "./org-model-config.service";
@@ -47,6 +48,48 @@ describe("OrgModelConfigService", () => {
     contextWindow: 200000,
     enabled: true,
   };
+
+  it("create 不传 contextWindow：主流模型按 MODEL_SPECS 解析，未知模型 128k 兜底", async () => {
+    const rows: OrgModelConfig[] = [];
+    const svc = new OrgModelConfigService(makeRepo(rows) as never, crypto);
+    // 命中 specs（deepseek-chat 在 MODEL_SPECS 里且非 128000）
+    await svc.create("o1", {
+      ...input,
+      model: "deepseek-chat",
+      contextWindow: undefined,
+    });
+    expect(rows[0].contextWindow).toBe(
+      resolveContextWindow("deepseek-chat", undefined),
+    );
+    expect(rows[0].contextWindow).not.toBe(128_000 + 1); // 防误写：确为查表值
+    // 未知模型 → 兜底 128k
+    await svc.create("o1", {
+      ...input,
+      model: "totally-unknown-x",
+      contextWindow: undefined,
+    });
+    expect(rows[1].contextWindow).toBe(128_000);
+  });
+
+  it("create 显式 contextWindow 优先于 specs；update 改 model 后重解析", async () => {
+    const rows: OrgModelConfig[] = [];
+    const svc = new OrgModelConfigService(makeRepo(rows) as never, crypto);
+    await svc.create("o1", {
+      ...input,
+      model: "deepseek-chat",
+      contextWindow: 999_000,
+    });
+    expect(rows[0].contextWindow).toBe(999_000);
+    // update 只改 model 不传 contextWindow → 按新 model 重查 specs（库里旧值
+    // 是"上次解析结果"，不享有用户优先级——否则手填一次永远回不到自动解析）
+    await svc.update("o1", rows[0].id, { model: "gpt-4o" });
+    expect(rows[0].contextWindow).toBe(
+      resolveContextWindow("gpt-4o", undefined),
+    );
+    // update 显式传 contextWindow → 用户值优先
+    await svc.update("o1", rows[0].id, { contextWindow: 555_000 });
+    expect(rows[0].contextWindow).toBe(555_000);
+  });
 
   it("create 加密入库,listForAdmin 打码,listForAgent 不含厂商 key", async () => {
     const rows: OrgModelConfig[] = [];

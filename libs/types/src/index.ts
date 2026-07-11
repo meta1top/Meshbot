@@ -74,6 +74,13 @@ export type {
   OrgModelConfigView,
 } from "./model-config/model-config.types";
 export {
+  FALLBACK_CONTEXT_WINDOW,
+  getModelSpec,
+  MODEL_SPECS,
+  type ModelSpec,
+  resolveContextWindow,
+} from "./model-config/model-specs";
+export {
   type OpenAIChatRequest,
   openAIChatRequestSchema,
 } from "./model-gateway/openai-chat.schema";
