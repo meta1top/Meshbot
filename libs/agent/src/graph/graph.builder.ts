@@ -1,4 +1,4 @@
-import { type BaseMessage, RemoveMessage } from "@langchain/core/messages";
+import type { BaseMessage } from "@langchain/core/messages";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 import { END, START, StateGraph } from "@langchain/langgraph";
 import type { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
@@ -37,11 +37,15 @@ export function mergeMessages(
   x: BaseMessage[],
   y: BaseMessage[],
 ): BaseMessage[] {
+  // 结构判定而非 instanceof：core 1.x 双构建（ESM/CJS）下跨模块系统的
+  // RemoveMessage 类不同源，instanceof 会假阴性（同 graph-runner 的
+  // isAIMessageChunk 改造）；core 1.x 未导出 isRemoveMessage guard，用 _getType。
+  const isRemove = (m: BaseMessage): boolean => m._getType() === "remove";
   const removeIds = new Set<string>();
   for (const m of y) {
-    if (m instanceof RemoveMessage && m.id) removeIds.add(m.id);
+    if (isRemove(m) && m.id) removeIds.add(m.id);
   }
-  const incoming = y.filter((m) => !(m instanceof RemoveMessage));
+  const incoming = y.filter((m) => !isRemove(m));
   const incomingById = new Map<string, BaseMessage>();
   for (const m of incoming) {
     if (m.id) incomingById.set(m.id, m);

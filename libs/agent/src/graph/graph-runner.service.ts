@@ -1,8 +1,12 @@
 import { randomUUID } from "node:crypto";
-import type { BaseMessage } from "@langchain/core/messages";
-import {
+import type {
   AIMessageChunk,
+  BaseMessage,
+  BaseMessageChunk,
+} from "@langchain/core/messages";
+import {
   HumanMessage,
+  isAIMessageChunk,
   RemoveMessage,
   SystemMessage,
 } from "@langchain/core/messages";
@@ -471,7 +475,11 @@ export class GraphRunner {
 
       // messages 模式：payload = [BaseMessage, metadata]
       const messagePart = payload as unknown[];
-      const msg = Array.isArray(messagePart) ? messagePart[0] : messagePart;
+      // 断言为 BaseMessageChunk 仅为满足 isAIMessageChunk 的参数签名；
+      // 真实窄化由下方 isAIMessageChunk 的结构判定完成，非 chunk 会被兜底分支处理。
+      const msg = (
+        Array.isArray(messagePart) ? messagePart[0] : messagePart
+      ) as BaseMessageChunk;
       // 按 metadata.thread_id 过滤外来事件：dispatch_subagent 的子图在父图 tools
       // 节点内部调用，streamMode:"messages" 经 callback 树采集 LLM token，子图的
       // 事件会冒泡进父图的 stream（父消费侧看到子的轮次 → UI 泄漏、llm_calls 双记）。
@@ -485,7 +493,10 @@ export class GraphRunner {
       if (typeof meta?.thread_id === "string" && meta.thread_id !== threadId) {
         continue;
       }
-      if (!(msg instanceof AIMessageChunk)) {
+      // 结构判定而非 instanceof：core 1.x 双构建（ESM/CJS）下，langgraph（ESM）
+      // 重建的 AIMessageChunk 与本包（CJS）require 的类不同源，instanceof 恒 false，
+      // 会把全部流式 chunk 静默丢弃（chunks=0、零输出「正常」结束）。
+      if (!isAIMessageChunk(msg)) {
         // 非 AIMessageChunk（ToolMessage 等）：上面 updates 路径已经把 supervisor 出口
         // flush 过了；这里保留为 backup 兜底，防 updates 事件意外缺失。
         if (currentId !== null && currentAcc !== undefined) {

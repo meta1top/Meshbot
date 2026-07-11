@@ -98,3 +98,16 @@ CommonJS）无法解析 export map（同 memory「@vscode/ripgrep ESM-only 需 j
 把分支 ref 拖回其 stash 前状态，抹掉了我的 commit）。**本工作已迁到独立分支
 `feat/langchain-1x-migration` 隔离**。判回归时若发现 HEAD/文件异常回退，先 `git worktree list`
 + `git rev-parse --abbrev-ref HEAD` 确认没被其他 session 影响。
+
+## S1 修正后的 vitest 失败集合（isAIMessageChunk 修复后，2026-07-11）
+
+基线 9 → **7**，每条进出可归因：
+
+- **-3 治愈**（graph-runner：逐 chunk / usage / resumeStream）——根因与生产 bug 同源：
+  instanceof AIMessageChunk 在 core 1.x ESM/CJS 双构建下恒 false，改
+  isAIMessageChunk() 结构判定后测试与生产一并恢复。
+- **+1 新增**（graph-runner：同一轮 messageId 收口为雪花）——mock 的 BaseChatModel
+  走 handleLLMNewToken 旧通道，1.x 基类包装时 chunk.id 丢失 → 每 chunk randomUUID
+  被判两轮。**生产路径已探针证实 id 保留、单轮正确**（真实流全 chunk 同
+  chatcmpl-… id）。与 supervisor×2 同属 mock 机制错位，S2 修测试 mock。
+- 其余 6（agent.module×4 + supervisor×2）与基线一致。
