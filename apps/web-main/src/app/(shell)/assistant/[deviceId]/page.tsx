@@ -72,7 +72,9 @@ export default function AssistantDevicePage() {
                         <span
                           className={cn(
                             "h-2 w-2 shrink-0 rounded-full",
-                            online ? "bg-green-500" : "bg-muted-foreground/40",
+                            online
+                              ? "bg-[#16a34a]"
+                              : "bg-(--shell-sidebar-fg)/30",
                           )}
                         />
                         {online ? tDevices("online") : tDevices("offline")}
