@@ -41,6 +41,11 @@ export {
   formatTime,
   type MessageRowMeta,
 } from "./message-rows";
+export { PresenceCache } from "./presence-cache";
+export {
+  bridgeImSocketEvents,
+  type ImSocketLike,
+} from "./socket-event-bridge";
 export {
   ImEventHub,
   type ImTransport,
