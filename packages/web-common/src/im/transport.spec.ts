@@ -19,8 +19,7 @@ describe("ImEventHub", () => {
       conversationId: "conv-1",
       content: "test",
       senderId: "user-1",
-      senderType: "user",
-      createdAt: new Date(),
+      createdAt: "2026-01-01T00:00:00.000Z",
     };
 
     const callback1 = jest.fn();
@@ -41,8 +40,7 @@ describe("ImEventHub", () => {
       conversationId: "conv-1",
       content: "test",
       senderId: "user-1",
-      senderType: "user",
-      createdAt: new Date(),
+      createdAt: "2026-01-01T00:00:00.000Z",
     };
 
     const callback = jest.fn();
@@ -63,8 +61,7 @@ describe("ImEventHub", () => {
       conversationId: "conv-1",
       content: "test",
       senderId: "user-1",
-      senderType: "user",
-      createdAt: new Date(),
+      createdAt: "2026-01-01T00:00:00.000Z",
     };
 
     const presence: PresenceState = {
@@ -98,8 +95,7 @@ describe("ImEventHub", () => {
       conversationId: "conv-1",
       content: "test",
       senderId: "user-1",
-      senderType: "user",
-      createdAt: new Date(),
+      createdAt: "2026-01-01T00:00:00.000Z",
     };
 
     const errorCallback = jest.fn(() => {
