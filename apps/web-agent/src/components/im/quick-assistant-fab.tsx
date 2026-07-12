@@ -88,7 +88,7 @@ export function QuickAssistantFab() {
       <aside
         ref={asideRef}
         style={{ width: widthCss }}
-        className="app-no-drag absolute top-0 right-0 bottom-0 z-10000 flex flex-col overflow-hidden border-l border-border bg-(--shell-content) shadow-2xl"
+        className="app-no-drag absolute top-0 right-0 bottom-0 z-10000 flex flex-col overflow-hidden border-l border-border bg-(--shell-content) shadow-[-8px_0_24px_-12px_rgba(0,0,0,0.18)]"
       >
         {/* 左缘拖拽手柄（贴面板左内缘，避免被 overflow-hidden 裁掉） */}
         <button

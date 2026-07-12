@@ -95,7 +95,7 @@ function ShellInner({ children }: { children: ReactNode }) {
             aria-hidden={!hasArtifact}
             style={{ width: widthStyle }}
             className={cn(
-              "app-no-drag absolute top-0 right-0 bottom-0 z-10000 flex flex-col overflow-hidden border-l border-border bg-(--shell-content) shadow-2xl transition-transform duration-200",
+              "app-no-drag absolute top-0 right-0 bottom-0 z-10000 flex flex-col overflow-hidden border-l border-border bg-(--shell-content) shadow-[-8px_0_24px_-12px_rgba(0,0,0,0.18)] transition-transform duration-200",
               hasArtifact ? "translate-x-0" : "translate-x-full",
             )}
           >
