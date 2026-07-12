@@ -6,6 +6,7 @@
     "loading": "Loading…"
   },
   "appShell": {
+    "newMessage": "New Message",
     "rail": {
       "assistant": "Assistant",
       "messages": "Messages",
@@ -13,6 +14,13 @@
       "drive": "Files",
       "flows": "Flows",
       "settings": "Settings"
+    },
+    "userMenu": {
+      "orgSwitcher": "Switch Organization",
+      "orgAndMembers": "Organization & Members",
+      "models": "Model Management",
+      "devices": "Device Management",
+      "logout": "Log Out"
     }
   },
   "shellStub": {

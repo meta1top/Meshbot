@@ -6,6 +6,7 @@
     "loading": "加载中…"
   },
   "appShell": {
+    "newMessage": "发起消息",
     "rail": {
       "assistant": "助手",
       "messages": "消息",
@@ -13,6 +14,13 @@
       "drive": "文件",
       "flows": "流程",
       "settings": "设置"
+    },
+    "userMenu": {
+      "orgSwitcher": "切换组织",
+      "orgAndMembers": "组织与成员",
+      "models": "模型管理",
+      "devices": "设备管理",
+      "logout": "登出"
     }
   },
   "shellStub": {
