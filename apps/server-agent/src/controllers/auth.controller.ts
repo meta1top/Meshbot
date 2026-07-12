@@ -9,6 +9,7 @@ import {
   Query,
 } from "@nestjs/common";
 
+import { renderAuthorizeResultPage } from "./authorize-result.page";
 import { AuthorizeCompleteDto, AuthorizePollDto } from "../dto/auth.dto";
 import { Public } from "../guards/jwt-auth.guard";
 import { CloudAuthService } from "../services/cloud-auth.service";
@@ -43,9 +44,9 @@ export class AuthController {
   ): Promise<string> {
     try {
       await this.deviceAuthorize.complete(requestId, code);
-      return "<!doctype html><meta charset='utf-8'><title>meshbot</title><p>授权成功，请关闭此页并返回 meshbot。</p>";
+      return renderAuthorizeResultPage("success");
     } catch {
-      return "<!doctype html><meta charset='utf-8'><title>meshbot</title><p>授权失败或已过期，请回到 meshbot 重试。</p>";
+      return renderAuthorizeResultPage("failure");
     }
   }
 
