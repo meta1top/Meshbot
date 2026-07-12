@@ -13,6 +13,8 @@ const DEV_AGENT_URL = "http://localhost:3001";
 app.setName(APP_NAME);
 
 let mainWindow: BrowserWindow | null = null;
+/** cmd+Q 退出标记：mac 点关闭按钮仅隐藏窗口（保留页面状态），退出时才真 close。 */
+let isQuitting = false;
 
 function createWindow(agentUrl: string) {
   const win = new BrowserWindow({
@@ -34,6 +36,14 @@ function createWindow(agentUrl: string) {
       contextIsolation: true,
       preload: path.join(__dirname, "preload.js"),
     },
+  });
+
+  // mac 惯例：关闭按钮只隐藏窗口（Dock 重开原样恢复页面状态），cmd+Q 才退出。
+  win.on("close", (e) => {
+    if (process.platform === "darwin" && !isQuitting) {
+      e.preventDefault();
+      win.hide();
+    }
   });
 
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -112,10 +122,16 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  isQuitting = true;
   stopAgentRuntime();
 });
 
 app.on("activate", async () => {
+  // 关闭按钮只是 hide——优先恢复既有窗口（页面状态原样保留）。
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show();
+    return;
+  }
   if (BrowserWindow.getAllWindows().length === 0) {
     // 与 whenReady 同样兜底：startAgentRuntime 已幂等（复用既有 runtime），
     // 但重建窗口链路仍可能抛错，需捕获避免 UnhandledPromiseRejection。

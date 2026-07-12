@@ -27,7 +27,9 @@ export function ArtifactSplitPane() {
     t("artifactUntitled");
   return (
     <div className="flex h-full flex-col bg-(--shell-content)">
-      <div className="flex h-13 shrink-0 items-center gap-2 border-b border-border px-3">
+      {/* drag-handle：产物面板盖在拖拽条之上（z-10000 app-no-drag），标题栏
+          自己声明可拖；下载/关闭按钮 app-no-drag 凿洞。 */}
+      <div className="drag-handle flex h-13 shrink-0 items-center gap-2 border-b border-border px-3">
         <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground">
           {title}
         </span>
@@ -41,7 +43,7 @@ export function ArtifactSplitPane() {
               name: title,
             })
           }
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="app-no-drag flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
         >
           <Download className="h-3.5 w-3.5" />
         </button>
@@ -49,7 +51,7 @@ export function ArtifactSplitPane() {
           type="button"
           title={t("artifactClose")}
           onClick={() => setPreviewArtifact(null)}
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="app-no-drag flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
         >
           <X className="h-3.5 w-3.5" />
         </button>
