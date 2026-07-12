@@ -33,25 +33,28 @@ function buildMainImTransport(): ImTransport {
 
   bridgeImSocketEvents(socket, hub, presenceCache);
 
-  let pingTimer: ReturnType<typeof setInterval> | null = null;
-  const stopPing = () => {
-    if (pingTimer) {
-      clearInterval(pingTimer);
-      pingTimer = null;
-    }
+  // 每次（重）连接成功都重新上报在线（对齐 im-relay-client.service.ts 的 connect 处理：
+  // 覆盖首次建连竞态 + 断线重连场景）。构建时 socket 可能已处于连接态（单例复用场景，
+  // 例如先访问 /settings/devices 再切 /messages）：同一 onConnect 立即补跑一次
+  //（照 use-global-events.ts 的 `if (socket.connected) onConnect()` 先例），
+  // 而非只在 "connect" 事件回调里处理，否则永远等不到这次事件。
+  const onConnect = () => {
+    socket.emit(IM_WS_EVENTS.presenceSet, { online: true });
   };
-  socket.on("connect", () => {
-    socket.emit(IM_WS_EVENTS.presenceSet, { online: true });
-    stopPing();
-    pingTimer = setInterval(() => {
+  socket.on("connect", onConnect);
+  if (socket.connected) onConnect();
+
+  // keepalive：定时器构建时无条件启动（不依赖 "connect" 事件回调触发），避免
+  // transport 构建时 socket 已连接导致定时器永不启动、45s presence TTL 到期后
+  // 在线态熄灭；回调内判断 socket.connected 才真正发送 ping（对齐
+  // im-relay-client.service.ts 的 keepalive 模式）。transport 是页面级单例、
+  // 随整个浏览器 tab 生命周期常驻（ImTransport 接口无 dispose 语义，
+  // `cached` 永不重置），故不清理该定时器。
+  setInterval(() => {
+    if (socket.connected) {
       socket.emit(IM_WS_EVENTS.ping);
-    }, PING_INTERVAL_MS);
-  });
-  socket.on("disconnect", stopPing);
-  // 创建时 socket 可能已处于连接态（单例复用场景）：补发一次上线上报。
-  if (socket.connected) {
-    socket.emit(IM_WS_EVENTS.presenceSet, { online: true });
-  }
+    }
+  }, PING_INTERVAL_MS);
 
   return {
     listConversations: async () =>

@@ -14,6 +14,7 @@ import {
   type ConversationListLabels,
   type CreateChannelInput,
   DmPicker,
+  type ImTransport,
   MessageFlow,
   MessageInput,
 } from "@meshbot/web-common/im";
@@ -204,7 +205,18 @@ export function MessagesView() {
   const id = searchParams.get("id");
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const transport = useMemo(() => createMainImTransport(), []);
+  // transport 单例的构建（getImSocket() 内部会立即建立 socket.io 连接）是真实
+  // 副作用，不能放渲染期的 useMemo 里跑（渲染可能被打断/重复执行，会开出多余
+  // 连接）；挪进 useEffect + useState 持有，对齐 useDevicePresenceSync 的
+  // "socket 相关工作只在 effect 里做" 先例。挂载前 transport 为 null，
+  // 下游 effect/回调据此短路等待；首帧渲染分支见下方各处既有的
+  // loading/骨架态（conversationsLoading/historyLoading 初始即为 true，
+  // 天然覆盖 transport 未就绪的首帧，无需新增专门分支）。
+  const [transport, setTransport] = useState<ImTransport | null>(null);
+  useEffect(() => {
+    setTransport(createMainImTransport());
+  }, []);
+
   const { data: profile } = useProfile();
   const meUserId = profile?.user?.id ?? "";
   const orgId = profile?.activeOrg?.id ?? null;
@@ -234,8 +246,10 @@ export function MessagesView() {
     currentConversation.type === "channel" &&
     currentConversation.visibility === "private";
 
-  // 首屏拉取会话列表（一次）。
+  // 首屏拉取会话列表（一次）；transport 未就绪（挂载首帧）先不跑，
+  // 待 transport 建好后 deps 变化会自动补跑一次。
   useEffect(() => {
+    if (!transport) return;
     let cancelled = false;
     setConversationsLoading(true);
     void transport
@@ -256,8 +270,9 @@ export function MessagesView() {
     currentIdRef.current = id;
   }, [id]);
 
-  // 订阅实时事件（稳定订阅一次）+ presence 初始快照。
+  // 订阅实时事件（稳定订阅一次）+ presence 初始快照；transport 未就绪先不订阅。
   useEffect(() => {
+    if (!transport) return;
     setPresence(Object.fromEntries(transport.presenceSnapshot()));
     return transport.subscribe({
       onMessage: (m) => {
@@ -295,6 +310,7 @@ export function MessagesView() {
       setHistoryError(false);
       return;
     }
+    if (!transport) return; // transport 未就绪：保持 historyLoading=true，待 transport 建好重跑
     let cancelled = false;
     setMessages([]);
     setHistoryLoading(true);
@@ -330,7 +346,7 @@ export function MessagesView() {
   }, [id, transport]);
 
   const loadMoreHistory = useCallback(async () => {
-    if (!id) return;
+    if (!id || !transport) return;
     if (!hasMoreRef.current || loadingMoreRef.current) return;
     const cursor = oldestIdRef.current;
     if (!cursor) return;
@@ -368,14 +384,14 @@ export function MessagesView() {
 
   const handleSend = useCallback(
     (text: string) => {
-      if (!id) return;
+      if (!id || !transport) return;
       void transport.send(id, text);
     },
     [id, transport],
   );
 
   const loadMembers = useCallback(async () => {
-    if (!currentConversation || !isPrivateChannel) return;
+    if (!currentConversation || !isPrivateChannel || !transport) return;
     try {
       setMembers(await transport.listChannelMembers(currentConversation.id));
     } catch {
@@ -400,7 +416,7 @@ export function MessagesView() {
 
   const handleAddMember = useCallback(
     async (userId: string) => {
-      if (!currentConversation) return;
+      if (!currentConversation || !transport) return;
       await transport.addChannelMember(currentConversation.id, userId);
       await loadMembers();
     },
@@ -408,7 +424,7 @@ export function MessagesView() {
   );
 
   const handleLeave = useCallback(async () => {
-    if (!currentConversation) return;
+    if (!currentConversation || !transport) return;
     const leftId = currentConversation.id;
     await transport.leaveChannel(leftId);
     setConversations((prev) => prev.filter((c) => c.id !== leftId));
@@ -417,6 +433,7 @@ export function MessagesView() {
 
   const handleCreateChannel = useCallback(
     async (input: CreateChannelInput) => {
+      if (!transport) return;
       const conv = await transport.createChannel(
         input.name,
         input.memberIds ?? [],
@@ -430,6 +447,7 @@ export function MessagesView() {
 
   const handlePickDm = useCallback(
     async (userId: string) => {
+      if (!transport) return;
       const conv = await transport.createDm(userId);
       setConversations((prev) => upsertConversation(prev, conv));
       router.push(`/messages?id=${conv.id}`);
