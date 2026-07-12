@@ -28,6 +28,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { areaFromPath } from "@/lib/area-from-path";
 import { clearMainToken } from "@/lib/auth-storage";
+import { resetMainImTransport } from "@/lib/im-transport";
 import { useProfile } from "@/rest/auth";
 import { useSwitchOrg } from "@/rest/org";
 
@@ -59,10 +60,16 @@ export function WorkspaceSidebar({
     window.location.href = "/login";
   };
 
-  /** 切换活跃组织：`useSwitchOrg` 成功后自身会重签 token + 全量失效查询。 */
+  /** 切换活跃组织：`useSwitchOrg` 成功后自身会重签 token + 全量失效查询；这里额外
+   * 重置 IM transport 单例——`WorkspaceSidebar` 常驻整个 shell（不像 `/messages`
+   * 页会随路由卸载/挂载），是切组织这一刻唯一可靠的触发点，否则旧组织房间的
+   * socket 会一直挂着，回到 `/messages` 时会话列表也不会跟着刷新。 */
   const handleSwitchOrg = (orgId: string) => {
     if (orgId === activeOrg?.id || switchOrgMutation.isPending) return;
-    switchOrgMutation.mutate({ orgId });
+    switchOrgMutation.mutate(
+      { orgId },
+      { onSuccess: () => resetMainImTransport() },
+    );
   };
 
   const initial = (user?.displayName ?? user?.email ?? "?")

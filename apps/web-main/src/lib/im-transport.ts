@@ -12,10 +12,15 @@ import {
   PresenceCache,
 } from "@meshbot/web-common/im";
 import { mainApi } from "./api";
-import { getImSocket } from "./im-socket";
+import { disconnectImSocket, getImSocket } from "./im-socket";
 
 /** server-agent 每 ~20s 发一次 ping 续期 presence TTL（45s）；web-main 无 relay，自己按同频率续。 */
 const PING_INTERVAL_MS = 20_000;
+
+/** keepalive 定时器句柄：`resetMainImTransport()` 重建 transport 前清掉旧的，
+ * 避免每次切组织重建都新开一个永不停止的 zombie interval（旧 socket 已断连，
+ * 定时器里的 `socket.connected` 判断永远为 false，但定时器本身仍会一直触发）。 */
+let keepaliveTimer: ReturnType<typeof setInterval> | null = null;
 
 /**
  * web-main 云协同前端的 `ImTransport` 实现：REST 直连 server-main `ImController`
@@ -47,10 +52,11 @@ function buildMainImTransport(): ImTransport {
   // keepalive：定时器构建时无条件启动（不依赖 "connect" 事件回调触发），避免
   // transport 构建时 socket 已连接导致定时器永不启动、45s presence TTL 到期后
   // 在线态熄灭；回调内判断 socket.connected 才真正发送 ping（对齐
-  // im-relay-client.service.ts 的 keepalive 模式）。transport 是页面级单例、
-  // 随整个浏览器 tab 生命周期常驻（ImTransport 接口无 dispose 语义，
-  // `cached` 永不重置），故不清理该定时器。
-  setInterval(() => {
+  // im-relay-client.service.ts 的 keepalive 模式）。transport 随浏览器 tab 内
+  // 一次「登录会话」常驻，但会因切组织被 `resetMainImTransport()` 重建
+  // （见下），故构建前先清掉上一份定时器，防止旧句柄常驻。
+  if (keepaliveTimer) clearInterval(keepaliveTimer);
+  keepaliveTimer = setInterval(() => {
     if (socket.connected) {
       socket.emit(IM_WS_EVENTS.ping);
     }
@@ -124,4 +130,16 @@ let cached: ImTransport | null = null;
 export function createMainImTransport(): ImTransport {
   if (!cached) cached = buildMainImTransport();
   return cached;
+}
+
+/** 断开并清空当前 transport 单例（socket + keepalive 定时器 + 缓存的事件桥/presence）；
+ * 切组织后调用，否则旧 socket 停在旧 org 房间、会话列表不会跟着刷新。
+ * 调用后 `createMainImTransport()` 会用当下的浏览器 token（已重签为新组织）重建一份全新连接。 */
+export function resetMainImTransport(): void {
+  if (keepaliveTimer) {
+    clearInterval(keepaliveTimer);
+    keepaliveTimer = null;
+  }
+  disconnectImSocket();
+  cached = null;
 }

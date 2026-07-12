@@ -25,7 +25,10 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSidebarSlot } from "@/components/shell/sidebar-slot-context";
-import { createMainImTransport } from "@/lib/im-transport";
+import {
+  createMainImTransport,
+  resetMainImTransport,
+} from "@/lib/im-transport";
 import { useProfile } from "@/rest/auth";
 import { useMembers } from "@/rest/org";
 
@@ -205,6 +208,10 @@ export function MessagesView() {
   const id = searchParams.get("id");
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const { data: profile } = useProfile();
+  const meUserId = profile?.user?.id ?? "";
+  const orgId = profile?.activeOrg?.id ?? null;
+
   // transport 单例的构建（getImSocket() 内部会立即建立 socket.io 连接）是真实
   // 副作用，不能放渲染期的 useMemo 里跑（渲染可能被打断/重复执行，会开出多余
   // 连接）；挪进 useEffect + useState 持有，对齐 useDevicePresenceSync 的
@@ -212,14 +219,17 @@ export function MessagesView() {
   // 下游 effect/回调据此短路等待；首帧渲染分支见下方各处既有的
   // loading/骨架态（conversationsLoading/historyLoading 初始即为 true，
   // 天然覆盖 transport 未就绪的首帧，无需新增专门分支）。
+  // deps 带上 orgId：切组织后 `WorkspaceSidebar.handleSwitchOrg` 已经 reset 过
+  // 一次单例，这里在 orgId 变化时再 reset+create 一次，兜住「切组织时本页未挂载，
+  // 之后才导航回 /messages」这一路径——此时上面那次 reset 早已发生，这里的
+  // reset 是幂等 no-op，真正起作用的是紧接着的 create 用当下（已重签）的 token
+  // 建一份新连接。
   const [transport, setTransport] = useState<ImTransport | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: orgId 是「重建触发器」，effect 本身不直接读它，只借它的变化去 reset+create transport 单例
   useEffect(() => {
+    resetMainImTransport();
     setTransport(createMainImTransport());
-  }, []);
-
-  const { data: profile } = useProfile();
-  const meUserId = profile?.user?.id ?? "";
-  const orgId = profile?.activeOrg?.id ?? null;
+  }, [orgId]);
 
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [conversationsLoading, setConversationsLoading] = useState(true);
@@ -322,8 +332,14 @@ export function MessagesView() {
     void transport
       .listMessages(id)
       .then((page) => {
-        if (cancelled) return;
-        setMessages(page.messages);
+        if (cancelled) return; // 会话已切走（effect 已重跑/卸载）：迟到响应直接丢弃，不写入当前状态
+        // 按 id 去重合并而非硬替换：REST 窗口期内 WS onMessage 可能已经把实时
+        // 消息追加进 messages（刚点开会话对方就发言），历史页在前、窗口期新
+        // 消息在后，保持时序不丢消息。
+        setMessages((prev) => {
+          const seen = new Set(page.messages.map((m) => m.id));
+          return [...page.messages, ...prev.filter((m) => !seen.has(m.id))];
+        });
         oldestIdRef.current = page.messages[0]?.id ?? null;
         hasMoreRef.current = page.hasMore;
         setHasMore(page.hasMore);
