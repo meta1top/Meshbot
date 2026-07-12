@@ -4,10 +4,7 @@ import {
   Alert,
   AlertDescription,
   Button,
-  Card,
-  CardContent,
   CardDescription,
-  CardHeader,
   CardTitle,
   cn,
   Input,
@@ -28,10 +25,10 @@ import { useAcceptInvitation, useCreateOrg } from "@/rest/org";
 type Mode = "create" | "join";
 
 /**
- * `/authorize` 无组织引导：已登录但 `profile.activeOrg == null` 时渲染，
- * 提供「建组织」/「粘贴邀请码」两个入口（并排卡片切换，非独立路由）。
- * 任一成功后调用方（父页面）靠 profile invalidate 自动重新渲染确认卡片，
- * 此组件不自行处理"成功后"跳转。
+ * `/authorize` 向导「组织」步：已登录但 `profile.activeOrg == null` 时渲染，
+ * 提供「建组织」/「粘贴邀请码」两个入口（并排 tab 切换，非独立路由）。
+ * 任一成功后调用方（父页面）靠 profile invalidate 自动重新渲染，向导推进到下一步。
+ * 本组件仅内容——外层卡片（`AuthCard`）与顶部 `WizardSteps` 由父层渲染。
  */
 export function OrgOnboarding() {
   const t = useTranslations("authorize");
@@ -66,12 +63,12 @@ export function OrgOnboarding() {
   };
 
   return (
-    <Card className="w-full max-w-[420px] border-0 shadow-none">
-      <CardHeader className="space-y-1">
+    <div>
+      <div className="space-y-1 pb-3">
         <CardTitle>{t("onboarding.title")}</CardTitle>
         <CardDescription>{t("onboarding.description")}</CardDescription>
-      </CardHeader>
-      <CardContent className="pt-0">
+      </div>
+      <div>
         {/* 模式切换：建组织 / 粘贴邀请码 */}
         <div className="mb-4 grid grid-cols-2 gap-1 rounded-md bg-muted p-1">
           <button
@@ -153,7 +150,7 @@ export function OrgOnboarding() {
             </Button>
           </Form>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

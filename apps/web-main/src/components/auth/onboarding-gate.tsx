@@ -1,5 +1,6 @@
 "use client";
 
+import { Card } from "@meshbot/design";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { useState } from "react";
@@ -120,7 +121,11 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
     case "org":
       return (
         <div className="mx-auto flex min-h-full max-w-xl flex-col justify-center overflow-y-auto px-4">
-          <OrgOnboarding />
+          {/* OrgOnboarding 本身仅内容（供 /authorize 套 AuthCard 视觉）——
+              这里是非授权链的全局引导门，独立补一层卡片视觉，还原改造前观感。 */}
+          <Card className="w-full max-w-[420px] border-0 p-6 shadow-none">
+            <OrgOnboarding />
+          </Card>
         </div>
       );
     case "error":

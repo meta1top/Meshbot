@@ -89,7 +89,8 @@
       "model": "模型",
       "device": "设备授权"
     },
-    "chainBanner": "完成后将继续为你的设备授权"
+    "chainBanner": "完成后将继续为你的设备授权",
+    "chainBannerDevice": "完成后将继续为「{deviceName}」授权"
   },
   "authorize": {
     "backToDesktop": "请回到 MeshBot 桌面端重新发起登录。",
@@ -116,8 +117,10 @@
     "finishing": "正在完成授权…",
     "confirm": {
       "title": "设备请求接入",
-      "description": "设备 {deviceName}（{platform}）请求接入你的账号，当前组织：{orgName}",
+      "subtitle": "请确认以下设备信息后继续",
       "unknownPlatform": "未知平台",
+      "platformLine": "平台：{platform}",
+      "orgLine": "组织：{orgName}",
       "approve": "授权",
       "approving": "授权中...",
       "deny": "拒绝",
@@ -148,6 +151,24 @@
       "join": "加入组织",
       "joining": "加入中...",
       "joinFailed": "加入组织失败，请检查邀请码"
+    },
+    "model": {
+      "title": "添加一个模型",
+      "description": "为组织配置至少一个模型，团队成员即可开始使用 Agent。",
+      "presetCustom": "自定义",
+      "fieldModel": "模型",
+      "fieldModelPlaceholder": "模型名称",
+      "fieldApiKey": "API Key",
+      "fieldBaseUrl": "Base URL",
+      "fieldBaseUrlPlaceholder": "https://...",
+      "fieldNameOptional": "配置名称（选填）",
+      "fieldNameHint": "留空将自动使用模型名称",
+      "fieldNamePlaceholder": "例如：DeepSeek 生产环境",
+      "contextWindowHint": "上下文窗口将按模型自动识别，可稍后在设置中调整",
+      "create": "创建并继续",
+      "creating": "创建中...",
+      "skip": "暂时跳过",
+      "createFailed": "创建模型配置失败，请重试"
     }
   },
   "settings": {
