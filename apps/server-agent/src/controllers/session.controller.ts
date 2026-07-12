@@ -114,6 +114,7 @@ export class SessionController {
       byMessage[msgId] = {
         providerType: c.providerType,
         model: c.model,
+        modelName: c.modelName ?? undefined,
         inputTokens: c.inputTokens,
         outputTokens: c.outputTokens,
         totalTokens: c.totalTokens,

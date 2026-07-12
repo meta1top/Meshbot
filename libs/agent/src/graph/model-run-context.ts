@@ -5,7 +5,7 @@ interface ModelRunStore {
   /** per-run 模型覆盖：ModelConfig id；null=用当前启用配置。 */
   modelConfigId: string | null;
   /** 本 run 最近一次解析出的模型 meta（usage 标注用，run 间互不串）。 */
-  meta: { providerType: string; model: string } | null;
+  meta: { providerType: string; model: string; modelName?: string } | null;
 }
 
 /**
@@ -30,13 +30,21 @@ export class ModelRunContext {
   }
 
   /** 写入本 run 解析出的模型 meta。 */
-  setMeta(meta: { providerType: string; model: string }): void {
+  setMeta(meta: {
+    providerType: string;
+    model: string;
+    modelName?: string;
+  }): void {
     const store = this.als.getStore();
     if (store) store.meta = meta;
   }
 
   /** 本 run 的模型 meta；无上下文返回 null。 */
-  getMeta(): { providerType: string; model: string } | null {
+  getMeta(): {
+    providerType: string;
+    model: string;
+    modelName?: string;
+  } | null {
     return this.als.getStore()?.meta ?? null;
   }
 }

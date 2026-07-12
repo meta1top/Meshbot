@@ -22,6 +22,10 @@ export class LlmCall extends SnowflakeBaseEntity {
   @Column({ type: "varchar" })
   model!: string;
 
+  /** 调用时的模型配置显示名快照（云网关行 model 列是配置 id，改名/删除后靠它回显）。 */
+  @Column({ name: "model_name", type: "varchar", nullable: true })
+  modelName!: string | null;
+
   @Column({ name: "input_tokens", type: "integer", default: 0 })
   inputTokens!: number;
 

@@ -27,7 +27,11 @@ import type { ModelProvider } from "./nodes/supervisor.node";
  */
 @Injectable()
 export class ModelResolver {
-  private modelMeta: { providerType: string; model: string };
+  private modelMeta: {
+    providerType: string;
+    model: string;
+    modelName?: string;
+  };
   private readonly modelCache = new Map<string, BaseChatModel>();
   private readonly overrideProvider?: ModelProvider;
   private readonly cloudTokenByAccount = new Map<string, string>();
@@ -37,7 +41,8 @@ export class ModelResolver {
     private readonly account: AccountContextService,
     private readonly runCtx: ModelRunContext,
     @Optional() overrideProvider?: ModelProvider,
-    @Optional() overrideMeta?: { providerType: string; model: string },
+    @Optional()
+    overrideMeta?: { providerType: string; model: string; modelName?: string },
     @Optional()
     @Inject(CLOUD_TOKEN_PORT)
     private readonly cloudTokenPort?: CloudTokenPort,
@@ -84,7 +89,7 @@ export class ModelResolver {
   }
 
   /** 当前 run 的模型 meta（run 上下文优先；无上下文回落共享字段——title 等旁路径）。 */
-  getMeta(): { providerType: string; model: string } {
+  getMeta(): { providerType: string; model: string; modelName?: string } {
     return this.runCtx.getMeta() ?? this.modelMeta;
   }
 
@@ -112,7 +117,12 @@ export class ModelResolver {
     if (!cfg) {
       throw new Error("当前账号没有启用的模型配置，请先在设置中配置模型");
     }
-    const meta = { providerType: cfg.providerType, model: cfg.model };
+    const meta = {
+      providerType: cfg.providerType,
+      model: cfg.model,
+      // 显示名快照：usage 观测存名字而非仅 id，改名/删除后历史仍可读
+      modelName: cfg.name,
+    };
     this.modelMeta = meta;
     this.runCtx.setMeta(meta);
     await this.refreshCloudToken(acct, cfg);

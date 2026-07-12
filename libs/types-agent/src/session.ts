@@ -194,6 +194,8 @@ const TokenBreakdownSchema = z.object({
 export const MessageUsageSchema = TokenBreakdownSchema.extend({
   providerType: z.string(),
   model: z.string(),
+  /** 调用时的模型配置显示名快照——改名/删除后历史仍显示当时名称；快照前的历史行无。 */
+  modelName: z.string().optional(),
   durationMs: z.number(),
 });
 export type MessageUsage = z.infer<typeof MessageUsageSchema>;

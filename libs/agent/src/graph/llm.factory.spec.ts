@@ -130,6 +130,7 @@ describe("createChatModel：云模型分支", () => {
       const model = await createChatModel(
         {
           providerType: "openai-compatible",
+          name: "测试模型",
           model: "gpt-4o",
           apiKey: "__cloud__",
           baseUrl: "http://gw.test/api/v1",
@@ -158,6 +159,7 @@ describe("createChatModel：本地轨 provider 白名单", () => {
     await expect(
       createChatModel({
         providerType: "anthropic",
+        name: "测试模型",
         model: "claude-sonnet-4-5",
         apiKey: "sk-ant-fake",
         baseUrl: "",
@@ -170,6 +172,7 @@ describe("createChatModel：本地轨 provider 白名单", () => {
     await expect(
       createChatModel({
         providerType: "deepseek",
+        name: "测试模型",
         model: "deepseek-chat",
         apiKey: "sk-fake",
         baseUrl: "",
@@ -182,6 +185,7 @@ describe("createChatModel：本地轨 provider 白名单", () => {
     await expect(
       createChatModel({
         providerType: "openai",
+        name: "测试模型",
         model: "gpt-4o",
         apiKey: "sk-fake",
         baseUrl: "",
@@ -192,6 +196,7 @@ describe("createChatModel：本地轨 provider 白名单", () => {
     await expect(
       createChatModel({
         providerType: "openai-compatible",
+        name: "测试模型",
         model: "deepseek-chat",
         apiKey: "sk-fake",
         baseUrl: "https://api.deepseek.com/v1",

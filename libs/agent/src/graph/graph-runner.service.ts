@@ -428,6 +428,7 @@ export class GraphRunner {
           messageId: currentSid,
           providerType: this.modelResolver.getMeta().providerType,
           model: this.modelResolver.getMeta().model,
+          modelName: this.modelResolver.getMeta().modelName,
           inputTokens: extracted.inputTokens,
           outputTokens: extracted.outputTokens,
           totalTokens: extracted.totalTokens,

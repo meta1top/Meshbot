@@ -92,7 +92,8 @@ export function AssistantMessageActions({
           <TooltipContent>
             <div className="space-y-0.5 text-xs">
               <div>
-                {resolveModelName(modelConfigs, usage.model) ??
+                {usage.modelName ??
+                  resolveModelName(modelConfigs, usage.model) ??
                   t("usage.deletedModel")}
               </div>
               <div>

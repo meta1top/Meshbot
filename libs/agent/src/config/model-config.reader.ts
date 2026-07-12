@@ -14,6 +14,8 @@ export const CLOUD_GATEWAY_API_KEY_PLACEHOLDER = "__cloud__";
 export interface ActiveModelConfig {
   providerType: string;
   model: string;
+  /** 配置显示名——usage 观测的模型名快照来源（改名/删除后历史仍显示当时名称）。 */
+  name: string;
   apiKey: string;
   baseUrl: string;
   /**
@@ -43,7 +45,7 @@ export function readActiveModelConfig(
   try {
     const row = db
       .prepare(
-        `SELECT provider_type, model, api_key, base_url
+        `SELECT provider_type, model, name, api_key, base_url
          FROM model_configs WHERE cloud_user_id = ? AND enabled = 1
          ORDER BY created_at ASC LIMIT 1`,
       )
@@ -51,6 +53,7 @@ export function readActiveModelConfig(
       | {
           provider_type: string;
           model: string;
+          name: string;
           api_key: string;
           base_url: string;
         }
@@ -59,6 +62,7 @@ export function readActiveModelConfig(
     return {
       providerType: row.provider_type,
       model: row.model,
+      name: row.name,
       apiKey: row.api_key,
       baseUrl: row.base_url,
       isCloudModel: row.api_key === CLOUD_GATEWAY_API_KEY_PLACEHOLDER,
@@ -81,13 +85,14 @@ export function readModelConfigById(
   try {
     const row = db
       .prepare(
-        `SELECT provider_type, model, api_key, base_url
+        `SELECT provider_type, model, name, api_key, base_url
          FROM model_configs WHERE cloud_user_id = ? AND id = ? LIMIT 1`,
       )
       .get(cloudUserId, id) as
       | {
           provider_type: string;
           model: string;
+          name: string;
           api_key: string;
           base_url: string;
         }
@@ -96,6 +101,7 @@ export function readModelConfigById(
     return {
       providerType: row.provider_type,
       model: row.model,
+      name: row.name,
       apiKey: row.api_key,
       baseUrl: row.base_url,
       isCloudModel: row.api_key === CLOUD_GATEWAY_API_KEY_PLACEHOLDER,
