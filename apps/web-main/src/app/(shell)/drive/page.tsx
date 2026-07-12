@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 export default function DrivePage() {
   const t = useTranslations("shellStub");
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-(--shell-content)">
+    <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-(--shell-content)">
       <div className="flex h-full items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-center">
           <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-(--shell-accent)/12 text-(--shell-accent)">
