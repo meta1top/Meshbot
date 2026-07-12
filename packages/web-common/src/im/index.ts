@@ -10,3 +10,8 @@ export {
   formatTime,
   type MessageRowMeta,
 } from "./message-rows";
+export {
+  ImEventHub,
+  type ImTransport,
+  type ImTransportEvents,
+} from "./transport";
