@@ -433,12 +433,38 @@
   "messages": {
     "title": "Messages",
     "empty": {
-      "title": "Pick an Agent to start chatting",
-      "description": "Select a device Agent conversation on the left, or start a new one from the top-right."
-    }
+      "title": "Pick a conversation to start chatting",
+      "description": "Select a channel or direct message on the left, or start a new one from the top-right."
+    },
+    "online": "Online",
+    "loading": "Loading…",
+    "inputPlaceholder": "Send a message…",
+    "privateChannelMembers": "Members",
+    "privateChannelAddMember": "Add member",
+    "privateChannelNoMoreMembers": "No more members to add",
+    "privateChannelLeave": "Leave channel",
+    "privateChannelLeaving": "Leaving…",
+    "privateChannelLeaveConfirm": "Leave \"{name}\"? You won't be able to see messages in this channel anymore.",
+    "channelCancel": "Cancel",
+    "newChannel": "New channel",
+    "channelNameLabel": "Channel name",
+    "channelNamePlaceholder": "Channel name",
+    "channelVisibilityLabel": "Channel type",
+    "channelVisibilityPublic": "Public",
+    "channelVisibilityPrivate": "Private",
+    "channelInitialMembers": "Initial members (optional)",
+    "channelNoMembers": "No other members in this organization",
+    "channelCreate": "Create",
+    "channelCreating": "Creating…",
+    "newDm": "New direct message",
+    "pickMember": "Start a direct message",
+    "dmEmpty": "No other members in this organization"
   },
   "messagesSidebar": {
     "title": "Messages",
+    "newMessage": "New message",
+    "channels": "Channels",
+    "directMessages": "Direct Messages",
     "newDm": "New conversation",
     "agentDms": "Device Agents",
     "empty": "No conversations yet",
@@ -460,13 +486,15 @@
     "agentFallback": "Device Agent",
     "today": "Today",
     "yesterday": "Yesterday",
+    "copy": "Copy",
     "historyError": "Failed to load message history, please try again",
     "emptyTitle": "No messages yet",
-    "emptyDescription": "Send {agent} a message to start the conversation",
+    "emptyDescription": "Send a message to start the conversation",
     "loadingMore": "Loading earlier messages…"
   },
   "chatInput": {
     "placeholder": "Type a message…",
-    "send": "Send"
+    "send": "Send",
+    "attachment": "Attachment"
   }
 }
