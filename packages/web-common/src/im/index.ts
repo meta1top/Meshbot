@@ -1,4 +1,9 @@
 export {
+  ConversationList,
+  type ConversationListLabels,
+  type ConversationListProps,
+} from "./conversation-list";
+export {
   ImMessageList,
   type ImMessageListLabels,
   type ImMessageListProps,
