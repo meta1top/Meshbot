@@ -54,6 +54,7 @@ export {
 } from "./components/ui/form";
 export { Label } from "./components/ui/label";
 export { Progress } from "./components/ui/progress";
+export { Skeleton } from "./components/ui/skeleton";
 export {
   Table,
   TableBody,

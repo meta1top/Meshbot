@@ -9,6 +9,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  Skeleton,
 } from "@meshbot/design";
 import { AuthCard } from "@meshbot/web-common/shell";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -235,14 +236,30 @@ function AuthorizeFlow() {
     );
   }
 
-  // profile 加载中 / 未登录跳转中 / 设备请求加载中 —— 统一 loading 态。
+  // profile 加载中 / 未登录跳转中 / 设备请求加载中 —— 统一 loading 态：卡片骨架贴近真实内容布局。
   if (profile.isPending || !authenticated || deviceAuthQuery.isPending) {
     return (
       <div
         role="status"
         aria-label={commonT("loading")}
-        className="h-8 w-8 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-foreground"
-      />
+        className="w-full max-w-[420px]"
+      >
+        <AuthCard className="flex flex-col gap-3">
+          <Skeleton className="h-5 w-32" />
+          <Skeleton className="h-4 w-56" />
+          <div className="flex gap-3 rounded-xl border border-border/60 p-3">
+            <Skeleton className="h-9 w-9 rounded-lg" />
+            <div className="flex flex-1 flex-col gap-2">
+              <Skeleton className="h-3.5 w-40" />
+              <Skeleton className="h-3 w-28" />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-10 flex-1 rounded-lg" />
+            <Skeleton className="h-10 flex-1 rounded-lg" />
+          </div>
+        </AuthCard>
+      </div>
     );
   }
 
