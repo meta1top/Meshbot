@@ -7,6 +7,7 @@ import {
   IM_RELAY_EVENTS,
   type ImRelayDeviceQueryRequestEvent,
 } from "../cloud/im-relay.events";
+import { RemoteArtifactService } from "./remote-artifact.service";
 import { SessionMessageService } from "./session-message.service";
 import { SessionService } from "./session.service";
 
@@ -23,6 +24,7 @@ export class RemoteQueryInboundService {
   constructor(
     private readonly sessions: SessionService,
     private readonly messages: SessionMessageService,
+    private readonly artifacts: RemoteArtifactService,
     private readonly relay: ImRelayClientService,
     private readonly account: AccountContextService,
   ) {}
@@ -42,6 +44,18 @@ export class RemoteQueryInboundService {
         let data: unknown;
         if (forwarded.kind === "sessions") {
           data = await this.sessions.listAllSorted();
+        } else if (forwarded.kind === "artifact-file") {
+          // 跨设备产物预览：白名单（本会话 present_file 呈现过）+ 2MB 内联上限。
+          data = await this.artifacts.read(
+            forwarded.params.sessionId ?? "",
+            forwarded.params.filePath ?? "",
+          );
+        } else if (forwarded.kind === "artifact-upload-drive") {
+          // 大文件路径：上传组织网盘，A 侧换 presigned URL 预览。
+          data = await this.artifacts.uploadToDrive(
+            forwarded.params.sessionId ?? "",
+            forwarded.params.filePath ?? "",
+          );
         } else if (forwarded.kind === "patch-session-model") {
           // 写操作:改会话绑定模型。modelConfigId 是云端配置 id(本地行 id 与
           // 之同源,跨设备一致),SessionService.patch 内校验存在性与账号归属。

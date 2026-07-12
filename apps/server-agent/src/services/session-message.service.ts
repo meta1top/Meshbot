@@ -137,6 +137,36 @@ export class SessionMessageService {
   }
 
   /**
+   * 判断某会话是否用 present_file 呈现过指定工作区相对路径的产物。
+   * 跨设备产物预览的路径白名单——只允许远端读「本会话确实呈现过」的文件，
+   * 杜绝经查询通道任意读取工作区文件。
+   */
+  async hasPresentedFile(sessionId: string, relPath: string): Promise<boolean> {
+    const rows = await this.repo.find({ where: { sessionId } });
+    for (const row of rows) {
+      if (!row.toolCalls?.includes("present_file")) continue;
+      try {
+        const calls = JSON.parse(row.toolCalls) as Array<{
+          name?: unknown;
+          result?: unknown;
+        }>;
+        for (const c of calls) {
+          if (c?.name !== "present_file" || typeof c.result !== "string")
+            continue;
+          const r = JSON.parse(c.result) as {
+            status?: unknown;
+            path?: unknown;
+          };
+          if (r.status === "presented" && r.path === relPath) return true;
+        }
+      } catch {
+        // 单行 toolCalls 解析失败跳过——不影响其余消息判定
+      }
+    }
+    return false;
+  }
+
+  /**
    * 记录一条 assistant 消息（含可选 reasoning / toolCalls）。幂等。
    */
   async recordAssistant(input: RecordAssistantInput): Promise<void> {

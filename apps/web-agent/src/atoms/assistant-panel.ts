@@ -43,6 +43,8 @@ export const assistantPanelTypeAtom = atom<"assistant" | "preview">(
 export interface PreviewArtifact {
   /** server-agent 产物相对路径（apiClient 带 token）。 */
   path?: string;
+  /** 远程设备产物：path 为 B 设备工作区相对路径，经设备查询通道读取。 */
+  remote?: { deviceId: string; sessionId: string };
   /** 网盘 presigned URL（裸 fetch，自带凭证，不带 apiClient token）。 */
   url?: string;
   /** 文件名（presigned 源用它判类型 + 下载名）。 */

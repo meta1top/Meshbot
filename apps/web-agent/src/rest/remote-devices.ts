@@ -147,3 +147,32 @@ export async function patchRemoteSessionModel(
     { modelConfigId },
   );
 }
+
+/** 读远程设备会话产物：≤2MB 内联 base64，超限返回 too-large 信号。 */
+export async function fetchRemoteArtifact(
+  deviceId: string,
+  sessionId: string,
+  path: string,
+): Promise<
+  | { kind: "content"; name: string; base64: string }
+  | { kind: "too-large"; name: string; size: number }
+> {
+  const res = await apiClient.get(
+    `/api/remote-devices/${encodeURIComponent(deviceId)}/artifact`,
+    { params: { sessionId, path } },
+  );
+  return res.data;
+}
+
+/** 远程大产物上传组织网盘（B 设备执行），返回网盘文件引用。 */
+export async function uploadRemoteArtifactToDrive(
+  deviceId: string,
+  sessionId: string,
+  path: string,
+): Promise<{ fileId: string; name: string }> {
+  const res = await apiClient.post(
+    `/api/remote-devices/${encodeURIComponent(deviceId)}/artifact/upload-drive`,
+    { sessionId, path },
+  );
+  return res.data;
+}

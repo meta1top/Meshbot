@@ -71,6 +71,8 @@ export const DeviceQueryKindSchema = z.enum([
   "sessions",
   "history",
   "patch-session-model",
+  "artifact-file",
+  "artifact-upload-drive",
 ]);
 export type DeviceQueryKind = z.infer<typeof DeviceQueryKindSchema>;
 
@@ -86,6 +88,8 @@ export const DeviceQueryRequestSchema = z.object({
       limit: z.number().int().min(1).max(100).optional(),
       /** patch-session-model 用:目标模型配置 id(云端配置 id,跨设备一致)。 */
       modelConfigId: z.string().optional(),
+      /** artifact-file / artifact-upload-drive 用:产物工作区相对路径。 */
+      filePath: z.string().optional(),
     })
     .default({}),
 });

@@ -12,12 +12,14 @@ export function ArtifactFullscreen({
   path,
   url,
   name,
+  remote,
   title,
   onClose,
 }: {
   path?: string;
   url?: string;
   name?: string;
+  remote?: { deviceId: string; sessionId: string };
   title: string;
   onClose: () => void;
 }) {
@@ -53,7 +55,13 @@ export function ArtifactFullscreen({
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
-        <ArtifactBody path={path} url={url} name={name} />
+        <ArtifactBody
+          path={path}
+          url={url}
+          name={name}
+          remote={remote}
+          title={title}
+        />
       </div>
     </div>,
     document.body,

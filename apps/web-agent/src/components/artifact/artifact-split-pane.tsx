@@ -59,6 +59,8 @@ export function ArtifactSplitPane() {
           path={artifact.path}
           url={artifact.url}
           name={artifact.name}
+          remote={artifact.remote}
+          title={artifact.title}
         />
       </div>
     </div>

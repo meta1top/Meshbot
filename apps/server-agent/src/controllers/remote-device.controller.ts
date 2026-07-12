@@ -50,6 +50,33 @@ export class RemoteDeviceController {
     )) as SessionSummary[];
   }
 
+  /** 读目标设备会话产物（≤2MB 内联 base64；超限返回 too-large 信号）。 */
+  @Get("remote-devices/:id/artifact")
+  async artifact(
+    @Param("id") id: string,
+    @Query("sessionId") sessionId: string,
+    @Query("path") filePath: string,
+  ): Promise<unknown> {
+    const acct = this.account.getOrThrow();
+    return this.query.query(acct, id, "artifact-file", {
+      sessionId,
+      filePath,
+    });
+  }
+
+  /** 目标设备大产物上传组织网盘（返回 fileId，本机换 presigned URL 预览）。 */
+  @Post("remote-devices/:id/artifact/upload-drive")
+  async artifactUploadDrive(
+    @Param("id") id: string,
+    @Body() dto: { sessionId: string; path: string },
+  ): Promise<unknown> {
+    const acct = this.account.getOrThrow();
+    return this.query.query(acct, id, "artifact-upload-drive", {
+      sessionId: dto.sessionId,
+      filePath: dto.path,
+    });
+  }
+
   /** 查目标设备某会话的历史消息（支持 before / limit 分页）。 */
   @Get("remote-devices/:id/sessions/:sessionId/history")
   async history(
