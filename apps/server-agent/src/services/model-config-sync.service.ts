@@ -17,6 +17,7 @@ import { EventEmitter2, OnEvent } from "@nestjs/event-emitter";
 import { ACCOUNT_EVENTS } from "../account/account.events";
 import type { AccountRuntimeEvent } from "../account/account.events";
 import { CloudClientService } from "../cloud/cloud-client.service";
+import { AUTH_EVENTS, type AuthorizedEvent } from "./auth.events";
 import {
   IM_RELAY_EVENTS,
   type ImRelayConnectedEvent,
@@ -53,6 +54,15 @@ export class ModelConfigSyncService implements OnApplicationBootstrap {
   async onApplicationBootstrap(): Promise<void> {
     const identities = await this.identity.listLoggedIn();
     for (const id of identities) await this.syncNow(id.cloudUserId);
+  }
+
+  /**
+   * 设备授权完成（登录）：complete() 用 emitAsync 等待本监听器——
+   * 首次模型同步在登录响应返回前完成，桌面端落地即有模型列表。
+   */
+  @OnEvent(AUTH_EVENTS.authorized)
+  async onAuthorized({ cloudUserId }: AuthorizedEvent): Promise<void> {
+    await this.syncNow(cloudUserId);
   }
 
   /** relay WS（重）连成功：追平离线期间的云端模型变更。 */

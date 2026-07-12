@@ -144,24 +144,6 @@
       "join": "加入组织",
       "joining": "加入中...",
       "joinFailed": "加入组织失败，请检查邀请码"
-    },
-    "model": {
-      "title": "添加一个模型",
-      "description": "为组织配置至少一个模型，团队成员即可开始使用 Agent。",
-      "presetCustom": "自定义",
-      "fieldModel": "模型",
-      "fieldModelPlaceholder": "模型名称",
-      "fieldApiKey": "API Key",
-      "fieldBaseUrl": "Base URL",
-      "fieldBaseUrlPlaceholder": "https://...",
-      "fieldNameOptional": "配置名称（选填）",
-      "fieldNameHint": "留空将自动使用模型名称",
-      "fieldNamePlaceholder": "例如：DeepSeek 生产环境",
-      "contextWindowHint": "上下文窗口将按模型自动识别，可稍后在设置中调整",
-      "create": "创建并继续",
-      "creating": "创建中...",
-      "skip": "暂时跳过",
-      "createFailed": "创建模型配置失败，请重试"
     }
   },
   "settings": {
@@ -366,7 +348,8 @@
     "modelBlockedDesc": "请联系组织 owner 配置模型后刷新。",
     "modelLoadErrorTitle": "模型配置加载失败",
     "modelLoadErrorDesc": "加载组织模型配置时出错，请重试。",
-    "refresh": "刷新"
+    "refresh": "刷新",
+    "modelSkip": "跳过，稍后配置"
   },
   "userMenu": {
     "switchOrg": "",

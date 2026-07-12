@@ -201,7 +201,10 @@ export function modelFormValuesToCreateInput(
 export interface ModelFormPanelProps {
   mode: "create" | "edit";
   initial: OrgModelConfigView | null;
-  onCancel: () => void;
+  /** 取消回调；传 null 隐藏取消按钮（onboarding 场景不可跳过时）。 */
+  onCancel: (() => void) | null;
+  /** 取消按钮文案覆盖（onboarding 授权链场景显示「跳过，稍后配置」）。 */
+  cancelLabel?: string;
   onSubmit: (values: ModelFormValues) => Promise<void>;
   submitting: boolean;
   error: string | null;
@@ -309,6 +312,7 @@ export function ModelFormPanel({
   onSubmit,
   submitting,
   error,
+  cancelLabel,
 }: ModelFormPanelProps) {
   const t = useTranslations("models");
   const schema = useSchema(buildFormSchema(mode === "create"));
@@ -350,14 +354,16 @@ export function ModelFormPanel({
             <Button type="submit" disabled={submitting}>
               {submitting ? t("saving") : t("save")}
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onCancel}
-              disabled={submitting}
-            >
-              {t("cancel")}
-            </Button>
+            {onCancel && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onCancel}
+                disabled={submitting}
+              >
+                {cancelLabel ?? t("cancel")}
+              </Button>
+            )}
           </div>
         </Form>
       </CardContent>

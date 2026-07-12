@@ -4,15 +4,20 @@ import { Card, Skeleton } from "@meshbot/design";
 import { AuthCard } from "@meshbot/web-common/shell";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { AuthChainBanner } from "@/components/auth/auth-chain-banner";
 import { AuthShell } from "@/components/auth/auth-shell";
-import { ModelOnboarding } from "@/components/auth/model-onboarding";
 import { resolveOnboardingStep } from "@/components/auth/onboarding-step";
 import { OrgOnboarding } from "@/components/auth/org-onboarding";
+import {
+  ModelFormPanel,
+  type ModelFormValues,
+  modelFormValuesToCreateInput,
+} from "@/components/models/model-form-panel";
+import { ApiError } from "@/lib/api";
 import { clearMainToken } from "@/lib/auth-storage";
 import { useProfile } from "@/rest/auth";
-import { useModelConfigs } from "@/rest/model-config";
+import { useCreateModelConfig, useModelConfigs } from "@/rest/model-config";
 
 /**
  * 统一 onboarding 漏斗（组织 → 模型）：全站唯一的组织/模型引导实现。
@@ -47,6 +52,19 @@ function OnboardingFlow() {
   });
 
   const goNext = () => router.replace(next ?? "/assistant");
+
+  // 模型步（owner）：复用 settings 的完整表单（厂商预设自动填充 + 上下文快捷 chip）。
+  const createModel = useCreateModelConfig(activeOrg?.id ?? "");
+  const [modelError, setModelError] = useState<string | null>(null);
+  const onModelSubmit = async (values: ModelFormValues) => {
+    setModelError(null);
+    try {
+      await createModel.mutateAsync(modelFormValuesToCreateInput(values));
+      goNext();
+    } catch (e) {
+      setModelError(e instanceof ApiError ? e.message : String(e));
+    }
+  };
 
   // 未登录 / 僵尸 token → 登录页，带上本页完整路径以便登录后回来继续。
   useEffect(() => {
@@ -125,19 +143,31 @@ function OnboardingFlow() {
     );
   }
 
+  if (step === "model-owner" && activeOrg) {
+    return (
+      <div className="w-full max-w-[560px]">
+        <AuthChainBanner />
+        <div className="mb-3 text-left">
+          <p className="text-sm font-semibold">{t("modelStepTitle")}</p>
+          <p className="text-xs text-muted-foreground">{t("modelStepDesc")}</p>
+        </div>
+        <ModelFormPanel
+          mode="create"
+          initial={null}
+          onCancel={next != null ? goNext : null}
+          cancelLabel={next != null ? t("modelSkip") : undefined}
+          onSubmit={onModelSubmit}
+          submitting={createModel.isPending}
+          error={modelError}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="w-full max-w-[420px]">
       <AuthChainBanner />
-      <AuthCard>
-        {step === "org" && <OrgOnboarding />}
-        {step === "model-owner" && activeOrg && (
-          <ModelOnboarding
-            orgId={activeOrg.id}
-            onDone={goNext}
-            allowSkip={next != null}
-          />
-        )}
-      </AuthCard>
+      <AuthCard>{step === "org" && <OrgOnboarding />}</AuthCard>
     </div>
   );
 }

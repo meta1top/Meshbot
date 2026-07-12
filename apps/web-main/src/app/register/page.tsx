@@ -30,6 +30,7 @@ import { z } from "zod";
 import { AuthChainBanner } from "@/components/auth/auth-chain-banner";
 import { AuthShell } from "@/components/auth/auth-shell";
 import { ApiError } from "@/lib/api";
+import { resolvePostAuthDestination } from "@/lib/post-auth-destination";
 import { useRegister, useResendCode, useVerifyEmail } from "@/rest/auth";
 
 type RegisterFormValues = RegisterUserInput & { confirmPassword: string };
@@ -114,7 +115,7 @@ function RegisterFlow() {
       setVerifyError(err instanceof ApiError ? err.message : t("verifyFailed"));
       return;
     }
-    router.replace(next ?? "/assistant");
+    router.replace(await resolvePostAuthDestination(next));
   };
 
   const onResend = async () => {

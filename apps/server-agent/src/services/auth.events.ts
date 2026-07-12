@@ -5,3 +5,8 @@ export const AUTH_EVENTS = {
   /** 云端凭据吊销/401：该账号需要重新授权登录（relay connect_error / REST 401 均可触发）。 */
   reauthRequired: "auth.reauth_required",
 } as const;
+
+/** auth.authorized 事件负载。 */
+export interface AuthorizedEvent {
+  cloudUserId: string;
+}

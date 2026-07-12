@@ -12,6 +12,7 @@ import { Suspense, useState } from "react";
 import { AuthChainBanner } from "@/components/auth/auth-chain-banner";
 import { AuthShell } from "@/components/auth/auth-shell";
 import { ApiError } from "@/lib/api";
+import { resolvePostAuthDestination } from "@/lib/post-auth-destination";
 import { useLogin } from "@/rest/auth";
 
 /** 后端 `AUTH_EMAIL_NOT_VERIFIED` 错误码——登录时邮箱未验证，分流去注册页续验证。 */
@@ -45,7 +46,7 @@ function LoginForm() {
       setErrorMessage(err instanceof ApiError ? err.message : t("loginFailed"));
       return;
     }
-    router.replace(next ?? "/assistant");
+    router.replace(await resolvePostAuthDestination(next));
   };
 
   return (

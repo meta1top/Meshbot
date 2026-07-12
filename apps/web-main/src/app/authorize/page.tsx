@@ -314,14 +314,20 @@ function AuthorizeFlow() {
     );
   }
 
-  // 无组织：上方 effect 正在 redirect 到 /onboarding——渲 loading 占位防闪。
+  // 无组织：上方 effect 正在 redirect 到 /onboarding——渲与首载同款骨架防闪且对齐。
   if (activeOrg == null) {
     return (
       <div
         role="status"
         aria-label={commonT("loading")}
-        className="h-8 w-8 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-foreground"
-      />
+        className="w-full max-w-[420px]"
+      >
+        <AuthCard className="flex flex-col gap-3">
+          <Skeleton className="h-5 w-32" />
+          <Skeleton className="h-4 w-56" />
+          <Skeleton className="h-10 w-full rounded-lg" />
+        </AuthCard>
+      </div>
     );
   }
 

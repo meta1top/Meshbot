@@ -144,24 +144,6 @@
       "join": "Join organization",
       "joining": "Joining...",
       "joinFailed": "Failed to join, please check the invitation code"
-    },
-    "model": {
-      "title": "Add a model",
-      "description": "Configure at least one model for your organization so your team can start using the agent.",
-      "presetCustom": "Custom",
-      "fieldModel": "Model",
-      "fieldModelPlaceholder": "Model name",
-      "fieldApiKey": "API Key",
-      "fieldBaseUrl": "Base URL",
-      "fieldBaseUrlPlaceholder": "https://...",
-      "fieldNameOptional": "Config name (optional)",
-      "fieldNameHint": "Leave blank to use the model name",
-      "fieldNamePlaceholder": "e.g. DeepSeek production",
-      "contextWindowHint": "The context window is detected automatically from the model; you can adjust it later in settings",
-      "create": "Create and continue",
-      "creating": "Creating...",
-      "skip": "Skip for now",
-      "createFailed": "Failed to create model config, please try again"
     }
   },
   "settings": {
@@ -366,7 +348,8 @@
     "modelBlockedDesc": "Ask your organization owner to configure a model, then refresh.",
     "modelLoadErrorTitle": "Couldn't load model configuration",
     "modelLoadErrorDesc": "Something went wrong while loading your organization's model configuration. Please retry.",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "modelSkip": "Skip for now"
   },
   "userMenu": {
     "switchOrg": "",

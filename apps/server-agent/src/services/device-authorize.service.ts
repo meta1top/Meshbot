@@ -117,7 +117,12 @@ export class DeviceAuthorizeService {
         token: access_token,
         createdAt: Date.now(),
       });
-      this.emitter.emit(AUTH_EVENTS.authorized, { cloudUserId: ex.user.id });
+      // emitAsync 等待监听器完成——ModelConfigSyncService 借此在登录响应返回前
+      // 完成首次云端模型同步，桌面端拿到 token 时模型列表已就位（免手动刷新）。
+      // 监听器异常不阻塞登录（同步失败有事件链/重连兜底）。
+      await this.emitter
+        .emitAsync(AUTH_EVENTS.authorized, { cloudUserId: ex.user.id })
+        .catch(() => undefined);
       return { access_token };
     } finally {
       this.inFlight.delete(requestId);
