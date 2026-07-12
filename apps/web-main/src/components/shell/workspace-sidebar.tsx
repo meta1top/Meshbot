@@ -190,7 +190,7 @@ export function WorkspaceSidebar({
               {t("userMenu.devices")}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleLogout}>
+            <DropdownMenuItem destructive onClick={handleLogout}>
               {t("userMenu.logout")}
             </DropdownMenuItem>
           </DropdownMenuContent>
