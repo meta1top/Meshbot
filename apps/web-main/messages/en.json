@@ -93,7 +93,7 @@
     },
     "expired": {
       "title": "Authorization request expired",
-      "description": "The authorization request exceeded its 10-minute validity window and has expired."
+      "description": "The authorization request exceeded its 30-minute validity window and has expired."
     },
     "alreadyProcessed": {
       "title": "Request already handled",

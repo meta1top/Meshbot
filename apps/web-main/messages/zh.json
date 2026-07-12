@@ -93,7 +93,7 @@
     },
     "expired": {
       "title": "授权请求已过期",
-      "description": "授权请求超过 10 分钟有效期，已自动失效。"
+      "description": "授权请求超过 30 分钟有效期，已自动失效。"
     },
     "alreadyProcessed": {
       "title": "请求已处理",
