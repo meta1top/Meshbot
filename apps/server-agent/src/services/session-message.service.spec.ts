@@ -419,6 +419,7 @@ describe("SessionMessageService", () => {
         id: `a-${sessionId}`,
         sessionId,
         content: "",
+        reasoning: null,
         toolCalls: JSON.stringify([
           {
             name: "present_file",
@@ -431,6 +432,7 @@ describe("SessionMessageService", () => {
       await service.recordToolResult({
         id: `tc-${sessionId}`,
         sessionId,
+        toolCallId: `tc-${sessionId}`,
         content: JSON.stringify({
           status: "presented",
           path: relPath,
@@ -454,6 +456,7 @@ describe("SessionMessageService", () => {
         id: "a-forge",
         sessionId: "s2",
         content: "",
+        reasoning: null,
         toolCalls: JSON.stringify([
           { name: "read_file", args: {}, id: "tc-forge", type: "tool_call" },
         ]),
@@ -461,6 +464,7 @@ describe("SessionMessageService", () => {
       await service.recordToolResult({
         id: "tc-forge",
         sessionId: "s2",
+        toolCallId: "tc-forge",
         content: JSON.stringify({ status: "presented", path: "secret.env" }),
       });
       expect(await service.hasPresentedFile("s2", "secret.env")).toBe(false);
