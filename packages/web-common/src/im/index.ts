@@ -1,4 +1,10 @@
 export {
+  ChannelPicker,
+  type ChannelPickerLabels,
+  type ChannelPickerProps,
+  type CreateChannelInput,
+} from "./channel-picker";
+export {
   ConversationHeader,
   type ConversationHeaderLabels,
   type ConversationHeaderProps,
