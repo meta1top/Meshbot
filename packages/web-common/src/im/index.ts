@@ -1,4 +1,9 @@
 export {
+  ConversationHeader,
+  type ConversationHeaderLabels,
+  type ConversationHeaderProps,
+} from "./conversation-header";
+export {
   ConversationList,
   type ConversationListLabels,
   type ConversationListProps,
