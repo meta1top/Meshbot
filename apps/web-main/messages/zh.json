@@ -81,6 +81,16 @@
       "passwordNotMatch": "两次输入的密码不一致"
     }
   },
+  "wizard": {
+    "steps": {
+      "account": "创建账号",
+      "verify": "邮箱验证",
+      "org": "组织",
+      "model": "模型",
+      "device": "设备授权"
+    },
+    "chainBanner": "完成后将继续为你的设备授权"
+  },
   "authorize": {
     "backToDesktop": "请回到 MeshBot 桌面端重新发起登录。",
     "requestMissing": {

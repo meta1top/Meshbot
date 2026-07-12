@@ -81,6 +81,16 @@
       "passwordNotMatch": "The two passwords do not match"
     }
   },
+  "wizard": {
+    "steps": {
+      "account": "Create account",
+      "verify": "Verify email",
+      "org": "Organization",
+      "model": "Model",
+      "device": "Device authorization"
+    },
+    "chainBanner": "We'll continue authorizing your device once this is done"
+  },
   "authorize": {
     "backToDesktop": "Please go back to the MeshBot desktop app and start the login again.",
     "requestMissing": {
