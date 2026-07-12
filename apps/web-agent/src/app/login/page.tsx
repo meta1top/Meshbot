@@ -69,8 +69,10 @@ export default function LoginPage() {
   const finishLogin = async (access_token: string) => {
     clearTimers();
     applyAuthToken(access_token);
-    queryClient.invalidateQueries({ queryKey: profileQueryKey });
-    router.replace("/");
+    // 硬跳而非 router.replace：切换账号时内存里的 react-query 缓存 / jotai atom
+    // （会话列表、IM、presence、用量）全是前一账号的数据，软导航会原样残留——
+    // 硬跳整页重载彻底重置（与 reauthRequired 登出路径同一模式）。
+    window.location.href = "/";
   };
 
   const beginPolling = (requestId: string) => {
