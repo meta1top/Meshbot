@@ -67,7 +67,7 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-full min-h-0">
       <SettingsNav />
-      <main className="min-w-0 flex-1 overflow-auto rounded-r-(--shell-radius) bg-(--shell-content) p-6">
+      <main className="min-w-0 flex-1 overflow-hidden rounded-r-(--shell-radius)">
         {children}
       </main>
     </div>

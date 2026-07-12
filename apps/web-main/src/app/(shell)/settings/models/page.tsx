@@ -16,6 +16,7 @@ import {
   TableRow,
 } from "@meshbot/design";
 import type { OrgModelConfigView } from "@meshbot/types";
+import { PageHeader, PageShellView } from "@meshbot/web-common/shell";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
@@ -37,6 +38,7 @@ import {
 /** 组织级模型配置管理页：列表 + 新建/编辑/删除 + enabled 即时开关；非 owner 只读。 */
 export default function ModelsSettingsPage() {
   const t = useTranslations("models");
+  const tSettings = useTranslations("settings");
   const profile = useProfile();
   const activeOrg = profile.data?.activeOrg ?? null;
   const isOwner = activeOrg?.role === "owner";
@@ -131,156 +133,162 @@ export default function ModelsSettingsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      {actionError ? (
-        <Alert variant="destructive">
-          <AlertDescription className="flex items-center justify-between gap-2">
-            <span>{actionError}</span>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setActionError(null)}
-            >
-              {t("dismiss")}
-            </Button>
-          </AlertDescription>
-        </Alert>
-      ) : null}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>{t("title")}</CardTitle>
-          {isOwner ? (
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => {
-                setFormError(null);
-                setPanel("create");
-              }}
-            >
-              {t("create")}
-            </Button>
-          ) : null}
-        </CardHeader>
-        <CardContent>
-          {error ? (
-            <Alert variant="destructive">
-              <AlertDescription>
-                {error instanceof Error ? error.message : t("loadFailed")}
-              </AlertDescription>
-            </Alert>
-          ) : isPending ? (
-            <div className="text-sm text-muted-foreground">{t("loading")}</div>
-          ) : configs.length === 0 ? (
-            <div className="text-sm text-muted-foreground">{t("empty")}</div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("colName")}</TableHead>
-                  <TableHead>{t("colProvider")}</TableHead>
-                  <TableHead>{t("colModel")}</TableHead>
-                  <TableHead>{t("colApiKey")}</TableHead>
-                  <TableHead>{t("colStatus")}</TableHead>
-                  {isOwner ? <TableHead /> : null}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {configs.map((c) => (
-                  <TableRow key={c.id}>
-                    <TableCell>{c.name}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {c.providerType}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {c.model}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs text-muted-foreground">
-                      {c.apiKeyMasked}
-                    </TableCell>
-                    <TableCell>
-                      {isOwner ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={updateConfig.isPending}
-                          onClick={() => toggleEnabled(c)}
-                        >
-                          {c.enabled ? t("statusEnabled") : t("statusDisabled")}
-                        </Button>
-                      ) : c.enabled ? (
-                        t("statusEnabled")
-                      ) : (
-                        t("statusDisabled")
-                      )}
-                    </TableCell>
-                    {isOwner ? (
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setFormError(null);
-                              setPanel(c);
-                            }}
-                          >
-                            {t("edit")}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setDeleteError(null);
-                              setDeleteTarget(c.id);
-                            }}
-                          >
-                            {t("delete")}
-                          </Button>
-                        </div>
-                      </TableCell>
-                    ) : null}
+    <PageShellView header={<PageHeader title={tSettings("nav.models")} />}>
+      <div className="flex flex-col gap-6">
+        {actionError ? (
+          <Alert variant="destructive">
+            <AlertDescription className="flex items-center justify-between gap-2">
+              <span>{actionError}</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setActionError(null)}
+              >
+                {t("dismiss")}
+              </Button>
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>{t("title")}</CardTitle>
+            {isOwner ? (
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  setFormError(null);
+                  setPanel("create");
+                }}
+              >
+                {t("create")}
+              </Button>
+            ) : null}
+          </CardHeader>
+          <CardContent>
+            {error ? (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  {error instanceof Error ? error.message : t("loadFailed")}
+                </AlertDescription>
+              </Alert>
+            ) : isPending ? (
+              <div className="text-sm text-muted-foreground">
+                {t("loading")}
+              </div>
+            ) : configs.length === 0 ? (
+              <div className="text-sm text-muted-foreground">{t("empty")}</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t("colName")}</TableHead>
+                    <TableHead>{t("colProvider")}</TableHead>
+                    <TableHead>{t("colModel")}</TableHead>
+                    <TableHead>{t("colApiKey")}</TableHead>
+                    <TableHead>{t("colStatus")}</TableHead>
+                    {isOwner ? <TableHead /> : null}
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                </TableHeader>
+                <TableBody>
+                  {configs.map((c) => (
+                    <TableRow key={c.id}>
+                      <TableCell>{c.name}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {c.providerType}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {c.model}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">
+                        {c.apiKeyMasked}
+                      </TableCell>
+                      <TableCell>
+                        {isOwner ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={updateConfig.isPending}
+                            onClick={() => toggleEnabled(c)}
+                          >
+                            {c.enabled
+                              ? t("statusEnabled")
+                              : t("statusDisabled")}
+                          </Button>
+                        ) : c.enabled ? (
+                          t("statusEnabled")
+                        ) : (
+                          t("statusDisabled")
+                        )}
+                      </TableCell>
+                      {isOwner ? (
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setFormError(null);
+                                setPanel(c);
+                              }}
+                            >
+                              {t("edit")}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setDeleteError(null);
+                                setDeleteTarget(c.id);
+                              }}
+                            >
+                              {t("delete")}
+                            </Button>
+                          </div>
+                        </TableCell>
+                      ) : null}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
 
-      {isOwner && panel != null ? (
-        <ModelFormPanel
-          // key 强制切换目标（编辑 A → 编辑 B / 切新建）时重挂表单，
-          // 否则 react-hook-form 仍持旧 defaultValues，提交会把 A 的值写进 B
-          key={panel === "create" ? "create" : panel.id}
-          mode={panel === "create" ? "create" : "edit"}
-          initial={panel === "create" ? null : panel}
-          onCancel={closePanel}
-          onSubmit={handleSubmit}
-          submitting={saving}
-          error={formError}
+        {isOwner && panel != null ? (
+          <ModelFormPanel
+            // key 强制切换目标（编辑 A → 编辑 B / 切新建）时重挂表单，
+            // 否则 react-hook-form 仍持旧 defaultValues，提交会把 A 的值写进 B
+            key={panel === "create" ? "create" : panel.id}
+            mode={panel === "create" ? "create" : "edit"}
+            initial={panel === "create" ? null : panel}
+            onCancel={closePanel}
+            onSubmit={handleSubmit}
+            submitting={saving}
+            error={formError}
+          />
+        ) : null}
+
+        <ConfirmDialog
+          open={deleteTarget != null}
+          title={t("deleteConfirmTitle")}
+          description={t("deleteConfirmDescription")}
+          confirmText={t("delete")}
+          cancelText={t("cancel")}
+          loading={deleteConfig.isPending}
+          destructive
+          error={deleteError}
+          onConfirm={() => void confirmDelete()}
+          onCancel={() => {
+            setDeleteTarget(null);
+            setDeleteError(null);
+          }}
         />
-      ) : null}
-
-      <ConfirmDialog
-        open={deleteTarget != null}
-        title={t("deleteConfirmTitle")}
-        description={t("deleteConfirmDescription")}
-        confirmText={t("delete")}
-        cancelText={t("cancel")}
-        loading={deleteConfig.isPending}
-        destructive
-        error={deleteError}
-        onConfirm={() => void confirmDelete()}
-        onCancel={() => {
-          setDeleteTarget(null);
-          setDeleteError(null);
-        }}
-      />
-    </div>
+      </div>
+    </PageShellView>
   );
 }
