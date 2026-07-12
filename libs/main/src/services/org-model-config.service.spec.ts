@@ -49,6 +49,24 @@ describe("OrgModelConfigService", () => {
     enabled: true,
   };
 
+  it("create/update/remove 均发出 org.model-config.changed 事件", async () => {
+    const rows: OrgModelConfig[] = [];
+    const emitter = { emit: jest.fn() };
+    const svc = new OrgModelConfigService(
+      makeRepo(rows) as never,
+      crypto,
+      emitter as never,
+    );
+    await svc.create("o1", input);
+    await svc.update("o1", rows[0].id, { name: "改名" });
+    await svc.remove("o1", rows[0].id);
+    const calls = emitter.emit.mock.calls.filter(
+      ([evt]: [string]) => evt === "org.model-config.changed",
+    );
+    expect(calls).toHaveLength(3);
+    for (const [, payload] of calls) expect(payload).toEqual({ orgId: "o1" });
+  });
+
   it("create 不传 contextWindow：主流模型按 MODEL_SPECS 解析，未知模型 128k 兜底", async () => {
     const rows: OrgModelConfig[] = [];
     const svc = new OrgModelConfigService(makeRepo(rows) as never, crypto);

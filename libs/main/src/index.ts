@@ -45,8 +45,10 @@ export type {
   OrgModelConfigView,
 } from "@meshbot/types";
 export {
-  type ResolvedModel,
+  ORG_MODEL_CONFIG_EVENTS,
+  type OrgModelConfigChangedEvent,
   OrgModelConfigService,
+  type ResolvedModel,
 } from "./services/org-model-config.service";
 export { PresenceService } from "./services/presence.service";
 export { DevicePresenceService } from "./services/device-presence.service";

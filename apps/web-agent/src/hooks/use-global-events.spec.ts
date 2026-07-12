@@ -9,7 +9,11 @@ jest.mock("react", () => ({
 }));
 
 import { AUTH_WS_EVENTS, IM_WS_EVENTS } from "@meshbot/types";
-import { QUICK_ASSISTANT_EVENTS, SCHEDULE_EVENTS } from "@meshbot/types-agent";
+import {
+  MODEL_CONFIG_EVENTS,
+  QUICK_ASSISTANT_EVENTS,
+  SCHEDULE_EVENTS,
+} from "@meshbot/types-agent";
 import { dispatchGlobalEvent } from "./use-global-events";
 
 function makeHandlers() {
@@ -21,6 +25,7 @@ function makeHandlers() {
     onConversationRead: jest.fn(),
     onScheduleFired: jest.fn(),
     onQuickAssistantRenamed: jest.fn(),
+    onModelConfigUpdated: jest.fn(),
     onReauthRequired: jest.fn(),
   };
 }
@@ -40,6 +45,15 @@ describe("dispatchGlobalEvent", () => {
     const payload = { x: 1 };
     dispatchGlobalEvent({ type, payload, ts: 1 }, h);
     expect(h[handlerKey as keyof typeof h]).toHaveBeenCalledWith(payload);
+  });
+
+  it("model-config.updated → onModelConfigUpdated（无参失效信号）", () => {
+    const h = makeHandlers();
+    dispatchGlobalEvent(
+      { type: MODEL_CONFIG_EVENTS.updated, payload: {}, ts: 1 },
+      h,
+    );
+    expect(h.onModelConfigUpdated).toHaveBeenCalled();
   });
 
   it("未知 type → 不抛错、不调用任何 handler", () => {

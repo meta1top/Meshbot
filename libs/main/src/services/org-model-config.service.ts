@@ -5,11 +5,20 @@ import {
   type OrgModelConfigView,
   resolveContextWindow,
 } from "@meshbot/types";
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
 import type { Repository } from "typeorm";
 import { OrgModelConfig } from "../entities/org-model-config.entity";
 import { SecretCryptoService } from "./secret-crypto.service";
+
+/** org 模型配置变更事件（云端进程内）：im.gateway 监听后向 org room 广播。 */
+export const ORG_MODEL_CONFIG_EVENTS = {
+  changed: "org.model-config.changed",
+} as const;
+export interface OrgModelConfigChangedEvent {
+  orgId: string;
+}
 
 /** 网关内部解析结果:归属校验通过后的厂商真实调用参数(apiKey 已解密明文) */
 export interface ResolvedModel {
@@ -29,7 +38,16 @@ export class OrgModelConfigService {
     @InjectRepository(OrgModelConfig)
     private readonly configRepo: Repository<OrgModelConfig>,
     private readonly crypto: SecretCryptoService,
+    // @Optional：生产由全局 EventEmitterModule 注入；单测两参构造仍可用。
+    @Optional() private readonly emitter?: EventEmitter2,
   ) {}
+
+  /** 模型配置变更后发进程内事件（im.gateway 监听 → org room 广播到设备）。 */
+  private emitChanged(orgId: string): void {
+    this.emitter?.emit(ORG_MODEL_CONFIG_EVENTS.changed, {
+      orgId,
+    } satisfies OrgModelConfigChangedEvent);
+  }
 
   /** 管理端列表(apiKey 打码) */
   async listForAdmin(orgId: string): Promise<OrgModelConfigView[]> {
@@ -56,6 +74,7 @@ export class OrgModelConfigService {
         enabled: input.enabled ?? true,
       }),
     );
+    this.emitChanged(orgId);
     return this.toView(row);
   }
 
@@ -80,13 +99,16 @@ export class OrgModelConfigService {
     }
     if (input.enabled !== undefined) row.enabled = input.enabled;
     if (input.apiKey) row.apiKeyEnc = this.crypto.encrypt(input.apiKey);
-    return this.toView(await this.configRepo.save(row));
+    const saved = await this.configRepo.save(row);
+    this.emitChanged(orgId);
+    return this.toView(saved);
   }
 
   /** 删除配置 */
   async remove(orgId: string, id: string): Promise<void> {
     await this.findOwned(orgId, id);
     await this.configRepo.delete({ id });
+    this.emitChanged(orgId);
   }
 
   /**

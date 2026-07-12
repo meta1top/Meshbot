@@ -23,7 +23,11 @@ import { type Socket, io } from "socket.io-client";
 
 import { AgentErrorCode } from "../errors/agent.error-codes";
 import { AUTH_EVENTS } from "../services/auth.events";
-import { IM_RELAY_EVENTS, type ImRelayConnectedEvent } from "./im-relay.events";
+import {
+  IM_RELAY_EVENTS,
+  type ImRelayConnectedEvent,
+  type ImRelayModelConfigChangedEvent,
+} from "./im-relay.events";
 import type { CloudIdentityService } from "../services/cloud-identity.service";
 
 /** socket.io-client 工厂函数类型（方便测试注入伪实现）。 */
@@ -137,6 +141,15 @@ export class ImRelayClientService implements OnModuleDestroy {
           });
         });
       }
+
+      // org 模型配置变更（云端广播的失效信号）→ 桥给 ModelConfigSyncService。
+      socket.on(IM_WS_EVENTS.modelConfigChanged, () => {
+        this.account.run(cloudUserId, () => {
+          this.emitter.emit(IM_RELAY_EVENTS.modelConfigChanged, {
+            cloudUserId,
+          } satisfies ImRelayModelConfigChangedEvent);
+        });
+      });
 
       // L2c 下行：设备查询响应（B→云→A）→ 桥给 RemoteDeviceQueryService.settle。
       socket.on(

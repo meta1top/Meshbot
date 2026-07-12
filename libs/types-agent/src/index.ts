@@ -15,6 +15,7 @@ export * from "./dispatch-subagent";
 export * from "./drive-tools";
 export * from "./im-tools";
 export * from "./llmuse";
+export * from "./model-config.events";
 export * from "./present-file";
 export * from "./quick-assistant";
 export * from "./quick-assistant.events";
