@@ -126,9 +126,17 @@ export function useGlobalEvents(): void {
     };
     const onEvent = (env: GlobalEventEnvelope) =>
       dispatchGlobalEvent(env, handlers);
+    // 连接/重连成功即刷新模型列表：登录完成瞬间 syncNow 的 model-config.updated
+    // 事件可能早于本 socket 建立而被错过（授权后「组织没有模型」假象），
+    // 连接时补一次 invalidate 兜住时序洞（幂等且便宜）。
+    const onConnect = () =>
+      queryClient.invalidateQueries({ queryKey: ["model-configs"] });
     socket.on("event", onEvent);
+    socket.on("connect", onConnect);
+    if (socket.connected) onConnect();
     return () => {
       socket.off("event", onEvent);
+      socket.off("connect", onConnect);
     };
   }, [
     applyIncomingMessage,

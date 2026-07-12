@@ -23,7 +23,6 @@ import {
 } from "@/components/auth/authorize-step";
 import { ModelOnboarding } from "@/components/auth/model-onboarding";
 import { OrgOnboarding } from "@/components/auth/org-onboarding";
-import { type WizardStep, WizardSteps } from "@/components/auth/wizard-steps";
 import { ApiError } from "@/lib/api";
 import { clearMainToken } from "@/lib/auth-storage";
 import { useProfile } from "@/rest/auth";
@@ -33,14 +32,6 @@ import {
   useDeviceAuthRequest,
 } from "@/rest/device-auth";
 import { useModelConfigs } from "@/rest/model-config";
-
-/**
- * `AuthorizeStep` 三态（"org"|"model"|"device"）本就是 `WizardStep` 字面量子集，
- * 恒落在 `includeModel` 对应的 steps 数组内——`WizardSteps` 契约天然满足。
- */
-function stepToWizard(step: AuthorizeStep): WizardStep {
-  return step;
-}
 
 /** 后端「授权请求已过期」错误码（2026）；其余设备授权错误（2025 等）统一按「无效」文案兜底。 */
 const DEVICE_AUTH_EXPIRED_CODE = 2026;
@@ -346,10 +337,6 @@ function AuthorizeFlow() {
   return (
     <div className="w-full max-w-[420px]">
       <AuthChainBanner deviceName={request.deviceName} />
-      <WizardSteps
-        current={stepToWizard(step)}
-        includeModel={activeOrg?.role !== "member"}
-      />
       <AuthCard>
         {step === "org" && <OrgOnboarding />}
 

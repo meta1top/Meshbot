@@ -29,7 +29,6 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { AuthChainBanner } from "@/components/auth/auth-chain-banner";
 import { AuthShell } from "@/components/auth/auth-shell";
-import { WizardSteps } from "@/components/auth/wizard-steps";
 import { ApiError } from "@/lib/api";
 import { useRegister, useResendCode, useVerifyEmail } from "@/rest/auth";
 
@@ -134,10 +133,6 @@ function RegisterFlow() {
       <div className="w-full">
         <AuthCard>
           <AuthChainBanner />
-          <WizardSteps
-            current={step === "verify" ? "verify" : "account"}
-            includeModel
-          />
           {step === "register" && (
             <div>
               <div className="space-y-1 pb-3">

@@ -230,9 +230,6 @@ export default function LoginPage() {
           >
             {starting ? t("starting") : t("browserLoginButton")}
           </Button>
-          <p className="text-[10.5px] leading-relaxed text-(--shell-sidebar-fg)/45">
-            {t("footNote")}
-          </p>
         </>
       )}
 

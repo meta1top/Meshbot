@@ -82,13 +82,6 @@
     }
   },
   "wizard": {
-    "steps": {
-      "account": "Create account",
-      "verify": "Verify email",
-      "org": "Organization",
-      "model": "Model",
-      "device": "Device authorization"
-    },
     "chainBanner": "We'll continue authorizing your device once this is done",
     "chainBannerDevice": "We'll continue authorizing \"{deviceName}\" once this is done"
   },

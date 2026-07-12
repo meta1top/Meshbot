@@ -118,7 +118,11 @@ function LoginForm() {
               <p className="mt-3 text-center text-xs text-muted-foreground">
                 {t("noAccount")}{" "}
                 <Link
-                  href="/register"
+                  href={
+                    next
+                      ? `/register?next=${encodeURIComponent(next)}`
+                      : "/register"
+                  }
                   className="text-(--shell-accent) hover:underline"
                 >
                   {t("goRegister")}

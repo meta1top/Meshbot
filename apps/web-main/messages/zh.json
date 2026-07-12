@@ -82,13 +82,6 @@
     }
   },
   "wizard": {
-    "steps": {
-      "account": "创建账号",
-      "verify": "邮箱验证",
-      "org": "组织",
-      "model": "模型",
-      "device": "设备授权"
-    },
     "chainBanner": "完成后将继续为你的设备授权",
     "chainBannerDevice": "完成后将继续为「{deviceName}」授权"
   },
