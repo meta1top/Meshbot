@@ -17,12 +17,6 @@ import { useTranslations } from "next-intl";
 import { Suspense, useEffect, useState } from "react";
 import { AuthChainBanner } from "@/components/auth/auth-chain-banner";
 import { AuthShell } from "@/components/auth/auth-shell";
-import {
-  type AuthorizeStep,
-  deriveAuthorizeStep,
-} from "@/components/auth/authorize-step";
-import { ModelOnboarding } from "@/components/auth/model-onboarding";
-import { OrgOnboarding } from "@/components/auth/org-onboarding";
 import { ApiError } from "@/lib/api";
 import { clearMainToken } from "@/lib/auth-storage";
 import { useProfile } from "@/rest/auth";
@@ -31,7 +25,6 @@ import {
   useApproveDevice,
   useDeviceAuthRequest,
 } from "@/rest/device-auth";
-import { useModelConfigs } from "@/rest/model-config";
 
 /** 后端「授权请求已过期」错误码（2026）；其余设备授权错误（2025 等）统一按「无效」文案兜底。 */
 const DEVICE_AUTH_EXPIRED_CODE = 2026;
@@ -161,17 +154,8 @@ function AuthorizeFlow() {
     useState<ApproveDeviceResult | null>(null);
   const [approveError, setApproveError] = useState<string | null>(null);
   const [denied, setDenied] = useState(false);
-  // 向导「模型」步跳过标记——owner 点「跳过」也放行到确认卡（见 deriveAuthorizeStep）。
-  const [modelSkipped, setModelSkipped] = useState(false);
 
-  // 模型配置数量仅 owner 且已有组织时才需要查询（member 无写权限，直接跳到确认卡）；
-  // 与 deviceAuthQuery 一样，hook 本身无条件调用，靠传参 null 关闭查询。
   const activeOrg = authenticated ? (profile.data?.activeOrg ?? null) : null;
-  const ownerModelQueryEnabled =
-    activeOrg != null && activeOrg.role === "owner";
-  const ownerModelQuery = useModelConfigs(
-    activeOrg != null && activeOrg.role === "owner" ? activeOrg.id : null,
-  );
 
   // 未登录 / 僵尸 token（success 但 user:null，与 AuthGuard 判定一致）→ 跳登录页，
   // next 带上完整 /authorize?request=<id> 以便登录后跳回。
@@ -182,6 +166,13 @@ function AuthorizeFlow() {
     const next = `/authorize?request=${encodeURIComponent(requestId)}`;
     router.replace(`/login?next=${encodeURIComponent(next)}`);
   }, [profile.isPending, profile.isSuccess, authenticated, requestId, router]);
+
+  // 无组织 → 统一 onboarding 漏斗（组织 → 模型），完成后带 next 回本页继续设备确认。
+  useEffect(() => {
+    if (!authenticated || activeOrg != null || !requestId) return;
+    const self = `/authorize?request=${encodeURIComponent(requestId)}`;
+    router.replace(`/onboarding?next=${encodeURIComponent(self)}`);
+  }, [authenticated, activeOrg, requestId, router]);
 
   // 批准成功且带 redirectUri → 尝试 loopback 重定向；重定向发起后本页即跳转离开，
   // 若跳转失败（本地端口未监听等），用户留在当前页——渲染分支已切到 spinner，
@@ -323,85 +314,75 @@ function AuthorizeFlow() {
     );
   }
 
-  // 组织/模型/确认三步向导——deriveAuthorizeStep 统一分派：
-  // 无组织 → org（OrgOnboarding）；owner 零模型未跳过 → model（ModelOnboarding）；
-  // 其余（含受邀 member 直接跳过模型步）→ device（确认卡）。
-  const step = deriveAuthorizeStep({
-    hasOrg: activeOrg != null,
-    role: activeOrg?.role ?? null,
-    modelCount:
-      ownerModelQuery.data?.length ?? (ownerModelQueryEnabled ? null : 0),
-    modelSkipped,
-  });
+  // 无组织：上方 effect 正在 redirect 到 /onboarding——渲 loading 占位防闪。
+  if (activeOrg == null) {
+    return (
+      <div
+        role="status"
+        aria-label={commonT("loading")}
+        className="h-8 w-8 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-foreground"
+      />
+    );
+  }
 
+  // 设备授权确认——本页唯一职责（组织/模型引导统一在 /onboarding）。
   return (
     <div className="w-full max-w-[420px]">
       <AuthChainBanner deviceName={request.deviceName} />
       <AuthCard>
-        {step === "org" && <OrgOnboarding />}
+        <div>
+          <div className="space-y-1 pb-3">
+            <CardTitle>{t("confirm.title")}</CardTitle>
+            <CardDescription>{t("confirm.subtitle")}</CardDescription>
+          </div>
 
-        {step === "model" && activeOrg && (
-          <ModelOnboarding
-            orgId={activeOrg.id}
-            onDone={() => setModelSkipped(true)}
-          />
-        )}
-
-        {step === "device" && activeOrg && (
-          <div>
-            <div className="space-y-1 pb-3">
-              <CardTitle>{t("confirm.title")}</CardTitle>
-              <CardDescription>{t("confirm.subtitle")}</CardDescription>
-            </div>
-
-            {/* 设备信息结构化小卡：图标 + 设备名/平台/组织三行。 */}
-            <div className="mb-4 flex items-start gap-3 rounded-lg border border-border bg-muted/40 p-3">
-              <span className="text-xl leading-none" aria-hidden>
-                💻
-              </span>
-              <div className="flex flex-col gap-0.5 text-sm">
-                <p className="font-medium text-foreground">
-                  {request.deviceName}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {t("confirm.platformLine", {
-                    platform: request.platform || t("confirm.unknownPlatform"),
-                  })}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {t("confirm.orgLine", { orgName: activeOrg.name })}
-                </p>
-              </div>
-            </div>
-
-            {approveError && (
-              <Alert variant="destructive">
-                <AlertDescription>{approveError}</AlertDescription>
-              </Alert>
-            )}
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                className="flex-1"
-                disabled={approveMutation.isPending}
-                onClick={() => void handleApprove()}
-              >
-                {approveMutation.isPending
-                  ? t("confirm.approving")
-                  : t("confirm.approve")}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="flex-1"
-                disabled={approveMutation.isPending}
-                onClick={() => setDenied(true)}
-              >
-                {t("confirm.deny")}
-              </Button>
+          {/* 设备信息结构化小卡：图标 + 设备名/平台/组织三行。 */}
+          <div className="mb-4 flex items-start gap-3 rounded-lg border border-border bg-muted/40 p-3">
+            <span className="text-xl leading-none" aria-hidden>
+              💻
+            </span>
+            <div className="flex flex-col gap-0.5 text-sm">
+              <p className="font-medium text-foreground">
+                {request.deviceName}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {t("confirm.platformLine", {
+                  platform: request.platform || t("confirm.unknownPlatform"),
+                })}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {t("confirm.orgLine", { orgName: activeOrg.name })}
+              </p>
             </div>
           </div>
-        )}
+
+          {approveError && (
+            <Alert variant="destructive">
+              <AlertDescription>{approveError}</AlertDescription>
+            </Alert>
+          )}
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              className="flex-1"
+              disabled={approveMutation.isPending}
+              onClick={() => void handleApprove()}
+            >
+              {approveMutation.isPending
+                ? t("confirm.approving")
+                : t("confirm.approve")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              disabled={approveMutation.isPending}
+              onClick={() => setDenied(true)}
+            >
+              {t("confirm.deny")}
+            </Button>
+          </div>
+        </div>
       </AuthCard>
     </div>
   );

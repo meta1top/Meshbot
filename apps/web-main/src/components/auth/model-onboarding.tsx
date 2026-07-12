@@ -159,17 +159,19 @@ function ModelPresetPicker({
 }
 
 /**
- * `/authorize` 向导「添加模型」步：owner 且组织零模型时渲染，简化版模型表单
- * （厂商 chip 预设 + model/apiKey/baseUrl/name），提交成功或点「跳过」都调用
- * `onDone`——由父层统一置位 `modelSkipped`，放行到确认卡步骤。
+ * onboarding「添加模型」步：owner 且组织零模型时渲染，简化版模型表单
+ * （厂商 chip 预设 + model/apiKey/baseUrl/name），提交成功调用 `onDone`。
+ * `allowSkip`：授权链场景可「跳过」（授权不需要模型）；shell 场景不可跳过。
  * `contextWindow` 不传，云端 `resolveContextWindow` 按模型自动解析。
  */
 export function ModelOnboarding({
   orgId,
   onDone,
+  allowSkip = true,
 }: {
   orgId: string;
   onDone: () => void;
+  allowSkip?: boolean;
 }) {
   const t = useTranslations("authorize");
   const [presetKey, setPresetKey] = useState<PresetKey>(
@@ -235,15 +237,17 @@ export function ModelOnboarding({
           >
             {createMutation.isPending ? t("model.creating") : t("model.create")}
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="flex-1"
-            onClick={onDone}
-            disabled={createMutation.isPending}
-          >
-            {t("model.skip")}
-          </Button>
+          {allowSkip && (
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              onClick={onDone}
+              disabled={createMutation.isPending}
+            >
+              {t("model.skip")}
+            </Button>
+          )}
         </div>
       </Form>
     </div>
