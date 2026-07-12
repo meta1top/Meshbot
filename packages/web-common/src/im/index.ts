@@ -10,6 +10,11 @@ export {
   type ImMessageSender,
 } from "./im-message-list";
 export {
+  MessageFlow,
+  type MessageFlowLabels,
+  type MessageFlowProps,
+} from "./message-flow";
+export {
   annotateRows,
   dayLabel,
   formatTime,
