@@ -140,27 +140,46 @@ export class SessionMessageService {
    * 判断某会话是否用 present_file 呈现过指定工作区相对路径的产物。
    * 跨设备产物预览的路径白名单——只允许远端读「本会话确实呈现过」的文件，
    * 杜绝经查询通道任意读取工作区文件。
+   *
+   * 存储形态：assistant 行 toolCalls 是 langchain tool_call JSON
+   * `[{name,args,id,type}]`（无 result）；工具结果在 role='tool' 行的
+   * content，靠 langgraphId=toolCallId 关联。两步严格校验：先收集
+   * present_file 的 toolCallId 集合，再核对对应 tool 行结果的归一化 path
+   * ——不直接信任 args（原始入参可能是绝对路径），也不按结果 JSON 形态
+   * 泛匹配（其他工具结果理论上可伪造同形 JSON）。
    */
   async hasPresentedFile(sessionId: string, relPath: string): Promise<boolean> {
     const rows = await this.repo.find({ where: { sessionId } });
+    const presentIds = new Set<string>();
     for (const row of rows) {
       if (!row.toolCalls?.includes("present_file")) continue;
       try {
         const calls = JSON.parse(row.toolCalls) as Array<{
           name?: unknown;
-          result?: unknown;
+          id?: unknown;
         }>;
         for (const c of calls) {
-          if (c?.name !== "present_file" || typeof c.result !== "string")
-            continue;
-          const r = JSON.parse(c.result) as {
-            status?: unknown;
-            path?: unknown;
-          };
-          if (r.status === "presented" && r.path === relPath) return true;
+          if (c?.name === "present_file" && typeof c.id === "string") {
+            presentIds.add(c.id);
+          }
         }
       } catch {
         // 单行 toolCalls 解析失败跳过——不影响其余消息判定
+      }
+    }
+    if (presentIds.size === 0) return false;
+    for (const row of rows) {
+      if (row.role !== "tool" || !presentIds.has(row.langgraphId ?? "")) {
+        continue;
+      }
+      try {
+        const r = JSON.parse(row.content ?? "") as {
+          status?: unknown;
+          path?: unknown;
+        };
+        if (r.status === "presented" && r.path === relPath) return true;
+      } catch {
+        // 非 JSON 结果（如 Error 文本）跳过
       }
     }
     return false;
