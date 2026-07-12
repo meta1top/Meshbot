@@ -3,7 +3,7 @@ import { Column, CreateDateColumn, Entity, UpdateDateColumn } from "typeorm";
 
 export type DeviceAuthStatus = "pending" | "approved" | "consumed";
 
-/** 设备授权请求中间态(TTL 10 分钟) */
+/** 设备授权请求中间态(TTL 30 分钟) */
 @Entity("device_auth_request")
 export class DeviceAuthRequest extends SnowflakeBaseEntity {
   @Column({ type: "varchar", length: 16, default: "pending" })

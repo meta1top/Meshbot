@@ -25,7 +25,7 @@ export class DeviceAuthService {
   /**
    * 本地 Agent 发起授权请求（公开端点调用，无身份）。
    *
-   * 返回新建的授权请求，状态为 pending，10 分钟过期。
+   * 返回新建的授权请求，状态为 pending，30 分钟过期。
    */
   async start(input: {
     deviceName: string;

@@ -226,7 +226,7 @@ function AuthorizeFlow() {
     return <ApprovedCard userCode={approveResult.userCode} />;
   }
 
-  // 拒绝 —— 纯前端提示可关闭页面，不调接口，请求 10 分钟自然过期。
+  // 拒绝 —— 纯前端提示可关闭页面，不调接口，请求 30 分钟自然过期。
   // 不复用 ErrorCard：拒绝后再提示「回到桌面端重新发起登录」语义矛盾。
   if (denied) {
     return (
