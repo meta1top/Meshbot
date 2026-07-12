@@ -17,6 +17,6 @@ export class CheckpointerCleanupService {
    * 须在账号上下文内调用（GraphService 按当前账号解析 checkpoint 库）。
    */
   async deleteThread(threadId: string): Promise<void> {
-    this.threadState.clearThread(threadId);
+    await this.threadState.clearThread(threadId);
   }
 }

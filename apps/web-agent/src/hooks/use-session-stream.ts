@@ -623,12 +623,36 @@ export function useSessionStream(
         ),
       );
     };
+    /**
+     * 把所有未终态（streaming/running）的工具块置为 error 终态。
+     * 中断/失败后 tool_call_end 永远不会到达，不收尾这些块会永久转圈。
+     */
+    const settleUnfinishedToolCalls = (
+      list: TimelineMessage[],
+    ): TimelineMessage[] =>
+      list.map((m) =>
+        m.toolCalls?.some(
+          (t) => t.status === "streaming" || t.status === "running",
+        )
+          ? {
+              ...m,
+              toolCalls: m.toolCalls.map((t) =>
+                t.status === "streaming" || t.status === "running"
+                  ? { ...t, status: "error" as const, argsText: undefined }
+                  : t,
+              ),
+            }
+          : m,
+      );
+
     const onInterrupted = (e: RunInterruptedEvent) => {
       if (e.sessionId !== sessionId) return;
       setRunning(false);
       apply((prev) =>
-        prev.map((m) =>
-          m.id === e.messageId ? { ...m, streaming: false } : m,
+        settleUnfinishedToolCalls(
+          prev.map((m) =>
+            m.id === e.messageId ? { ...m, streaming: false } : m,
+          ),
         ),
       );
     };
@@ -646,13 +670,22 @@ export function useSessionStream(
       const loadingIdsToDrop = new Set<string>();
       for (const id of failedIds) loadingIdsToDrop.add(`loading-${id}`);
       apply((prev) =>
-        prev
-          .filter((m) => !loadingIdsToDrop.has(m.id))
-          .map((m) =>
-            failedIds.has(m.id)
-              ? { ...m, failed: true, pending: false, streaming: false }
-              : m,
-          ),
+        settleUnfinishedToolCalls(
+          prev
+            .filter((m) => !loadingIdsToDrop.has(m.id))
+            .map((m) =>
+              failedIds.has(m.id)
+                ? {
+                    ...m,
+                    failed: true,
+                    pending: false,
+                    streaming: false,
+                    // 错误原因随气泡展示；截断防止超长堆栈撑爆消息流
+                    errorText: e.error.slice(0, 200),
+                  }
+                : m,
+            ),
+        ),
       );
     };
     const onUsage = (e: RunUsageEvent) => {
@@ -671,7 +704,11 @@ export function useSessionStream(
       // 独立预览块再整批清空。个别 provider 流里不带 id → 跳过预览，等 onToolStart。
       const toolCallId = e.toolCallId;
       if (!toolCallId) return;
-      apply((prev) => {
+      apply((rawPrev) => {
+        // 决策轮（tool_calls、content 空）没有 reasoning/chunk 事件（云网关不透传
+        // reasoning，空 delta 不发 chunk），loading 占位无人清 → 「…」悬置在工具块
+        // 上方。本轮首个工具事件到达即视为 LLM 已应答，清掉占位。
+        const prev = rawPrev.filter((m) => !m.loading);
         const merge = (m: TimelineMessage): TimelineMessage => {
           const list = m.toolCalls ? [...m.toolCalls] : [];
           const i = list.findIndex((t) => t.toolCallId === toolCallId);
@@ -707,42 +744,46 @@ export function useSessionStream(
     };
     const onToolStart = (e: RunToolCallStartEvent) => {
       if (e.sessionId !== sessionId) return;
+      // 同 onToolArgsDelta：args 流不带 id 的 provider 跳过预览直达 start，
+      // 这里是该路径下本轮的首个工具事件，同样要清 loading 占位。
       apply((prev) =>
-        prev.map((m) => {
-          if (m.id !== e.messageId) return m;
-          // tool_call 开始 = 本轮 LLM 文本已收尾。
-          // 1) 锁住 reasoningDurationMs，否则「思考中 Xs」会一直跳到本轮 LLM 结束才能切回「已思考」。
-          // 2) 清 streaming 标记，否则中间决策轮（content 已停 + tool_call 进行中）
-          //    气泡尾部的闪烁光标永不熄灭 —— runDone 要等整轮跑完才发。
-          const lockDuration =
-            m.reasoningStartedAt !== undefined &&
-            m.reasoningDurationMs === undefined
-              ? { reasoningDurationMs: Date.now() - m.reasoningStartedAt }
-              : {};
-          // 合并到流式阶段已建的同一块（按 toolCallId 命中）：升级 running、填权威
-          // args、清流式文本。命不中（无流式预览 / 重复 start）则新建/覆盖。
-          // 按 toolCallId 命中 = 幂等：重复 start 不会再 push 出重复块。
-          const list = m.toolCalls ? [...m.toolCalls] : [];
-          const i = list.findIndex((t) => t.toolCallId === e.toolCallId);
-          const next = {
-            toolCallId: e.toolCallId,
-            name: e.name,
-            args: e.args,
-            status: "running" as const,
-            argsText: undefined,
-          };
-          if (i === -1) {
-            list.push(next);
-          } else {
-            list[i] = { ...list[i], ...next };
-          }
-          return {
-            ...m,
-            ...lockDuration,
-            streaming: false,
-            toolCalls: list,
-          };
-        }),
+        prev
+          .filter((m) => !m.loading)
+          .map((m) => {
+            if (m.id !== e.messageId) return m;
+            // tool_call 开始 = 本轮 LLM 文本已收尾。
+            // 1) 锁住 reasoningDurationMs，否则「思考中 Xs」会一直跳到本轮 LLM 结束才能切回「已思考」。
+            // 2) 清 streaming 标记，否则中间决策轮（content 已停 + tool_call 进行中）
+            //    气泡尾部的闪烁光标永不熄灭 —— runDone 要等整轮跑完才发。
+            const lockDuration =
+              m.reasoningStartedAt !== undefined &&
+              m.reasoningDurationMs === undefined
+                ? { reasoningDurationMs: Date.now() - m.reasoningStartedAt }
+                : {};
+            // 合并到流式阶段已建的同一块（按 toolCallId 命中）：升级 running、填权威
+            // args、清流式文本。命不中（无流式预览 / 重复 start）则新建/覆盖。
+            // 按 toolCallId 命中 = 幂等：重复 start 不会再 push 出重复块。
+            const list = m.toolCalls ? [...m.toolCalls] : [];
+            const i = list.findIndex((t) => t.toolCallId === e.toolCallId);
+            const next = {
+              toolCallId: e.toolCallId,
+              name: e.name,
+              args: e.args,
+              status: "running" as const,
+              argsText: undefined,
+            };
+            if (i === -1) {
+              list.push(next);
+            } else {
+              list[i] = { ...list[i], ...next };
+            }
+            return {
+              ...m,
+              ...lockDuration,
+              streaming: false,
+              toolCalls: list,
+            };
+          }),
       );
     };
     const onToolProgress = (e: RunToolCallProgressEvent) => {

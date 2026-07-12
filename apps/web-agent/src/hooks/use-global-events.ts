@@ -9,12 +9,14 @@ import type {
 } from "@meshbot/types";
 import { AUTH_WS_EVENTS, IM_WS_EVENTS } from "@meshbot/types";
 import {
+  MODEL_CONFIG_EVENTS,
   QUICK_ASSISTANT_EVENTS,
   type QuickAssistantRenamedEvent,
   SCHEDULE_EVENTS,
   type ScheduleFiredEvent,
 } from "@meshbot/types-agent";
 import { clearAccessToken } from "@meshbot/web-common";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSetAtom } from "jotai";
 import { useEffect } from "react";
 import { quickAssistantNameAtom } from "@/atoms/assistant-panel";
@@ -38,6 +40,7 @@ export interface GlobalEventHandlers {
   onConversationRead: (p: ImConversationReadEvent) => void;
   onScheduleFired: (p: ScheduleFiredEvent) => void;
   onQuickAssistantRenamed: (p: QuickAssistantRenamedEvent) => void;
+  onModelConfigUpdated: () => void;
   onReauthRequired: (p: { cloudUserId: string }) => void;
 }
 
@@ -66,6 +69,9 @@ export function dispatchGlobalEvent(
       break;
     case QUICK_ASSISTANT_EVENTS.renamed:
       h.onQuickAssistantRenamed(env.payload as QuickAssistantRenamedEvent);
+      break;
+    case MODEL_CONFIG_EVENTS.updated:
+      h.onModelConfigUpdated();
       break;
     case AUTH_WS_EVENTS.reauthRequired:
       h.onReauthRequired(env.payload as { cloudUserId: string });
@@ -98,6 +104,7 @@ export function useGlobalEvents(): void {
   const markConversationRead = useSetAtom(markConversationReadAtom);
   const addScheduleActivity = useSetAtom(addScheduleActivityAtom);
   const setQuickAssistantName = useSetAtom(quickAssistantNameAtom);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     const socket = getEventsSocket();
@@ -112,13 +119,24 @@ export function useGlobalEvents(): void {
       onConversationRead: (p) => markConversationRead(p.conversationId),
       onScheduleFired: (p) => addScheduleActivity(p.sessionId),
       onQuickAssistantRenamed: (p) => setQuickAssistantName(p.name),
+      // 云端模型配置同步完成 → 刷新模型列表（选择器/设置页实时更新）
+      onModelConfigUpdated: () =>
+        queryClient.invalidateQueries({ queryKey: ["model-configs"] }),
       onReauthRequired: () => handleReauthRequired(),
     };
     const onEvent = (env: GlobalEventEnvelope) =>
       dispatchGlobalEvent(env, handlers);
+    // 连接/重连成功即刷新模型列表：登录完成瞬间 syncNow 的 model-config.updated
+    // 事件可能早于本 socket 建立而被错过（授权后「组织没有模型」假象），
+    // 连接时补一次 invalidate 兜住时序洞（幂等且便宜）。
+    const onConnect = () =>
+      queryClient.invalidateQueries({ queryKey: ["model-configs"] });
     socket.on("event", onEvent);
+    socket.on("connect", onConnect);
+    if (socket.connected) onConnect();
     return () => {
       socket.off("event", onEvent);
+      socket.off("connect", onConnect);
     };
   }, [
     applyIncomingMessage,
@@ -129,5 +147,6 @@ export function useGlobalEvents(): void {
     markConversationRead,
     addScheduleActivity,
     setQuickAssistantName,
+    queryClient,
   ]);
 }

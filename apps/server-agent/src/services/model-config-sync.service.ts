@@ -4,38 +4,40 @@ import {
 } from "@meshbot/lib-agent";
 import type { AgentModelConfig } from "@meshbot/types";
 import {
+  MODEL_CONFIG_EVENTS,
+  type ModelConfigUpdatedEvent,
+} from "@meshbot/types-agent";
+import {
   Injectable,
   Logger,
   type OnApplicationBootstrap,
-  type OnModuleDestroy,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { OnEvent } from "@nestjs/event-emitter";
+import { EventEmitter2, OnEvent } from "@nestjs/event-emitter";
 import { ACCOUNT_EVENTS } from "../account/account.events";
 import type { AccountRuntimeEvent } from "../account/account.events";
 import { CloudClientService } from "../cloud/cloud-client.service";
+import { AUTH_EVENTS, type AuthorizedEvent } from "./auth.events";
+import {
+  IM_RELAY_EVENTS,
+  type ImRelayConnectedEvent,
+  type ImRelayModelConfigChangedEvent,
+} from "../cloud/im-relay.events";
 import { CloudIdentityService } from "./cloud-identity.service";
 import type { CloudModelConfigRow } from "./model-config.service";
 import { ModelConfigService } from "./model-config.service";
 
-/** 定时全量同步周期：30 分钟。 */
-const SYNC_INTERVAL_MS = 30 * 60 * 1000;
-/** 失败退避基数：1 分钟起，指数翻倍，封顶到 SYNC_INTERVAL_MS。 */
-const BACKOFF_BASE_MS = 60 * 1000;
-
 /**
- * 云端组织模型配置同步服务——登录 / 启动 / 定时从云端拉组织模型配置，
- * 整体替换本地 source='cloud' 缓存行（本地模型配置写 REST 已下线）。
+ * 云端组织模型配置同步服务——事件驱动，无轮询：
+ * - 启动 / 登录（runtimeCreated）同步一次；
+ * - relay WS（重）连成功同步一次（离线期间的变更在重连瞬间追平）；
+ * - 云端广播 modelConfigChanged（org 内模型创建/编辑/启禁/删除）实时同步。
+ * 覆盖性：设备任意时刻要么在线（收广播）要么刚上线（重连拉取），无漏更新窗口。
+ * 同步完成后发 MODEL_CONFIG_EVENTS.updated（ws/events 信封转前端刷新列表）。
  */
 @Injectable()
-export class ModelConfigSyncService
-  implements OnApplicationBootstrap, OnModuleDestroy
-{
-  private timer: NodeJS.Timeout | null = null;
-  /**
-   * 按账号独立的连续失败计数（cloudUserId → 连败次数）。
-   * 全局共享单计数会被健康账号每轮归零，持续故障账号的退避永远卡在低档位。
-   */
+export class ModelConfigSyncService implements OnApplicationBootstrap {
+  /** 按账号连续失败计数——仅用于告警日志分级（轮询退避已随轮询一并移除）。 */
   private readonly failCounts = new Map<string, number>();
   private readonly logger = new Logger(ModelConfigSyncService.name);
 
@@ -45,18 +47,38 @@ export class ModelConfigSyncService
     private readonly account: AccountContextService,
     private readonly modelConfig: ModelConfigService,
     private readonly config: ConfigService,
+    private readonly emitter: EventEmitter2,
   ) {}
 
-  /** 启动时对全部已登录账号逐个同步一次，随后挂定时器。 */
+  /** 启动时对全部已登录账号逐个同步一次。 */
   async onApplicationBootstrap(): Promise<void> {
     const identities = await this.identity.listLoggedIn();
     for (const id of identities) await this.syncNow(id.cloudUserId);
-    this.schedule(SYNC_INTERVAL_MS);
   }
 
-  /** 模块销毁时清定时器，避免测试 / 热重载残留定时任务。 */
-  onModuleDestroy(): void {
-    if (this.timer) clearTimeout(this.timer);
+  /**
+   * 设备授权完成（登录）：complete() 用 emitAsync 等待本监听器——
+   * 首次模型同步在登录响应返回前完成，桌面端落地即有模型列表。
+   */
+  @OnEvent(AUTH_EVENTS.authorized)
+  async onAuthorized({ cloudUserId }: AuthorizedEvent): Promise<void> {
+    await this.syncNow(cloudUserId);
+  }
+
+  /** relay WS（重）连成功：追平离线期间的云端模型变更。 */
+  @OnEvent(IM_RELAY_EVENTS.connected)
+  async onRelayConnected({
+    cloudUserId,
+  }: ImRelayConnectedEvent): Promise<void> {
+    await this.syncNow(cloudUserId);
+  }
+
+  /** 云端广播模型配置变更（失效信号）：实时全量重同步。 */
+  @OnEvent(IM_RELAY_EVENTS.modelConfigChanged)
+  async onModelConfigChanged({
+    cloudUserId,
+  }: ImRelayModelConfigChangedEvent): Promise<void> {
+    await this.syncNow(cloudUserId);
   }
 
   /** 账号运行时创建（登录 / 重连）时立即同步一次该账号的模型配置。 */
@@ -85,6 +107,10 @@ export class ModelConfigSyncService
         this.modelConfig.replaceCloudConfigs(rows),
       );
       this.failCounts.delete(cloudUserId);
+      // 通知前端刷新模型列表（EventsGateway 转 ws/events 信封到 acct 房间）
+      this.emitter.emit(MODEL_CONFIG_EVENTS.updated, {
+        cloudUserId,
+      } satisfies ModelConfigUpdatedEvent);
       return true;
     } catch (err) {
       const count = (this.failCounts.get(cloudUserId) ?? 0) + 1;
@@ -94,19 +120,6 @@ export class ModelConfigSyncService
       );
       return false;
     }
-  }
-
-  /** 挂一次性定时器：到时对全部已登录账号同步，按结果决定下一次延迟（失败退避）。 */
-  private schedule(delay: number): void {
-    this.timer = setTimeout(async () => {
-      const identities = await this.identity.listLoggedIn().catch(() => []);
-      let roundOk = true;
-      for (const id of identities) {
-        roundOk = (await this.syncNow(id.cloudUserId)) && roundOk;
-      }
-      this.schedule(this.nextDelay(identities.length, roundOk));
-    }, delay);
-    this.timer.unref();
   }
 
   /**
@@ -119,6 +132,8 @@ export class ModelConfigSyncService
   private toGatewayRow(config: AgentModelConfig): CloudModelConfigRow {
     const cloudUrl = this.config.getOrThrow<string>("MESHBOT_CLOUD_URL");
     return {
+      // 本地行 id 复用云端配置 id：跨同步稳定，会话级模型引用不失效。
+      id: config.id,
       providerType: "openai-compatible",
       baseUrl: `${cloudUrl.replace(/\/$/, "")}/api/v1`,
       model: config.id,
@@ -127,16 +142,5 @@ export class ModelConfigSyncService
       contextWindow: config.contextWindow,
       enabled: config.enabled,
     };
-  }
-
-  /**
-   * 计算下一轮同步延迟：
-   * - 无已登录账号 / 本轮全部成功 → 正常间隔 30 分钟（"无账号"不是失败路径，不得空转退避）
-   * - 有失败 → 按各账号中最大的连败次数指数退避（首败 1 分钟，连败翻倍，封顶 30 分钟）
-   */
-  private nextDelay(identityCount: number, roundOk: boolean): number {
-    if (identityCount === 0 || roundOk) return SYNC_INTERVAL_MS;
-    const maxFail = Math.max(1, ...this.failCounts.values());
-    return Math.min(BACKOFF_BASE_MS * 2 ** (maxFail - 1), SYNC_INTERVAL_MS);
   }
 }

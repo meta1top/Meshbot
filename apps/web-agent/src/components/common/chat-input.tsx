@@ -13,6 +13,7 @@ import {
   useEffect,
   useImperativeHandle,
   useRef,
+  useState,
 } from "react";
 import { Markdown } from "tiptap-markdown";
 import { formatTokens } from "@/lib/format-tokens";
@@ -38,6 +39,8 @@ interface ChatInputProps {
   placeholder?: string;
   /** 底部动作栏左侧的前导动作（如 ComposerActions 的 技能/连应用/权限 mock 链）。 */
   leadingActions?: ReactNode;
+  /** 右下动作区（token 环左侧）的选择器（如模型选择）；不传不渲染。 */
+  trailingActions?: ReactNode;
   modelName?: string;
   tokenUsage?: {
     /**
@@ -81,6 +84,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       isLoading = false,
       placeholder,
       leadingActions,
+      trailingActions,
       modelName,
       tokenUsage,
     },
@@ -92,6 +96,10 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     // sendFnRef 让 handleKeyDown（在 useEditor 配置对象中捕获）
     // 始终能调用到最新的 handleSend，绕开闭包陈旧问题。
     const sendFnRef = useRef<() => void>(() => {});
+
+    // 编辑器空态镜像：驱动发送按钮 disabled。不能直接读 editor.isEmpty——
+    // 受控同步走 emitUpdate:false 不触发重渲，直读会拿到陈旧渲染帧的值。
+    const [isEmpty, setIsEmpty] = useState(true);
 
     const editor = useEditor({
       immediatelyRender: false,
@@ -128,29 +136,42 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       },
       onUpdate: ({ editor: e }) => {
         onChange(getMarkdown(e.storage));
+        setIsEmpty(e.isEmpty);
       },
     });
 
     const handleSend = useCallback(() => {
+      // 运行中禁止发送（与发送按钮隐藏一致）：Enter 快捷键与按钮同一守卫，
+      // 避免「按钮没了但快捷键还能发」的不一致。
+      if (isLoading) return;
       if (!editor) return;
       const md = getMarkdown(editor.storage).trim();
       if (!md) return;
       onSend?.(md);
       editor.commands.clearContent();
       onChange("");
-    }, [editor, onSend, onChange]);
+    }, [editor, onSend, onChange, isLoading]);
 
     // 每次 handleSend 更新时同步到 ref，让 handleKeyDown 读到最新版本
     useEffect(() => {
       sendFnRef.current = handleSend;
     }, [handleSend]);
 
-    // 受控 value 同步守卫：防自身 onChange 回环 + 光标跳
+    // 编辑器就绪时校准一次空态（初始 content 与 value 一致时下方同步不会跑）
+    useEffect(() => {
+      if (editor) setIsEmpty(editor.isEmpty);
+    }, [editor]);
+
+    // 受控 value 同步守卫：防自身 onChange 回环 + 光标跳。
+    // emitUpdate:false 不触发 onUpdate → React 不重渲，isEmpty 必须手动刷新，
+    // 否则外部填入草稿（建议 chips）后发送按钮仍按旧空态禁用（快捷键路径
+    // 直读编辑器所以能发，恰好掩盖此 bug）。
     useEffect(() => {
       if (!editor) return;
       const current = getMarkdown(editor.storage);
       if (value !== current) {
         editor.commands.setContent(value, { emitUpdate: false });
+        setIsEmpty(editor.isEmpty);
       }
     }, [value, editor]);
 
@@ -170,7 +191,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       onInterrupt?.();
     }, [onInterrupt]);
 
-    const hasContent = !!editor && !editor.isEmpty;
+    const hasContent = !!editor && !isEmpty;
 
     const tokenPercent = tokenUsage
       ? Math.min((tokenUsage.current / tokenUsage.max) * 100, 100)
@@ -194,6 +215,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           )}
 
           <div className="ml-auto flex shrink-0 items-center gap-1.5">
+            {trailingActions}
             {tokenUsage && (
               <>
                 {modelName && (
@@ -283,8 +305,10 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               <Paperclip className="h-4 w-4" />
             </button>
 
-            {/* 运行中显示中断；再显示发送键 */}
-            {isLoading && (
+            {/* 运行中只显示中断（发送隐藏，Enter 同步禁用——见 handleSend
+                守卫）；想发新消息先停止当前 run。排队追加的后端能力保留，
+                仅不再从此入口暴露。 */}
+            {isLoading ? (
               <button
                 type="button"
                 onClick={handleInterrupt}
@@ -293,21 +317,22 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               >
                 <Square className="h-4 w-4 fill-current" />
               </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={!hasContent}
+                className={cn(
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors",
+                  hasContent
+                    ? "bg-(--shell-accent) text-white"
+                    : "text-muted-foreground",
+                )}
+                title={tChat("send")}
+              >
+                <Send className="h-4 w-4" />
+              </button>
             )}
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={!hasContent}
-              className={cn(
-                "flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors",
-                hasContent
-                  ? "bg-(--shell-accent) text-white"
-                  : "text-muted-foreground",
-              )}
-              title={tChat("send")}
-            >
-              <Send className="h-4 w-4" />
-            </button>
           </div>
         </div>
       </div>

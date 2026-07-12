@@ -6,6 +6,8 @@ import { Check, Copy, Info, ThumbsDown, ThumbsUp } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useState } from "react";
 import { formatTokens } from "@/lib/format-tokens";
+import { resolveModelName } from "@/lib/model-name";
+import { useModelConfigs } from "@/rest/model-config";
 import { setMessageFeedback } from "@/rest/session";
 
 interface Props {
@@ -33,6 +35,7 @@ export function AssistantMessageActions({
   feedback,
 }: Props) {
   const t = useTranslations("session");
+  const { data: modelConfigs } = useModelConfigs();
   const [copied, setCopied] = useState(false);
   const [current, setCurrent] = useState<"up" | "down" | null>(
     feedback ?? null,
@@ -88,7 +91,11 @@ export function AssistantMessageActions({
           </TooltipTrigger>
           <TooltipContent>
             <div className="space-y-0.5 text-xs">
-              <div>{usage.model}</div>
+              <div>
+                {usage.modelName ??
+                  resolveModelName(modelConfigs, usage.model) ??
+                  t("usage.deletedModel")}
+              </div>
               <div>
                 {t("usage.inputLabel")} {formatTokens(usage.inputTokens)}
                 {usage.cacheReadTokens > 0 &&

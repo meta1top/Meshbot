@@ -1,3 +1,4 @@
+export { AuthCard } from "./auth-card";
 export { BrandLogo } from "./brand-logo";
 export { PageHeader } from "./page-header";
 export { PageShellView, type PageShellViewProps } from "./page-shell-view";

@@ -27,6 +27,10 @@
     "manualFailed": "授权码无效或已过期",
     "noAccount": "没有账号？",
     "goRegister": "去注册",
+    "registerAndAuthorize": "注册并授权本机",
+    "step1": "点击授权",
+    "step2": "浏览器确认",
+    "step3": "自动登录",
     "brandTagline": "让团队与 AI 一起协作",
     "brandSubtitle": "本地 Agent + 云端协同，随时随地接管你的工作流。",
     "welcomeBack": "欢迎回到 MeshBot",
@@ -121,7 +125,8 @@
     "comingSoon": "即将上线",
     "agentLocal": "本地",
     "agentComingSoon": "其他设备即将支持",
-    "workspaceDefault": "默认工作区"
+    "workspaceDefault": "默认工作区",
+    "modelSelect": "选择模型"
   },
   "chatInput": {
     "placeholder": "请输入",
@@ -195,7 +200,8 @@
       "totalLabel": "总计",
       "callCount": "{count} 次调用",
       "nextRequestLabel": "下次预估",
-      "cumulativeLabel": "累计"
+      "cumulativeLabel": "累计",
+      "deletedModel": "已删除的模型"
     },
     "actions": {
       "copy": "复制",
@@ -231,7 +237,8 @@
     },
     "artifact": {
       "presentFailed": "呈现失败"
-    }
+    },
+    "runErrorPrefix": "运行失败："
   },
   "newMessage": {
     "title": "新消息",

@@ -1,20 +1,26 @@
 "use client";
 
 import { stripLlmuse } from "@meshbot/types-agent";
-import { useAtomValue } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import { ArrowDown } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import {
+  loadRemoteSessionsAtom,
+  remoteSessionsAtom,
+} from "@/atoms/remote-sessions";
+import {
   sessionTotalsFamily,
   usageByMessageFamily,
 } from "@/atoms/session-usage";
+import { sessionsAtom } from "@/atoms/sessions";
 import {
   ChatInput,
   type ChatInputHandle,
 } from "@/components/common/chat-input";
 import { CompactionBanner } from "@/components/common/compaction-banner";
 import { ComposerActions } from "@/components/common/composer-actions";
+import { ModelSelect } from "@/components/common/model-select";
 import { MessageSkeleton } from "@/components/im/message-skeleton";
 import { MessageList } from "@/components/session/message-list";
 import { PendingList } from "@/components/session/pending-list";
@@ -25,7 +31,8 @@ import { useLlmusePrefix } from "@/hooks/use-llmuse-prefix";
 import { useSessionStream } from "@/hooks/use-session-stream";
 import { toI18nList } from "@/lib/i18n-list";
 import { useModelConfigs } from "@/rest/model-config";
-import { deletePendingMessage } from "@/rest/session";
+import { patchRemoteSessionModel } from "@/rest/remote-devices";
+import { deletePendingMessage, patchSession } from "@/rest/session";
 
 interface AssistantConversationBodyProps {
   /** 当前会话 ID，由 page 传入（渲染时必有）。远程会话时是 B 上的会话 id。 */
@@ -71,6 +78,39 @@ export function AssistantConversationBody({
   const sessionTotals = useAtomValue(sessionTotalsFamily(id));
   const { data: modelConfigs } = useModelConfigs();
   const enabledModel = modelConfigs?.find((c) => c.enabled);
+  // 会话级模型：初值取会话摘要里的 modelConfigId，切换 PATCH 后本地覆盖，
+  // 下一条消息由后端 runner 读列生效。
+  const allSessions = useAtomValue(sessionsAtom);
+  const [modelOverride, setModelOverride] = useState<string | null>(null);
+  // 远程会话的摘要在 remoteSessionsAtom（本地 sessionsAtom 不含对端会话）；
+  // 模型配置云端统一下发且本地行 id=云端配置 id，跨设备 id 一致，本地下拉
+  // 列表可直接用于远端会话的显示与写入。
+  const remoteSessions = useAtomValue(remoteSessionsAtom);
+  const loadRemoteSessions = useSetAtom(loadRemoteSessionsAtom);
+  // 进入远程会话时强制刷新对端会话列表：modelConfigId 可能已在对端被改
+  // （侧栏懒加载的缓存不会自己失效），选择器初值需要新鲜快照。
+  useEffect(() => {
+    if (remoteDeviceId) void loadRemoteSessions(remoteDeviceId, true);
+  }, [remoteDeviceId, loadRemoteSessions]);
+  const sessionModelId =
+    modelOverride ??
+    (remoteDeviceId
+      ? (remoteSessions[remoteDeviceId]?.sessions.find((s) => s.id === id)
+          ?.modelConfigId ?? null)
+      : (allSessions.find((s) => s.id === id)?.modelConfigId ?? null));
+  const handleModelChange = async (mid: string) => {
+    try {
+      if (remoteDeviceId) {
+        // 经 device query 通道写对端 session（本地 PATCH 会 404）
+        await patchRemoteSessionModel(remoteDeviceId, id, mid);
+      } else {
+        await patchSession(id, { modelConfigId: mid });
+      }
+      setModelOverride(mid);
+    } catch (err) {
+      console.error("切换模型失败", err);
+    }
+  };
   // contextWindow 由后端在配置入库时按 MODEL_SPECS 解析后固化（用户可覆盖），前端直接读
   const contextWindow = enabledModel?.contextWindow ?? 128_000;
 
@@ -270,6 +310,9 @@ export function AssistantConversationBody({
           onInterrupt={stream.interrupt}
           isLoading={stream.running}
           placeholder={inputPlaceholder}
+          trailingActions={
+            <ModelSelect value={sessionModelId} onChange={handleModelChange} />
+          }
           leadingActions={<ComposerActions />}
           tokenUsage={{
             // 「下次请求估算 / ctx 上限」—— 用 lastInputTokens 作为代理：

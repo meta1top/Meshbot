@@ -11,16 +11,23 @@ function make() {
     }),
   };
   const relay = { emitDeviceQueryResponse: jest.fn() };
+  const artifacts = {
+    read: jest
+      .fn()
+      .mockResolvedValue({ kind: "content", name: "a.md", base64: "aGk=" }),
+    uploadToDrive: jest.fn().mockResolvedValue({ fileId: "f1", name: "a.md" }),
+  };
   const account = {
     run: jest.fn(async (_uid: string, fn: () => Promise<void>) => fn()),
   };
   const svc = new RemoteQueryInboundService(
     sessions as never,
     messages as never,
+    artifacts as never,
     relay as never,
     account as never,
   );
-  return { svc, sessions, messages, relay, account };
+  return { svc, sessions, messages, artifacts, relay, account };
 }
 const fwd = (over: object) => ({
   cloudUserId: "u1",
@@ -97,6 +104,57 @@ describe("RemoteQueryInboundService", () => {
     const { svc, sessions, relay } = make();
     sessions.listAllSorted.mockRejectedValueOnce(new Error("boom"));
     await svc.onDeviceQueryRequest(fwd({}) as never);
+    expect(relay.emitDeviceQueryResponse).toHaveBeenCalledWith(
+      "u1",
+      expect.objectContaining({ ok: false, reason: "error" }),
+    );
+  });
+
+  it("kind=artifact-file → 白名单读产物并回 ok:true", async () => {
+    const { svc, artifacts, relay } = make();
+    await svc.onDeviceQueryRequest(
+      fwd({
+        kind: "artifact-file",
+        params: { sessionId: "s1", filePath: "out/a.md" },
+      }) as never,
+    );
+    expect(artifacts.read).toHaveBeenCalledWith("s1", "out/a.md");
+    expect(relay.emitDeviceQueryResponse).toHaveBeenCalledWith(
+      "u1",
+      expect.objectContaining({
+        ok: true,
+        data: { kind: "content", name: "a.md", base64: "aGk=" },
+      }),
+    );
+  });
+
+  it("kind=artifact-upload-drive → 上传网盘并回文件引用", async () => {
+    const { svc, artifacts, relay } = make();
+    await svc.onDeviceQueryRequest(
+      fwd({
+        kind: "artifact-upload-drive",
+        params: { sessionId: "s1", filePath: "out/a.md" },
+      }) as never,
+    );
+    expect(artifacts.uploadToDrive).toHaveBeenCalledWith("s1", "out/a.md");
+    expect(relay.emitDeviceQueryResponse).toHaveBeenCalledWith(
+      "u1",
+      expect.objectContaining({
+        ok: true,
+        data: { fileId: "f1", name: "a.md" },
+      }),
+    );
+  });
+
+  it("artifact-file 读取抛错（白名单不通过）→ 回 ok:false", async () => {
+    const { svc, artifacts, relay } = make();
+    artifacts.read.mockRejectedValue(new Error("forbidden"));
+    await svc.onDeviceQueryRequest(
+      fwd({
+        kind: "artifact-file",
+        params: { sessionId: "s1", filePath: "../../etc/passwd" },
+      }) as never,
+    );
     expect(relay.emitDeviceQueryResponse).toHaveBeenCalledWith(
       "u1",
       expect.objectContaining({ ok: false, reason: "error" }),

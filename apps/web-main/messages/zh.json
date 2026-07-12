@@ -81,6 +81,10 @@
       "passwordNotMatch": "两次输入的密码不一致"
     }
   },
+  "wizard": {
+    "chainBanner": "完成后将继续为你的设备授权",
+    "chainBannerDevice": "完成后将继续为「{deviceName}」授权"
+  },
   "authorize": {
     "backToDesktop": "请回到 MeshBot 桌面端重新发起登录。",
     "requestMissing": {
@@ -93,7 +97,7 @@
     },
     "expired": {
       "title": "授权请求已过期",
-      "description": "授权请求超过 10 分钟有效期，已自动失效。"
+      "description": "授权请求超过 30 分钟有效期，已自动失效。"
     },
     "alreadyProcessed": {
       "title": "请求已处理",
@@ -103,10 +107,13 @@
       "title": "已拒绝授权",
       "description": "你可以关闭此页。"
     },
+    "finishing": "正在完成授权…",
     "confirm": {
       "title": "设备请求接入",
-      "description": "设备 {deviceName}（{platform}）请求接入你的账号，当前组织：{orgName}",
+      "subtitle": "请确认以下设备信息后继续",
       "unknownPlatform": "未知平台",
+      "platformLine": "平台：{platform}",
+      "orgLine": "组织：{orgName}",
       "approve": "授权",
       "approving": "授权中...",
       "deny": "拒绝",
@@ -118,6 +125,9 @@
       "copy": "复制",
       "copied": "已复制",
       "copyManually": "复制失败，请手动选中授权码复制。"
+    },
+    "fallback": {
+      "hint": "自动完成失败——请复制下方授权码，回到桌面端「手动输入授权码」粘贴。"
     },
     "onboarding": {
       "title": "先加入一个组织",
@@ -338,7 +348,8 @@
     "modelBlockedDesc": "请联系组织 owner 配置模型后刷新。",
     "modelLoadErrorTitle": "模型配置加载失败",
     "modelLoadErrorDesc": "加载组织模型配置时出错，请重试。",
-    "refresh": "刷新"
+    "refresh": "刷新",
+    "modelSkip": "跳过，稍后配置"
   },
   "userMenu": {
     "switchOrg": "",

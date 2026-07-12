@@ -5,6 +5,7 @@ import { useSetAtom } from "jotai";
 import { FileText, FileWarning } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { previewArtifactAtom } from "@/atoms/assistant-panel";
+import { useRemoteSession } from "@/hooks/remote-session-context";
 import { artifactKind } from "@/lib/artifact";
 import type { ToolCallView } from "./message-list";
 
@@ -55,6 +56,8 @@ function parsePresented(
 export function ArtifactFileCard({ tool }: { tool: ToolCallView }) {
   const t = useTranslations("session.artifact");
   const setArtifact = useSetAtom(previewArtifactAtom);
+  // 远程会话（RemoteSessionProvider 内）：产物在对端设备，预览走设备查询通道。
+  const remote = useRemoteSession();
 
   const args = (tool.args ?? {}) as { path?: string; title?: string };
   const presented = parsePresented(tool.result);
@@ -86,7 +89,13 @@ export function ArtifactFileCard({ tool }: { tool: ToolCallView }) {
 
   const open = () => {
     if (!previewPath) return;
-    setArtifact({ path: previewPath, title: args.title });
+    setArtifact({
+      path: previewPath,
+      title: args.title,
+      remote: remote
+        ? { deviceId: remote.remoteDeviceId, sessionId: remote.sessionId }
+        : undefined,
+    });
   };
 
   return (

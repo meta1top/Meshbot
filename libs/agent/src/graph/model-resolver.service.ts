@@ -27,7 +27,11 @@ import type { ModelProvider } from "./nodes/supervisor.node";
  */
 @Injectable()
 export class ModelResolver {
-  private modelMeta: { providerType: string; model: string };
+  private modelMeta: {
+    providerType: string;
+    model: string;
+    modelName?: string;
+  };
   private readonly modelCache = new Map<string, BaseChatModel>();
   private readonly overrideProvider?: ModelProvider;
   private readonly cloudTokenByAccount = new Map<string, string>();
@@ -37,7 +41,8 @@ export class ModelResolver {
     private readonly account: AccountContextService,
     private readonly runCtx: ModelRunContext,
     @Optional() overrideProvider?: ModelProvider,
-    @Optional() overrideMeta?: { providerType: string; model: string },
+    @Optional()
+    overrideMeta?: { providerType: string; model: string; modelName?: string },
     @Optional()
     @Inject(CLOUD_TOKEN_PORT)
     private readonly cloudTokenPort?: CloudTokenPort,
@@ -84,7 +89,7 @@ export class ModelResolver {
   }
 
   /** 当前 run 的模型 meta（run 上下文优先；无上下文回落共享字段——title 等旁路径）。 */
-  getMeta(): { providerType: string; model: string } {
+  getMeta(): { providerType: string; model: string; modelName?: string } {
     return this.runCtx.getMeta() ?? this.modelMeta;
   }
 
@@ -98,17 +103,26 @@ export class ModelResolver {
     const dbPath = this.config.getDatabasePath();
     const acct = this.account.getOrThrow();
     const overrideId = this.runCtx.getOverrideId();
-    const cfg = overrideId
+    let cfg = overrideId
       ? readModelConfigById(dbPath, acct, overrideId)
       : readActiveModelConfig(dbPath, acct);
-    if (!cfg) {
-      throw new Error(
-        overrideId
-          ? `指定的模型配置不存在：${overrideId}（可能已被删除）`
-          : "当前账号没有启用的模型配置，请先在设置中配置模型",
+    if (!cfg && overrideId) {
+      // 会话绑定的模型可能已被云端删除（同步后行消失）。回退账号默认模型
+      // 继续跑而不是抛死——否则该会话永久卡在「runOnce 失败停止消费循环」。
+      console.warn(
+        `[ModelResolver] 会话指定的模型配置不存在：${overrideId}（可能已被云端删除），回退默认模型`,
       );
+      cfg = readActiveModelConfig(dbPath, acct);
     }
-    const meta = { providerType: cfg.providerType, model: cfg.model };
+    if (!cfg) {
+      throw new Error("当前账号没有启用的模型配置，请先在设置中配置模型");
+    }
+    const meta = {
+      providerType: cfg.providerType,
+      model: cfg.model,
+      // 显示名快照：usage 观测存名字而非仅 id，改名/删除后历史仍可读
+      modelName: cfg.name,
+    };
     this.modelMeta = meta;
     this.runCtx.setMeta(meta);
     await this.refreshCloudToken(acct, cfg);
@@ -140,13 +154,8 @@ export class ModelResolver {
     const key = `title|${modelCacheKey(cfg)}`;
     const cached = this.modelCache.get(key);
     if (cached) return cached;
-    const modelKwargs =
-      cfg.providerType === "deepseek"
-        ? { thinking: { type: "disabled" } }
-        : undefined;
     const model = await createChatModel(cfg, {
       streaming: false,
-      modelKwargs,
       cloudTokenProvider: this.cloudTokenProvider,
     });
     this.modelCache.set(key, model);

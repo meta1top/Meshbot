@@ -130,6 +130,7 @@ describe("createChatModel：云模型分支", () => {
       const model = await createChatModel(
         {
           providerType: "openai-compatible",
+          name: "测试模型",
           model: "gpt-4o",
           apiKey: "__cloud__",
           baseUrl: "http://gw.test/api/v1",
@@ -143,5 +144,64 @@ describe("createChatModel：云模型分支", () => {
     }
 
     expect(capturedAuth).toBe("Bearer mbd_LIVE");
+  });
+});
+
+describe("createChatModel：本地轨 provider 白名单", () => {
+  // 本地轨只经云网关取模型：model-config-sync.service.ts 的 toGatewayRow 把下发行
+  // 的 providerType 固定写成 openai-compatible，真实厂商调用发生在 server-main 的
+  // model-gateway。所以本地轨出现其他 providerType 一定是脏数据。
+  //
+  // 守卫必须显式抛错：hoisted 模式下 @langchain/anthropic 仍物理存在于根
+  // node_modules（server-main 依赖它），不加守卫的话 initChatModel 会静默成功，
+  // 用一条本地直连打到厂商——这正是我们要杜绝的。
+  it("未知 providerType（anthropic）→ 抛错，而不是静默走 hoisted 的厂商包", async () => {
+    await expect(
+      createChatModel({
+        providerType: "anthropic",
+        name: "测试模型",
+        model: "claude-sonnet-4-5",
+        apiKey: "sk-ant-fake",
+        baseUrl: "",
+        isCloudModel: false,
+      }),
+    ).rejects.toThrow(/本地轨不支持的 providerType：anthropic/);
+  });
+
+  it("deepseek 同样被拒（真实厂商调用应发生在云网关侧）", async () => {
+    await expect(
+      createChatModel({
+        providerType: "deepseek",
+        name: "测试模型",
+        model: "deepseek-chat",
+        apiKey: "sk-fake",
+        baseUrl: "",
+        isCloudModel: false,
+      }),
+    ).rejects.toThrow(/本地轨不支持的 providerType：deepseek/);
+  });
+
+  it("openai 与 openai-compatible 仍在白名单内", async () => {
+    await expect(
+      createChatModel({
+        providerType: "openai",
+        name: "测试模型",
+        model: "gpt-4o",
+        apiKey: "sk-fake",
+        baseUrl: "",
+        isCloudModel: false,
+      }),
+    ).resolves.toBeDefined();
+
+    await expect(
+      createChatModel({
+        providerType: "openai-compatible",
+        name: "测试模型",
+        model: "deepseek-chat",
+        apiKey: "sk-fake",
+        baseUrl: "https://api.deepseek.com/v1",
+        isCloudModel: false,
+      }),
+    ).resolves.toBeDefined();
   });
 });

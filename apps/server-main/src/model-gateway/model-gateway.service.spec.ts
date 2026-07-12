@@ -119,6 +119,112 @@ describe("ModelGatewayService", () => {
     );
   });
 
+  it("流式：并行多工具同 index 不同 id（ChatOllama 形态）→ 按 id 重新分桶", async () => {
+    orgSvc.resolveDecrypted.mockResolvedValue({
+      providerType: "ollama",
+      model: "qwen3",
+      baseUrl: "http://127.0.0.1:11434",
+      apiKey: "unused",
+      contextWindow: null,
+    });
+    (initChatModel as jest.Mock).mockResolvedValue({
+      bindTools: jest.fn().mockReturnThis(),
+      stream: async function* () {
+        // 实测 qwen3 双工具：两帧 index 均为 0、id 不同、args 各自完整——
+        // 若透传 index，端侧按 index 分桶会把两个调用拼成一个（args 变
+        // `{}{"city":…}` 脏串，第二个工具丢失）。
+        yield new AIMessageChunk({
+          content: "",
+          tool_call_chunks: [
+            {
+              index: 0,
+              id: "call_a",
+              name: "get_time",
+              args: "{}",
+              type: "tool_call_chunk",
+            },
+          ],
+        });
+        yield new AIMessageChunk({
+          content: "",
+          tool_call_chunks: [
+            {
+              index: 0,
+              id: "call_b",
+              name: "get_weather",
+              args: '{"city":"北京"}',
+              type: "tool_call_chunk",
+            },
+          ],
+        });
+      },
+    });
+
+    const frames: any[] = [];
+    for await (const f of service.stream(
+      "o1",
+      {
+        model: "m1",
+        messages: [{ role: "user", content: "hi" }],
+        stream: true,
+        tools: [{ type: "function", function: { name: "t", parameters: {} } }],
+      } as never,
+      "id2",
+    )) {
+      frames.push(f);
+    }
+    const tcs = frames
+      .flatMap((f) => f.choices?.[0]?.delta?.tool_calls ?? [])
+      .map((t: any) => ({ index: t.index, id: t.id }));
+    expect(tcs).toEqual([
+      { index: 0, id: "call_a" },
+      { index: 1, id: "call_b" },
+    ]);
+  });
+
+  it("流式：纯 reasoning 帧也下发（reasoning_content），role 落在首个思考帧", async () => {
+    orgSvc.resolveDecrypted.mockResolvedValue({
+      providerType: "deepseek",
+      model: "deepseek-reasoner",
+      baseUrl: null,
+      apiKey: "sk-x",
+      contextWindow: null,
+    });
+    (initChatModel as jest.Mock).mockResolvedValue({
+      stream: async function* () {
+        yield new AIMessageChunk({
+          content: "",
+          additional_kwargs: { reasoning_content: "想一下" },
+        });
+        yield new AIMessageChunk({ content: "答案" });
+      },
+    });
+
+    const frames: any[] = [];
+    for await (const f of service.stream(
+      "o1",
+      {
+        model: "m1",
+        messages: [{ role: "user", content: "hi" }],
+        stream: true,
+      },
+      "id1",
+    )) {
+      frames.push(f);
+    }
+    const deltas = frames
+      .map((f) => f.choices?.[0]?.delta)
+      .filter((d) => d && Object.keys(d).length > 0);
+    // 首帧 = 纯思考帧：带 role + reasoning_content（端侧 ChatOpenAI 1.x 原生解析此形态）
+    expect(deltas[0].role).toBe("assistant");
+    expect(deltas[0].reasoning_content).toBe("想一下");
+    expect(deltas[0].tool_calls).toBeUndefined();
+    // 次帧 = 正文帧：无 role、无 reasoning_content
+    expect(deltas[1].content).toBe("答案");
+    expect(deltas[1].role).toBeUndefined();
+    expect(deltas[1].reasoning_content).toBeUndefined();
+  });
+
   it("流式：逐 chunk yield OpenAI 帧 + 末尾 usage 帧", async () => {
     orgSvc.resolveDecrypted.mockResolvedValue({
       providerType: "openai",

@@ -13,6 +13,8 @@ export const IM_WS_EVENTS = {
   conversationCreated: "im.conversation_created",
   conversationRemoved: "im.conversation_removed",
   conversationRead: "im.conversation_read",
+  /** org 模型配置变更（创建/编辑/启用禁用/删除）——失效信号，端侧收到即全量重同步 */
+  modelConfigChanged: "im.model_config_changed",
   // client → server（上行）
   send: "im.send",
   read: "im.read",

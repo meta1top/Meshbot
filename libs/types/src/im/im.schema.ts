@@ -62,8 +62,18 @@ export type CreateDmInput = z.infer<typeof CreateDmSchema>;
 export const AddChannelMemberSchema = z.object({ userId: z.string() });
 export type AddChannelMemberInput = z.infer<typeof AddChannelMemberSchema>;
 
-/** 跨设备只读查询的种类:列会话 / 取某会话历史 */
-export const DeviceQueryKindSchema = z.enum(["sessions", "history"]);
+/**
+ * 跨设备查询/操作的种类:列会话 / 取某会话历史 / 改会话模型。
+ * patch-session-model 是本通道首个写操作——模型配置由云端 Org 统一下发且
+ * 本地行 id=云端配置 id(跨设备一致),A 侧下拉选的 id 可直接写对端会话。
+ */
+export const DeviceQueryKindSchema = z.enum([
+  "sessions",
+  "history",
+  "patch-session-model",
+  "artifact-file",
+  "artifact-upload-drive",
+]);
 export type DeviceQueryKind = z.infer<typeof DeviceQueryKindSchema>;
 
 /** A→云 的设备查询请求(上行,需服务端校验) */
@@ -76,6 +86,10 @@ export const DeviceQueryRequestSchema = z.object({
       sessionId: z.string().optional(),
       before: z.string().optional(),
       limit: z.number().int().min(1).max(100).optional(),
+      /** patch-session-model 用:目标模型配置 id(云端配置 id,跨设备一致)。 */
+      modelConfigId: z.string().optional(),
+      /** artifact-file / artifact-upload-drive 用:产物工作区相对路径。 */
+      filePath: z.string().optional(),
     })
     .default({}),
 });

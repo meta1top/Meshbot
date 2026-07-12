@@ -7,6 +7,8 @@ import type {
 /** im-relay 本地事件（server-agent 进程内 EventEmitter2）。 */
 export const IM_RELAY_EVENTS = {
   connected: "im.relay.connected",
+  /** 云端广播的 org 模型配置变更（失效信号）——sync 服务收到即全量重同步。 */
+  modelConfigChanged: "im.relay.model_config_changed",
   /** L2c：云端回流的设备查询响应（B→云→A），桥给 RemoteDeviceQueryService.settle。 */
   deviceQueryResponse: "im.relay.device_query_response",
   /** L2c：云端转发给本设备的入站查询请求（A→云→B），供 Task4 入站消费。 */
@@ -23,6 +25,11 @@ export const IM_RELAY_EVENTS = {
 
 /** relay 重连成功事件负载。 */
 export interface ImRelayConnectedEvent {
+  cloudUserId: string;
+}
+
+/** 云端模型配置变更事件负载（失效信号，无明细）。 */
+export interface ImRelayModelConfigChangedEvent {
   cloudUserId: string;
 }
 

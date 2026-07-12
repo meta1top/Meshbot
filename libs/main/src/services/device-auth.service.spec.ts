@@ -134,4 +134,20 @@ describe("DeviceAuthService", () => {
     });
     expect(rows[0].userId).toBe("u1");
   });
+
+  it("start 的授权请求有效期为 30 分钟", async () => {
+    const rows: DeviceAuthRequest[] = [];
+    const repo = makeRepo(rows);
+    const svc = buildSvc(repo);
+    const before = Date.now();
+    await svc.start({
+      deviceName: "d",
+      platform: "darwin",
+      codeChallenge: challenge,
+      redirectUri: null,
+    });
+    const ttl = rows[0].expiresAt.getTime() - before;
+    expect(ttl).toBeGreaterThanOrEqual(29 * 60 * 1000);
+    expect(ttl).toBeLessThanOrEqual(31 * 60 * 1000);
+  });
 });

@@ -64,10 +64,14 @@ async function seedModelConfig(
 function cloudConfigRow(
   overrides: Partial<CloudModelConfigRow> = {},
 ): CloudModelConfigRow {
+  // id 与 model 同源（真实实现即本地行 id=云端配置 id），跟随 overrides.model
+  // 变化——否则多行 fixture 同 id 主键互覆，replaceCloudConfigs 断言只剩一行。
+  const model = overrides.model ?? "cloud-cfg-1";
   return {
+    id: model,
     providerType: "openai-compatible",
     name: "Cloud GPT-4o",
-    model: "cloud-cfg-1",
+    model,
     apiKey: "__cloud__",
     baseUrl: "http://127.0.0.1:3200/api/v1",
     contextWindow: 128_000,

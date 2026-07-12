@@ -67,7 +67,9 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   if (isAuthenticated && !isPreLoginRoute) {
     if (modelsPending) return <SplashScreen />;
     // 成功拉到空列表 → 引导配置；拉取失败（网络异常等）不阻塞用户
-    if (modelConfigs?.length === 0) return <ModelSetupGate />;
+    // 列表含停用行（留给历史模型名解析）——"可用模型"须按 enabled 判定
+    if (modelConfigs && !modelConfigs.some((c) => c.enabled))
+      return <ModelSetupGate />;
   }
 
   return <>{children}</>;

@@ -45,6 +45,11 @@ const config: Config = {
     // import statement outside a module」（jest 不跑 grep 测试，libs/agent 走 vitest）。
     // 换成 CommonJS 桩解开这条 import 链。
     "^@vscode/ripgrep$": "<rootDir>/test/mocks/vscode-ripgrep.js",
+    // socket.io-client 的 exports map 在本 jest resolver 下解析不稳——直接映射
+    // 到包内真实 CJS 构建（build/cjs）。server-main e2e 需要真客户端实现建连，
+    // 不能用 no-op stub（stub 会让全部 WS e2e connect 超时）。
+    "^socket\\.io-client$":
+      "<rootDir>/node_modules/socket.io-client/build/cjs/index.js",
   },
   transform: {
     "^.+\\.ts$": [

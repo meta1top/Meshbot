@@ -61,8 +61,9 @@ export function WorkspaceSidebar({
   // 单账号：退出即彻底登出回登录页；切换账号 = 退出后重新登录。
   const handleLogout = useCallback(async () => {
     await logoutMutation.mutateAsync().catch(() => {});
-    router.replace("/login");
-  }, [logoutMutation.mutateAsync, router]);
+    // 硬跳清空内存缓存/atom——下一个登录账号不得继承本账号的会话/IM 数据。
+    window.location.href = "/login";
+  }, [logoutMutation.mutateAsync]);
 
   /** 切换活跃组织：调远端，成功后失效 profile/org 相关查询。 */
   const handleSwitchOrg = useCallback(
@@ -234,7 +235,7 @@ export function WorkspaceSidebar({
         <button
           type="button"
           onClick={toggleTheme}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-(--shell-radius) text-(--shell-sidebar-fg)/65 transition-colors hover:bg-(--shell-sidebar-hover) hover:text-(--shell-sidebar-fg)"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-(--shell-radius) text-(--shell-sidebar-fg)/65 transition-colors hover:bg-(--shell-sidebar-hover) hover:text-(--shell-sidebar-fg)"
           title={
             theme === "dark"
               ? tCommon("switchToLightTheme")

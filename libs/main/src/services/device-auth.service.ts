@@ -6,7 +6,8 @@ import type { Repository } from "typeorm";
 import { DeviceAuthRequest } from "../entities/device-auth-request.entity";
 import { MainErrorCode } from "../errors/main.error-codes";
 
-const REQUEST_TTL_MS = 10 * 60 * 1000;
+/** 授权请求有效期：30 分钟（注册→验码→建组织→配模型全链路留足时间）。 */
+const REQUEST_TTL_MS = 30 * 60 * 1000;
 const MAX_EXCHANGE_ATTEMPTS = 5;
 
 /**
@@ -24,7 +25,7 @@ export class DeviceAuthService {
   /**
    * 本地 Agent 发起授权请求（公开端点调用，无身份）。
    *
-   * 返回新建的授权请求，状态为 pending，10 分钟过期。
+   * 返回新建的授权请求，状态为 pending，30 分钟过期。
    */
   async start(input: {
     deviceName: string;

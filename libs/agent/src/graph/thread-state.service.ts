@@ -19,22 +19,20 @@ export class ThreadStateService {
   constructor(private readonly accountGraphProvider: AccountGraphProvider) {}
 
   /**
-   * 删除某 thread（=sessionId）在当前账号 checkpoint 库的 checkpoints/writes 行。
-   * 复用该账号 checkpointer 的同一 better-sqlite3 连接（不另开连接，避免与
-   * checkpointer 争锁）。同步执行；幂等：表未懒建或无匹配行均不报错。
-   * 须在账号上下文内调用。
+   * 删除某 thread（=sessionId）在当前账号 checkpoint 库的全部 checkpoints/writes。
+   * 走 checkpoint-sqlite 1.x 官方 `deleteThread`（同一 better-sqlite3 连接，不再
+   * 直接拼 SQL 删表——0.x 时代无官方 API 的权宜已废）。
+   * 幂等：表未懒建（官方实现不做 setup，实测抛 no such table）与无匹配行均不报错；
+   * 其余错误（连接 / IO 等真实故障）照抛。须在账号上下文内调用。
    */
-  clearThread(threadId: string): void {
-    const db = this.accountGraphProvider.accountGraph().checkpointer.db;
-    for (const table of ["checkpoints", "writes"]) {
-      try {
-        db.prepare(`DELETE FROM ${table} WHERE thread_id = ?`).run(threadId);
-      } catch (err) {
-        // 表尚未由 SqliteSaver.setup 建出 → 无可删，正常跳过；
-        // 其余错误（连接 / IO 等真实故障）抛出，不静默掩盖。
-        if (!(err instanceof Error && /no such table/i.test(err.message))) {
-          throw err;
-        }
+  async clearThread(threadId: string): Promise<void> {
+    try {
+      await this.accountGraphProvider
+        .accountGraph()
+        .checkpointer.deleteThread(threadId);
+    } catch (err) {
+      if (!(err instanceof Error && /no such table/i.test(err.message))) {
+        throw err;
       }
     }
   }

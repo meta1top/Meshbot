@@ -9,7 +9,7 @@ import {
 } from "@meshbot/types-agent";
 import { BrandLogo } from "@meshbot/web-common/shell";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Loader2 } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
@@ -25,7 +25,7 @@ import {
 } from "@/rest/auth";
 
 const POLL_INTERVAL_MS = 2000;
-const WAIT_TIMEOUT_MS = 10 * 60 * 1000;
+const WAIT_TIMEOUT_MS = 30 * 60 * 1000;
 
 type Stage = "idle" | "waiting" | "timeout";
 
@@ -69,8 +69,10 @@ export default function LoginPage() {
   const finishLogin = async (access_token: string) => {
     clearTimers();
     applyAuthToken(access_token);
-    queryClient.invalidateQueries({ queryKey: profileQueryKey });
-    router.replace("/");
+    // 硬跳而非 router.replace：切换账号时内存里的 react-query 缓存 / jotai atom
+    // （会话列表、IM、presence、用量）全是前一账号的数据，软导航会原样残留——
+    // 硬跳整页重载彻底重置（与 reauthRequired 登出路径同一模式）。
+    window.location.href = "/";
   };
 
   const beginPolling = (requestId: string) => {
@@ -116,6 +118,26 @@ export default function LoginPage() {
     setStage("idle");
   };
 
+  // 注册并授权本机：先拿 requestId，把授权回跳地址透传给云端注册页，注册完成后回跳自动进入本机授权，再复用同一套轮询等待态
+  const onRegisterWithAuthorize = async () => {
+    if (!cloudWebUrl.data) return;
+    setStartError(null);
+    setStarting(true);
+    try {
+      const { requestId } = await startAuthorize();
+      const next = encodeURIComponent(`/authorize?request=${requestId}`);
+      window.open(
+        `${cloudWebUrl.data.webMainBase}/register?next=${next}`,
+        "_blank",
+      );
+      beginPolling(requestId);
+    } catch (err) {
+      setStartError(err instanceof Error ? err.message : t("startFailed"));
+    } finally {
+      setStarting(false);
+    }
+  };
+
   const onManualSubmit = async (values: AuthorizeCodeInput) => {
     setManualError(null);
     setManualSubmitting(true);
@@ -129,10 +151,6 @@ export default function LoginPage() {
     }
   };
 
-  const registerHref = cloudWebUrl.data
-    ? `${cloudWebUrl.data.webMainBase}/register`
-    : undefined;
-
   return (
     <AuthShellLayout>
       <BrandLogo size="md" withWordmark />
@@ -145,10 +163,16 @@ export default function LoginPage() {
           <p className="-mt-2 text-[12.5px] text-(--shell-sidebar-fg)/60">
             {t("waitingSub")}
           </p>
-          <div className="flex items-center gap-2 text-[12px] text-(--shell-sidebar-fg)/70">
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-(--shell-accent)" />
-            {t("waitingText")}
+          <div className="relative flex h-16 w-16 items-center justify-center">
+            <span className="absolute inset-0 animate-ping rounded-full bg-(--shell-accent)/20" />
+            <span className="absolute inset-2 rounded-full bg-(--shell-accent)/10" />
+            <span className="relative flex h-11 w-11 items-center justify-center rounded-full border border-(--shell-accent)/30 bg-background text-lg">
+              🌐
+            </span>
           </div>
+          <p className="text-[12px] text-(--shell-sidebar-fg)/70">
+            {t("waitingText")}
+          </p>
           <button
             type="button"
             onClick={onBrowserLogin}
@@ -173,6 +197,23 @@ export default function LoginPage() {
           <p className="-mt-2 text-[12.5px] text-(--shell-sidebar-fg)/60">
             {t("deviceSubtitle")}
           </p>
+          {stage === "idle" && (
+            <div className="flex items-start justify-center gap-3 text-[10.5px] text-(--shell-sidebar-fg)/45">
+              {[t("step1"), t("step2"), t("step3")].map((label, i) => (
+                <div key={label} className="flex items-center gap-3">
+                  {i > 0 && (
+                    <span className="mt-[-14px] tracking-[3px]">·····</span>
+                  )}
+                  <div className="flex flex-col items-center gap-1.5">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-(--shell-line) bg-background text-(--shell-accent)">
+                      {i + 1}
+                    </span>
+                    {label}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           {stage === "timeout" && (
             <Alert variant="destructive" className="text-left">
               <AlertDescription>{t("timeoutMessage")}</AlertDescription>
@@ -191,9 +232,6 @@ export default function LoginPage() {
           >
             {starting ? t("starting") : t("browserLoginButton")}
           </Button>
-          <p className="text-[10.5px] leading-relaxed text-(--shell-sidebar-fg)/45">
-            {t("footNote")}
-          </p>
         </>
       )}
 
@@ -236,17 +274,17 @@ export default function LoginPage() {
         )}
       </div>
 
-      {registerHref ? (
+      {cloudWebUrl.data ? (
         <p className="text-[11px] text-(--shell-sidebar-fg)/45">
           {t("noAccount")}{" "}
-          <a
-            href={registerHref}
-            target="_blank"
-            rel="noreferrer"
-            className="text-(--shell-accent) hover:underline"
+          <button
+            type="button"
+            onClick={onRegisterWithAuthorize}
+            disabled={starting}
+            className="text-(--shell-accent) hover:underline disabled:opacity-50"
           >
-            {t("goRegister")}
-          </a>
+            {t("registerAndAuthorize")}
+          </button>
         </p>
       ) : null}
     </AuthShellLayout>

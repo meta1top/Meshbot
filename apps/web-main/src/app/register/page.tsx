@@ -5,10 +5,7 @@ import {
   Alert,
   AlertDescription,
   Button,
-  Card,
-  CardContent,
   CardDescription,
-  CardHeader,
   CardTitle,
   Form,
   FormControl,
@@ -23,14 +20,17 @@ import {
   type RegisterUserInput,
   RegisterUserSchema,
 } from "@meshbot/types-main";
+import { AuthCard } from "@meshbot/web-common/shell";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Suspense, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { AuthChainBanner } from "@/components/auth/auth-chain-banner";
 import { AuthShell } from "@/components/auth/auth-shell";
 import { ApiError } from "@/lib/api";
+import { resolvePostAuthDestination } from "@/lib/post-auth-destination";
 import { useRegister, useResendCode, useVerifyEmail } from "@/rest/auth";
 
 type RegisterFormValues = RegisterUserInput & { confirmPassword: string };
@@ -115,7 +115,7 @@ function RegisterFlow() {
       setVerifyError(err instanceof ApiError ? err.message : t("verifyFailed"));
       return;
     }
-    router.replace(next ?? "/assistant");
+    router.replace(await resolvePostAuthDestination(next));
   };
 
   const onResend = async () => {
@@ -132,17 +132,18 @@ function RegisterFlow() {
   return (
     <AuthShell>
       <div className="w-full">
-        {step === "register" && (
-          <Card className="border-0 shadow-none">
-            <CardHeader className="space-y-1">
-              <CardTitle className="text-center">
-                {t("createAccount")}
-              </CardTitle>
-              <CardDescription className="text-center">
-                {t("createAccountDescription")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-3">
+        <AuthCard>
+          <AuthChainBanner />
+          {step === "register" && (
+            <div>
+              <div className="space-y-1 pb-3">
+                <CardTitle className="text-center">
+                  {t("createAccount")}
+                </CardTitle>
+                <CardDescription className="text-center">
+                  {t("createAccountDescription")}
+                </CardDescription>
+              </div>
               <Form {...form}>
                 <form
                   onSubmit={form.handleSubmit(onSubmitRegister)}
@@ -252,19 +253,19 @@ function RegisterFlow() {
                   </p>
                 </form>
               </Form>
-            </CardContent>
-          </Card>
-        )}
+            </div>
+          )}
 
-        {step === "verify" && (
-          <Card className="border-0 shadow-none">
-            <CardHeader className="space-y-1">
-              <CardTitle className="text-center">{t("verifyTitle")}</CardTitle>
-              <CardDescription className="text-center">
-                {t("verifyDescription", { email })}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-3">
+          {step === "verify" && (
+            <div>
+              <div className="space-y-1 pb-3">
+                <CardTitle className="text-center">
+                  {t("verifyTitle")}
+                </CardTitle>
+                <CardDescription className="text-center">
+                  {t("verifyDescription", { email })}
+                </CardDescription>
+              </div>
               <form onSubmit={onSubmitVerify} className="flex flex-col gap-5">
                 <div className="space-y-4">
                   <label
@@ -313,9 +314,9 @@ function RegisterFlow() {
                     : t("resend")}
                 </Button>
               </form>
-            </CardContent>
-          </Card>
-        )}
+            </div>
+          )}
+        </AuthCard>
       </div>
     </AuthShell>
   );

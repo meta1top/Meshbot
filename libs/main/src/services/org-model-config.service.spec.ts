@@ -1,3 +1,4 @@
+import { resolveContextWindow } from "@meshbot/types";
 import { CommonErrorCode } from "@meshbot/common";
 import { SecretCryptoService } from "./secret-crypto.service";
 import { OrgModelConfigService } from "./org-model-config.service";
@@ -48,6 +49,66 @@ describe("OrgModelConfigService", () => {
     enabled: true,
   };
 
+  it("create/update/remove 均发出 org.model-config.changed 事件", async () => {
+    const rows: OrgModelConfig[] = [];
+    const emitter = { emit: jest.fn() };
+    const svc = new OrgModelConfigService(
+      makeRepo(rows) as never,
+      crypto,
+      emitter as never,
+    );
+    await svc.create("o1", input);
+    await svc.update("o1", rows[0].id, { name: "改名" });
+    await svc.remove("o1", rows[0].id);
+    const calls = emitter.emit.mock.calls.filter(
+      ([evt]: [string]) => evt === "org.model-config.changed",
+    );
+    expect(calls).toHaveLength(3);
+    for (const [, payload] of calls) expect(payload).toEqual({ orgId: "o1" });
+  });
+
+  it("create 不传 contextWindow：主流模型按 MODEL_SPECS 解析，未知模型 128k 兜底", async () => {
+    const rows: OrgModelConfig[] = [];
+    const svc = new OrgModelConfigService(makeRepo(rows) as never, crypto);
+    // 命中 specs（deepseek-chat 在 MODEL_SPECS 里且非 128000）
+    await svc.create("o1", {
+      ...input,
+      model: "deepseek-chat",
+      contextWindow: undefined,
+    });
+    expect(rows[0].contextWindow).toBe(
+      resolveContextWindow("deepseek-chat", undefined),
+    );
+    expect(rows[0].contextWindow).not.toBe(128_000 + 1); // 防误写：确为查表值
+    // 未知模型 → 兜底 128k
+    await svc.create("o1", {
+      ...input,
+      model: "totally-unknown-x",
+      contextWindow: undefined,
+    });
+    expect(rows[1].contextWindow).toBe(128_000);
+  });
+
+  it("create 显式 contextWindow 优先于 specs；update 改 model 后重解析", async () => {
+    const rows: OrgModelConfig[] = [];
+    const svc = new OrgModelConfigService(makeRepo(rows) as never, crypto);
+    await svc.create("o1", {
+      ...input,
+      model: "deepseek-chat",
+      contextWindow: 999_000,
+    });
+    expect(rows[0].contextWindow).toBe(999_000);
+    // update 只改 model 不传 contextWindow → 按新 model 重查 specs（库里旧值
+    // 是"上次解析结果"，不享有用户优先级——否则手填一次永远回不到自动解析）
+    await svc.update("o1", rows[0].id, { model: "gpt-4o" });
+    expect(rows[0].contextWindow).toBe(
+      resolveContextWindow("gpt-4o", undefined),
+    );
+    // update 显式传 contextWindow → 用户值优先
+    await svc.update("o1", rows[0].id, { contextWindow: 555_000 });
+    expect(rows[0].contextWindow).toBe(555_000);
+  });
+
   it("create 加密入库,listForAdmin 打码,listForAgent 不含厂商 key", async () => {
     const rows: OrgModelConfig[] = [];
     const svc = new OrgModelConfigService(makeRepo(rows) as never, crypto);
@@ -80,6 +141,16 @@ describe("OrgModelConfigService", () => {
     spy.mockRestore();
   });
 
+  it("listForAgent 停用行也下发（enabled:false 原样带出，端侧留名字解析）", async () => {
+    const rows: OrgModelConfig[] = [];
+    const svc = new OrgModelConfigService(makeRepo(rows) as never, crypto);
+    const created = await svc.create("o1", input);
+    await svc.update("o1", created.id, { enabled: false });
+    const agent = await svc.listForAgent("o1");
+    expect(agent).toHaveLength(1);
+    expect(agent[0].enabled).toBe(false);
+  });
+
   it("create 缺 apiKey 抛 VALIDATION_FAILED", async () => {
     const rows: OrgModelConfig[] = [];
     const svc = new OrgModelConfigService(makeRepo(rows) as never, crypto);
@@ -101,14 +172,6 @@ describe("OrgModelConfigService", () => {
     expect(resolved?.apiKey).toBe("sk-abcd1234");
     const agent = await svc.listForAgent("o1");
     expect(agent[0].name).toBe("改名");
-  });
-
-  it("listForAgent 过滤 enabled=false", async () => {
-    const rows: OrgModelConfig[] = [];
-    const svc = new OrgModelConfigService(makeRepo(rows) as never, crypto);
-    const created = await svc.create("o1", input);
-    await svc.update("o1", created.id, { enabled: false });
-    expect(await svc.listForAgent("o1")).toHaveLength(0);
   });
 
   it("跨组织 update/remove 抛 DEVICE_NOT_FOUND 级别的未找到错误", async () => {

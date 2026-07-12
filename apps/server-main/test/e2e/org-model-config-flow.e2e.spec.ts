@@ -179,7 +179,7 @@ describe("server-main 组织模型配置权限 e2e", () => {
     return exchangeRes.body.data.deviceToken as string;
   }
 
-  it("owner 建配置 → 打码列表 → 成员 403 → agent 端点下发不含厂商 key → disable 后为空", async () => {
+  it("owner 建配置 → 打码列表 → 成员 403 → agent 端点下发不含厂商 key → disable 后停用行仍下发（enabled:false）", async () => {
     if (maybeSkip()) return;
 
     // owner 建组织
@@ -262,7 +262,8 @@ describe("server-main 组织模型配置权限 e2e", () => {
     expect(agentListRes.body.data[0].model).toBeUndefined();
     expect(agentListRes.body.data[0].baseUrl).toBeUndefined();
 
-    // disable 后 agent 列表为空
+    // disable 后停用行仍下发（enabled:false）——端侧留行做历史模型名解析与
+    // 「禁用报错」语义（行消失会静默回退默认模型），选择器/调用侧按 enabled 过滤
     const updateRes = await request(app.getHttpServer())
       .patch(`/api/orgs/${orgId}/model-configs/${configId}`)
       .set("Authorization", `Bearer ${ownerToken}`)
@@ -275,6 +276,11 @@ describe("server-main 组织模型配置权限 e2e", () => {
     const agentListAfterDisable = await request(app.getHttpServer())
       .get("/api/agent/model-configs")
       .set("Authorization", `Bearer ${deviceToken}`);
-    expect(agentListAfterDisable.body.data).toEqual([]);
+    expect(agentListAfterDisable.body.data).toHaveLength(1);
+    expect(agentListAfterDisable.body.data[0]).toMatchObject({
+      enabled: false,
+      name: "GPT-4o",
+    });
+    expect(agentListAfterDisable.body.data[0]).not.toHaveProperty("apiKey");
   });
 });

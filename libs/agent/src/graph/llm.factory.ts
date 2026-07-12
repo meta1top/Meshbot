@@ -7,17 +7,15 @@ import { initChatModel } from "langchain/chat_models/universal";
 import type { ActiveModelConfig } from "../config/model-config.reader";
 
 /**
- * PROVIDERS type → initChatModel 期望的 modelProvider 名。
+ * 本地轨 providerType → initChatModel 期望的 modelProvider 名。
  *
- * `google` 在 LangChain 中对应 `google-genai`；
- * `openai-compatible` 复用 `openai`（通过 baseUrl 路由）。
+ * 本地轨只经云网关取模型：`model-config-sync.service.ts` 的 `toGatewayRow` 把云端
+ * 下发行的 providerType 固定写成 `openai-compatible`，真实厂商（anthropic /
+ * google-genai / ollama / deepseek）的调用发生在 server-main 的 model-gateway。
+ * 因此这里只需支持 OpenAI 兼容协议一种。
  */
 const PROVIDER_MODEL_NAME: Record<string, string> = {
   openai: "openai",
-  anthropic: "anthropic",
-  google: "google-genai",
-  deepseek: "deepseek",
-  ollama: "ollama",
   "openai-compatible": "openai",
 };
 
@@ -129,26 +127,27 @@ export async function createChatModel(
     /** 覆盖 streaming，title / one-shot 场景设 false 跳过 stream 开销。 */
     streaming?: boolean;
     /**
-     * 透传到 OpenAI client 的额外参数。deepseek thinking 模型用
-     * `{ thinking: { type: "disabled" } }` 关思考；其他 provider 按各自约定。
-     */
-    modelKwargs?: Record<string, unknown>;
-    /**
      * 云网关模型（`config.isCloudModel`）取当前 device token 的回调。
      * 每次请求都会重新调用，token 轮换无需重建 client；不传时云模型请求
-     * 会带空 Bearer（server-agent 侧接线见后续任务）。
+     * 会带空 Bearer。
      */
     cloudTokenProvider?: () => string | null;
   },
 ): Promise<BaseChatModel> {
+  // 白名单守卫必须显式抛错：hoisted 模式下厂商包仍物理存在于根 node_modules
+  // （server-main 依赖它们），不拦的话 initChatModel 会静默建出一个本地直连
+  // client，把请求打到厂商而绕过云网关。
+  const modelProvider = PROVIDER_MODEL_NAME[config.providerType];
+  if (!modelProvider) {
+    throw new Error(
+      `本地轨不支持的 providerType：${config.providerType}。` +
+        `本地轨只经云网关取模型，真实厂商调用发生在 server-main 的 model-gateway；` +
+        `请检查 model_configs 表是否残留 source='local' 的旧行。`,
+    );
+  }
+
   const configuration: Record<string, unknown> = {};
   if (config.baseUrl) configuration.baseURL = config.baseUrl;
-  // 临时验证：deepseek thinking 模式要求每条 assistant 消息带 reasoning_content，
-  // 但 @langchain/openai 序列化 message 时不会回写。拦截 fetch 给 assistant
-  // 消息补一个空字段，验证占位能否绕过 deepseek 服务端校验。
-  if (config.providerType === "deepseek") {
-    configuration.fetch = patchedFetchForDeepseek(globalThis.fetch);
-  }
   // 云网关模型：apiKey 落地的是占位符（真实厂商 key 只在云端持有），client
   // 用占位 key 建一次即可；每次请求靠 fetch 包装把 Authorization 换成当前
   // device token，避免把易失效的 token 提前烘进 client 实例。
@@ -159,50 +158,12 @@ export async function createChatModel(
     );
   }
   return (await initChatModel(config.model, {
-    modelProvider:
-      PROVIDER_MODEL_NAME[config.providerType] ?? config.providerType,
+    modelProvider,
     apiKey: config.apiKey,
     ...(Object.keys(configuration).length > 0 ? { configuration } : {}),
     streaming: options?.streaming ?? true,
-    ...(options?.modelKwargs ? { modelKwargs: options.modelKwargs } : {}),
     ...(debugCallback ? { callbacks: [debugCallback] } : {}),
   })) as BaseChatModel;
-}
-
-/**
- * Wrap fetch：检测 POST /chat/completions JSON body，给 role=assistant 且
- * 缺 reasoning_content 的消息补一个空 reasoning_content。临时验证用，确认
- * 占位能否过 deepseek thinking 校验后再抽架构。
- */
-function patchedFetchForDeepseek(base: typeof fetch): typeof fetch {
-  return async function patchedFetch(input, init) {
-    if (!init?.body || typeof init.body !== "string") {
-      return base(input, init);
-    }
-    let body: { messages?: Array<Record<string, unknown>> };
-    try {
-      body = JSON.parse(init.body);
-    } catch {
-      return base(input, init);
-    }
-    if (!Array.isArray(body.messages)) {
-      return base(init === undefined ? input : input, init);
-    }
-    let patched = false;
-    for (const msg of body.messages) {
-      if (msg.role === "assistant" && msg.reasoning_content === undefined) {
-        msg.reasoning_content = "";
-        patched = true;
-      }
-    }
-    if (!patched) {
-      return base(input, init);
-    }
-    console.log(
-      `[deepseek-patch] injected reasoning_content="" into ${body.messages.filter((m) => m.role === "assistant").length} assistant message(s)`,
-    );
-    return base(input, { ...init, body: JSON.stringify(body) });
-  };
 }
 
 /**

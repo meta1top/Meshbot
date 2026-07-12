@@ -86,3 +86,18 @@ export class RemoteRunsQueryDto extends createI18nZodDto(
   RemoteRunsQuerySchema,
 ) {}
 export interface RemoteRunsQueryDto extends RemoteRunsQueryInput {}
+
+/** PATCH /remote-devices/:id/sessions/:sessionId/model 请求体。 */
+export const RemotePatchSessionModelSchema = z.object({
+  modelConfigId: z.string().min(1),
+});
+export type RemotePatchSessionModelInput = z.infer<
+  typeof RemotePatchSessionModelSchema
+>;
+
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
+export class RemotePatchSessionModelDto extends createI18nZodDto(
+  RemotePatchSessionModelSchema,
+) {}
+export interface RemotePatchSessionModelDto
+  extends RemotePatchSessionModelInput {}

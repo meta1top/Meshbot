@@ -65,6 +65,8 @@ export type StreamChunk =
       messageId: string;
       providerType: string;
       model: string;
+      /** 模型配置显示名快照（resolver meta 无名字的旁路径为 undefined）。 */
+      modelName?: string;
       inputTokens: number;
       outputTokens: number;
       totalTokens: number;

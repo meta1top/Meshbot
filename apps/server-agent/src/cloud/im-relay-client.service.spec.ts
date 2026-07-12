@@ -28,6 +28,14 @@ class FakeSocket extends EventEmitter {
     this.disconnected = true;
     this.connected = false;
   }
+
+  /** 手动重连调用记录（服务端踢后的补连）。 */
+  public reconnectCalls = 0;
+  connect(): this {
+    this.reconnectCalls += 1;
+    this.connected = true;
+    return this;
+  }
 }
 
 /** 单账号镜像（仅取连接相关字段）。 */
@@ -318,6 +326,59 @@ describe("ImRelayClientService", () => {
       expect(svc.isConnected("u1")).toBe(true);
 
       svc.disconnect("u1");
+    });
+  });
+
+  describe("服务端主动踢后的补连（io server disconnect）", () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it("被服务端踢（io server disconnect）→ 延迟后手动 socket.connect() 补连", async () => {
+      const s1 = new FakeSocket();
+      const { svc } = makeService(
+        { u1: { deviceToken: "tok-u1", orgId: "org1" } },
+        { u1: s1 },
+      );
+      await svc.connect("u1");
+
+      s1.simulateServerEvent("disconnect", "io server disconnect");
+      expect(s1.reconnectCalls).toBe(0);
+      jest.advanceTimersByTime(5000);
+
+      expect(s1.reconnectCalls).toBe(1);
+    });
+
+    it("其他断开原因（transport close）→ 不手动补连（socket.io 自动重连）", async () => {
+      const s1 = new FakeSocket();
+      const { svc } = makeService(
+        { u1: { deviceToken: "tok-u1", orgId: "org1" } },
+        { u1: s1 },
+      );
+      await svc.connect("u1");
+
+      s1.simulateServerEvent("disconnect", "transport close");
+      jest.advanceTimersByTime(10_000);
+
+      expect(s1.reconnectCalls).toBe(0);
+    });
+
+    it("被踢后若该账号已主动 disconnect（登出拆连）→ 不复活", async () => {
+      const s1 = new FakeSocket();
+      const { svc } = makeService(
+        { u1: { deviceToken: "tok-u1", orgId: "org1" } },
+        { u1: s1 },
+      );
+      await svc.connect("u1");
+
+      s1.simulateServerEvent("disconnect", "io server disconnect");
+      svc.disconnect("u1");
+      jest.advanceTimersByTime(10_000);
+
+      expect(s1.reconnectCalls).toBe(0);
     });
   });
 

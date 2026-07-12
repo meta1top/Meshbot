@@ -11,6 +11,7 @@ export class ModelConfigController {
 
   @Get()
   findAll() {
-    return this.service.findAllEnabled();
+    // 含停用行：前端选择器自行按 enabled 过滤，历史用量的模型名解析需要停用行
+    return this.service.findAll();
   }
 }

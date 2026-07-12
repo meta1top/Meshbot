@@ -21,6 +21,10 @@
     "manualFailed": "Invalid or expired authorization code",
     "noAccount": "No account?",
     "goRegister": "Sign up",
+    "registerAndAuthorize": "Sign up and authorize this device",
+    "step1": "Tap to authorize",
+    "step2": "Confirm in browser",
+    "step3": "Signed in automatically",
     "brandTagline": "Where your team and AI work together",
     "brandSubtitle": "Local agent + cloud collaboration — pick up your workflow anywhere.",
     "welcomeBack": "Welcome back to MeshBot",
@@ -121,7 +125,8 @@
     "comingSoon": "Coming soon",
     "agentLocal": "Local",
     "agentComingSoon": "Other devices coming soon",
-    "workspaceDefault": "Default workspace"
+    "workspaceDefault": "Default workspace",
+    "modelSelect": "Select model"
   },
   "chatInput": {
     "placeholder": "Type here",
@@ -195,7 +200,8 @@
       "totalLabel": "Total",
       "callCount": "{count} calls",
       "nextRequestLabel": "Next request",
-      "cumulativeLabel": "Cumulative"
+      "cumulativeLabel": "Cumulative",
+      "deletedModel": "Deleted model"
     },
     "actions": {
       "copy": "Copy",
@@ -231,7 +237,8 @@
     },
     "artifact": {
       "presentFailed": "Presentation failed"
-    }
+    },
+    "runErrorPrefix": "Run failed: "
   },
   "newMessage": {
     "title": "New message",

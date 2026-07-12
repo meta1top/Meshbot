@@ -6,6 +6,8 @@ import { answerRemote, confirmRemote } from "@/rest/remote-devices";
 /** 远程会话控制器：深层 HITL 卡片消费的最小闭包集合。 */
 type RemoteSession = {
   remoteDeviceId: string;
+  /** B 设备上的会话 id（跨设备产物预览等按会话校验的请求用）。 */
+  sessionId: string;
   confirm: (
     toolCallId: string,
     decision: "send" | "cancel",
@@ -34,6 +36,7 @@ export function RemoteSessionProvider(props: {
   const value = useMemo<RemoteSession>(
     () => ({
       remoteDeviceId,
+      sessionId,
       confirm: async (toolCallId, decision, content) => {
         const streamId = getStreamId();
         if (!streamId) throw new Error("远程会话 streamId 未就绪，请稍候重试");

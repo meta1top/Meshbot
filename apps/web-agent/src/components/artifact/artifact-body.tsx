@@ -1,10 +1,17 @@
 "use client";
 
 import { apiClient } from "@meshbot/web-common";
+import { useSetAtom } from "jotai";
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
+import { previewArtifactAtom } from "@/atoms/assistant-panel";
 import { MarkdownContent } from "@/components/session/markdown-content";
 import { artifactKind, artifactRawUrl } from "@/lib/artifact";
+import { getFileUrl } from "@/rest/drive";
+import {
+  fetchRemoteArtifact,
+  uploadRemoteArtifactToDrive,
+} from "@/rest/remote-devices";
 
 /** PDF 用 react-pdf(client-only，避开 static export 的 SSR/prerender 与 pdf.js worker)。 */
 const PdfView = dynamic(() => import("./pdf-view").then((m) => m.PdfView), {
@@ -17,14 +24,24 @@ const PdfView = dynamic(() => import("./pdf-view").then((m) => m.PdfView), {
  * - url 源（网盘 presigned）：裸 fetch，presigned URL 自带凭证，不需要 apiClient token
  * 二进制（html/pdf/image）→ blob ObjectURL；文本（markdown/text）→ string。
  */
+/** base64 → Uint8Array（独立 ArrayBuffer，满足 BlobPart/TextDecoder 两用）。 */
+function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(new ArrayBuffer(bin.length));
+  for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
 function useArtifactContent(
   path: string | undefined,
   url: string | undefined,
   name: string | undefined,
+  remote: { deviceId: string; sessionId: string } | undefined,
 ): {
   blobUrl: string | null;
   text: string | null;
   err: boolean;
+  tooLarge: { size: number; name: string } | null;
 } {
   // 类型判定：path 源用 path，url 源用 name，都没有则 binary
   const kindTarget = path ?? name ?? "";
@@ -32,6 +49,10 @@ function useArtifactContent(
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [text, setText] = useState<string | null>(null);
   const [err, setErr] = useState(false);
+  const [tooLarge, setTooLarge] = useState<{
+    size: number;
+    name: string;
+  } | null>(null);
 
   useEffect(() => {
     if (kind === "binary") return;
@@ -42,8 +63,35 @@ function useArtifactContent(
     setBlobUrl(null);
     setText(null);
     setErr(false);
+    setTooLarge(null);
     // html 也按文本拉取，用 iframe srcDoc 渲染——不依赖 blob 的 MIME（presigned 可能不带 Content-Type）
     const isText = kind === "markdown" || kind === "text" || kind === "html";
+
+    // 远程产物：经设备查询通道拉内联内容；too-large 由专属状态承接（非错误）。
+    if (remote && path) {
+      fetchRemoteArtifact(remote.deviceId, remote.sessionId, path)
+        .then((r) => {
+          if (cancelled) return;
+          if (r.kind === "too-large") {
+            setTooLarge({ size: r.size, name: r.name });
+            return;
+          }
+          const bytes = base64ToBytes(r.base64);
+          if (isText) {
+            setText(new TextDecoder().decode(bytes));
+          } else {
+            obj = URL.createObjectURL(new Blob([bytes]));
+            setBlobUrl(obj);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setErr(true);
+        });
+      return () => {
+        cancelled = true;
+        if (obj) URL.revokeObjectURL(obj);
+      };
+    }
 
     const fetchContent: Promise<string | Blob> = url
       ? // 网盘 presigned：裸 fetch，presigned URL 自带凭证
@@ -77,9 +125,9 @@ function useArtifactContent(
       if (obj) URL.revokeObjectURL(obj);
     };
     // name 不直接用于 effect 内部（只影响 kind，kind 已在依赖中）
-  }, [path, url, kind]);
+  }, [path, url, kind, remote]);
 
-  return { blobUrl, text, err };
+  return { blobUrl, text, err, tooLarge };
 }
 
 /**
@@ -135,14 +183,70 @@ export function ArtifactBody({
   path,
   url,
   name,
+  remote,
+  title,
 }: {
   path?: string;
   url?: string;
   name?: string;
+  /** 远程设备产物来源（path 为对端工作区相对路径）。 */
+  remote?: { deviceId: string; sessionId: string };
+  title?: string;
 }) {
   const kindTarget = path ?? name ?? "";
   const kind = artifactKind(kindTarget);
-  const { blobUrl, text, err } = useArtifactContent(path, url, name);
+  const { blobUrl, text, err, tooLarge } = useArtifactContent(
+    path,
+    url,
+    name,
+    remote,
+  );
+  const setPreviewArtifact = useSetAtom(previewArtifactAtom);
+  const [uploading, setUploading] = useState(false);
+  const [uploadErr, setUploadErr] = useState(false);
+
+  // 远程大产物：提示上传网盘预览；确认后 B 设备上传 → 本机取 presigned URL
+  // → 切换预览来源为网盘 url（atom 替换，组件自动重渲染）。
+  if (tooLarge && remote && path) {
+    const sizeMb = (tooLarge.size / 1024 / 1024).toFixed(1);
+    const onUpload = async () => {
+      setUploading(true);
+      setUploadErr(false);
+      try {
+        const up = await uploadRemoteArtifactToDrive(
+          remote.deviceId,
+          remote.sessionId,
+          path,
+        );
+        const presigned = await getFileUrl(up.fileId);
+        setPreviewArtifact({ url: presigned.url, name: up.name, title });
+      } catch {
+        setUploadErr(true);
+        setUploading(false);
+      }
+    };
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+        <p className="text-sm font-medium text-foreground">
+          文件较大（{sizeMb} MB），无法直接远程预览
+        </p>
+        <p className="text-xs text-muted-foreground">
+          可上传到企业网盘后在本机预览
+        </p>
+        {uploadErr && (
+          <p className="text-xs text-destructive">上传失败，请重试</p>
+        )}
+        <button
+          type="button"
+          disabled={uploading}
+          onClick={() => void onUpload()}
+          className="rounded-md bg-(--shell-accent) px-4 py-2 text-sm font-medium text-white transition-opacity disabled:opacity-60"
+        >
+          {uploading ? "上传中…" : "上传到网盘并预览"}
+        </button>
+      </div>
+    );
+  }
 
   if (err) {
     return (

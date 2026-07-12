@@ -23,7 +23,11 @@ import { type Socket, io } from "socket.io-client";
 
 import { AgentErrorCode } from "../errors/agent.error-codes";
 import { AUTH_EVENTS } from "../services/auth.events";
-import { IM_RELAY_EVENTS, type ImRelayConnectedEvent } from "./im-relay.events";
+import {
+  IM_RELAY_EVENTS,
+  type ImRelayConnectedEvent,
+  type ImRelayModelConfigChangedEvent,
+} from "./im-relay.events";
 import type { CloudIdentityService } from "../services/cloud-identity.service";
 
 /** socket.io-client 工厂函数类型（方便测试注入伪实现）。 */
@@ -37,6 +41,9 @@ interface Conn {
 
 /** keepalive 心跳间隔（ms）。 */
 const PING_INTERVAL_MS = 20_000;
+
+/** 被服务端主动踢后的手动补连延迟（socket.io 对 io server disconnect 不自动重连）。 */
+const KICKED_RECONNECT_DELAY_MS = 3_000;
 
 /**
  * 云端 IM WebSocket 中继客户端（v3 账号化）。
@@ -138,6 +145,15 @@ export class ImRelayClientService implements OnModuleDestroy {
         });
       }
 
+      // org 模型配置变更（云端广播的失效信号）→ 桥给 ModelConfigSyncService。
+      socket.on(IM_WS_EVENTS.modelConfigChanged, () => {
+        this.account.run(cloudUserId, () => {
+          this.emitter.emit(IM_RELAY_EVENTS.modelConfigChanged, {
+            cloudUserId,
+          } satisfies ImRelayModelConfigChangedEvent);
+        });
+      });
+
       // L2c 下行：设备查询响应（B→云→A）→ 桥给 RemoteDeviceQueryService.settle。
       socket.on(
         IM_WS_EVENTS.deviceQueryResponse,
@@ -208,6 +224,22 @@ export class ImRelayClientService implements OnModuleDestroy {
             this.emitter.emit(AUTH_EVENTS.reauthRequired, { cloudUserId });
           });
         }
+      });
+
+      // 服务端主动踢（onAuthedConnect 失败 / 重启窗口内被 disconnect(true)）时
+      // socket.io 协议约定客户端不自动重连（reason = "io server disconnect"），
+      // 必须手动补连，否则 relay 永久断、设备在云端一直离线。延迟补连避免撞
+      // 服务端 boot 窗口形成快速踢-连循环；补连前确认该账号连接仍在册
+      //（期间登出拆连则不复活）。其余 reason 由 socket.io 自动重连，不干预。
+      socket.on("disconnect", (reason: string) => {
+        if (reason !== "io server disconnect") return;
+        const timer = setTimeout(() => {
+          if (this.conns.get(cloudUserId)?.socket === socket) {
+            socket.connect();
+          }
+        }, KICKED_RECONNECT_DELAY_MS);
+        // biome-ignore lint/suspicious/noExplicitAny: NodeJS.Timeout has unref()
+        (timer as any).unref?.();
       });
 
       // relay（重）连成功后：若该账号仍有浏览器连着，重新上报在线

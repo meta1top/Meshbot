@@ -411,6 +411,71 @@ describe("SessionMessageService", () => {
     expect(got.size).toBe(0);
   });
 
+  describe("hasPresentedFile（跨设备产物白名单）", () => {
+    /** 按真实存储形态造数据：assistant 行 langchain toolCalls JSON（无 result）
+     *  + role=tool 行 content 存结果 JSON，langgraphId=toolCallId 关联。 */
+    async function seedPresented(sessionId: string, relPath: string) {
+      await service.recordAssistant({
+        id: `a-${sessionId}`,
+        sessionId,
+        content: "",
+        reasoning: null,
+        toolCalls: JSON.stringify([
+          {
+            name: "present_file",
+            args: { path: relPath },
+            id: `tc-${sessionId}`,
+            type: "tool_call",
+          },
+        ]),
+      });
+      await service.recordToolResult({
+        id: `tc-${sessionId}`,
+        sessionId,
+        toolCallId: `tc-${sessionId}`,
+        content: JSON.stringify({
+          status: "presented",
+          path: relPath,
+          name: relPath.split("/").pop(),
+        }),
+      });
+    }
+
+    it("present_file 呈现过的路径 → true", async () => {
+      await seedPresented("s1", "out/a.md");
+      expect(await service.hasPresentedFile("s1", "out/a.md")).toBe(true);
+    });
+
+    it("未呈现过的路径 → false", async () => {
+      await seedPresented("s1", "out/a.md");
+      expect(await service.hasPresentedFile("s1", "secret.env")).toBe(false);
+    });
+
+    it("其他工具结果伪造 presented JSON（无 present_file 调用关联）→ false", async () => {
+      await service.recordAssistant({
+        id: "a-forge",
+        sessionId: "s2",
+        content: "",
+        reasoning: null,
+        toolCalls: JSON.stringify([
+          { name: "read_file", args: {}, id: "tc-forge", type: "tool_call" },
+        ]),
+      });
+      await service.recordToolResult({
+        id: "tc-forge",
+        sessionId: "s2",
+        toolCallId: "tc-forge",
+        content: JSON.stringify({ status: "presented", path: "secret.env" }),
+      });
+      expect(await service.hasPresentedFile("s2", "secret.env")).toBe(false);
+    });
+
+    it("跨会话不串：s1 呈现的路径对 s3 → false", async () => {
+      await seedPresented("s1", "out/a.md");
+      expect(await service.hasPresentedFile("s3", "out/a.md")).toBe(false);
+    });
+  });
+
   describe("findLastAssistant", () => {
     it("用例 A：多条消息含 assistant 时返回末条 assistant 的 content", async () => {
       const sessionId = randomUUID();

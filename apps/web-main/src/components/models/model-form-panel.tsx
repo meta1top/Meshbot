@@ -201,11 +201,22 @@ export function modelFormValuesToCreateInput(
 export interface ModelFormPanelProps {
   mode: "create" | "edit";
   initial: OrgModelConfigView | null;
-  onCancel: () => void;
+  /** 取消回调；传 null 隐藏取消按钮（onboarding 场景不可跳过时）。 */
+  onCancel: (() => void) | null;
+  /** 取消按钮文案覆盖（onboarding 授权链场景显示「跳过，稍后配置」）。 */
+  cancelLabel?: string;
   onSubmit: (values: ModelFormValues) => Promise<void>;
   submitting: boolean;
   error: string | null;
 }
+
+/** 上下文窗口快捷值：未知模型手填时的常用档位（点击填入，可再手改）。 */
+const CONTEXT_WINDOW_PRESETS = [
+  { label: "32k", value: 32_768 },
+  { label: "128k", value: 131_072 },
+  { label: "256k", value: 262_144 },
+  { label: "1M", value: 1_048_576 },
+] as const;
 
 /**
  * 表单字段体——拆成 `<Form>` 子组件,用 `useFormContext` 读 `providerType`
@@ -219,7 +230,7 @@ function ModelFormFields({
   initial: OrgModelConfigView | null;
 }) {
   const t = useTranslations("models");
-  const { watch } = useFormContext<ModelFormValues>();
+  const { watch, setValue } = useFormContext<ModelFormValues>();
   const providerType = watch("providerType");
   const models = resolveProviderPreset(providerType)?.models ?? [];
 
@@ -271,6 +282,24 @@ function ModelFormFields({
           placeholder={t("fieldContextWindowPlaceholder")}
         />
       </FormItem>
+      {/* 未知模型的常用档位快捷填入（schema 收字符串，setValue 用字符串） */}
+      <div className="-mt-2 flex items-center gap-1.5">
+        {CONTEXT_WINDOW_PRESETS.map((p) => (
+          <button
+            key={p.label}
+            type="button"
+            onClick={() =>
+              setValue("contextWindow", String(p.value), {
+                shouldValidate: true,
+                shouldDirty: true,
+              })
+            }
+            className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
     </>
   );
 }
@@ -283,6 +312,7 @@ export function ModelFormPanel({
   onSubmit,
   submitting,
   error,
+  cancelLabel,
 }: ModelFormPanelProps) {
   const t = useTranslations("models");
   const schema = useSchema(buildFormSchema(mode === "create"));
@@ -324,14 +354,16 @@ export function ModelFormPanel({
             <Button type="submit" disabled={submitting}>
               {submitting ? t("saving") : t("save")}
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onCancel}
-              disabled={submitting}
-            >
-              {t("cancel")}
-            </Button>
+            {onCancel && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onCancel}
+                disabled={submitting}
+              >
+                {cancelLabel ?? t("cancel")}
+              </Button>
+            )}
           </div>
         </Form>
       </CardContent>

@@ -14,6 +14,7 @@ import { SessionMessage } from "./entities/session-message.entity";
 import { LlmCallService } from "./services/llm-call.service";
 import { ModelConfigService } from "./services/model-config.service";
 import { ModelConfigSyncService } from "./services/model-config-sync.service";
+import { RemoteArtifactService } from "./services/remote-artifact.service";
 import { RemoteQueryInboundService } from "./services/remote-query-inbound.service";
 import { RemoteRunControlService } from "./services/remote-run-control.service";
 import { RemoteRunInboundService } from "./services/remote-run-inbound.service";
@@ -67,6 +68,7 @@ import { SessionGateway } from "./ws/session.gateway";
     SuggestionService,
     ScheduleExecutor,
     RemoteQueryInboundService,
+    RemoteArtifactService,
     RemoteRunInboundService,
     RemoteRunControlService,
     RemoteRunRegistryService,

@@ -1,6 +1,6 @@
-import { type BaseMessage, RemoveMessage } from "@langchain/core/messages";
+import type { BaseMessage } from "@langchain/core/messages";
 import type { StructuredToolInterface } from "@langchain/core/tools";
-import { END, START, StateGraph } from "@langchain/langgraph";
+import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import type { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import type { EventEmitter2 } from "@nestjs/event-emitter";
 import type { ToolRegistry } from "../tools/tool-registry";
@@ -10,9 +10,20 @@ import {
 } from "./nodes/supervisor.node";
 import { createToolsNode } from "./nodes/tools.node";
 
-export interface GraphState {
-  messages: BaseMessage[];
-}
+/**
+ * 主图 state 定义：messages 经 mergeMessages 归并（append + 同 id 原地替换 +
+ * RemoveMessage 删除）。langgraph 1.x 起 {channels} 构造重载已 @deprecated，
+ * 迁 Annotation.Root（官方迁移第一档，reducer 语义 1:1）。
+ */
+export const GraphAnnotation = Annotation.Root({
+  messages: Annotation<BaseMessage[]>({
+    reducer: mergeMessages,
+    default: () => [],
+  }),
+});
+
+/** 图 state 类型：从 Annotation 派生（形状仍是 { messages: BaseMessage[] }）。 */
+export type GraphState = typeof GraphAnnotation.State;
 
 /** 按名字过滤 bindable 工具列表（子 Agent 用来排除 dispatch_subagent，实现一层嵌套）。 */
 export function filterBindable(
@@ -37,11 +48,15 @@ export function mergeMessages(
   x: BaseMessage[],
   y: BaseMessage[],
 ): BaseMessage[] {
+  // 结构判定而非 instanceof：core 1.x 双构建（ESM/CJS）下跨模块系统的
+  // RemoveMessage 类不同源，instanceof 会假阴性（同 graph-runner 的
+  // isAIMessageChunk 改造）；core 1.x 未导出 isRemoveMessage guard，用 _getType。
+  const isRemove = (m: BaseMessage): boolean => m._getType() === "remove";
   const removeIds = new Set<string>();
   for (const m of y) {
-    if (m instanceof RemoveMessage && m.id) removeIds.add(m.id);
+    if (isRemove(m) && m.id) removeIds.add(m.id);
   }
-  const incoming = y.filter((m) => !(m instanceof RemoveMessage));
+  const incoming = y.filter((m) => !isRemove(m));
   const incomingById = new Map<string, BaseMessage>();
   for (const m of incoming) {
     if (m.id) incomingById.set(m.id, m);
@@ -92,15 +107,7 @@ export function buildSupervisorGraph(
     resolveMessageId,
   );
   const tools = createToolsNode(registry, emitter);
-  return new StateGraph<GraphState>({
-    channels: {
-      messages: {
-        // 见 mergeMessages：append + 同 id 原地替换 + RemoveMessage 按 id 删除。
-        value: mergeMessages,
-        default: () => [],
-      },
-    },
-  })
+  return new StateGraph(GraphAnnotation)
     .addNode("supervisor", supervisor)
     .addNode("tools", tools)
     .addEdge(START, "supervisor")

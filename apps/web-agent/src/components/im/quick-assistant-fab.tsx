@@ -88,7 +88,7 @@ export function QuickAssistantFab() {
       <aside
         ref={asideRef}
         style={{ width: widthCss }}
-        className="app-no-drag absolute top-0 right-0 bottom-0 z-10000 flex flex-col overflow-hidden border-l border-border bg-(--shell-content) shadow-2xl"
+        className="app-no-drag absolute top-0 right-0 bottom-0 z-10000 flex flex-col overflow-hidden border-l border-border bg-(--shell-content) shadow-[-8px_0_24px_-12px_rgba(0,0,0,0.18)]"
       >
         {/* 左缘拖拽手柄（贴面板左内缘，避免被 overflow-hidden 裁掉） */}
         <button
@@ -99,8 +99,9 @@ export function QuickAssistantFab() {
         >
           <span className="h-full w-px bg-transparent transition-colors group-hover:bg-(--shell-accent)" />
         </button>
-        {/* 头部（高度对齐会话头 h-13） */}
-        <div className="flex h-13 shrink-0 items-center gap-2 border-b border-border pr-3 pl-4">
+        {/* 头部（高度对齐会话头 h-13）：drag-handle 恢复窗口拖动（面板整体
+            app-no-drag 挖掉了顶部拖拽条），按钮再 app-no-drag 凿洞保持可点。 */}
+        <div className="drag-handle flex h-13 shrink-0 items-center gap-2 border-b border-border pr-3 pl-4">
           <Sparkles className="h-4 w-4 text-(--shell-accent)" />
           <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">
             {name}
@@ -109,7 +110,7 @@ export function QuickAssistantFab() {
             type="button"
             onClick={() => setOpen(false)}
             aria-label="close"
-            className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="app-no-drag flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             <X className="h-4 w-4" />
           </button>

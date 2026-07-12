@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { AIMessageChunk, ToolMessage } from "@langchain/core/messages";
 import { ChatGenerationChunk } from "@langchain/core/outputs";
 import { EventEmitter2 } from "@nestjs/event-emitter";
@@ -93,24 +94,33 @@ describe("GraphRunner", () => {
     mkdirSync(path.join(testDir, "prompt"), { recursive: true });
     const { ctx: c, configService, promptService } = makeTestServices(testDir);
     ctx = c;
-    // 注意：以下 fakeModel 是普通对象，不继承 BaseChatModel，stream() 不经过
-    // LangChain 的 callback pipeline。配 streamMode:"messages" 单 mode 时凑合能用，
-    // 但 streamMode:["messages","updates"] 多 mode 下不可靠（chunks 不进 messages 流）。
-    // 想真测 streamMessage/resumeStream 流式行为，参考下面 TwoRoundModel 用
-    // BaseChatModel + _streamResponseChunks 的写法。3 个 pre-existing 挂的用例
-    // 是这个限制的后果，独立 issue 跟进。
-    //
-    // fakeModel 用 stream() 逐 token yield AIMessageChunk —— 与 supervisor 节点一致。
-    // 每次 stream() 调用产出一个新 id（模拟真实 LLM 每轮回复有独立 id），
-    // 单轮内各 chunk 共享同一 id，验证 streamMode:"messages" 管道连通 + messageId 稳定。
+    // BaseChatModel 子类 + _streamResponseChunks 只 yield ChatGenerationChunk：
+    // 1.x 基类自动把 chunk 送进事件通道（langgraph messages 流拿到真 chunk，
+    // id / usage_metadata 完整透传）；绝不手动调 runManager.handleLLMNewToken——
+    // 1.x 下手动调用会让 langgraph 额外合成一帧 run-<runId> id 的 chunk，
+    // 制造幻影轮。（旧版本此处是 plain-object mock，chunk 进不了 messages 流，
+    // 3 个用例长期预挂——S2 一并修复。）
+    // 每次 stream 产出一个新 id（模拟真实 LLM 每轮独立 id），单轮内共享。
     let streamCall = 0;
-    const fakeModel = {
-      stream: async () => {
+    class BasicFakeModel extends BaseChatModel {
+      _llmType() {
+        return "basic-fake";
+      }
+      async _generate(): Promise<never> {
+        throw new Error("不应走 _generate");
+      }
+      async *_streamResponseChunks(
+        _msgs: unknown,
+        _opts: unknown,
+      ): AsyncGenerator<ChatGenerationChunk> {
         streamCall += 1;
         const msgId = `fake-msg-${streamCall}`;
-        async function* gen() {
-          yield new AIMessageChunk({ id: msgId, content: "你" });
-          yield new AIMessageChunk({
+        yield new ChatGenerationChunk({
+          message: new AIMessageChunk({ id: msgId, content: "你" }),
+          text: "你",
+        });
+        yield new ChatGenerationChunk({
+          message: new AIMessageChunk({
             id: msgId,
             content: "好",
             usage_metadata: {
@@ -120,11 +130,12 @@ describe("GraphRunner", () => {
               input_token_details: { cache_read: 3, cache_creation: 0 },
               output_token_details: { reasoning: 0 },
             },
-          });
-        }
-        return gen();
-      },
-    };
+          }),
+          text: "好",
+        });
+      }
+    }
+    const fakeModel = new BasicFakeModel({});
     ({ graphRunner, threadState } = makeServices({
       configService,
       promptService,
@@ -244,18 +255,6 @@ describe("GraphRunner", () => {
       async *_streamResponseChunks(
         _msgs: unknown,
         _opts: unknown,
-        runManager:
-          | {
-              handleLLMNewToken: (
-                t: string,
-                i: unknown,
-                id: unknown,
-                p: unknown,
-                tags: unknown,
-                fields: unknown,
-              ) => Promise<void>;
-            }
-          | undefined,
       ): AsyncGenerator<ChatGenerationChunk> {
         this.callCount += 1;
         if (this.callCount === 1) {
@@ -269,14 +268,6 @@ describe("GraphRunner", () => {
             text: "",
           });
           yield chunk;
-          await runManager?.handleLLMNewToken(
-            "",
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            { chunk },
-          );
         } else {
           // 轮2：直接回复（无延迟）
           const chunk = new ChatGenerationChunk({
@@ -284,14 +275,6 @@ describe("GraphRunner", () => {
             text: "好",
           });
           yield chunk;
-          await runManager?.handleLLMNewToken(
-            "好",
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            { chunk },
-          );
         }
       }
     }
@@ -373,18 +356,6 @@ describe("GraphRunner", () => {
       async *_streamResponseChunks(
         _msgs: unknown,
         _opts: unknown,
-        runManager:
-          | {
-              handleLLMNewToken: (
-                t: string,
-                i: unknown,
-                id: unknown,
-                p: unknown,
-                tags: unknown,
-                fields: unknown,
-              ) => Promise<void>;
-            }
-          | undefined,
       ): AsyncGenerator<ChatGenerationChunk> {
         const c1 = new ChatGenerationChunk({
           message: new AIMessageChunk({
@@ -395,27 +366,11 @@ describe("GraphRunner", () => {
           text: "",
         });
         yield c1;
-        await runManager?.handleLLMNewToken(
-          "",
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          { chunk: c1 },
-        );
         const c2 = new ChatGenerationChunk({
           message: new AIMessageChunk({ id: "model-uuid-1", content: "好" }),
           text: "好",
         });
         yield c2;
-        await runManager?.handleLLMNewToken(
-          "好",
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          { chunk: c2 },
-        );
       }
     }
     const {
@@ -495,18 +450,6 @@ describe("GraphRunner system:ctx 刷新不累积", () => {
       async *_streamResponseChunks(
         _msgs: unknown,
         _opts: unknown,
-        runManager:
-          | {
-              handleLLMNewToken: (
-                t: string,
-                i: unknown,
-                id: unknown,
-                p: unknown,
-                tags: unknown,
-                fields: unknown,
-              ) => Promise<void>;
-            }
-          | undefined,
       ): AsyncGenerator<ChatGenerationChunk> {
         this.callCount += 1;
         const msgId = `msg-simple-${this.callCount}`;
@@ -525,14 +468,6 @@ describe("GraphRunner system:ctx 刷新不累积", () => {
           text: "ok",
         });
         yield chunk;
-        await runManager?.handleLLMNewToken(
-          "ok",
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          { chunk },
-        );
       }
     }
 

@@ -13,6 +13,8 @@ import {
   MessageService,
   PresenceService,
   UserService,
+  ORG_MODEL_CONFIG_EVENTS,
+  type OrgModelConfigChangedEvent,
 } from "@meshbot/main";
 import {
   type AgentRunControlInput,
@@ -553,6 +555,18 @@ export class ImGateway extends BaseWebSocketGateway {
    * 2. 过滤 userId 在 payload.userIds 中的连接
    * 3. 这些连接 join conv 房间 + emit conversationCreated 事件
    */
+  /** org 模型配置变更 → 广播给该 org 全部在线连接（设备收到即全量重同步）。 */
+  @OnEvent(ORG_MODEL_CONFIG_EVENTS.changed)
+  onOrgModelConfigChanged(payload: OrgModelConfigChangedEvent): void {
+    try {
+      this.server
+        .to(`org:${payload.orgId}`)
+        .emit(IM_WS_EVENTS.modelConfigChanged, {});
+    } catch (err) {
+      this.logger.error("im onOrgModelConfigChanged failed", err as Error);
+    }
+  }
+
   @OnEvent(IM_WS_EVENTS.conversationCreated)
   async onConversationCreated(payload: {
     summary: ConversationSummary;

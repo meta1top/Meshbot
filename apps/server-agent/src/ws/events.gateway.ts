@@ -20,6 +20,8 @@ import {
 import {
   QUICK_ASSISTANT_EVENTS,
   type QuickAssistantRenamedEvent,
+  MODEL_CONFIG_EVENTS,
+  type ModelConfigUpdatedEvent,
   SCHEDULE_EVENTS,
   type ScheduleFiredEvent,
 } from "@meshbot/types-agent";
@@ -185,6 +187,17 @@ export class EventsGateway extends BaseWebSocketGateway {
   @OnEvent(QUICK_ASSISTANT_EVENTS.renamed)
   onQuickAssistantRenamed(payload: QuickAssistantRenamedEvent): void {
     this.emitEnvelope(QUICK_ASSISTANT_EVENTS.renamed, payload);
+  }
+
+  /**
+   * 云端模型配置同步完成 → 信封投递给所属账号浏览器，模型列表实时刷新。
+   *
+   * ModelConfigSyncService.syncNow 成功后经 EventEmitter2 触发（事件驱动同步：
+   * 云端推送 / relay 重连 / 登录），前端收到后 invalidate model-configs 查询。
+   */
+  @OnEvent(MODEL_CONFIG_EVENTS.updated)
+  onModelConfigUpdated(payload: ModelConfigUpdatedEvent): void {
+    this.emitEnvelope(MODEL_CONFIG_EVENTS.updated, payload);
   }
 
   /**

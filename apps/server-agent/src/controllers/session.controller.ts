@@ -63,6 +63,7 @@ export class SessionController {
     const result = await this.sessions.createSession({
       content: dto.content,
       kind: dto.kind,
+      modelConfigId: dto.modelConfigId,
     });
     this.runner.kick(result.sessionId);
     this.titleService.schedule(result.sessionId, dto.content);
@@ -113,6 +114,7 @@ export class SessionController {
       byMessage[msgId] = {
         providerType: c.providerType,
         model: c.model,
+        modelName: c.modelName ?? undefined,
         inputTokens: c.inputTokens,
         outputTokens: c.outputTokens,
         totalTokens: c.totalTokens,

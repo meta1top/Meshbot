@@ -1,14 +1,24 @@
 import { AppError, CommonErrorCode } from "@meshbot/common";
-import type {
-  AgentModelConfig,
-  OrgModelConfigInput,
-  OrgModelConfigView,
+import {
+  type AgentModelConfig,
+  type OrgModelConfigInput,
+  type OrgModelConfigView,
+  resolveContextWindow,
 } from "@meshbot/types";
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
 import type { Repository } from "typeorm";
 import { OrgModelConfig } from "../entities/org-model-config.entity";
 import { SecretCryptoService } from "./secret-crypto.service";
+
+/** org 模型配置变更事件（云端进程内）：im.gateway 监听后向 org room 广播。 */
+export const ORG_MODEL_CONFIG_EVENTS = {
+  changed: "org.model-config.changed",
+} as const;
+export interface OrgModelConfigChangedEvent {
+  orgId: string;
+}
 
 /** 网关内部解析结果:归属校验通过后的厂商真实调用参数(apiKey 已解密明文) */
 export interface ResolvedModel {
@@ -28,7 +38,16 @@ export class OrgModelConfigService {
     @InjectRepository(OrgModelConfig)
     private readonly configRepo: Repository<OrgModelConfig>,
     private readonly crypto: SecretCryptoService,
+    // @Optional：生产由全局 EventEmitterModule 注入；单测两参构造仍可用。
+    @Optional() private readonly emitter?: EventEmitter2,
   ) {}
+
+  /** 模型配置变更后发进程内事件（im.gateway 监听 → org room 广播到设备）。 */
+  private emitChanged(orgId: string): void {
+    this.emitter?.emit(ORG_MODEL_CONFIG_EVENTS.changed, {
+      orgId,
+    } satisfies OrgModelConfigChangedEvent);
+  }
 
   /** 管理端列表(apiKey 打码) */
   async listForAdmin(orgId: string): Promise<OrgModelConfigView[]> {
@@ -50,10 +69,12 @@ export class OrgModelConfigService {
         model: input.model,
         apiKeyEnc: this.crypto.encrypt(input.apiKey),
         baseUrl: input.baseUrl ?? "",
-        contextWindow: input.contextWindow ?? 128_000,
+        // 用户显式值 > MODEL_SPECS 查表 > 128k 兜底（resolveContextWindow 内建优先级）
+        contextWindow: resolveContextWindow(input.model, input.contextWindow),
         enabled: input.enabled ?? true,
       }),
     );
+    this.emitChanged(orgId);
     return this.toView(row);
   }
 
@@ -68,33 +89,42 @@ export class OrgModelConfigService {
     if (input.providerType !== undefined) row.providerType = input.providerType;
     if (input.model !== undefined) row.model = input.model;
     if (input.baseUrl !== undefined) row.baseUrl = input.baseUrl;
-    if (input.contextWindow !== undefined)
+    // contextWindow 语义：本次请求显式传值 → 用户值优先；只改 model 不传
+    // contextWindow → 按新 model 重查 specs（库里旧值是"上次解析结果"，不享有
+    // 用户优先级——否则手填一次后永远无法回到自动解析）。
+    if (input.contextWindow !== undefined) {
       row.contextWindow = input.contextWindow;
+    } else if (input.model !== undefined) {
+      row.contextWindow = resolveContextWindow(input.model, undefined);
+    }
     if (input.enabled !== undefined) row.enabled = input.enabled;
     if (input.apiKey) row.apiKeyEnc = this.crypto.encrypt(input.apiKey);
-    return this.toView(await this.configRepo.save(row));
+    const saved = await this.configRepo.save(row);
+    this.emitChanged(orgId);
+    return this.toView(saved);
   }
 
   /** 删除配置 */
   async remove(orgId: string, id: string): Promise<void> {
     await this.findOwned(orgId, id);
     await this.configRepo.delete({ id });
+    this.emitChanged(orgId);
   }
 
   /**
    * Agent 下发:仅可见列表,不解密、不带厂商敏感字段(apiKey/baseUrl/providerType/model)。
    * 厂商调用改由网关侧 resolveDecrypted 持有,本地 Agent 只拿 id 做调用引用。
+   * 停用行也下发（enabled:false）：端侧留行做历史用量的模型名解析与"禁用报错"
+   * 语义（行被删会静默回退默认模型），选择器/调用侧各自按 enabled 过滤。
    */
   async listForAgent(orgId: string): Promise<AgentModelConfig[]> {
     const rows = await this.configRepo.find({ where: { orgId } });
-    return rows
-      .filter((r) => r.enabled)
-      .map((r) => ({
-        id: r.id,
-        name: r.name,
-        contextWindow: r.contextWindow,
-        enabled: r.enabled,
-      }));
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      contextWindow: r.contextWindow,
+      enabled: r.enabled,
+    }));
   }
 
   /** 网关内部用:按 orgId + 模型 id 查归属并解密厂商 apiKey;不存在/不归属返回 null */

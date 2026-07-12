@@ -28,6 +28,7 @@ function sampleConfigs(): AgentModelConfig[] {
 /** 按当前实现规则，把 AgentModelConfig 映射为期望的网关坐标行，供断言复用。 */
 function expectedGatewayRow(config: AgentModelConfig): CloudModelConfigRow {
   return {
+    id: config.id,
     providerType: "openai-compatible",
     baseUrl: `${CLOUD_URL}/api/v1`,
     model: config.id,
@@ -54,14 +55,18 @@ describe("ModelConfigSyncService", () => {
     const config = {
       getOrThrow: jest.fn().mockReturnValue(CLOUD_URL),
     };
+    const emitter = {
+      emit: jest.fn(),
+    };
     const service = new ModelConfigSyncService(
       cloud as never,
       identity as never,
       account,
       modelConfig as never,
       config as never,
+      emitter as never,
     );
-    return { account, cloud, identity, modelConfig, config, service };
+    return { account, cloud, identity, modelConfig, config, emitter, service };
   }
 
   afterEach(() => {
@@ -128,119 +133,52 @@ describe("ModelConfigSyncService", () => {
     expect(modelConfig.replaceCloudConfigs).not.toHaveBeenCalled();
   });
 
-  describe("失败退避（按账号独立计数）", () => {
-    const MINUTE = 60 * 1000;
-    const INTERVAL = 30 * MINUTE;
-
-    /** 访问私有 nextDelay（退避计算抽出的可测方法）。 */
-    function nextDelay(
-      service: ModelConfigSyncService,
-      identityCount: number,
-      roundOk: boolean,
-    ): number {
-      return (
-        service as unknown as {
-          nextDelay(identityCount: number, roundOk: boolean): number;
-        }
-      ).nextDelay(identityCount, roundOk);
-    }
-
-    /** 让指定账号的 syncNow 失败一次（identity 有 token，cloud.get 抛错）。 */
-    async function failOnce(
-      service: ModelConfigSyncService,
-      identity: { get: jest.Mock },
-      cloud: { get: jest.Mock },
-      cloudUserId: string,
-    ): Promise<void> {
-      identity.get.mockResolvedValue({ deviceToken: "mbd_x" });
-      cloud.get.mockRejectedValue(new Error("boom"));
-      await expect(service.syncNow(cloudUserId)).resolves.toBe(false);
-    }
-
-    /** 让指定账号的 syncNow 成功一次。 */
-    async function succeedOnce(
-      service: ModelConfigSyncService,
-      identity: { get: jest.Mock },
-      cloud: { get: jest.Mock },
-      cloudUserId: string,
-    ): Promise<void> {
+  describe("事件驱动触发源（轮询已删）", () => {
+    it("relay 连接成功事件 → syncNow 该账号", async () => {
+      const { cloud, identity, modelConfig, service } = build();
       identity.get.mockResolvedValue({ deviceToken: "mbd_x" });
       cloud.get.mockResolvedValue(sampleConfigs());
-      await expect(service.syncNow(cloudUserId)).resolves.toBe(true);
-    }
 
-    it("单账号连续失败 3 轮 → 退避 1 → 2 → 4 分钟递增", async () => {
-      const { cloud, identity, service } = build();
+      await service.onRelayConnected({ cloudUserId: "u1" });
 
-      await failOnce(service, identity, cloud, "u1");
-      expect(nextDelay(service, 1, false)).toBe(1 * MINUTE);
-
-      await failOnce(service, identity, cloud, "u1");
-      expect(nextDelay(service, 1, false)).toBe(2 * MINUTE);
-
-      await failOnce(service, identity, cloud, "u1");
-      expect(nextDelay(service, 1, false)).toBe(4 * MINUTE);
+      expect(cloud.get).toHaveBeenCalledWith(
+        "/api/agent/model-configs",
+        "mbd_x",
+      );
+      expect(modelConfig.replaceCloudConfigs).toHaveBeenCalled();
     });
 
-    it("退避封顶 30 分钟（连败 6+ 轮不再翻倍）", async () => {
-      const { cloud, identity, service } = build();
+    it("云端模型配置变更事件 → syncNow 该账号", async () => {
+      const { cloud, identity, modelConfig, service } = build();
+      identity.get.mockResolvedValue({ deviceToken: "mbd_x" });
+      cloud.get.mockResolvedValue(sampleConfigs());
 
-      for (let i = 0; i < 7; i += 1) {
-        await failOnce(service, identity, cloud, "u1");
-      }
-      expect(nextDelay(service, 1, false)).toBe(INTERVAL);
+      await service.onModelConfigChanged({ cloudUserId: "u1" });
+
+      expect(cloud.get).toHaveBeenCalled();
+      expect(modelConfig.replaceCloudConfigs).toHaveBeenCalled();
     });
 
-    it("u1 成功不影响 u2 的失败计数（按账号隔离）", async () => {
-      const { cloud, identity, service } = build();
+    it("syncNow 成功后 emit model-config.updated（前端刷新信号）", async () => {
+      const { cloud, identity, emitter, service } = build();
+      identity.get.mockResolvedValue({ deviceToken: "mbd_x" });
+      cloud.get.mockResolvedValue(sampleConfigs());
 
-      await failOnce(service, identity, cloud, "u2");
-      await failOnce(service, identity, cloud, "u2");
-      await succeedOnce(service, identity, cloud, "u1");
+      await service.syncNow("u1");
 
-      // u2 已连败 2 次，u1 的成功不得把退避拉回首败档位
-      expect(nextDelay(service, 2, false)).toBe(2 * MINUTE);
+      expect(emitter.emit).toHaveBeenCalledWith("model-config.updated", {
+        cloudUserId: "u1",
+      });
     });
 
-    it("u2 成功后其失败计数清零，再失败从 1 分钟重新起步", async () => {
-      const { cloud, identity, service } = build();
+    it("syncNow 失败不 emit 前端刷新事件", async () => {
+      const { cloud, identity, emitter, service } = build();
+      identity.get.mockResolvedValue({ deviceToken: "mbd_x" });
+      cloud.get.mockRejectedValue(new Error("boom"));
 
-      await failOnce(service, identity, cloud, "u2");
-      await failOnce(service, identity, cloud, "u2");
-      await succeedOnce(service, identity, cloud, "u2");
+      await service.syncNow("u1");
 
-      expect(nextDelay(service, 1, true)).toBe(INTERVAL);
-
-      await failOnce(service, identity, cloud, "u2");
-      expect(nextDelay(service, 1, false)).toBe(1 * MINUTE);
-    });
-
-    it("无已登录账号 → 正常 30 分钟间隔（不算失败路径）", () => {
-      const { service } = build();
-
-      expect(nextDelay(service, 0, false)).toBe(INTERVAL);
-    });
-
-    it("本轮全部成功 → 正常 30 分钟间隔", async () => {
-      const { cloud, identity, service } = build();
-
-      await succeedOnce(service, identity, cloud, "u1");
-      expect(nextDelay(service, 1, true)).toBe(INTERVAL);
-    });
-
-    it("账号 teardown 后其失败计数清零，不再影响下轮延迟计算", async () => {
-      const { cloud, identity, service } = build();
-
-      // u2 连续失败 2 次，延迟升到 2 分钟档位
-      await failOnce(service, identity, cloud, "u2");
-      await failOnce(service, identity, cloud, "u2");
-      expect(nextDelay(service, 1, false)).toBe(2 * MINUTE);
-
-      // u2 teardown（登出）清理其失败计数
-      service.onRuntimeTeardown({ cloudUserId: "u2" });
-
-      // failCounts 已空 → Math.max(1, ...[]) = 1 → 退避回落到首败 1 分钟档位
-      expect(nextDelay(service, 1, false)).toBe(1 * MINUTE);
+      expect(emitter.emit).not.toHaveBeenCalled();
     });
   });
 });

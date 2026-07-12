@@ -81,6 +81,10 @@
       "passwordNotMatch": "The two passwords do not match"
     }
   },
+  "wizard": {
+    "chainBanner": "We'll continue authorizing your device once this is done",
+    "chainBannerDevice": "We'll continue authorizing \"{deviceName}\" once this is done"
+  },
   "authorize": {
     "backToDesktop": "Please go back to the MeshBot desktop app and start the login again.",
     "requestMissing": {
@@ -93,7 +97,7 @@
     },
     "expired": {
       "title": "Authorization request expired",
-      "description": "The authorization request exceeded its 10-minute validity window and has expired."
+      "description": "The authorization request exceeded its 30-minute validity window and has expired."
     },
     "alreadyProcessed": {
       "title": "Request already handled",
@@ -103,10 +107,13 @@
       "title": "Authorization denied",
       "description": "You can close this page."
     },
+    "finishing": "Finishing authorization…",
     "confirm": {
       "title": "Device requesting access",
-      "description": "Device {deviceName} ({platform}) is requesting access to your account. Current organization: {orgName}",
+      "subtitle": "Please confirm the device details below before continuing",
       "unknownPlatform": "Unknown platform",
+      "platformLine": "Platform: {platform}",
+      "orgLine": "Organization: {orgName}",
       "approve": "Approve",
       "approving": "Approving...",
       "deny": "Deny",
@@ -118,6 +125,9 @@
       "copy": "Copy",
       "copied": "Copied",
       "copyManually": "Copy failed — please select the code and copy it manually."
+    },
+    "fallback": {
+      "hint": "Automatic completion failed — copy the authorization code below and paste it into \"Enter authorization code manually\" on the desktop app."
     },
     "onboarding": {
       "title": "Join an organization first",
@@ -338,7 +348,8 @@
     "modelBlockedDesc": "Ask your organization owner to configure a model, then refresh.",
     "modelLoadErrorTitle": "Couldn't load model configuration",
     "modelLoadErrorDesc": "Something went wrong while loading your organization's model configuration. Please retry.",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "modelSkip": "Skip for now"
   },
   "userMenu": {
     "switchOrg": "",

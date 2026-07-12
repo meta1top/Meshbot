@@ -11,6 +11,8 @@ export interface RecordLlmCallInput {
   messageId: string;
   providerType: string;
   model: string;
+  /** 模型配置显示名快照（无名字的旁路径可缺省，落 NULL）。 */
+  modelName?: string;
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;

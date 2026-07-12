@@ -23,7 +23,7 @@ describe("ModelResolver 覆盖解析", () => {
     db.prepare(
       `INSERT INTO model_configs (id, cloud_user_id, provider_type, name, model, api_key, enabled)
        VALUES ('mc-default','u1','openai','默认','gpt-a','k',1),
-              ('mc-alt','u1','deepseek','备用','ds-b','k',0)`,
+              ('mc-alt','u1','openai-compatible','备用','ds-b','k',0)`,
     ).run();
     db.close();
   });
@@ -47,6 +47,7 @@ describe("ModelResolver 覆盖解析", () => {
         expect(resolver.getMeta()).toEqual({
           providerType: "openai",
           model: "gpt-a",
+          modelName: "默认",
         });
       }),
     );
@@ -58,19 +59,26 @@ describe("ModelResolver 覆盖解析", () => {
       runCtx.run("mc-alt", async () => {
         await resolver.resolveModel();
         expect(resolver.getMeta()).toEqual({
-          providerType: "deepseek",
+          providerType: "openai-compatible",
           model: "ds-b",
+          modelName: "备用",
         });
       }),
     );
   });
 
-  it("覆盖 id 不存在 → 抛错（含 id）", async () => {
+  it("覆盖 id 不存在 → 回退账号默认模型（云端删模型后会话不卡死）", async () => {
     const { account, runCtx, resolver } = make();
-    await expect(
-      account.run("u1", () =>
-        runCtx.run("mc-404", () => resolver.resolveModel()),
-      ),
-    ).rejects.toThrow(/mc-404/);
+    await account.run("u1", () =>
+      runCtx.run("mc-404", async () => {
+        await resolver.resolveModel();
+        // 回退 enabled 默认配置（mc-default），而不是抛错卡死消费循环
+        expect(resolver.getMeta()).toEqual({
+          providerType: "openai",
+          model: "gpt-a",
+          modelName: "默认",
+        });
+      }),
+    );
   });
 });

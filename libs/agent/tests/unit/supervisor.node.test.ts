@@ -23,7 +23,11 @@ const noTools = () => [];
 describe("createSupervisorNode", () => {
   it("调用注入的 model.stream 并把累加后的 AIMessage 追加到 state", async () => {
     const model = fakeStreamingModel(["你", "好"]);
-    const node = createSupervisorNode(() => Promise.resolve(model), noTools);
+    const node = createSupervisorNode(
+      () => Promise.resolve(model),
+      noTools,
+      (id) => id,
+    );
     const result = await node({ messages: [new HumanMessage("hi")] });
     expect(model.stream).toHaveBeenCalledTimes(1);
     expect(result.messages).toHaveLength(1);
@@ -35,7 +39,11 @@ describe("createSupervisorNode", () => {
 
   it("把完整消息历史传给 model.stream", async () => {
     const model = fakeStreamingModel(["ok"]);
-    const node = createSupervisorNode(() => Promise.resolve(model), noTools);
+    const node = createSupervisorNode(
+      () => Promise.resolve(model),
+      noTools,
+      (id) => id,
+    );
     const messages = [
       new HumanMessage("a"),
       new HumanMessage("b"),
@@ -53,6 +61,7 @@ describe("createSupervisorNode", () => {
     const node = createSupervisorNode(
       () => Promise.resolve(null as unknown as BaseChatModel),
       noTools,
+      (id) => id,
     );
     await expect(node({ messages: [new HumanMessage("hi")] })).rejects.toThrow(
       "modelProvider 返回空",
@@ -61,7 +70,11 @@ describe("createSupervisorNode", () => {
 
   it("LLM 流未产出任何 chunk 时抛错", async () => {
     const model = fakeStreamingModel([]);
-    const node = createSupervisorNode(() => Promise.resolve(model), noTools);
+    const node = createSupervisorNode(
+      () => Promise.resolve(model),
+      noTools,
+      (id) => id,
+    );
     await expect(node({ messages: [new HumanMessage("hi")] })).rejects.toThrow(
       "未产出任何内容",
     );

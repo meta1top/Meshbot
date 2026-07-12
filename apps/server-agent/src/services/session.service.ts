@@ -21,6 +21,7 @@ import { PendingMessage } from "../entities/pending-message.entity";
 import { Session } from "../entities/session.entity";
 import { CheckpointerCleanupService } from "./checkpointer-cleanup.service";
 import { LlmCallService } from "./llm-call.service";
+import { ModelConfigService } from "./model-config.service";
 import { ScheduleService } from "./schedule.service";
 import { SessionMessageService } from "./session-message.service";
 
@@ -35,6 +36,7 @@ function toSummary(s: Session): SessionSummary {
     pinned: s.pinnedAt !== null,
     pinnedAt: s.pinnedAt ? s.pinnedAt.toISOString() : null,
     titleGenerated: s.titleGenerated,
+    modelConfigId: s.modelConfigId ?? null,
     createdAt: s.createdAt.toISOString(),
     updatedAt: s.updatedAt.toISOString(),
   };
@@ -66,6 +68,7 @@ export class SessionService {
     private readonly checkpointer: CheckpointerCleanupService,
     private readonly threadState: ThreadStateService,
     private readonly schedules: ScheduleService,
+    private readonly modelConfigs: ModelConfigService,
   ) {
     // 包裹 tx-aware 注入代理：作用域仓库的操作仍参与外层 @Transactional 边界
     this.sessionRepo = scopedFactory.create(rawSessionRepo);
@@ -91,6 +94,8 @@ export class SessionService {
       title: stripLlmuse(input.content).slice(0, TITLE_MAX),
       status: "running" as const,
       kind: input.kind ?? "user",
+      // 会话级模型选择：runner 每次 run 经 ModelRunContext 读此列做 override。
+      modelConfigId: input.modelConfigId ?? null,
     })) as Session;
     await this.pendingRepo.save({
       sessionId: saved.id,
@@ -433,7 +438,7 @@ export class SessionService {
    */
   async patch(
     sessionId: string,
-    input: { title?: string; pinned?: boolean },
+    input: { title?: string; pinned?: boolean; modelConfigId?: string },
   ): Promise<SessionSummary> {
     const changes: Partial<Session> = {};
     if (input.title !== undefined) {
@@ -442,6 +447,11 @@ export class SessionService {
     }
     if (input.pinned !== undefined) {
       changes.pinnedAt = input.pinned ? new Date() : null;
+    }
+    if (input.modelConfigId !== undefined) {
+      // 校验归属：按账号作用域查询，他账号/不存在的 id 统一 404，防越权指认。
+      await this.modelConfigs.findOneOrFail(input.modelConfigId);
+      changes.modelConfigId = input.modelConfigId;
     }
     await this.sessionRepo.update({ id: sessionId }, changes);
     const s = await this.findSessionOrFail(sessionId);
@@ -567,5 +577,9 @@ export class SessionService {
       sessionId,
       msg.langgraphId ?? messageId,
     );
+    // 该消息若曾 run 失败（pending 行 status=failed），重生成即用户对这次失败
+    // 的处置——置回 processed。否则重生成走 resume（batch=0）永远不清 failed，
+    // 前端拉 pending 后消息恒标红、失败态无法退出。幂等：已 processed 不受影响。
+    await this.markProcessed([messageId]);
   }
 }

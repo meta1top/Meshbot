@@ -90,26 +90,28 @@ function ShellInner({ children }: { children: ReactNode }) {
             {children}
           </SidebarSlotContext.Provider>
           {/* 产物预览：右侧全高浮层（与随手问助手同形态）；左缘拖拽调宽，
-              z 抬到拖拽条（z-9999）之上 → 顶部下载/关闭按钮可点、不被 app-region:drag 吞。 */}
-          <aside
-            aria-hidden={!hasArtifact}
-            style={{ width: widthStyle }}
-            className={cn(
-              "app-no-drag absolute top-0 right-0 bottom-0 z-10000 flex flex-col overflow-hidden border-l border-border bg-(--shell-content) shadow-2xl transition-transform duration-200",
-              hasArtifact ? "translate-x-0" : "translate-x-full",
-            )}
-          >
-            {/* 左缘拖拽手柄（贴内缘，避免被 overflow-hidden 裁掉） */}
-            <button
-              type="button"
-              aria-label="resize"
-              onMouseDown={startPanelResize}
-              className="group absolute top-0 bottom-0 left-0 z-10 flex w-2 cursor-col-resize items-stretch"
+              z 抬到拖拽条（z-9999）之上 → 顶部下载/关闭按钮可点、不被 app-region:drag 吞。
+              条件挂载而非常驻 + transform 滑入：合成器 transform 不触发布局变化，
+              Electron 不重算 draggable regions——常驻模式下打开面板后顶部按钮的
+              no-drag 洞停留在收起态快照，首次点击被拖拽区吞掉（助手面板即条件
+              挂载无此问题）。挂载产生真实布局变化，regions 必然重算。 */}
+          {hasArtifact && (
+            <aside
+              style={{ width: widthStyle }}
+              className="app-no-drag absolute top-0 right-0 bottom-0 z-10000 flex animate-in fade-in slide-in-from-right-4 flex-col overflow-hidden border-l border-border bg-(--shell-content) shadow-[-8px_0_24px_-12px_rgba(0,0,0,0.18)] duration-200"
             >
-              <span className="h-full w-px bg-transparent transition-colors group-hover:bg-(--shell-accent)" />
-            </button>
-            <ArtifactSplitPane />
-          </aside>
+              {/* 左缘拖拽手柄（贴内缘，避免被 overflow-hidden 裁掉） */}
+              <button
+                type="button"
+                aria-label="resize"
+                onMouseDown={startPanelResize}
+                className="group absolute top-0 bottom-0 left-0 z-10 flex w-2 cursor-col-resize items-stretch"
+              >
+                <span className="h-full w-px bg-transparent transition-colors group-hover:bg-(--shell-accent)" />
+              </button>
+              <ArtifactSplitPane />
+            </aside>
+          )}
           {isResizing && (
             <div className="fixed inset-0 z-10001 cursor-col-resize" />
           )}

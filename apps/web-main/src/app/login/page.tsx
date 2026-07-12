@@ -1,25 +1,18 @@
 "use client";
 
-import {
-  Alert,
-  AlertDescription,
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  Input,
-} from "@meshbot/design";
+import { Alert, AlertDescription, Button, Input } from "@meshbot/design";
 import { Form, FormItem } from "@meshbot/design/form";
 import { useSchema } from "@meshbot/design/hooks";
 import { type LoginInput, LoginSchema } from "@meshbot/types-main";
+import { AuthCard } from "@meshbot/web-common/shell";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Suspense, useState } from "react";
+import { AuthChainBanner } from "@/components/auth/auth-chain-banner";
 import { AuthShell } from "@/components/auth/auth-shell";
 import { ApiError } from "@/lib/api";
+import { resolvePostAuthDestination } from "@/lib/post-auth-destination";
 import { useLogin } from "@/rest/auth";
 
 /** 后端 `AUTH_EMAIL_NOT_VERIFIED` 错误码——登录时邮箱未验证，分流去注册页续验证。 */
@@ -53,25 +46,26 @@ function LoginForm() {
       setErrorMessage(err instanceof ApiError ? err.message : t("loginFailed"));
       return;
     }
-    router.replace(next ?? "/assistant");
+    router.replace(await resolvePostAuthDestination(next));
   };
 
   return (
     <AuthShell>
       <div className="w-full">
-        <Card className="border-0 shadow-none">
-          <CardHeader className="space-y-0 pb-4">
+        <AuthCard>
+          <AuthChainBanner />
+          <div className="space-y-0 pb-4">
             <p className="mb-1 text-center text-xs text-muted-foreground">
               {t("welcomeBack")}
             </p>
-            <CardTitle className="text-center text-[28px] leading-[1.15] font-semibold tracking-tight text-foreground">
+            <h1 className="text-center text-[28px] leading-[1.15] font-semibold tracking-tight text-foreground">
               {t("title")}
-            </CardTitle>
-            <CardDescription className="mt-1 text-center text-[12px] tracking-[0.08em] text-muted-foreground">
+            </h1>
+            <p className="mt-1 text-center text-[12px] tracking-[0.08em] text-muted-foreground">
               {t("subtitle")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-0">
+            </p>
+          </div>
+          <div className="pt-0">
             <Form
               schema={schema}
               defaultValues={{ email: "", password: "" }}
@@ -125,15 +119,19 @@ function LoginForm() {
               <p className="mt-3 text-center text-xs text-muted-foreground">
                 {t("noAccount")}{" "}
                 <Link
-                  href="/register"
+                  href={
+                    next
+                      ? `/register?next=${encodeURIComponent(next)}`
+                      : "/register"
+                  }
                   className="text-(--shell-accent) hover:underline"
                 >
                   {t("goRegister")}
                 </Link>
               </p>
             </Form>
-          </CardContent>
-        </Card>
+          </div>
+        </AuthCard>
       </div>
     </AuthShell>
   );
