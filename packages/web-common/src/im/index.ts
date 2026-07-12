@@ -15,6 +15,11 @@ export {
   type ConversationListProps,
 } from "./conversation-list";
 export {
+  DmPicker,
+  type DmPickerLabels,
+  type DmPickerProps,
+} from "./dm-picker";
+export {
   ImMessageList,
   type ImMessageListLabels,
   type ImMessageListProps,
