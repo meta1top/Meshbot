@@ -60,7 +60,7 @@ function ErrorCard({
   );
 }
 
-/** 授权码展示块：等宽字体 + 复制按钮，批准成功后无论是否 loopback 重定向都展示，作为兜底。 */
+/** 授权码展示块：等宽字体 + 复制按钮，仅 ApprovedCard 兜底态渲染。 */
 function ApproveCodeBlock({ userCode }: { userCode: string }) {
   const t = useTranslations("authorize");
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
@@ -102,8 +102,18 @@ function ApproveCodeBlock({ userCode }: { userCode: string }) {
   );
 }
 
-/** 「已批准」卡片：批准成功即时态与「重定向失败后返回」恢复态共用。 */
-function ApprovedCard({ userCode }: { userCode: string }) {
+/**
+ * 「已批准」卡片：批准成功即时态与「重定向失败后返回」恢复态共用。
+ * `fallback` 为 true 时（无 redirectUri 的直出兜底 / sessionStorage 恢复路径）
+ * 顶部加黄提示条，告知用户 loopback 自动完成失败，需手动粘贴授权码。
+ */
+function ApprovedCard({
+  userCode,
+  fallback = false,
+}: {
+  userCode: string;
+  fallback?: boolean;
+}) {
   const t = useTranslations("authorize");
   return (
     <Card className="w-full max-w-[420px] border-0 shadow-none">
@@ -111,7 +121,12 @@ function ApprovedCard({ userCode }: { userCode: string }) {
         <CardTitle>{t("approved.title")}</CardTitle>
         <CardDescription>{t("approved.description")}</CardDescription>
       </CardHeader>
-      <CardContent className="pt-0">
+      <CardContent className="flex flex-col gap-3 pt-0">
+        {fallback && (
+          <Alert className="border-amber-300/60 bg-amber-50 text-amber-900">
+            <AlertDescription>{t("fallback.hint")}</AlertDescription>
+          </Alert>
+        )}
         <ApproveCodeBlock userCode={userCode} />
       </CardContent>
     </Card>
@@ -148,7 +163,9 @@ function AuthorizeFlow() {
     router.replace(`/login?next=${encodeURIComponent(next)}`);
   }, [profile.isPending, profile.isSuccess, authenticated, requestId, router]);
 
-  // 批准成功且带 redirectUri → 尝试 loopback 重定向；无论成功与否，授权码块始终展示兜底。
+  // 批准成功且带 redirectUri → 尝试 loopback 重定向；重定向发起后本页即跳转离开，
+  // 若跳转失败（本地端口未监听等），用户留在当前页——渲染分支已切到 spinner，
+  // sessionStorage 缓存的授权码留作用户手动返回本页时的兜底恢复入口。
   useEffect(() => {
     if (!approveResult?.redirectUri || !requestId) return;
     const url = `${approveResult.redirectUri}?request=${encodeURIComponent(
@@ -221,21 +238,33 @@ function AuthorizeFlow() {
 
   const request = deviceAuthQuery.data;
 
-  // 已批准 —— 展示授权码兜底块（同时若有 redirectUri 上面的 effect 已尝试重定向）。
+  // 已批准 —— 带 redirectUri：静默完成，只展示 spinner，同时上面的 effect 已发起 loopback 跳转；
+  // 不带 redirectUri（罕见：请求未带回调）→ 没有 loopback 可跳，直接展示授权码兜底卡。
   if (approveResult) {
-    return <ApprovedCard userCode={approveResult.userCode} />;
+    if (approveResult.redirectUri) {
+      return (
+        <div className="flex flex-col items-center gap-3 py-6">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-foreground" />
+          <p className="text-sm text-muted-foreground">{t("finishing")}</p>
+        </div>
+      );
+    }
+    return <ApprovedCard userCode={approveResult.userCode} fallback />;
   }
 
-  // 拒绝 —— 纯前端提示可关闭页面，不调接口，请求 30 分钟自然过期。
+  // 拒绝 —— 弱化处理：灰叉圆环 + 提示可关闭页面，不调接口，请求 30 分钟自然过期。
   // 不复用 ErrorCard：拒绝后再提示「回到桌面端重新发起登录」语义矛盾。
   if (denied) {
     return (
-      <Card className="w-full max-w-[420px] border-0 shadow-none">
-        <CardHeader className="space-y-1">
-          <CardTitle>{t("denied.title")}</CardTitle>
-          <CardDescription>{t("denied.description")}</CardDescription>
-        </CardHeader>
-      </Card>
+      <div className="flex flex-col items-center gap-2 py-6 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+          <span className="text-lg text-muted-foreground">✕</span>
+        </div>
+        <p className="text-sm font-semibold">{t("denied.title")}</p>
+        <p className="text-xs text-muted-foreground">
+          {t("denied.description")}
+        </p>
+      </div>
     );
   }
 
@@ -248,7 +277,7 @@ function AuthorizeFlow() {
         ? null
         : window.sessionStorage.getItem(codeStorageKey(requestId));
     if (storedCode) {
-      return <ApprovedCard userCode={storedCode} />;
+      return <ApprovedCard userCode={storedCode} fallback />;
     }
     return (
       <ErrorCard

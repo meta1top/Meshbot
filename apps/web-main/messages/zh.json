@@ -103,6 +103,7 @@
       "title": "已拒绝授权",
       "description": "你可以关闭此页。"
     },
+    "finishing": "正在完成授权…",
     "confirm": {
       "title": "设备请求接入",
       "description": "设备 {deviceName}（{platform}）请求接入你的账号，当前组织：{orgName}",
@@ -118,6 +119,9 @@
       "copy": "复制",
       "copied": "已复制",
       "copyManually": "复制失败，请手动选中授权码复制。"
+    },
+    "fallback": {
+      "hint": "自动完成失败——请复制下方授权码，回到桌面端「手动输入授权码」粘贴。"
     },
     "onboarding": {
       "title": "先加入一个组织",
