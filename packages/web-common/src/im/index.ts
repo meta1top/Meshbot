@@ -15,6 +15,11 @@ export {
   type MessageFlowProps,
 } from "./message-flow";
 export {
+  MessageInput,
+  type MessageInputLabels,
+  type MessageInputProps,
+} from "./message-input";
+export {
   annotateRows,
   dayLabel,
   formatTime,

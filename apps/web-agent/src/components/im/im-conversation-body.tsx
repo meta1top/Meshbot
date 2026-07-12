@@ -1,7 +1,7 @@
 "use client";
 
 import { IM_WS_EVENTS } from "@meshbot/types";
-import { MessageFlow } from "@meshbot/web-common/im";
+import { MessageFlow, MessageInput } from "@meshbot/web-common/im";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useTranslations } from "next-intl";
 import {
@@ -19,10 +19,6 @@ import {
   markConversationReadAtom,
   messagesAtom,
 } from "@/atoms/im";
-import {
-  ChatInput,
-  type ChatInputHandle,
-} from "@/components/common/chat-input";
 import { ConversationEmptyState } from "@/components/im/conversation-empty-state";
 import { MessageSkeleton } from "@/components/im/message-skeleton";
 import { MarkdownContent } from "@/components/session/markdown-content";
@@ -40,6 +36,7 @@ interface ImConversationBodyProps {
 /** IM 会话主体：socket 订阅、历史分页、消息列表、粘底输入。不含外壳/header。 */
 export function ImConversationBody({ id, scrollRef }: ImConversationBodyProps) {
   const t = useTranslations("messages");
+  const tChat = useTranslations("chatInput");
 
   const setCurrentConversationId = useSetAtom(currentConversationIdAtom);
   const setMessages = useSetAtom(messagesAtom);
@@ -79,9 +76,7 @@ export function ImConversationBody({ id, scrollRef }: ImConversationBodyProps) {
     return map;
   }, [currentUser, membersData, currentConversation]);
 
-  const [draft, setDraft] = useState("");
   const [historyLoading, setHistoryLoading] = useState(true);
-  const chatInputRef = useRef<ChatInputHandle>(null);
 
   const oldestMessageIdRef = useRef<string | null>(null);
   const hasMoreHistoryRef = useRef(true);
@@ -176,7 +171,6 @@ export function ImConversationBody({ id, scrollRef }: ImConversationBodyProps) {
     (text: string) => {
       const socket = getEventsSocket();
       socket.emit(IM_WS_EVENTS.send, { conversationId: id, content: text });
-      setDraft("");
     },
     [id],
   );
@@ -220,12 +214,13 @@ export function ImConversationBody({ id, scrollRef }: ImConversationBodyProps) {
           aria-hidden
           className="pointer-events-none absolute inset-x-0 -bottom-4 h-4 bg-background"
         />
-        <ChatInput
-          ref={chatInputRef}
-          value={draft}
-          onChange={setDraft}
+        <MessageInput
           onSend={handleSend}
           placeholder={t("inputPlaceholder")}
+          labels={{
+            attachment: tChat("attachment"),
+            send: tChat("send"),
+          }}
         />
       </div>
     </>
