@@ -232,7 +232,8 @@
     },
     "artifact": {
       "presentFailed": "Presentation failed"
-    }
+    },
+    "runErrorPrefix": "Run failed: "
   },
   "newMessage": {
     "title": "New message",

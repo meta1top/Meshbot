@@ -675,7 +675,14 @@ export function useSessionStream(
             .filter((m) => !loadingIdsToDrop.has(m.id))
             .map((m) =>
               failedIds.has(m.id)
-                ? { ...m, failed: true, pending: false, streaming: false }
+                ? {
+                    ...m,
+                    failed: true,
+                    pending: false,
+                    streaming: false,
+                    // 错误原因随气泡展示；截断防止超长堆栈撑爆消息流
+                    errorText: e.error.slice(0, 200),
+                  }
                 : m,
             ),
         ),

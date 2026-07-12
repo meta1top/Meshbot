@@ -232,7 +232,8 @@
     },
     "artifact": {
       "presentFailed": "呈现失败"
-    }
+    },
+    "runErrorPrefix": "运行失败："
   },
   "newMessage": {
     "title": "新消息",

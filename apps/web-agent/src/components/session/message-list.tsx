@@ -49,6 +49,8 @@ export interface TimelineMessage {
    */
   loading?: boolean;
   failed?: boolean;
+  /** run 失败的错误原因（仅实时 run.error 事件携带；历史恢复的 failed 行无此值）。 */
+  errorText?: string;
   /** 推理模型的思考过程（仅 assistant）：流式累积，渲染在气泡上方可展开折叠区。 */
   reasoning?: string;
   /**
@@ -188,6 +190,12 @@ export function MessageList({
                         streaming={m.role === "assistant" && m.streaming}
                       />
                     )}
+                  </div>
+                )}
+                {m.failed && m.errorText && (
+                  <div className="text-xs text-destructive/80">
+                    {t("runErrorPrefix")}
+                    {m.errorText}
                   </div>
                 )}
                 {m.role === "assistant" &&
