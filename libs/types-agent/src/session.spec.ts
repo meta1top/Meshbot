@@ -136,6 +136,7 @@ describe("session schemas — sidebar list", () => {
       pinned: false,
       pinnedAt: null,
       titleGenerated: false,
+      modelConfigId: null,
       createdAt: "2026-05-24T00:00:00.000Z",
       updatedAt: "2026-05-24T00:00:00.000Z",
     });
@@ -173,6 +174,7 @@ describe("session schemas — sidebar list", () => {
         pinned: false,
         pinnedAt: null,
         titleGenerated: false,
+        modelConfigId: null,
         createdAt: "2026-05-24T00:00:00.000Z",
         updatedAt: "2026-05-24T00:00:00.000Z",
       },
@@ -199,6 +201,7 @@ describe("session schemas — title generation", () => {
       pinned: false,
       pinnedAt: null,
       titleGenerated: true,
+      modelConfigId: null,
       createdAt: "2026-05-24T00:00:00.000Z",
       updatedAt: "2026-05-24T00:00:00.000Z",
     });

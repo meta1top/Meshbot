@@ -62,6 +62,7 @@ describe("readActiveModelConfig", () => {
     expect(readActiveModelConfig(dbPath, "user-a")).toEqual({
       providerType: "openai",
       model: "gpt-4o",
+      name: "gpt-4o",
       apiKey: "sk-a",
       baseUrl: "",
       isCloudModel: false,

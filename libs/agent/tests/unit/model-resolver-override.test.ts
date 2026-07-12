@@ -47,6 +47,7 @@ describe("ModelResolver 覆盖解析", () => {
         expect(resolver.getMeta()).toEqual({
           providerType: "openai",
           model: "gpt-a",
+          modelName: "默认",
         });
       }),
     );
@@ -60,6 +61,7 @@ describe("ModelResolver 覆盖解析", () => {
         expect(resolver.getMeta()).toEqual({
           providerType: "openai-compatible",
           model: "ds-b",
+          modelName: "备用",
         });
       }),
     );
@@ -74,6 +76,7 @@ describe("ModelResolver 覆盖解析", () => {
         expect(resolver.getMeta()).toEqual({
           providerType: "openai",
           model: "gpt-a",
+          modelName: "默认",
         });
       }),
     );
