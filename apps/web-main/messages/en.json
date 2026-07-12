@@ -24,11 +24,21 @@
     }
   },
   "shellStub": {
-    "assistant": "Assistant",
     "skills": "Skills",
     "drive": "Files",
     "flows": "Flows",
     "comingHint": "This feature is coming soon."
+  },
+  "assistant": {
+    "selectDeviceTitle": "Select a device",
+    "selectDeviceHint": "Choose an authorized device on the left to view its details",
+    "notFoundTitle": "Device not found",
+    "notFoundHint": "This device may have been revoked or does not belong to the current organization. Please pick another one from the list on the left.",
+    "remoteSessionComingSoon": "Remote sessions will be available in a future release",
+    "remoteSessionOfflineHint": "This device is currently offline. Remote sessions will be available in a future release"
+  },
+  "assistantSidebar": {
+    "title": "Devices"
   },
   "loading": "",
   "validation": {

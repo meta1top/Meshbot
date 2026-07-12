@@ -24,11 +24,21 @@
     }
   },
   "shellStub": {
-    "assistant": "助手",
     "skills": "技能",
     "drive": "文件",
     "flows": "流程",
     "comingHint": "该功能正在开发中，敬请期待。"
+  },
+  "assistant": {
+    "selectDeviceTitle": "选择设备",
+    "selectDeviceHint": "从左侧选择一个已授权设备，查看详情",
+    "notFoundTitle": "设备不存在",
+    "notFoundHint": "该设备可能已被吊销或不属于当前组织，请返回左侧列表重新选择。",
+    "remoteSessionComingSoon": "远程会话将在后续版本开通",
+    "remoteSessionOfflineHint": "设备当前离线，远程会话将在后续版本开通"
+  },
+  "assistantSidebar": {
+    "title": "设备"
   },
   "loading": "",
   "validation": {
