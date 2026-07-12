@@ -6,7 +6,8 @@ import type { Repository } from "typeorm";
 import { DeviceAuthRequest } from "../entities/device-auth-request.entity";
 import { MainErrorCode } from "../errors/main.error-codes";
 
-const REQUEST_TTL_MS = 10 * 60 * 1000;
+/** 授权请求有效期：30 分钟（注册→验码→建组织→配模型全链路留足时间）。 */
+const REQUEST_TTL_MS = 30 * 60 * 1000;
 const MAX_EXCHANGE_ATTEMPTS = 5;
 
 /**

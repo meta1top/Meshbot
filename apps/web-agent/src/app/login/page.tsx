@@ -25,7 +25,7 @@ import {
 } from "@/rest/auth";
 
 const POLL_INTERVAL_MS = 2000;
-const WAIT_TIMEOUT_MS = 10 * 60 * 1000;
+const WAIT_TIMEOUT_MS = 30 * 60 * 1000;
 
 type Stage = "idle" | "waiting" | "timeout";
 
