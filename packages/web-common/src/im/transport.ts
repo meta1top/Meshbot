@@ -1,4 +1,5 @@
 import type {
+  ChannelMember,
   ConversationSummary,
   ImConversationReadEvent,
   ImMessage,
@@ -24,14 +25,16 @@ export interface ImTransport {
   send(conversationId: string, content: string): Promise<void>;
   markRead(conversationId: string): Promise<void>;
   createDm(userId: string): Promise<ConversationSummary>;
+  /** visibility 缺省 "public"（不传即建公开频道，与后端 CreateChannelSchema 默认值一致）。 */
   createChannel(
     name: string,
     memberIds: string[],
+    visibility?: "public" | "private",
   ): Promise<ConversationSummary>;
   addChannelMember(conversationId: string, userId: string): Promise<void>;
-  listChannelMembers(
-    conversationId: string,
-  ): Promise<Array<{ userId: string; displayName: string }>>;
+  /** 退出私有频道（自身）。 */
+  leaveChannel(conversationId: string): Promise<void>;
+  listChannelMembers(conversationId: string): Promise<ChannelMember[]>;
   /** 订阅事件；返回退订函数。适配器负责连接生命周期。 */
   subscribe(events: Partial<ImTransportEvents>): () => void;
   /** 当前在线快照（适配器缓存的 presence 状态）。 */
