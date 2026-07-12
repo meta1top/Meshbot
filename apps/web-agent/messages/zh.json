@@ -196,7 +196,8 @@
       "totalLabel": "总计",
       "callCount": "{count} 次调用",
       "nextRequestLabel": "下次预估",
-      "cumulativeLabel": "累计"
+      "cumulativeLabel": "累计",
+      "deletedModel": "已删除的模型"
     },
     "actions": {
       "copy": "复制",

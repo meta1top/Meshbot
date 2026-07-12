@@ -141,6 +141,16 @@ describe("OrgModelConfigService", () => {
     spy.mockRestore();
   });
 
+  it("listForAgent 停用行也下发（enabled:false 原样带出，端侧留名字解析）", async () => {
+    const rows: OrgModelConfig[] = [];
+    const svc = new OrgModelConfigService(makeRepo(rows) as never, crypto);
+    const created = await svc.create("o1", input);
+    await svc.update("o1", created.id, { enabled: false });
+    const agent = await svc.listForAgent("o1");
+    expect(agent).toHaveLength(1);
+    expect(agent[0].enabled).toBe(false);
+  });
+
   it("create 缺 apiKey 抛 VALIDATION_FAILED", async () => {
     const rows: OrgModelConfig[] = [];
     const svc = new OrgModelConfigService(makeRepo(rows) as never, crypto);
@@ -162,14 +172,6 @@ describe("OrgModelConfigService", () => {
     expect(resolved?.apiKey).toBe("sk-abcd1234");
     const agent = await svc.listForAgent("o1");
     expect(agent[0].name).toBe("改名");
-  });
-
-  it("listForAgent 过滤 enabled=false", async () => {
-    const rows: OrgModelConfig[] = [];
-    const svc = new OrgModelConfigService(makeRepo(rows) as never, crypto);
-    const created = await svc.create("o1", input);
-    await svc.update("o1", created.id, { enabled: false });
-    expect(await svc.listForAgent("o1")).toHaveLength(0);
   });
 
   it("跨组织 update/remove 抛 DEVICE_NOT_FOUND 级别的未找到错误", async () => {

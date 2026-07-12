@@ -91,7 +91,10 @@ export function AssistantMessageActions({
           </TooltipTrigger>
           <TooltipContent>
             <div className="space-y-0.5 text-xs">
-              <div>{resolveModelName(modelConfigs, usage.model)}</div>
+              <div>
+                {resolveModelName(modelConfigs, usage.model) ??
+                  t("usage.deletedModel")}
+              </div>
               <div>
                 {t("usage.inputLabel")} {formatTokens(usage.inputTokens)}
                 {usage.cacheReadTokens > 0 &&

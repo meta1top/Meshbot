@@ -114,17 +114,17 @@ export class OrgModelConfigService {
   /**
    * Agent 下发:仅可见列表,不解密、不带厂商敏感字段(apiKey/baseUrl/providerType/model)。
    * 厂商调用改由网关侧 resolveDecrypted 持有,本地 Agent 只拿 id 做调用引用。
+   * 停用行也下发（enabled:false）：端侧留行做历史用量的模型名解析与"禁用报错"
+   * 语义（行被删会静默回退默认模型），选择器/调用侧各自按 enabled 过滤。
    */
   async listForAgent(orgId: string): Promise<AgentModelConfig[]> {
     const rows = await this.configRepo.find({ where: { orgId } });
-    return rows
-      .filter((r) => r.enabled)
-      .map((r) => ({
-        id: r.id,
-        name: r.name,
-        contextWindow: r.contextWindow,
-        enabled: r.enabled,
-      }));
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      contextWindow: r.contextWindow,
+      enabled: r.enabled,
+    }));
   }
 
   /** 网关内部用:按 orgId + 模型 id 查归属并解密厂商 apiKey;不存在/不归属返回 null */

@@ -196,7 +196,8 @@
       "totalLabel": "Total",
       "callCount": "{count} calls",
       "nextRequestLabel": "Next request",
-      "cumulativeLabel": "Cumulative"
+      "cumulativeLabel": "Cumulative",
+      "deletedModel": "Deleted model"
     },
     "actions": {
       "copy": "Copy",
