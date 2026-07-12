@@ -234,7 +234,7 @@ export function WorkspaceSidebar({
         <button
           type="button"
           onClick={toggleTheme}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-(--shell-radius) text-(--shell-sidebar-fg)/65 transition-colors hover:bg-(--shell-sidebar-hover) hover:text-(--shell-sidebar-fg)"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-(--shell-radius) text-(--shell-sidebar-fg)/65 transition-colors hover:bg-(--shell-sidebar-hover) hover:text-(--shell-sidebar-fg)"
           title={
             theme === "dark"
               ? tCommon("switchToLightTheme")
