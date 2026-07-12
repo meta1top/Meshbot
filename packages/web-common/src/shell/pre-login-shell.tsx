@@ -23,6 +23,13 @@ export function PreLoginShellView({
 }: PreLoginShellViewProps) {
   return (
     <div className="relative flex min-h-screen flex-col bg-(--surface-0) text-(--shell-sidebar-fg)">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 overflow-hidden"
+      >
+        <div className="absolute -top-24 -left-16 h-80 w-80 rounded-full bg-(--shell-accent)/4 blur-2xl" />
+        <div className="absolute -bottom-32 -right-12 h-96 w-96 rounded-full bg-(--shell-accent)/3 blur-2xl" />
+      </div>
       {topBar}
       <div className="flex min-h-0 flex-1 items-center justify-center px-6 py-10">
         <div
