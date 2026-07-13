@@ -306,6 +306,122 @@ describe("RemoteRunInboundService", () => {
     });
   });
 
+  describe("子会话事件动态并入过滤集合（subagent 过程流实时转发）", () => {
+    it("runSubagentSpawned 后，子会话（subSessionId）的 runChunk 进帧转发", async () => {
+      const { svc, relay, emitter } = make();
+      await svc.onAgentRunRequest(fwd({}) as never); // 父 sessionId = s-new
+
+      emitter.emit(SESSION_WS_EVENTS.runSubagentSpawned, {
+        sessionId: "s-new",
+        toolCallId: "tc1",
+        subSessionId: "sub-1",
+        description: "子任务",
+      });
+      relay.emitAgentRunFrame.mockClear();
+
+      emitter.emit(SESSION_WS_EVENTS.runChunk, {
+        sessionId: "sub-1",
+        messageId: "m1",
+        delta: "子会话输出",
+      });
+
+      expect(relay.emitAgentRunFrame).toHaveBeenCalledTimes(1);
+      expect(relay.emitAgentRunFrame).toHaveBeenCalledWith(
+        "u1",
+        expect.objectContaining({
+          sessionId: "sub-1",
+          event: SESSION_WS_EVENTS.runChunk,
+        }),
+      );
+    });
+
+    it("子会话 runDone 不触发 agentRunEnd、不退订，主会话事件继续进帧", async () => {
+      const { svc, relay, emitter } = make();
+      await svc.onAgentRunRequest(fwd({}) as never); // 父 sessionId = s-new
+
+      emitter.emit(SESSION_WS_EVENTS.runSubagentSpawned, {
+        sessionId: "s-new",
+        toolCallId: "tc1",
+        subSessionId: "sub-1",
+        description: "子任务",
+      });
+
+      emitter.emit(SESSION_WS_EVENTS.runDone, {
+        sessionId: "sub-1",
+        messageId: "m1",
+        content: "子会话结束",
+      });
+
+      expect(relay.emitAgentRunEnd).not.toHaveBeenCalled();
+
+      relay.emitAgentRunFrame.mockClear();
+      emitter.emit(SESSION_WS_EVENTS.runChunk, {
+        sessionId: "s-new",
+        messageId: "m2",
+        delta: "主会话继续",
+      });
+
+      expect(relay.emitAgentRunFrame).toHaveBeenCalledTimes(1);
+      expect(relay.emitAgentRunFrame).toHaveBeenCalledWith(
+        "u1",
+        expect.objectContaining({ sessionId: "s-new" }),
+      );
+    });
+
+    it("主会话 runDone 仍正常终止（agentRunEnd + 退订）", async () => {
+      const { svc, relay, emitter } = make();
+      await svc.onAgentRunRequest(fwd({}) as never); // 父 sessionId = s-new
+
+      emitter.emit(SESSION_WS_EVENTS.runSubagentSpawned, {
+        sessionId: "s-new",
+        toolCallId: "tc1",
+        subSessionId: "sub-1",
+        description: "子任务",
+      });
+
+      emitter.emit(SESSION_WS_EVENTS.runDone, {
+        sessionId: "s-new",
+        messageId: "m1",
+        content: "主会话结束",
+      });
+
+      expect(relay.emitAgentRunEnd).toHaveBeenCalledWith("u1", {
+        streamId: "stream-1",
+        requesterDeviceId: "dA",
+        reason: "done",
+      });
+      expect(emitter.off.mock.calls.length).toBe(emitter.on.mock.calls.length);
+    });
+
+    it("runSubagentSettled 后，该子会话事件不再进帧", async () => {
+      const { svc, relay, emitter } = make();
+      await svc.onAgentRunRequest(fwd({}) as never); // 父 sessionId = s-new
+
+      emitter.emit(SESSION_WS_EVENTS.runSubagentSpawned, {
+        sessionId: "s-new",
+        toolCallId: "tc1",
+        subSessionId: "sub-1",
+        description: "子任务",
+      });
+      emitter.emit(SESSION_WS_EVENTS.runSubagentSettled, {
+        sessionId: "s-new",
+        toolCallId: "tc1",
+        subSessionId: "sub-1",
+        status: "done",
+        output: "子任务结果",
+      });
+
+      relay.emitAgentRunFrame.mockClear();
+      emitter.emit(SESSION_WS_EVENTS.runChunk, {
+        sessionId: "sub-1",
+        messageId: "m9",
+        delta: "settled 后不应转发",
+      });
+
+      expect(relay.emitAgentRunFrame).not.toHaveBeenCalled();
+    });
+  });
+
   describe("streamId↔sessionId 注册表(M3 校验真源)", () => {
     it("onAgentRunRequest 建订阅后 registry 可反查 sessionId", async () => {
       const { svc, registry } = make();

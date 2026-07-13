@@ -3,6 +3,8 @@ import { AccountContextService } from "@meshbot/lib-agent";
 import type { AgentRunEnd, AgentRunFrame } from "@meshbot/types";
 import {
   SESSION_WS_EVENTS,
+  type RunSubagentSettledEvent,
+  type RunSubagentSpawnedEvent,
   type RunToolCallEndEvent,
 } from "@meshbot/types-agent";
 import { Injectable, Logger } from "@nestjs/common";
@@ -71,12 +73,17 @@ function stripToolCallEndContent(
  * （零改 runner），再订阅该 sessionId 的 `SESSION_WS_EVENTS.*` 打包成
  * `AgentRunFrame` 经 relay 回发给发起设备（A）。
  *
- * 按 sessionId 精确过滤：B 上可能有多个会话/多个远程 run 并行，同一事件名
- * 会被多个请求各自的监听器收到，只有 `payload.sessionId` 命中自己登记的
- * sessionId 才转发，防止跨 run 串台。
+ * 按动态 sessionId 集合精确过滤：B 上可能有多个会话/多个远程 run 并行，
+ * 同一事件名会被多个请求各自的监听器收到，只有 `payload.sessionId` 命中
+ * 本次登记的集合（初始只含主会话 sessionId）才转发，防止跨 run 串台。
  *
- * 终止事件（run.done/run.error/run.interrupted）触发后回发 `agentRunEnd`
- * 并逐个 `emitter.off` 移除本次登记的全部监听器，防止长连接下监听器泄漏。
+ * 子代理过程流：收到 `runSubagentSpawned`（主会话事件，携带
+ * `subSessionId`）→ 把子会话 id 并入过滤集合，子会话的 runChunk 等过程
+ * 事件才能进帧；收到 `runSubagentSettled` → 把该子会话 id 移出集合。
+ *
+ * 终止事件（run.done/run.error/run.interrupted）只认主会话：必须
+ * `payload.sessionId === sessionId` 才触发 `agentRunEnd` + 退订，子会话的
+ * 终止事件（子代理跑完）不得掐断主流——否则子代理一结束整个远程流就断。
  *
  * relay 传输层保持纯净：本服务经 EventEmitter2 `@OnEvent` 桥接（镜像
  * L2c `RemoteQueryInboundService`），不让 `ImRelayClientService` 反向依赖。
@@ -146,10 +153,13 @@ export class RemoteRunInboundService {
   }
 
   /**
-   * 订阅该 sessionId 的 `SESSION_WS_EVENTS.*` 全集，按 sessionId 过滤后打包
-   * 成 `AgentRunFrame` 经 relay 回发；命中终止事件则额外回发 `agentRunEnd`
-   * 并退订本次登记的全部监听器。监听器就绪后向 `RemoteRunRegistryService`
-   * 登记 streamId→sessionId，退订时一并解除。
+   * 订阅主 sessionId 的 `SESSION_WS_EVENTS.*` 全集，按动态过滤集合
+   * `allowedSessions` 过滤后打包成 `AgentRunFrame` 经 relay 回发；集合初始只
+   * 含主 sessionId，收到 `runSubagentSpawned` 时并入其 `subSessionId`（子代理
+   * 过程流才能进帧），收到 `runSubagentSettled` 时移出。命中终止事件且
+   * `payload.sessionId` 是主 sessionId 本身时才额外回发 `agentRunEnd` 并退订
+   * 本次登记的全部监听器（子会话终止不掐断主流）。监听器就绪后向
+   * `RemoteRunRegistryService` 登记 streamId→主 sessionId，退订时一并解除。
    */
   private subscribeAndForward(
     cloudUserId: string,
@@ -158,6 +168,7 @@ export class RemoteRunInboundService {
     sessionId: string,
   ): void {
     let seq = 0;
+    const allowedSessions = new Set<string>([sessionId]);
     const registered: Array<{
       event: string;
       handler: (payload: unknown) => void;
@@ -172,9 +183,25 @@ export class RemoteRunInboundService {
 
     for (const event of FORWARDED_SESSION_EVENTS) {
       const handler = (payload: unknown): void => {
-        if ((payload as { sessionId?: unknown })?.sessionId !== sessionId) {
-          return; // 别的 session 的事件——防串台
+        const payloadSessionId = (payload as { sessionId?: unknown })
+          ?.sessionId;
+        if (
+          typeof payloadSessionId !== "string" ||
+          !allowedSessions.has(payloadSessionId)
+        ) {
+          return; // 不在当前登记集合内的 session——防串台
         }
+
+        if (event === SESSION_WS_EVENTS.runSubagentSpawned) {
+          allowedSessions.add(
+            (payload as RunSubagentSpawnedEvent).subSessionId,
+          );
+        } else if (event === SESSION_WS_EVENTS.runSubagentSettled) {
+          allowedSessions.delete(
+            (payload as RunSubagentSettledEvent).subSessionId,
+          );
+        }
+
         seq += 1;
         // run.tool_call_end 转发前剥掉 content（可能很大，如长文件读取结果）：
         // 照 session.gateway.ts 对 A 本地前端的处理——前端只用 resultPreview，
@@ -187,13 +214,13 @@ export class RemoteRunInboundService {
           streamId,
           requesterDeviceId,
           seq,
-          sessionId,
+          sessionId: payloadSessionId,
           event,
           payload: wirePayload,
         } satisfies AgentRunFrame);
 
         const reason = TERMINAL_REASON_BY_EVENT.get(event);
-        if (reason) {
+        if (reason && payloadSessionId === sessionId) {
           this.relay.emitAgentRunEnd(cloudUserId, {
             streamId,
             requesterDeviceId,
