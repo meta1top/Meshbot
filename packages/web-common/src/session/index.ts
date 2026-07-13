@@ -57,6 +57,7 @@ export {
   type SessionConversationViewLabels,
   type SessionConversationViewProps,
 } from "./session-conversation-view";
+export { createSessionSocketAdapter } from "./session-socket-adapter";
 export type { SessionSocketLike } from "./socket-like";
 export {
   claimSubagentOnTimeline,
