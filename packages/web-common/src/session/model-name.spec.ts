@@ -1,14 +1,13 @@
-import type { ModelConfig } from "@/rest/model-config";
-import { resolveModelName } from "./model-name";
+import { type ModelConfigLike, resolveModelName } from "./model-name";
 
-const configs = [
+const configs: ModelConfigLike[] = [
   {
     id: "mc-1",
     name: "DeepSeek - deepseek-v4-pro",
     model: "201624607445221376",
   },
   { id: "mc-2", name: "Ollama - qwen3:30b-a3b", model: "201630000000000000" },
-] as ModelConfig[];
+];
 
 describe("resolveModelName", () => {
   it("usage.model 命中配置行 model 列（云网关行）→ 友好名", () => {
