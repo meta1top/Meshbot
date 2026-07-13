@@ -45,8 +45,10 @@ const SESSION_PREFIX = "session:";
  * - 展开在线设备 → 并入 `expanded` → `useQueries` 懒加载该设备会话内联铺开，
  *   多设备可同时展开；
  * - 路由携带 `deviceId`（`/assistant/[deviceId]`）时，主动把该设备并入
- *   `expanded`（懒加载其会话列表）—— 否则刷新页面后展开态是空的、看不到
- *   自动展开高亮；
+ *   `expanded`（懒加载其会话列表）；`expanded` 的初始值懒初始化时就带上
+ *   首帧 `routeDeviceId`，确保 `defaultOpen` 在 NavItem 首次挂载时就能读到
+ *   展开态——否则刷新 / 直达链接会因为 `SidebarNav` 的 `defaultOpen` 只读一次
+ *   而被锁死在折叠态，看不到自动展开高亮；
  * - 点会话叶子 → `/assistant/[deviceId]?session=<id>` 打开主区；
  * - 设备行尾「新建」→ `/assistant/[deviceId]`（无 session 参数 = 新建态）；
  * - 会话全部远程只读（wire protocol 未提供 rename/delete 能力）：不传
@@ -83,11 +85,17 @@ export function AssistantSidebar() {
   );
 
   // 已展开设备 id 集合。组件挂持久 layout，导航切会话不重置。
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  // 懒初始化并入首帧路由携带的 deviceId（刷新 / 分享链接直达）——必须在
+  // NavItem 首次挂载前就位：NavItem 的展开态只在 mount 时读一次
+  // defaultOpen（packages/web-common/src/shell/sidebar-nav.tsx），事后
+  // setExpanded 已经追不上，会导致目标设备分支停在折叠态、
+  // activeSessionKey 匹配不到任何已渲染节点，无从自动展开高亮。
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() =>
+    routeDeviceId ? new Set([routeDeviceId]) : new Set(),
+  );
 
-  // 路由直达某设备（刷新 / 分享链接）：把它并入 expanded，懒加载会话列表——
-  // 否则该设备分支停在折叠态，activeSessionKey 匹配不到任何已渲染节点，
-  // 无从自动展开高亮。
+  // 持久 layout 内后续导航到另一设备（routeDeviceId 变化但组件不 remount）
+  // 时同样要并入 expanded，才能展开新目标设备分支。
   useEffect(() => {
     if (!routeDeviceId) return;
     setExpanded((prev) =>
@@ -162,7 +170,7 @@ export function AssistantSidebar() {
     return {
       key: `device:${d.id}`,
       label: d.name,
-      defaultOpen: online && (expanded.has(d.id) || d.id === routeDeviceId),
+      defaultOpen: expanded.has(d.id) || d.id === routeDeviceId,
       // 恒给非空 children 撑出 chevron；离线设备的占位内容永远不会被打开渲染
       // （expandable=false 时行整体 pointer-events-none，chevron 点不动）。
       children: online
