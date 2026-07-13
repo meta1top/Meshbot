@@ -33,7 +33,7 @@ import { useProfile } from "@/rest/auth";
 import { useSwitchOrg } from "@/rest/org";
 
 /**
- * 左栏容器（浅色宽侧栏）：品牌 + 「发起消息」CTA + 一级区域图标条 + 子栏插槽 + 底部（主题/用户）。
+ * 左栏容器（浅色宽侧栏）：品牌 + 「新建任务」CTA + 一级区域图标条 + 子栏插槽 + 底部（主题/用户）。
  * org 切换 / 登出逻辑原样搬自旧 workspace-rail.tsx + user-menu.tsx（该两文件已删，逻辑内联于此，对齐范本 web-agent workspace-sidebar.tsx 的形态）。
  */
 export function WorkspaceSidebar({
@@ -114,13 +114,13 @@ export function WorkspaceSidebar({
       <div className="sidebar-brand flex items-center gap-2 px-3 pt-3 pb-2">
         <BrandLogo size="sm" withWordmark />
       </div>
-      {/* 发起消息 CTA */}
+      {/* 新建任务 CTA（对齐 web-agent）：进助手区选设备起会话 */}
       <button
         type="button"
-        onClick={() => router.push("/messages")}
+        onClick={() => router.push("/assistant")}
         className="mx-3 mt-2 mb-4 flex h-9 items-center gap-2 rounded-lg bg-(--shell-chrome) px-3 text-[13px] font-bold text-white [&_svg]:h-4 [&_svg]:w-4"
       >
-        <Plus /> {t("newMessage")}
+        <Plus /> {t("newTask")}
       </button>
       {/* 一级图标条 */}
       <RailNav

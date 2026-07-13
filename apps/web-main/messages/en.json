@@ -7,6 +7,7 @@
   },
   "appShell": {
     "newMessage": "New Message",
+    "newTask": "New task",
     "rail": {
       "assistant": "Assistant",
       "messages": "Messages",
