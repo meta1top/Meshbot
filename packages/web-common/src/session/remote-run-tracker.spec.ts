@@ -110,4 +110,27 @@ describe("RemoteRunTracker", () => {
     expect(t.handleFrame(frame())).toEqual([]);
     expect(t.handleEnd(end())).toBeNull();
   });
+
+  it("reset 清空全部登记，此后任何已注册 streamId 均被忽略", () => {
+    const t = new RemoteRunTracker();
+    t.register("s1", "sess-1");
+    t.register("s2", "sess-2");
+    t.reset();
+    expect(t.owns("s1")).toBe(false);
+    expect(t.owns("s2")).toBe(false);
+    expect(t.handleFrame(frame({ streamId: "s1" }))).toEqual([]);
+    expect(t.handleEnd(end({ streamId: "s2" }))).toBeNull();
+  });
+
+  it("reset 后可重新 register 同一 streamId，行为等同全新实例", () => {
+    const t = new RemoteRunTracker();
+    t.register("s1", "sess-1");
+    t.handleFrame(frame({ seq: 1 }));
+    t.reset();
+    t.register("s1", "sess-1");
+    // 重排状态也随之清空：重新从 seq=1 开始，不会被旧状态判定为重复丢弃
+    expect(t.handleFrame(frame({ seq: 1, payload: "fresh" }))).toEqual([
+      { event: SESSION_WS_EVENTS.runChunk, payload: "fresh" },
+    ]);
+  });
 });

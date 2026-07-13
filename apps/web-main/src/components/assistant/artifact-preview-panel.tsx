@@ -82,6 +82,15 @@ function ArtifactPreviewContent({
     () => createRemoteSessionTransport(deviceId),
     [deviceId],
   );
+  // deviceId 切换（同一面板会话内预览另一台设备的产物，罕见但可能）会让
+  // useMemo 换出一个新 transport 实例；组件卸载（面板关闭）同理——两种情况
+  // 都要释放旧 transport 常驻的三个 socket 监听器，否则在 module 级单例
+  // socket 上无界累积。
+  useEffect(() => {
+    return () => {
+      transport.dispose?.();
+    };
+  }, [transport]);
   const [state, setState] = useState<
     | { status: "loading" }
     | { status: "error" }

@@ -107,4 +107,10 @@ export class RemoteRunTracker {
   release(streamId: string): void {
     this.streams.delete(streamId);
   }
+
+  /** 清空全部登记（transport dispose 时调用，避免与后续新建的同类型实例
+   * 混淆残留状态；同一实例也可安全复用——清空后行为等同刚构造）。 */
+  reset(): void {
+    this.streams.clear();
+  }
 }

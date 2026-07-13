@@ -5,7 +5,7 @@ import { SidebarHeader, SidebarRow } from "@meshbot/web-common/shell";
 import { ChevronLeft, Sparkles, SquarePen } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useSidebarSlot } from "@/components/shell/sidebar-slot-context";
 import { useRemoteSessions } from "@/hooks/use-remote-sessions";
@@ -42,6 +42,13 @@ export function SessionSublist({
     () => createRemoteSessionTransport(deviceId),
     [deviceId],
   );
+  // deviceId 切换 / 组件卸载都要释放 transport 常驻的三个 socket 监听器，
+  // 否则在 module 级单例 socket 上无界累积（见 lib/session-transport.ts dispose 文档）。
+  useEffect(() => {
+    return () => {
+      transport.dispose?.();
+    };
+  }, [transport]);
   const {
     data: sessions,
     isPending,
