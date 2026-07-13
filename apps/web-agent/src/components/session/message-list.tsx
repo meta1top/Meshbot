@@ -1,19 +1,20 @@
 "use client";
 
-import { cn } from "@meshbot/design";
 import type { MessageUsage } from "@meshbot/types-agent";
-import { stripLlmuse } from "@meshbot/types-agent";
-import type { TimelineMessage } from "@meshbot/web-common/session";
-import { useAtomValue } from "jotai";
-import { ChevronRight, Sparkles } from "lucide-react";
+import {
+  type ArtifactPreviewTarget,
+  MessageList as MessageListBase,
+  type TimelineMessage,
+} from "@meshbot/web-common/session";
+import { useAtomValue, useSetAtom } from "jotai";
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { previewArtifactAtom } from "@/atoms/assistant-panel";
 import { currentUserAtom } from "@/atoms/auth";
-import { AssistantMessageActions } from "./assistant-message-actions";
-import { CompactionRow } from "./compaction-row";
-import { MarkdownContent } from "./markdown-content";
-import { ToolCallBlock } from "./tool-call-block";
-import { UserMessageActions } from "./user-message-actions";
+import { conversationsAtom } from "@/atoms/im";
+import { useRemoteSession } from "@/hooks/remote-session-context";
+import { useModelConfigs } from "@/rest/model-config";
+import { regenerateMessage, setMessageFeedback } from "@/rest/session";
+import { SubagentCard } from "./subagent-card";
 
 /**
  * `TimelineMessage`/`ToolCallView` 原在本文件定义，Task 6 随 `useSessionStream`
@@ -65,13 +66,19 @@ interface MessageListProps {
 }
 
 /**
- * 会话消息时间线。Slack 行式：头像 + 名字 + 左对齐内容。
+ * web-agent 薄容器：把 web-common `MessageList` 接线到本应用的数据源——
+ * 当前用户展示名（`currentUserAtom`）、i18n 文案、AssistantMessageActions/
+ * UserMessageActions 的 REST 回调（`setMessageFeedback`/`regenerateMessage`）、
+ * ToolCallBlock 的 IM 会话目标解析（`conversationsAtom`）/ 产物预览
+ * （`previewArtifactAtom` + `useRemoteSession()`）/ dispatch_subagent 渲染插槽
+ * （`SubagentCard`）。
  *
- * 设计原则：
- * - 全局 radius=0（直角），由 design token 强制；
- * - 每条消息以 7×7 头像块 + 粗体名字开头，内容左对齐；
- * - assistant 消息无背景，靠对齐 + 间距区分，避免大色块视觉重量；
- * - reasoning 区无背景，用左侧细竖线低调表示「思考」是从属过程。
+ * 这是 Task 8（`tool-call-block.tsx`）与 Task 7（`assistant-message-actions.tsx`/
+ * `user-message-actions.tsx`）三个薄容器在 Task 9 的合并——`MessageList` 迁入
+ * web-common 后直接渲染 web-common 版 `AssistantMessageActions`/
+ * `UserMessageActions`/`ToolCallBlock`/`CompactionRow`，不再经过原来那层
+ * app 专属中间组件，三者的接线逻辑收敛进本文件（原三个薄容器文件已删除，
+ * 唯一消费方就是本文件）。
  */
 export function MessageList({
   messages,
@@ -85,217 +92,67 @@ export function MessageList({
   onAnswer,
 }: MessageListProps) {
   const t = useTranslations("session");
+  const tArtifact = useTranslations("session.artifact");
   const user = useAtomValue(currentUserAtom);
   const userName = user?.displayName ?? user?.email ?? t("youName");
-  const userInitial = userName.charAt(0).toUpperCase();
   const assistantName = t("assistantName");
-  return (
-    <div className={cn("flex flex-col gap-1", nested ? "py-1" : "pb-6 pt-2")}>
-      {messages
-        .filter(
-          (m) => !(m.role === "system" && m.metadata?.kind !== "compaction"),
-        )
-        .map((m) => {
-          // 压缩占位行：role=system + metadata.kind="compaction"
-          if (m.role === "system" && m.metadata?.kind === "compaction") {
-            return (
-              <CompactionRow
-                key={m.id}
-                removedCount={(m.metadata.removedCount as number) ?? 0}
-                summary={m.content}
-              />
-            );
-          }
-          return (
-            <div
-              key={m.id}
-              className="group relative -mx-2 flex gap-3 rounded px-2 py-1.5 hover:bg-muted/40"
-            >
-              {!nested &&
-                (m.role === "user" ? (
-                  <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] bg-[#16a34a] text-[12px] font-semibold text-white">
-                    {userInitial}
-                  </div>
-                ) : (
-                  <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] bg-(--shell-accent) text-white">
-                    <Sparkles className="h-4 w-4" />
-                  </div>
-                ))}
-              <div className="flex min-w-0 flex-1 flex-col gap-2">
-                {!nested && (
-                  <div className="text-[13px] font-bold text-foreground">
-                    {m.role === "user" ? userName : assistantName}
-                  </div>
-                )}
-                {m.role === "assistant" && m.reasoning ? (
-                  <ReasoningBlock
-                    text={m.reasoning}
-                    startedAt={m.reasoningStartedAt}
-                    durationMs={m.reasoningDurationMs}
-                    streaming={m.streaming}
-                  />
-                ) : null}
-                {/*
-                气泡仅在「有可见正文 / loading / streaming / failed」时出现。
-                中间决策轮（仅 reasoning + toolCalls、content 空）不出气泡 —— 否则
-                空 div 也算 flex gap-2 一个 item，让「思考过程 ↔ tool 块」之间多一段空白。
-                toolCalls 自身有独立块（下方渲染），不靠这里撑场。
-              */}
-                {(m.role === "user" ||
-                  m.content ||
-                  m.loading ||
-                  m.streaming ||
-                  m.failed) && (
-                  <div
-                    className={cn(
-                      "text-sm leading-relaxed text-foreground",
-                      m.failed && "text-destructive",
-                    )}
-                  >
-                    {m.loading ? (
-                      <TypingDots />
-                    ) : (
-                      <MarkdownContent
-                        text={stripLlmuse(m.content)}
-                        streaming={m.role === "assistant" && m.streaming}
-                      />
-                    )}
-                  </div>
-                )}
-                {m.failed && m.errorText && (
-                  <div className="text-xs text-destructive/80">
-                    {t("runErrorPrefix")}
-                    {m.errorText}
-                  </div>
-                )}
-                {m.role === "assistant" &&
-                  m.toolCalls &&
-                  m.toolCalls.length > 0 && (
-                    <div className="flex flex-col gap-2">
-                      {m.toolCalls.map((tc) => (
-                        <ToolCallBlock
-                          key={tc.toolCallId}
-                          tool={tc}
-                          onConfirm={onConfirm}
-                          onAnswer={onAnswer}
-                        />
-                      ))}
-                    </div>
-                  )}
-                {!nested &&
-                  !readOnly &&
-                  m.role === "assistant" &&
-                  m.content &&
-                  !m.streaming && (
-                    <AssistantMessageActions
-                      sessionId={sessionId}
-                      messageId={m.id}
-                      content={m.content}
-                      usage={usageByMessage?.[m.id]}
-                      feedback={m.feedback}
-                    />
-                  )}
-                {!nested && !readOnly && m.role === "user" && (
-                  <UserMessageActions
-                    sessionId={sessionId}
-                    messageId={m.id}
-                    content={m.content}
-                    failed={m.failed}
-                    running={running}
-                    onOptimisticCut={() => onRegenerateOptimisticCut(m.id)}
-                  />
-                )}
-              </div>
-            </div>
-          );
-        })}
-    </div>
-  );
-}
+  const conversations = useAtomValue(conversationsAtom);
+  const setArtifact = useSetAtom(previewArtifactAtom);
+  const remote = useRemoteSession();
+  const { data: modelConfigs } = useModelConfigs();
 
-/** "..." 三点跳动 loading 指示器（等首个 chunk 时显示）。颜色调淡避免视觉重量。 */
-function TypingDots() {
-  const t = useTranslations("session");
   return (
-    <span
-      role="status"
-      aria-label={t("generatingReply")}
-      className="inline-flex items-center gap-1 align-middle"
-    >
-      <span className="h-1 w-1 animate-bounce rounded-full bg-muted-foreground/40 [animation-delay:-0.3s]" />
-      <span className="h-1 w-1 animate-bounce rounded-full bg-muted-foreground/40 [animation-delay:-0.15s]" />
-      <span className="h-1 w-1 animate-bounce rounded-full bg-muted-foreground/40" />
-    </span>
-  );
-}
-
-/**
- * 推理过程可展开块。思考中默认展开、思考结束后自动收起；用户也可点击切换。
- * 标签显示「思考中 Xs」/「已思考 Xs」/「思考过程」（历史持久化时没耗时信息）。
- */
-function ReasoningBlock({
-  text,
-  startedAt,
-  durationMs,
-  streaming,
-}: {
-  text: string;
-  startedAt?: number;
-  durationMs?: number;
-  /**
-   * 父 message 是否在流式中（来自 inflight push 或 ws onChunk 标记）。
-   * 为 true 时强制走「思考中」分支 + 默认展开，无视 durationMs ——
-   * 刷新落在 reasoning 流式中时 durationMs=0 会被误判为「已思考」，
-   * 此 prop 是首要语义信号。
-   */
-  streaming?: boolean;
-}) {
-  const t = useTranslations("session");
-  const isThinking =
-    streaming === true || (durationMs === undefined && startedAt !== undefined);
-  // 思考中默认展开；思考一结束自动收起。用户点击切换会覆盖这个默认，
-  // 但 isThinking 再变化时会再次同步（下一次新的推理流又会展开）。
-  const [open, setOpen] = useState(isThinking);
-  useEffect(() => {
-    setOpen(isThinking);
-  }, [isThinking]);
-  // 推理中：每 100ms 重渲染一次以更新「思考中 Xs」秒数显示
-  const [, force] = useState(0);
-  useEffect(() => {
-    if (!isThinking) return;
-    const id = setInterval(() => force((n) => n + 1), 100);
-    return () => clearInterval(id);
-  }, [isThinking]);
-  const elapsed = isThinking
-    ? startedAt !== undefined
-      ? Date.now() - startedAt
-      : 0
-    : (durationMs ?? 0);
-  const label = isThinking
-    ? elapsed > 0
-      ? t("reasoningThinking", { seconds: (elapsed / 1000).toFixed(1) })
-      : t("reasoningThinking", { seconds: "0.0" })
-    : elapsed > 0
-      ? t("reasoningThought", { seconds: (elapsed / 1000).toFixed(1) })
-      : t("reasoningProcess");
-  return (
-    <div className="flex flex-col gap-2">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 self-start text-xs text-muted-foreground hover:text-foreground"
-        aria-expanded={open}
-      >
-        <ChevronRight
-          className={cn("h-3 w-3 transition-transform", open && "rotate-90")}
-        />
-        <span>{label}</span>
-      </button>
-      {open && (
-        <div className="whitespace-pre-wrap border-l border-border pl-3 text-xs leading-relaxed text-muted-foreground">
-          {text}
-        </div>
-      )}
-    </div>
+    <MessageListBase
+      messages={messages}
+      sessionId={sessionId}
+      running={running}
+      onRegenerateOptimisticCut={onRegenerateOptimisticCut}
+      usageByMessage={usageByMessage}
+      nested={nested}
+      readOnly={readOnly}
+      onConfirm={onConfirm}
+      onAnswer={onAnswer}
+      userName={userName}
+      assistantName={assistantName}
+      modelConfigs={modelConfigs}
+      onFeedback={setMessageFeedback}
+      onRegenerate={regenerateMessage}
+      assistantActionsLabels={{
+        copy: t("actions.copy"),
+        copied: t("actions.copied"),
+        usage: t("actions.usage"),
+        like: t("actions.like"),
+        dislike: t("actions.dislike"),
+        deletedModel: t("usage.deletedModel"),
+        inputLabel: t("usage.inputLabel"),
+        cacheLabel: t("usage.cacheLabel"),
+        outputLabel: t("usage.outputLabel"),
+        reasoningLabel: t("usage.reasoningLabel"),
+        totalLabel: t("usage.totalLabel"),
+      }}
+      resolveImTargetName={(conversationId) => {
+        const target = conversations.find((c) => c.id === conversationId);
+        return (
+          target?.name ?? target?.peer?.displayName ?? conversationId ?? "会话"
+        );
+      }}
+      onPreviewArtifact={(target: ArtifactPreviewTarget) => setArtifact(target)}
+      artifactRemote={
+        remote
+          ? { deviceId: remote.remoteDeviceId, sessionId: remote.sessionId }
+          : null
+      }
+      toolCallLabels={{ artifactPresentFailed: tArtifact("presentFailed") }}
+      renderSubagentCard={(subTool) => <SubagentCard tool={subTool} />}
+      labels={{
+        assistantName,
+        runErrorPrefix: t("runErrorPrefix"),
+        generatingReply: t("generatingReply"),
+        reasoningThinking: (seconds) => t("reasoningThinking", { seconds }),
+        reasoningThought: (seconds) => t("reasoningThought", { seconds }),
+        reasoningProcess: t("reasoningProcess"),
+        compactionRowTitle: (count) => t("compaction.rowTitle", { count }),
+      }}
+    />
   );
 }

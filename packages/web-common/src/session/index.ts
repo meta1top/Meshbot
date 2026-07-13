@@ -15,6 +15,11 @@ export {
   type AssistantMessageActionsProps,
 } from "./assistant-message-actions";
 export {
+  CompactionRow,
+  type CompactionRowLabels,
+  type CompactionRowProps,
+} from "./compaction-row";
+export {
   DriveCreateShareCard,
   type DriveCreateShareCardProps,
 } from "./drive-create-share-card";
@@ -28,6 +33,11 @@ export {
   type ImSendConfirmCardProps,
 } from "./im-send-confirm-card";
 export { MarkdownContent } from "./markdown-content";
+export {
+  MessageList,
+  type MessageListLabels,
+  type MessageListProps,
+} from "./message-list";
 export { MessageSkeleton } from "./message-skeleton";
 export { type ModelConfigLike, resolveModelName } from "./model-name";
 export {
