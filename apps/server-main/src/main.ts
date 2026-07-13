@@ -54,7 +54,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule.forRoot(config));
 
   // CORS：token 型 API（Bearer 显式携带，无 cookie 会话），镜像 server-agent 的写法。
-  // 解除 web-main(3002) → server-main(3200) 本地 dev 跨端口阻塞；生产同源反代下无副作用。
+  // 解除 web-main(3102) → server-main(3200) 本地 dev 跨端口阻塞；生产同源反代下无副作用。
   app.enableCors({
     origin: true,
     credentials: true,

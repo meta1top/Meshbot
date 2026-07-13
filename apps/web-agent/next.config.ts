@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
     "@meshbot/types-agent",
   ],
   allowedDevOrigins: ["127.0.0.1", "localhost"],
-  // dev 期前端在独立 Next dev server（:3001），需显式指向自检后的 server-agent（默认 7727）；
+  // dev 期前端在独立 Next dev server（:3101），需显式指向自检后的 server-agent（默认 7727）；
   // 生产静态导出不注入 → resolveBaseURL 落到同源 window.location.origin。
   // 本地可建 apps/web-agent/.env.development（已 gitignore）覆盖此默认。
   // 注：Next.js 在求值本 config 前已把 .env.development 载入 process.env，

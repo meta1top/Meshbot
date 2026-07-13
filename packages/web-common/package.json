@@ -33,9 +33,13 @@
     "@meshbot/design": "workspace:*",
     "@meshbot/types": "workspace:*",
     "@meshbot/types-agent": "workspace:*",
+    "@tiptap/extension-placeholder": "^3.27.1",
+    "@tiptap/react": "^3.27.1",
+    "@tiptap/starter-kit": "^3.27.1",
     "axios": "^1.16.0",
     "best-effort-json-parser": "^1.4.1",
     "lucide-react": "^0.468",
+    "tiptap-markdown": "^0.9.0",
     "zod": "^3"
   },
   "peerDependencies": {

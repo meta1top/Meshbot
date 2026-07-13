@@ -17,6 +17,7 @@ import {
   TableRow,
 } from "@meshbot/design";
 import type { DeviceView } from "@meshbot/types";
+import { PageHeader, PageShellView } from "@meshbot/web-common/shell";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
@@ -27,6 +28,7 @@ import { useDevices, useRevokeDevice } from "@/rest/devices";
 /** 设备管理页：设备表（名称/平台/最近活跃/在线/授权状态），行内「吊销」二次确认。 */
 export default function DevicesSettingsPage() {
   const t = useTranslations("devices");
+  const tSettings = useTranslations("settings");
   const { data: devices = [], isPending, error } = useDevices();
   const revoke = useRevokeDevice();
   const [revokeTarget, setRevokeTarget] = useState<string | null>(null);
@@ -48,68 +50,72 @@ export default function DevicesSettingsPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("title")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {error ? (
-            <Alert variant="destructive">
-              <AlertDescription>
-                {error instanceof Error ? error.message : t("loadFailed")}
-              </AlertDescription>
-            </Alert>
-          ) : isPending ? (
-            <div className="text-sm text-muted-foreground">{t("loading")}</div>
-          ) : devices.length === 0 ? (
-            <div className="text-sm text-muted-foreground">{t("empty")}</div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("colName")}</TableHead>
-                  <TableHead>{t("colPlatform")}</TableHead>
-                  <TableHead>{t("colLastSeen")}</TableHead>
-                  <TableHead>{t("colOnline")}</TableHead>
-                  <TableHead>{t("colStatus")}</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {devices.map((d) => (
-                  <DeviceRow
-                    key={d.id}
-                    device={d}
-                    revoking={revoke.isPending}
-                    onRevoke={() => {
-                      setRevokeError(null);
-                      setRevokeTarget(d.id);
-                    }}
-                  />
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+    <PageShellView header={<PageHeader title={tSettings("nav.devices")} />}>
+      <div className="flex flex-col gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("title")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {error ? (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  {error instanceof Error ? error.message : t("loadFailed")}
+                </AlertDescription>
+              </Alert>
+            ) : isPending ? (
+              <div className="text-sm text-muted-foreground">
+                {t("loading")}
+              </div>
+            ) : devices.length === 0 ? (
+              <div className="text-sm text-muted-foreground">{t("empty")}</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t("colName")}</TableHead>
+                    <TableHead>{t("colPlatform")}</TableHead>
+                    <TableHead>{t("colLastSeen")}</TableHead>
+                    <TableHead>{t("colOnline")}</TableHead>
+                    <TableHead>{t("colStatus")}</TableHead>
+                    <TableHead />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {devices.map((d) => (
+                    <DeviceRow
+                      key={d.id}
+                      device={d}
+                      revoking={revoke.isPending}
+                      onRevoke={() => {
+                        setRevokeError(null);
+                        setRevokeTarget(d.id);
+                      }}
+                    />
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
 
-      <ConfirmDialog
-        open={revokeTarget != null}
-        title={t("revokeConfirmTitle")}
-        description={t("revokeConfirmDescription")}
-        confirmText={t("revoke")}
-        cancelText={t("cancel")}
-        loading={revoke.isPending}
-        destructive
-        error={revokeError}
-        onConfirm={() => void confirmRevoke()}
-        onCancel={() => {
-          setRevokeTarget(null);
-          setRevokeError(null);
-        }}
-      />
-    </div>
+        <ConfirmDialog
+          open={revokeTarget != null}
+          title={t("revokeConfirmTitle")}
+          description={t("revokeConfirmDescription")}
+          confirmText={t("revoke")}
+          cancelText={t("cancel")}
+          loading={revoke.isPending}
+          destructive
+          error={revokeError}
+          onConfirm={() => void confirmRevoke()}
+          onCancel={() => {
+            setRevokeTarget(null);
+            setRevokeError(null);
+          }}
+        />
+      </div>
+    </PageShellView>
   );
 }
 

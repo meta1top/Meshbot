@@ -20,8 +20,8 @@ pnpm dev                      # 启动所有 app（turbo dev）
 ```bash
 pnpm dev:server-agent         # :3100，SQLite，本地 Agent 后端
 pnpm dev:server-main          # :3200，Postgres，云协同后端
-pnpm dev:web-agent            # :3001，桌面端 UI
-pnpm dev:web-main             # :3002，云协同前端
+pnpm dev:web-agent            # :3101，桌面端 UI
+pnpm dev:web-main             # :3102，云协同前端
 pnpm dev:desktop              # Electron 桌面壳
 pnpm dev:cli            # CLI Agent 工具
 ```

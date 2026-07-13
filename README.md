@@ -18,8 +18,8 @@ apps/
 ├── desktop/          Electron 桌面壳
 ├── server-agent/     NestJS 本地 agent 后端（:3100，SQLite）
 ├── server-main/      NestJS 云平台后端（:3200，Postgres）
-├── web-agent/        Next.js 桌面端 UI（:3001）
-└── web-main/         Next.js 云平台前端（:3002）
+├── web-agent/        Next.js 桌面端 UI（:3101）
+└── web-main/         Next.js 云平台前端（:3102）
 
 libs/
 ├── agent/            LangGraph 编排 + Agent 域业务

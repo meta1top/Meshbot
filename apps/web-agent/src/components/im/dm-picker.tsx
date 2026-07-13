@@ -1,9 +1,8 @@
 "use client";
 
+import { DmPicker as DmPickerBase } from "@meshbot/web-common/im";
 import { useAtomValue, useSetAtom } from "jotai";
-import { X } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
 import { currentUserAtom } from "@/atoms/auth";
 import { upsertConversationAtom } from "@/atoms/im";
 import { createDm } from "@/rest/im";
@@ -17,7 +16,7 @@ interface DmPickerProps {
 }
 
 /**
- * DM 选人对话框。
+ * DM 选人对话框容器：atoms/rest 数据逻辑 + labels 注入，渲染委托 web-common DmPicker。
  * 拉取当前用户所属 org 的成员列表，排除自身，点击即创建或复用 DM 会话。
  */
 export function DmPicker({ open, onClose, onNavigate }: DmPickerProps) {
@@ -28,94 +27,31 @@ export function DmPicker({ open, onClose, onNavigate }: DmPickerProps) {
   const orgId = currentUser?.org?.id ?? null;
   const { data: members = [], isLoading } = useMembers(orgId);
 
-  const [pending, setPending] = useState<string | null>(null);
-
-  if (!open) return null;
-
   // currentUser 为 null（鉴权加载中/失效）时，m.userId !== undefined 恒为 true，
   // 自身会出现在自己的 DM 列表里。仅在 currentUser 存在时计算列表，确保永不列出自身。
   const others = currentUser
     ? members.filter((m) => m.userId !== currentUser.id)
     : [];
 
-  async function handleSelect(userId: string) {
-    if (pending) return;
-    setPending(userId);
-    try {
-      const conv = await createDm(userId);
-      upsertConversation(conv);
-      onNavigate(conv.id);
-      onClose();
-    } catch {
-      // swallow — user can retry
-    } finally {
-      setPending(null);
-    }
+  async function handlePick(userId: string) {
+    const conv = await createDm(userId);
+    upsertConversation(conv);
+    onNavigate(conv.id);
   }
 
-  return (
-    /* Overlay */
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") onClose();
-      }}
-      role="dialog"
-      aria-modal
-      aria-label={t("pickMember")}
-    >
-      <div className="w-80 rounded-xl bg-(--shell-content) shadow-2xl ring-1 ring-border">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <span className="text-[14px] font-semibold text-foreground">
-            {t("pickMember")}
-          </span>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+  if (!open) return null;
 
-        {/* Member list */}
-        <div className="max-h-72 overflow-y-auto p-2">
-          {isLoading && (
-            <p className="px-2 py-4 text-center text-[13px] text-muted-foreground">
-              {t("loading")}
-            </p>
-          )}
-          {!isLoading && others.length === 0 && (
-            <p className="px-2 py-4 text-center text-[13px] text-muted-foreground">
-              {t("empty")}
-            </p>
-          )}
-          {others.map((m) => (
-            <button
-              key={m.userId}
-              type="button"
-              disabled={pending !== null}
-              onClick={() => void handleSelect(m.userId)}
-              className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-[13px] text-foreground transition-colors hover:bg-muted disabled:opacity-50"
-            >
-              {/* Avatar initial */}
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] bg-(--shell-accent) text-[12px] font-semibold text-white">
-                {m.displayName.charAt(0).toUpperCase()}
-              </div>
-              <div className="min-w-0">
-                <div className="truncate font-medium">{m.displayName}</div>
-                <div className="truncate text-[11px] text-muted-foreground">
-                  {m.email}
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
+  return (
+    <DmPickerBase
+      candidates={others}
+      loading={isLoading}
+      onPick={handlePick}
+      onClose={onClose}
+      labels={{
+        title: t("pickMember"),
+        loading: t("loading"),
+        empty: t("empty"),
+      }}
+    />
   );
 }

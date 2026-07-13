@@ -1,7 +1,7 @@
 "use client";
 
 import { IM_WS_EVENTS } from "@meshbot/types";
-import { ImMessageList } from "@meshbot/web-common/im";
+import { MessageFlow, MessageInput } from "@meshbot/web-common/im";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useTranslations } from "next-intl";
 import {
@@ -19,10 +19,6 @@ import {
   markConversationReadAtom,
   messagesAtom,
 } from "@/atoms/im";
-import {
-  ChatInput,
-  type ChatInputHandle,
-} from "@/components/common/chat-input";
 import { ConversationEmptyState } from "@/components/im/conversation-empty-state";
 import { MessageSkeleton } from "@/components/im/message-skeleton";
 import { MarkdownContent } from "@/components/session/markdown-content";
@@ -40,6 +36,7 @@ interface ImConversationBodyProps {
 /** IM 会话主体：socket 订阅、历史分页、消息列表、粘底输入。不含外壳/header。 */
 export function ImConversationBody({ id, scrollRef }: ImConversationBodyProps) {
   const t = useTranslations("messages");
+  const tChat = useTranslations("chatInput");
 
   const setCurrentConversationId = useSetAtom(currentConversationIdAtom);
   const setMessages = useSetAtom(messagesAtom);
@@ -79,18 +76,13 @@ export function ImConversationBody({ id, scrollRef }: ImConversationBodyProps) {
     return map;
   }, [currentUser, membersData, currentConversation]);
 
-  const [draft, setDraft] = useState("");
   const [historyLoading, setHistoryLoading] = useState(true);
-  const chatInputRef = useRef<ChatInputHandle>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const topSentinelRef = useRef<HTMLDivElement>(null);
 
   const oldestMessageIdRef = useRef<string | null>(null);
   const hasMoreHistoryRef = useRef(true);
   const loadingMoreRef = useRef(false);
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
-  const [stickToBottom, setStickToBottom] = useState(true);
-  const initialScrollDoneRef = useRef(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   // 1. URL hydration: sync props.id → atom
   useEffect(() => {
@@ -110,7 +102,6 @@ export function ImConversationBody({ id, scrollRef }: ImConversationBodyProps) {
     oldestMessageIdRef.current = null;
     hasMoreHistoryRef.current = true;
     setHasMoreHistory(true);
-    initialScrollDoneRef.current = false;
 
     let cancelled = false;
 
@@ -136,7 +127,7 @@ export function ImConversationBody({ id, scrollRef }: ImConversationBodyProps) {
     };
   }, [id, setMessages, markConversationRead]);
 
-  // 5. History pagination: top-sentinel IntersectionObserver
+  // 5. History pagination: called by MessageFlow's top-sentinel IO (onLoadMore)
   const loadMoreHistory = useCallback(async () => {
     if (!hasMoreHistoryRef.current) return;
     if (loadingMoreRef.current) return;
@@ -144,6 +135,7 @@ export function ImConversationBody({ id, scrollRef }: ImConversationBodyProps) {
     if (!cursor) return;
 
     loadingMoreRef.current = true;
+    setLoadingMore(true);
     const scroller = scrollRef.current;
     const prevScrollHeight = scroller?.scrollHeight ?? 0;
     const prevScrollTop = scroller?.scrollTop ?? 0;
@@ -170,62 +162,18 @@ export function ImConversationBody({ id, scrollRef }: ImConversationBodyProps) {
       console.error("加载更早消息失败", err);
     } finally {
       loadingMoreRef.current = false;
+      setLoadingMore(false);
     }
   }, [id, setMessages, scrollRef]);
-
-  useEffect(() => {
-    if (!hasMoreHistory) return;
-    const sentinel = topSentinelRef.current;
-    if (!sentinel) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) {
-          void loadMoreHistory();
-        }
-      },
-      { rootMargin: "100px" },
-    );
-    io.observe(sentinel);
-    return () => io.disconnect();
-  }, [loadMoreHistory, hasMoreHistory]);
 
   // 6. Send: emit via WS, no optimistic insert
   const handleSend = useCallback(
     (text: string) => {
       const socket = getEventsSocket();
       socket.emit(IM_WS_EVENTS.send, { conversationId: id, content: text });
-      setDraft("");
     },
     [id],
   );
-
-  // 7. Scroll-to-bottom on new messages
-  useEffect(() => {
-    if (!stickToBottom) return;
-    if (messages.length === 0) return;
-    if (!initialScrollDoneRef.current) {
-      initialScrollDoneRef.current = true;
-      bottomRef.current?.scrollIntoView({ behavior: "instant" });
-      return;
-    }
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, stickToBottom]);
-
-  // Bottom sentinel IO for stick-to-bottom detection
-  useEffect(() => {
-    const sentinel = bottomRef.current;
-    const root = scrollRef.current;
-    if (!sentinel || !root) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        const visible = entries[0]?.isIntersecting ?? false;
-        setStickToBottom(visible);
-      },
-      { root, threshold: 0 },
-    );
-    io.observe(sentinel);
-    return () => io.disconnect();
-  }, [scrollRef]);
 
   return (
     <>
@@ -237,35 +185,23 @@ export function ImConversationBody({ id, scrollRef }: ImConversationBodyProps) {
             <ConversationEmptyState conversation={currentConversation} />
           ) : null
         ) : (
-          <>
-            {hasMoreHistory && (
-              <div
-                ref={topSentinelRef}
-                className="flex justify-center py-2 text-xs text-muted-foreground/60"
-              />
-            )}
-            <ImMessageList
-              messages={messages}
-              variant="rows"
-              groupKey={(m) => m.senderId}
-              resolveSender={(m) => {
-                const dn = members[m.senderId]?.displayName ?? m.senderId;
-                return {
-                  displayName: dn,
-                  initial: dn.charAt(0).toUpperCase(),
-                  isSelf: m.senderId === currentUserId,
-                };
-              }}
-              renderContent={(m) => <MarkdownContent text={m.content} />}
-              labels={{
-                today: t("today"),
-                yesterday: t("yesterday"),
-                copy: t("copy"),
-              }}
-              onCopy={(m) => void navigator.clipboard?.writeText(m.content)}
-            />
-            <div ref={bottomRef} />
-          </>
+          <MessageFlow
+            messages={messages}
+            meUserId={currentUserId}
+            hasMore={hasMoreHistory}
+            loadingMore={loadingMore}
+            onLoadMore={() => void loadMoreHistory()}
+            scrollRef={scrollRef}
+            resolveDisplayName={(senderId) =>
+              members[senderId]?.displayName ?? senderId
+            }
+            renderContent={(m) => <MarkdownContent text={m.content} />}
+            labels={{
+              today: t("today"),
+              yesterday: t("yesterday"),
+              copy: t("copy"),
+            }}
+          />
         )}
       </div>
 
@@ -278,12 +214,13 @@ export function ImConversationBody({ id, scrollRef }: ImConversationBodyProps) {
           aria-hidden
           className="pointer-events-none absolute inset-x-0 -bottom-4 h-4 bg-background"
         />
-        <ChatInput
-          ref={chatInputRef}
-          value={draft}
-          onChange={setDraft}
+        <MessageInput
           onSend={handleSend}
           placeholder={t("inputPlaceholder")}
+          labels={{
+            attachment: tChat("attachment"),
+            send: tChat("send"),
+          }}
         />
       </div>
     </>
