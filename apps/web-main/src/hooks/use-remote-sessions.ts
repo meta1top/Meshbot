@@ -1,29 +1,29 @@
 "use client";
 
 import type { SessionSummary } from "@meshbot/types-agent";
-import type { SessionTransport } from "@meshbot/web-common/session";
 import { type UseQueryResult, useQuery } from "@tanstack/react-query";
+import { remoteQuery } from "@/lib/device-query";
 
-/** 远程设备会话列表 query key（`SessionSublist` / `RemoteSessionView` 共用，缓存互通）。 */
+/** 远程设备会话列表 query key（侧栏树 / RemoteSessionView 共用，缓存互通）。 */
 export function remoteSessionsQueryKey(deviceId: string) {
   return ["main", "remote-sessions", deviceId] as const;
 }
 
 /**
- * 某远程设备的会话列表（经 `SessionTransport.listSessions()` 走
- * `device.query` 通道，非 REST）。仅 `online` 时 enabled——设备离线时
- * `listSessions()` 会较快 reject（网关 `reply("offline")`），但不主动尝试，
- * 避免无意义的往返与用户能感知到的等待。
+ * 某远程设备的会话列表：经 device-query 模块级单例往返（correlationId + 10s
+ * 超时），不再绑 transport 实例——修复过「首个响应 settle 不到挂起 Promise、
+ * 干等 10s 超时 + React Query 重试才出来」的 ~11s 慢加载（见 lib/device-query.ts）。
+ * `enabled` 通常传设备在线态：离线不发起。
  */
 export function useRemoteSessions(
   deviceId: string,
-  transport: SessionTransport,
-  online: boolean,
+  enabled: boolean,
 ): UseQueryResult<SessionSummary[]> {
   return useQuery({
     queryKey: remoteSessionsQueryKey(deviceId),
-    queryFn: () => transport.listSessions(),
-    enabled: online,
+    queryFn: () =>
+      remoteQuery(deviceId, "sessions", {}) as Promise<SessionSummary[]>,
+    enabled,
     staleTime: 15_000,
   });
 }

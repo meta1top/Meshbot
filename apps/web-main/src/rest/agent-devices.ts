@@ -21,17 +21,21 @@ export function deviceOnlineQueryKey(deviceId: string) {
  * 设备 Agent 在线态 hook（Agent-DM 会话侧栏在线点、设备管理页在线列首屏用）。
  * 仅取首屏快照，之后的实时变化靠 `useDevicePresenceSync` 订阅 presence 事件推送。
  */
+/** 拉单设备在线态（供 useDeviceOnline 与侧栏树的 useQueries 共用）。 */
+export async function fetchDeviceOnline(
+  deviceId: string,
+): Promise<{ online: boolean }> {
+  return (
+    await mainApi.get<{ online: boolean }>(`/api/devices/${deviceId}/online`)
+  ).data;
+}
+
 export function useDeviceOnline(
   deviceId: string,
 ): UseQueryResult<{ online: boolean }> {
   return useQuery({
     queryKey: deviceOnlineQueryKey(deviceId),
-    queryFn: async () =>
-      (
-        await mainApi.get<{ online: boolean }>(
-          `/api/devices/${deviceId}/online`,
-        )
-      ).data,
+    queryFn: () => fetchDeviceOnline(deviceId),
     enabled: deviceId.length > 0,
   });
 }

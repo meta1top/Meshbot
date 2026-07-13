@@ -6,9 +6,7 @@ import { Monitor } from "lucide-react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Suspense } from "react";
-import { DeviceSublist } from "@/components/assistant/device-sublist";
 import { RemoteSessionView } from "@/components/assistant/remote-session-view";
-import { SessionSublist } from "@/components/assistant/session-sublist";
 import { useDeviceOnline, useDevicePresenceSync } from "@/rest/agent-devices";
 import { useProfile } from "@/rest/auth";
 import { useDevices } from "@/rest/devices";
@@ -49,19 +47,9 @@ function AssistantDeviceView() {
   const notFound = !isPending && (error || !device || device.revokedAt != null);
   const online = onlineData?.online ?? false;
 
+  // 侧栏（设备→会话展开树）由段 layout 的 AssistantSidebar 持久渲染，本页只出主区。
   return (
     <>
-      {isPending || notFound ? (
-        <DeviceSublist />
-      ) : (
-        <SessionSublist
-          deviceId={deviceId}
-          deviceName={device?.name ?? ""}
-          online={online}
-          activeSessionId={sessionId}
-        />
-      )}
-
       {isPending ? (
         <PageShellView>
           <DeviceDetailSkeleton />

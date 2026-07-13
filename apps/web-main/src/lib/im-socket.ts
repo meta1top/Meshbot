@@ -1,6 +1,7 @@
 import { IM_WS_NAMESPACE } from "@meshbot/types";
 import { io, type Socket } from "socket.io-client";
 import { getMainToken } from "./auth-storage";
+import { resetDeviceQuery } from "./device-query";
 
 /**
  * web-main 云协同前端的 IM WebSocket 单例连接（直连 server-main `/ws/im`）。
@@ -31,4 +32,6 @@ export function getImSocket(): Socket {
 export function disconnectImSocket(): void {
   socket?.disconnect();
   socket = null;
+  // deviceQuery 单例的常驻监听器绑在旧 socket 上——重置，下次在新 socket 重绑。
+  resetDeviceQuery();
 }

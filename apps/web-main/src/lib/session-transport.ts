@@ -7,7 +7,6 @@ import type {
   AgentRunStartInput,
   DeviceQueryKind,
   DeviceQueryRequestInput,
-  DeviceQueryResponse,
 } from "@meshbot/types";
 import { IM_WS_EVENTS } from "@meshbot/types";
 import type {
@@ -17,11 +16,11 @@ import type {
 } from "@meshbot/types-agent";
 import { clientSnowflakeId } from "@meshbot/web-common";
 import {
-  DeviceQueryClient,
   MulticastRunEvents,
   RemoteRunTracker,
   type SessionTransport,
 } from "@meshbot/web-common/session";
+import { remoteQuery } from "./device-query";
 import { getImSocket } from "./im-socket";
 
 /**
@@ -31,14 +30,14 @@ import { getImSocket } from "./im-socket";
  * 直接是 L3 的发起方（A），`device.query.*`/`agent.run.*` 六个事件都在这条
  * socket 上原样收发（`im.gateway.ts` 的 `RunRequester` kind:"user" 分支）。
  *
- * 三个纯逻辑单元（无 socket 依赖，见 `packages/web-common/src/session/`）：
- * - {@link DeviceQueryClient}：deviceQuery 往返（correlationId + 超时 + 响应匹配）。
+ * 纯逻辑单元（无 socket 依赖，见 `packages/web-common/src/session/`）：
  * - {@link RemoteRunTracker}：run 帧流归属过滤 + 乱序重排 + end 事件合成。
  * - {@link MulticastRunEvents}：`subscribe()` 的多播分发（见下）。
  *
- * 三个 socket 监听器（`deviceQueryResponse`/`agentRunFrame`/`agentRunEnd`）在
- * 工厂调用时一次性注册，随 transport 实例常驻——不随 `subscribe()`/退订反复
- * 挂卸（`query()` 独立于 `subscribe()` 生命周期，随时可调用）。
+ * deviceQuery 往返（`device.query.*`）走 `device-query.ts` 的**模块级单例**
+ * （一个 client + 一个常驻 `deviceQueryResponse` 监听器），不绑 transport 实例——
+ * 否则 remount 时会丢掉尚未 settle 的响应（详见该文件）。本工厂只注册
+ * `agentRunFrame`/`agentRunEnd` 两个 run 帧监听器（随 transport 实例，`dispose` 摘除）。
  *
  * `subscribe()` 是**多播**语义（{@link MulticastRunEvents}），并发多路订阅同时
  * 生效：dispatch_subagent 的父子会话共享同一父 `streamId`（B 端按
@@ -57,11 +56,9 @@ export function createRemoteSessionTransport(
   deviceId: string,
 ): SessionTransport {
   const socket = getImSocket();
-  const queries = new DeviceQueryClient();
   const runs = new RemoteRunTracker();
   const runEvents = new MulticastRunEvents();
 
-  const onQueryResponse = (res: DeviceQueryResponse) => queries.settle(res);
   const onRunFrame = (frame: AgentRunFrame) => {
     for (const { event, payload } of runs.handleFrame(frame)) {
       runEvents.emit(event, payload);
@@ -71,20 +68,15 @@ export function createRemoteSessionTransport(
     const synthesized = runs.handleEnd(end);
     if (synthesized) runEvents.emit(synthesized.event, synthesized.payload);
   };
-  socket.on(IM_WS_EVENTS.deviceQueryResponse, onQueryResponse);
+  // deviceQueryResponse 监听器不在此注册——它挂在 device-query.ts 的模块级单例上
+  // （见该文件说明：per-instance 监听器会在 remount 时丢掉尚未 settle 的响应）。
   socket.on(IM_WS_EVENTS.agentRunFrame, onRunFrame);
   socket.on(IM_WS_EVENTS.agentRunEnd, onRunEnd);
 
   const query = (
     kind: DeviceQueryKind,
     params: DeviceQueryRequestInput["params"],
-  ) =>
-    queries.query(
-      (req) => socket.emit(IM_WS_EVENTS.deviceQueryRequest, req),
-      deviceId,
-      kind,
-      params,
-    );
+  ) => remoteQuery(deviceId, kind, params);
 
   const control = (body: AgentRunControlInput) =>
     socket.emit(IM_WS_EVENTS.agentRunControl, body);
@@ -212,11 +204,10 @@ export function createRemoteSessionTransport(
     },
 
     dispose() {
-      // 三个常驻监听器挂在 module 级单例 socket（`getImSocket()`）上，
-      // 不随 transport 实例 GC 自动摘除——组件 unmount 时必须显式 off，
-      // 否则每次 remount（如导航切换会话/设备）都会在同一个 socket 上
-      // 无界累积新的一份，重复触发 `queries.settle`/`runs.handleFrame` 等。
-      socket.off(IM_WS_EVENTS.deviceQueryResponse, onQueryResponse);
+      // run 帧监听器挂在 module 级单例 socket（`getImSocket()`）上，不随 transport
+      // 实例 GC 自动摘除——组件 unmount 时必须显式 off，否则每次 remount（导航切换
+      // 会话/设备）都会累积一份，重复触发 `runs.handleFrame`。deviceQueryResponse
+      // 监听器归 device-query.ts 单例常驻，不在此摘除。
       socket.off(IM_WS_EVENTS.agentRunFrame, onRunFrame);
       socket.off(IM_WS_EVENTS.agentRunEnd, onRunEnd);
       runs.reset();

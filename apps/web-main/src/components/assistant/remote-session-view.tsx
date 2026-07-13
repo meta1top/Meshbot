@@ -199,7 +199,7 @@ function RemoteSessionViewReady({
     streamId,
   );
 
-  const { data: sessions } = useRemoteSessions(deviceId, transport, true);
+  const { data: sessions } = useRemoteSessions(deviceId, true);
   const currentSession = sessions?.find((s) => s.id === sessionId);
   const [modelOverride, setModelOverride] = useState<string | null>(null);
   const sessionModelId = modelOverride ?? currentSession?.modelConfigId ?? null;
