@@ -24,6 +24,7 @@ export {
   type CompactionRowLabels,
   type CompactionRowProps,
 } from "./compaction-row";
+export { DeviceQueryClient } from "./device-query-client";
 export {
   DriveCreateShareCard,
   type DriveCreateShareCardProps,
@@ -50,6 +51,7 @@ export {
   type PendingListLabels,
   type PendingListProps,
 } from "./pending-list";
+export { RemoteRunTracker } from "./remote-run-tracker";
 export {
   SessionConversationView,
   type SessionConversationViewLabels,
