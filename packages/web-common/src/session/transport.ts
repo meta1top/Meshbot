@@ -1,4 +1,8 @@
-import type { HistoryResponse, SessionSummary } from "@meshbot/types-agent";
+import type {
+  HistoryResponse,
+  PendingResponse,
+  SessionSummary,
+} from "@meshbot/types-agent";
 
 /** run 流事件（本机 session WS 事件与远程 AgentRunFrame 解包后的统一形态）。 */
 export interface SessionRunEvents {
@@ -43,6 +47,20 @@ export interface SessionTransport {
     answers: { selected: string[]; other?: string }[],
   ): Promise<void>;
   patchSessionModel(sessionId: string, modelConfigId: string): Promise<void>;
+  /**
+   * 取会话排队中的用户消息（本机专属概念：远程 relay 无「排队未处理」语义，
+   * `useSessionStream` 只在 local 分支调用）。契约扩展（Task 6，从 hook 内
+   * `@/rest/session` 直连迁入）——remote 侧实现应显式抛错，不伪造空结果。
+   */
+  fetchPending(sessionId: string): Promise<PendingResponse>;
+  /**
+   * 查询会话当前活跃 run 的 streamId（reclaim 场景：刷新页面 / 直接进入远程
+   * 会话时用它回填 `useSessionStream` 内部的 streamId 引用，之后 confirm/
+   * interrupt 才可路由到目标设备）。本机会话无独立 streamId 概念，
+   * `useSessionStream` 只在 remote 分支调用。契约扩展（Task 6，从 hook 内
+   * `@/rest/remote-devices` 直连迁入）——local 侧实现应显式抛错。
+   */
+  fetchActiveRun(sessionId: string): Promise<{ streamId: string } | null>;
   readArtifact(
     sessionId: string,
     path: string,
