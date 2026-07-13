@@ -1,9 +1,6 @@
 "use client";
 
-import { cn } from "@meshbot/design";
-import { stripLlmuse } from "@meshbot/types-agent";
-import { Check, Copy, Loader2, RotateCcw } from "lucide-react";
-import { useCallback, useState } from "react";
+import { UserMessageActions as UserMessageActionsBase } from "@meshbot/web-common/session";
 import { regenerateMessage } from "@/rest/session";
 
 interface Props {
@@ -24,75 +21,8 @@ interface Props {
 }
 
 /**
- * user 气泡下方的操作按钮组：复制 + 重生成。
- *
- * - hover 气泡才显（failed 状态默认显，引导用户重试）
- * - 重试请求飞行期间 spinner + disabled，避免双击
- * - copy 总是可点（无网络）
+ * user 气泡下方操作按钮组容器：REST 调用注入，渲染委托 web-common UserMessageActions。
  */
-export function UserMessageActions({
-  sessionId,
-  messageId,
-  content,
-  failed,
-  running,
-  onOptimisticCut,
-  onError,
-}: Props) {
-  const [copied, setCopied] = useState(false);
-  const [busy, setBusy] = useState(false);
-
-  const handleCopy = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(stripLlmuse(content));
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      onError?.(err);
-    }
-  }, [content, onError]);
-
-  const handleRegenerate = useCallback(async () => {
-    if (busy || running) return;
-    setBusy(true);
-    onOptimisticCut();
-    try {
-      await regenerateMessage(sessionId, messageId);
-    } catch (err) {
-      onError?.(err);
-    } finally {
-      setBusy(false);
-    }
-  }, [busy, running, sessionId, messageId, onOptimisticCut, onError]);
-
-  return (
-    <div
-      className={cn(
-        "absolute top-1 right-2 z-10 items-center gap-0.5 rounded-md border border-border bg-background p-0.5 shadow-xs",
-        failed ? "flex" : "hidden group-hover:flex",
-      )}
-    >
-      <button
-        type="button"
-        onClick={handleCopy}
-        title="复制"
-        className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-      >
-        {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-      </button>
-      <button
-        type="button"
-        onClick={handleRegenerate}
-        disabled={busy || running}
-        title={failed ? "重试" : "重新生成"}
-        className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        {busy ? (
-          <Loader2 className="h-3 w-3 animate-spin" />
-        ) : (
-          <RotateCcw className="h-3 w-3" />
-        )}
-      </button>
-    </div>
-  );
+export function UserMessageActions(props: Props) {
+  return <UserMessageActionsBase {...props} onRegenerate={regenerateMessage} />;
 }

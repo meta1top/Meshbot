@@ -39,3 +39,7 @@ export {
   type UseSessionStreamCallbacks,
   useSessionStream,
 } from "./use-session-stream";
+export {
+  UserMessageActions,
+  type UserMessageActionsProps,
+} from "./user-message-actions";
