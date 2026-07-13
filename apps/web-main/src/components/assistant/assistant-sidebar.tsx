@@ -3,17 +3,19 @@
 import { cn } from "@meshbot/design";
 import type { SessionSummary } from "@meshbot/types-agent";
 import {
+  SessionTree,
+  type SessionTreeLabels,
+  type SessionTreeNodeInfo,
+} from "@meshbot/web-common/session";
+import {
+  type NavGroup,
   type NavNode,
   SidebarHeader,
-  SidebarNav,
-  SidebarRow,
-  type SidebarRowProps,
 } from "@meshbot/web-common/shell";
 import { useQueries } from "@tanstack/react-query";
-import { Sparkles, SquarePen } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSidebarSlot } from "@/components/shell/sidebar-slot-context";
 import { remoteSessionsQueryKey } from "@/hooks/use-remote-sessions";
@@ -25,18 +27,30 @@ import {
 } from "@/rest/agent-devices";
 import { useDevices } from "@/rest/devices";
 
+/** 会话叶子 key 前缀（`session:<sessionId>`）。 */
+const SESSION_PREFIX = "session:";
+
 /**
- * 助手区侧栏：设备 → 会话两级展开树（对齐 web-agent `assistant-sidebar.tsx`）。
+ * 助手区侧栏：设备 → 会话两级展开树（数据装配层，实际树渲染 + 会话行交给共享
+ * `SessionTree`，`@meshbot/web-common/session`，与 web-agent 复用同一份交互逻辑）。
  *
  * 渲染进助手段的持久 layout（`(shell)/assistant/layout.tsx`），因此展开态
  * （`expanded` useState）与已加载会话（React Query 缓存）在 `/assistant` ↔
  * `/assistant/[deviceId]` 间导航时不丢——不像旧的「点设备跳独立页」会 remount。
  *
- * - 一级 = 该账号全部已授权设备（在线点 + 名称，离线置灰不可展开）；
+ * - 一级 = 该账号全部已授权设备（在线点 + 名称）；设备节点恒有子节点（撑出
+ *   chevron），离线设备的子节点是纯占位（`expandable=false` 时行整体
+ *   pointer-events-none，占位内容永远不会被打开渲染）—— 对齐 web-agent
+ *   「离线也显示 chevron，置灰不可点」的既有交互；
  * - 展开在线设备 → 并入 `expanded` → `useQueries` 懒加载该设备会话内联铺开，
  *   多设备可同时展开；
+ * - 路由携带 `deviceId`（`/assistant/[deviceId]`）时，主动把该设备并入
+ *   `expanded`（懒加载其会话列表）—— 否则刷新页面后展开态是空的、看不到
+ *   自动展开高亮；
  * - 点会话叶子 → `/assistant/[deviceId]?session=<id>` 打开主区；
- * - 设备行尾「新建」→ `/assistant/[deviceId]`（无 session 参数 = 新建态）。
+ * - 设备行尾「新建」→ `/assistant/[deviceId]`（无 session 参数 = 新建态）；
+ * - 会话全部远程只读（wire protocol 未提供 rename/delete 能力）：不传
+ *   `onRenameSession`/`onDeleteSession`，`SessionTree` 按此自动不出三点菜单。
  */
 export function AssistantSidebar() {
   const t = useTranslations("assistantSidebar");
@@ -45,11 +59,16 @@ export function AssistantSidebar() {
   const slot = useSidebarSlot();
   const searchParams = useSearchParams();
   const activeSessionId = searchParams.get("session");
+  const routeParams = useParams<{ deviceId?: string }>();
+  const routeDeviceId = routeParams?.deviceId;
 
   const { data: allDevices, isPending, error } = useDevices();
   useDevicePresenceSync();
 
-  const devices = (allDevices ?? []).filter((d) => !d.revokedAt);
+  const devices = useMemo(
+    () => (allDevices ?? []).filter((d) => !d.revokedAt),
+    [allDevices],
+  );
 
   // 全部设备在线态（一次性并行；presence 事件经 useDevicePresenceSync 写同一缓存键）。
   const onlineQueries = useQueries({
@@ -65,6 +84,17 @@ export function AssistantSidebar() {
 
   // 已展开设备 id 集合。组件挂持久 layout，导航切会话不重置。
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+
+  // 路由直达某设备（刷新 / 分享链接）：把它并入 expanded，懒加载会话列表——
+  // 否则该设备分支停在折叠态，activeSessionKey 匹配不到任何已渲染节点，
+  // 无从自动展开高亮。
+  useEffect(() => {
+    if (!routeDeviceId) return;
+    setExpanded((prev) =>
+      prev.has(routeDeviceId) ? prev : new Set(prev).add(routeDeviceId),
+    );
+  }, [routeDeviceId]);
+
   const expandedIds = [...expanded];
 
   // 每个展开设备并行拉会话（走 device-query 单例往返，正常秒回）。
@@ -80,100 +110,94 @@ export function AssistantSidebar() {
     expandedIds.map((id, i) => [id, sessionQueries[i]]),
   );
 
-  if (!slot) return null;
+  const activeSessionKey = activeSessionId
+    ? `${SESSION_PREFIX}${activeSessionId}`
+    : undefined;
 
-  const toggle = (deviceId: string, open: boolean) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (open) next.add(deviceId);
-      else next.delete(deviceId);
-      return next;
-    });
-  };
+  // 边装配树边登记每个 key 的渲染元数据，供 SessionTree.nodeInfo 回读。
+  const metaByKey = new Map<string, SessionTreeNodeInfo>();
 
   const sessionChildren = (deviceId: string): NavNode[] => {
     const q = sessionsById.get(deviceId);
     if (!q || q.isPending) {
-      return [{ key: `${deviceId}:__skeleton__`, label: tDevices("empty") }];
+      metaByKey.set(`ph:${deviceId}:load`, {
+        kind: "placeholder",
+        variant: "skeleton",
+      });
+      return [{ key: `ph:${deviceId}:load`, label: "" }];
     }
     if (q.isError) {
-      return [{ key: `${deviceId}:__error__`, label: t("remoteLoadFailed") }];
+      metaByKey.set(`ph:${deviceId}:err`, {
+        kind: "placeholder",
+        variant: "note",
+      });
+      return [{ key: `ph:${deviceId}:err`, label: t("remoteLoadFailed") }];
     }
     const sessions = q.data ?? [];
     if (sessions.length === 0) {
-      return [{ key: `${deviceId}:__empty__`, label: t("remoteEmpty") }];
+      metaByKey.set(`ph:${deviceId}:empty`, {
+        kind: "placeholder",
+        variant: "note",
+      });
+      return [{ key: `ph:${deviceId}:empty`, label: t("remoteEmpty") }];
     }
-    return sessions.map((s) => ({
-      key: `session:${s.id}`,
-      label: <span title={s.title}>{s.title}</span>,
-      icon: <Sparkles className="text-(--shell-sidebar-fg)/60" />,
-      onClick: () => router.push(`/assistant/${deviceId}?session=${s.id}`),
-    }));
+    return sessions.map((s) => {
+      const key = `${SESSION_PREFIX}${s.id}`;
+      metaByKey.set(key, { kind: "session", title: s.title });
+      return {
+        key,
+        label: s.title,
+        onClick: () => router.push(`/assistant/${deviceId}?session=${s.id}`),
+      };
+    });
   };
 
   const items: NavNode[] = devices.map((d) => {
     const online = onlineById.get(d.id) ?? false;
-    const open = expanded.has(d.id);
+    metaByKey.set(`device:${d.id}`, {
+      kind: "device",
+      online,
+      expandable: online,
+    });
     return {
       key: `device:${d.id}`,
       label: d.name,
-      defaultOpen: open,
-      // 在线设备恒给 children（撑出 chevron）；离线无 children、不可展开、置灰。
+      defaultOpen: online && (expanded.has(d.id) || d.id === routeDeviceId),
+      // 恒给非空 children 撑出 chevron；离线设备的占位内容永远不会被打开渲染
+      // （expandable=false 时行整体 pointer-events-none，chevron 点不动）。
       children: online
-        ? open
-          ? sessionChildren(d.id)
-          : [{ key: `${d.id}:__ph__`, label: "" }]
-        : undefined,
+        ? sessionChildren(d.id)
+        : [{ key: `ph:${d.id}:offline`, label: "" }],
     };
   });
 
-  const renderRow = (node: NavNode, defaults: SidebarRowProps) => {
-    if (node.key.startsWith("device:")) {
-      const deviceId = node.key.slice("device:".length);
-      const online = onlineById.get(deviceId) ?? false;
-      return (
-        <SidebarRow
-          {...defaults}
-          icon={
-            <span
-              className={cn(
-                "h-2 w-2 shrink-0 rounded-full",
-                online ? "bg-[#16a34a]" : "bg-(--shell-sidebar-fg)/30",
-              )}
-            />
-          }
-          actions={
-            online ? (
-              <button
-                type="button"
-                title={t("newSession")}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  router.push(`/assistant/${deviceId}`);
-                }}
-                className="flex h-6 w-6 items-center justify-center rounded text-(--shell-sidebar-fg)/60 transition-colors hover:bg-(--shell-sidebar-hover) hover:text-(--shell-sidebar-fg)"
-              >
-                <SquarePen className="h-3.5 w-3.5" />
-              </button>
-            ) : undefined
-          }
-        />
-      );
-    }
-    // 骨架/空/错误/占位子行：纯弱化提示，不复用可点的 SidebarRow。
-    if (node.key.includes("__")) {
-      const isPh = node.key.endsWith("__ph__");
-      return (
-        <div
-          className="flex h-7 items-center truncate pl-[22px] pr-2 text-[12px] text-(--shell-sidebar-fg)/45"
-          aria-hidden={isPh}
-        >
-          {isPh ? "" : node.label}
-        </div>
-      );
-    }
-    return <SidebarRow {...defaults} />;
+  const groups: NavGroup[] = [{ key: "devices", items }];
+
+  const handleExpandDevice = (node: NavNode) => {
+    const id = node.key.startsWith("device:")
+      ? node.key.slice("device:".length)
+      : undefined;
+    if (!id) return;
+    setExpanded((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
   };
+
+  const handleNewSession = (node: NavNode) => {
+    const id = node.key.startsWith("device:")
+      ? node.key.slice("device:".length)
+      : undefined;
+    if (!id) return;
+    router.push(`/assistant/${id}`);
+  };
+
+  const labels: SessionTreeLabels = useMemo(
+    () => ({
+      offline: tDevices("offline"),
+      newSession: t("newSession"),
+    }),
+    [tDevices, t],
+  );
+
+  if (!slot) return null;
 
   return createPortal(
     <div className="flex h-full flex-col">
@@ -190,17 +214,13 @@ export function AssistantSidebar() {
             {tDevices("empty")}
           </div>
         ) : (
-          <SidebarNav
-            groups={[{ key: "devices", items }]}
-            activeKey={
-              activeSessionId ? `session:${activeSessionId}` : undefined
-            }
-            onToggle={(node, open) => {
-              if (node.key.startsWith("device:")) {
-                toggle(node.key.slice("device:".length), open);
-              }
-            }}
-            renderRow={renderRow}
+          <SessionTree
+            groups={groups}
+            activeSessionKey={activeSessionKey}
+            nodeInfo={(node) => metaByKey.get(node.key)}
+            onExpandDevice={handleExpandDevice}
+            onNewSession={handleNewSession}
+            labels={labels}
           />
         )}
       </div>
