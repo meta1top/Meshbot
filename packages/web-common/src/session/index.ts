@@ -1,5 +1,10 @@
 export { MarkdownContent } from "./markdown-content";
 export { MessageSkeleton } from "./message-skeleton";
+export {
+  PendingList,
+  type PendingListLabels,
+  type PendingListProps,
+} from "./pending-list";
 export type { SessionSocketLike } from "./socket-like";
 export {
   claimSubagentOnTimeline,
