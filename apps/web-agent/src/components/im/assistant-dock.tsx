@@ -185,6 +185,7 @@ export function AssistantDock({ chromeless }: { chromeless?: boolean } = {}) {
             running={stream.running}
             usageByMessage={usageByMessage}
             onRegenerateOptimisticCut={() => {}}
+            onConfirm={stream.confirm}
             onAnswer={stream.answer}
           />
         ) : (

@@ -46,6 +46,15 @@ interface MessageListProps {
    */
   readOnly?: boolean;
   /**
+   * 确认/取消 im_send_message / drive 分享类 HITL（透传给 ToolCallBlock）。
+   * HITL 收敛（Task 8）：调用方统一传 `useSessionStream().confirm`。
+   */
+  onConfirm: (
+    toolCallId: string,
+    decision: "send" | "cancel",
+    content?: string,
+  ) => Promise<void>;
+  /**
    * 提交 ask_question 型 HITL 的回答（透传给 ToolCallBlock/AskQuestionCard）。
    * HITL 收敛（Task 8）：调用方统一传 `useSessionStream().answer`。
    */
@@ -72,6 +81,7 @@ export function MessageList({
   usageByMessage,
   nested,
   readOnly,
+  onConfirm,
   onAnswer,
 }: MessageListProps) {
   const t = useTranslations("session");
@@ -167,6 +177,7 @@ export function MessageList({
                           key={tc.toolCallId}
                           tool={tc}
                           sessionId={sessionId}
+                          onConfirm={onConfirm}
                           onAnswer={onAnswer}
                         />
                       ))}

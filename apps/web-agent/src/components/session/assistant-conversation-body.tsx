@@ -238,6 +238,7 @@ export function AssistantConversationBody({
         });
       }}
       usageByMessage={usageByMessage}
+      onConfirm={stream.confirm}
       onAnswer={stream.answer}
     />
   );

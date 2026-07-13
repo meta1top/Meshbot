@@ -291,6 +291,7 @@ export function SubagentCard({ tool }: { tool: ToolCallView }) {
               sessionId={subSessionId}
               running={sub.running}
               onRegenerateOptimisticCut={() => {}}
+              onConfirm={sub.confirm}
               onAnswer={sub.answer}
             />
           </div>

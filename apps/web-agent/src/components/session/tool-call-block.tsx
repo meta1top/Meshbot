@@ -6,8 +6,10 @@ import {
   extractPartialString,
   parsePartialToolArgs,
 } from "@meshbot/web-common";
+import { useAtomValue } from "jotai";
 import { ChevronDown, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { conversationsAtom } from "@/atoms/im";
 import { sanitizeMeshbotPaths, toolDisplayName } from "@/lib/tool-display";
 import { ArtifactFileCard } from "./artifact-file-card";
 import { AskQuestionCard } from "./ask-question-card";
@@ -35,10 +37,19 @@ import { TodoList } from "./todo-list";
 export function ToolCallBlock({
   tool,
   sessionId,
+  onConfirm,
   onAnswer,
 }: {
   tool: ToolCallView;
   sessionId: string;
+  /**
+   * 确认/取消 im_send_message / drive 分享类 HITL。HITL 收敛点同 onAnswer。
+   */
+  onConfirm: (
+    toolCallId: string,
+    decision: "send" | "cancel",
+    content?: string,
+  ) => Promise<void>;
   /**
    * 提交 ask_question 型 HITL 的回答。HITL 收敛点（Task 5 裁定，Task 8 落地）：
    * 上游统一传入 `useSessionStream().answer`（本地/远程分支已下沉到
@@ -50,8 +61,22 @@ export function ToolCallBlock({
   ) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
+  const conversations = useAtomValue(conversationsAtom);
   if (tool.name === "im_send_message" && tool.status !== "streaming") {
-    return <ImSendConfirmCard tool={tool} sessionId={sessionId} />;
+    const args = (tool.args ?? {}) as { conversationId?: string };
+    const target = conversations.find((c) => c.id === args.conversationId);
+    const targetName =
+      target?.name ??
+      target?.peer?.displayName ??
+      args.conversationId ??
+      "会话";
+    return (
+      <ImSendConfirmCard
+        tool={tool}
+        targetName={targetName}
+        onConfirm={onConfirm}
+      />
+    );
   }
   if (tool.name === "ask_question" && tool.status !== "streaming") {
     return <AskQuestionCard tool={tool} onAnswer={onAnswer} />;

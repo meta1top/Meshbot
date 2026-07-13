@@ -15,6 +15,10 @@ export {
   type AssistantMessageActionsProps,
 } from "./assistant-message-actions";
 export { formatTokens } from "./format-tokens";
+export {
+  ImSendConfirmCard,
+  type ImSendConfirmCardProps,
+} from "./im-send-confirm-card";
 export { MarkdownContent } from "./markdown-content";
 export { MessageSkeleton } from "./message-skeleton";
 export { type ModelConfigLike, resolveModelName } from "./model-name";
