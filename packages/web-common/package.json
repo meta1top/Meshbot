@@ -20,6 +20,10 @@
     "./im": {
       "types": "./src/im/index.ts",
       "default": "./src/im/index.ts"
+    },
+    "./session": {
+      "types": "./src/session/index.ts",
+      "default": "./src/session/index.ts"
     }
   },
   "scripts": {
