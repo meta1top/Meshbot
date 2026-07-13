@@ -3,8 +3,9 @@
 import { cn } from "@meshbot/design";
 import { Check, ChevronDown, Square, X } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSessionStream } from "@/hooks/use-session-stream";
+import { createLocalSessionTransport } from "@/lib/session-transport";
 import {
   countToolCalls,
   deriveLiveAction,
@@ -86,7 +87,9 @@ export function SubagentCard({ tool }: { tool: ToolCallView }) {
   const subSessionId = resolveSubSessionId(tool);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
-  const sub = useSessionStream(subSessionId, scrollRef);
+  // 子 Agent 会话恒为本机（无跨设备嵌套子会话场景）；工厂无状态，挂载期稳定即可。
+  const transport = useMemo(() => createLocalSessionTransport(), []);
+  const sub = useSessionStream(subSessionId, scrollRef, transport);
   const [collapse, setCollapse] = useState<SubagentCollapse>({
     mode: "manual",
     open: false,

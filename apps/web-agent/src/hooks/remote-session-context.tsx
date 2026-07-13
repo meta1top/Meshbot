@@ -1,7 +1,6 @@
 "use client";
 
 import { createContext, type ReactNode, useContext, useMemo } from "react";
-import { answerRemote, confirmRemote } from "@/rest/remote-devices";
 
 /** 远程会话控制器：深层 HITL 卡片消费的最小闭包集合。 */
 type RemoteSession = {
@@ -22,44 +21,31 @@ type RemoteSession = {
 const Ctx = createContext<RemoteSession | null>(null);
 
 /**
- * 远程会话上下文：让深层的 HITL 卡片拿到 remoteDeviceId 与「点击时的实时
- * streamId」，走远程控制端点。本地会话不包这个 Provider，useRemoteSession
- * 返回 null。
+ * 远程会话上下文：让深层的 HITL 卡片拿到 remoteDeviceId/sessionId 与
+ * confirm/answer 闭包。confirm/answer 由调用方直接传入
+ * `useSessionStream` 返回的 `stream.confirm`/`stream.answer`（内部已经过
+ * SessionTransport 路由 + 「点击时的实时 streamId」现取，见
+ * use-session-stream.ts），本组件不再自行拼装远程端点调用。本地会话不包这个
+ * Provider，useRemoteSession 返回 null。
  */
 export function RemoteSessionProvider(props: {
   remoteDeviceId: string;
   sessionId: string;
-  getStreamId: () => string | null;
+  confirm: (
+    toolCallId: string,
+    decision: "send" | "cancel",
+    content?: string,
+  ) => Promise<void>;
+  answer: (
+    toolCallId: string,
+    answers: { selected: string[]; other?: string }[],
+  ) => Promise<void>;
   children: ReactNode;
 }) {
-  const { remoteDeviceId, sessionId, getStreamId, children } = props;
+  const { remoteDeviceId, sessionId, confirm, answer, children } = props;
   const value = useMemo<RemoteSession>(
-    () => ({
-      remoteDeviceId,
-      sessionId,
-      confirm: async (toolCallId, decision, content) => {
-        const streamId = getStreamId();
-        if (!streamId) throw new Error("远程会话 streamId 未就绪，请稍候重试");
-        await confirmRemote(remoteDeviceId, {
-          streamId,
-          sessionId,
-          toolCallId,
-          decision,
-          content,
-        });
-      },
-      answer: async (toolCallId, answers) => {
-        const streamId = getStreamId();
-        if (!streamId) throw new Error("远程会话 streamId 未就绪，请稍候重试");
-        await answerRemote(remoteDeviceId, {
-          streamId,
-          sessionId,
-          toolCallId,
-          answers,
-        });
-      },
-    }),
-    [remoteDeviceId, sessionId, getStreamId],
+    () => ({ remoteDeviceId, sessionId, confirm, answer }),
+    [remoteDeviceId, sessionId, confirm, answer],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

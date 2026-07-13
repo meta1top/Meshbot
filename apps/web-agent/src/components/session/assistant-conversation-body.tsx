@@ -30,9 +30,12 @@ import { useChatScroll } from "@/hooks/use-chat-scroll";
 import { useLlmusePrefix } from "@/hooks/use-llmuse-prefix";
 import { useSessionStream } from "@/hooks/use-session-stream";
 import { toI18nList } from "@/lib/i18n-list";
+import {
+  createLocalSessionTransport,
+  createRemoteSessionTransport,
+} from "@/lib/session-transport";
 import { useModelConfigs } from "@/rest/model-config";
-import { patchRemoteSessionModel } from "@/rest/remote-devices";
-import { deletePendingMessage, patchSession } from "@/rest/session";
+import { deletePendingMessage } from "@/rest/session";
 
 interface AssistantConversationBodyProps {
   /** 当前会话 ID，由 page 传入（渲染时必有）。远程会话时是 B 上的会话 id。 */
@@ -98,14 +101,11 @@ export function AssistantConversationBody({
       ? (remoteSessions[remoteDeviceId]?.sessions.find((s) => s.id === id)
           ?.modelConfigId ?? null)
       : (allSessions.find((s) => s.id === id)?.modelConfigId ?? null));
+  // 经 transport 统一路由：本地 PATCH /api/sessions/:id，远程走 device query 通道
+  // （本地 PATCH 对远程会话 id 会 404）——分支判断已下沉到 session-transport.ts。
   const handleModelChange = async (mid: string) => {
     try {
-      if (remoteDeviceId) {
-        // 经 device query 通道写对端 session（本地 PATCH 会 404）
-        await patchRemoteSessionModel(remoteDeviceId, id, mid);
-      } else {
-        await patchSession(id, { modelConfigId: mid });
-      }
+      await stream.patchSessionModel(mid);
       setModelOverride(mid);
     } catch (err) {
       console.error("切换模型失败", err);
@@ -115,9 +115,19 @@ export function AssistantConversationBody({
   const contextWindow = enabledModel?.contextWindow ?? 128_000;
 
   const prefix = useLlmusePrefix();
+  // transport 按 remoteDeviceId 二选一：无状态工厂，deviceId 不变时引用稳定，
+  // 避免每次渲染重建导致 useSessionStream 内部 effect/callback 误判依赖变化。
+  const transport = useMemo(
+    () =>
+      remoteDeviceId
+        ? createRemoteSessionTransport(remoteDeviceId)
+        : createLocalSessionTransport(),
+    [remoteDeviceId],
+  );
   const stream = useSessionStream(
     id,
     scrollRef,
+    transport,
     remoteDeviceId,
     remoteInitialStreamId,
   );
@@ -258,7 +268,8 @@ export function AssistantConversationBody({
               <RemoteSessionProvider
                 remoteDeviceId={remoteDeviceId}
                 sessionId={id}
-                getStreamId={stream.getStreamId}
+                confirm={stream.confirm}
+                answer={stream.answer}
               >
                 {messageListNode}
               </RemoteSessionProvider>

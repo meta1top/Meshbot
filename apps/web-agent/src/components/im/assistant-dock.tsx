@@ -4,7 +4,7 @@ import { QUICK_ASSISTANT_NAME_MAX } from "@meshbot/types-agent";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { Sparkles, X } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   assistantPanelOpenAtom,
   currentQuickSessionIdAtom,
@@ -22,6 +22,7 @@ import { MessageList } from "@/components/session/message-list";
 import { useChatScroll } from "@/hooks/use-chat-scroll";
 import { useLlmusePrefix } from "@/hooks/use-llmuse-prefix";
 import { useSessionStream } from "@/hooks/use-session-stream";
+import { createLocalSessionTransport } from "@/lib/session-transport";
 import { useModelConfigs } from "@/rest/model-config";
 import {
   fetchQuickAssistantName,
@@ -45,7 +46,9 @@ export function AssistantDock({ chromeless }: { chromeless?: boolean } = {}) {
   const [sessionId, setSessionId] = useAtom(currentQuickSessionIdAtom);
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const stream = useSessionStream(sessionId, scrollRef);
+  // 随手问 dock 恒为本机会话（无远程设备概念）；工厂无状态，挂载期稳定即可。
+  const transport = useMemo(() => createLocalSessionTransport(), []);
+  const stream = useSessionStream(sessionId, scrollRef, transport);
 
   // token 用量：按本 session 隔离读取（与主会话各读各的，互不串台）；
   // sessionId 未就绪时读空 family（环显示 0/上限，无碍）。
