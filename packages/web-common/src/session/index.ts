@@ -15,6 +15,12 @@ export {
   type AssistantMessageActionsProps,
 } from "./assistant-message-actions";
 export {
+  ChatInput,
+  type ChatInputHandle,
+  type ChatInputLabels,
+  type ChatInputProps,
+} from "./chat-input";
+export {
   CompactionBanner,
   type CompactionBannerLabels,
   type CompactionBannerProps,

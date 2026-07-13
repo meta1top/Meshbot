@@ -42,6 +42,8 @@ import { createSession, fetchQuickSessions } from "@/rest/session";
  */
 export function AssistantDock({ chromeless }: { chromeless?: boolean } = {}) {
   const t = useTranslations("assistantDock");
+  const tChat = useTranslations("chatInput");
+  const tSession = useTranslations("session");
   const setOpen = useSetAtom(assistantPanelOpenAtom);
   const [sessionId, setSessionId] = useAtom(currentQuickSessionIdAtom);
 
@@ -215,6 +217,20 @@ export function AssistantDock({ chromeless }: { chromeless?: boolean } = {}) {
               reasoningTokens: sessionTotals.reasoningTokens,
               callCount: sessionTotals.callCount,
               cumulativeTokens: sessionTotals.totalTokens,
+            },
+          }}
+          labels={{
+            attachment: tChat("attachment"),
+            interrupt: tChat("interrupt"),
+            send: tChat("send"),
+            usage: {
+              nextRequestLabel: tSession("usage.nextRequestLabel"),
+              inputLabel: tSession("usage.inputLabel"),
+              cacheLabel: tSession("usage.cacheLabel"),
+              outputLabel: tSession("usage.outputLabel"),
+              reasoningLabel: tSession("usage.reasoningLabel"),
+              cumulativeLabel: tSession("usage.cumulativeLabel"),
+              callCount: (count) => tSession("usage.callCount", { count }),
             },
           }}
         />

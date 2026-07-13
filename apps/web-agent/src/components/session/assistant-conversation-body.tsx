@@ -80,6 +80,7 @@ export function AssistantConversationBody({
   const t = useTranslations("session");
   const tHome = useTranslations("home");
   const tRemote = useTranslations("assistantSidebar");
+  const tChat = useTranslations("chatInput");
   const [draft, setDraft] = useState("");
   const chatInputRef = useRef<ChatInputHandle>(null);
 
@@ -320,6 +321,20 @@ export function AssistantConversationBody({
               reasoningTokens: sessionTotals.reasoningTokens,
               callCount: sessionTotals.callCount,
               cumulativeTokens: sessionTotals.totalTokens,
+            },
+          }}
+          labels={{
+            attachment: tChat("attachment"),
+            interrupt: tChat("interrupt"),
+            send: tChat("send"),
+            usage: {
+              nextRequestLabel: t("usage.nextRequestLabel"),
+              inputLabel: t("usage.inputLabel"),
+              cacheLabel: t("usage.cacheLabel"),
+              outputLabel: t("usage.outputLabel"),
+              reasoningLabel: t("usage.reasoningLabel"),
+              cumulativeLabel: t("usage.cumulativeLabel"),
+              callCount: (count) => t("usage.callCount", { count }),
             },
           }}
         />

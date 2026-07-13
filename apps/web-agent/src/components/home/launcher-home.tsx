@@ -18,6 +18,7 @@ import { createSession } from "@/rest/session";
 /** 起手台中区：品牌大标题 + 场景分段 + 建议 chips + 重 composer；发送即建会话跳转。 */
 export function LauncherHome() {
   const t = useTranslations("home");
+  const tChat = useTranslations("chatInput");
   const router = useRouter();
   const addSession = useSetAtom(addSessionAtom);
   const devices = useAtomValue(devicesAtom);
@@ -128,6 +129,11 @@ export function LauncherHome() {
             isLoading={sending}
             placeholder={t("inputPlaceholders.0")}
             leadingActions={<ComposerActions />}
+            labels={{
+              attachment: tChat("attachment"),
+              interrupt: tChat("interrupt"),
+              send: tChat("send"),
+            }}
           />
           <ComposerTargetBar
             selectedDeviceId={targetDeviceId}
