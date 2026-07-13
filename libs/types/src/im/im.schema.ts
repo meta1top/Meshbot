@@ -95,12 +95,19 @@ export const DeviceQueryRequestSchema = z.object({
 });
 export type DeviceQueryRequestInput = z.infer<typeof DeviceQueryRequestSchema>;
 
-/** 云网关转发给目标设备时附加发起方 deviceId */
+/**
+ * 云网关转发给目标设备时附加发起方标识。
+ * device 发起：deviceId 原值；浏览器 user 发起（L3 发起方泛化）：`"user:" + socketId`
+ * （server-main 内部编码，B 端原样回填不解析）。
+ */
 export interface DeviceQueryForwarded extends DeviceQueryRequestInput {
   requesterDeviceId: string;
 }
 
-/** 设备查询响应(B→云→A);data 按 kind 由 A 侧断言(sessions→SessionSummary[] / history→HistoryResponse) */
+/**
+ * 设备查询响应(B→云→A);data 按 kind 由 A 侧断言(sessions→SessionSummary[] / history→HistoryResponse)。
+ * requesterDeviceId 同上：device 发起为 deviceId，user 发起为 `"user:" + socketId`。
+ */
 export interface DeviceQueryResponse {
   correlationId: string;
   requesterDeviceId: string;
@@ -118,6 +125,10 @@ export const AgentRunStartSchema = z.object({
   content: z.string(),
 });
 export type AgentRunStartInput = z.infer<typeof AgentRunStartSchema>;
+/**
+ * requesterDeviceId：device 发起为 deviceId，浏览器 user 发起（L3 发起方泛化）
+ * 为 `"user:" + socketId`（server-main 内部编码，B 端原样回填不解析）。
+ */
 export interface AgentRunStartForwarded extends AgentRunStartInput {
   requesterDeviceId: string;
 }
@@ -144,11 +155,16 @@ export const AgentRunControlSchema = z.object({
   answers: z.array(AgentRunAnswerItemSchema).optional(),
 });
 export type AgentRunControlInput = z.infer<typeof AgentRunControlSchema>;
+/** requesterDeviceId 同 AgentRunStartForwarded：device 为 deviceId，user 为 `"user:" + socketId`。 */
 export interface AgentRunControlForwarded extends AgentRunControlInput {
   requesterDeviceId: string;
 }
 
-/** L3:B→A 运行帧(透传 SESSION_WS_EVENTS.* payload;event 用其常量字符串)。 */
+/**
+ * L3:B→A 运行帧(透传 SESSION_WS_EVENTS.* payload;event 用其常量字符串)。
+ * requesterDeviceId 由 B 端原样回填 agentRunStart 收到的值，不解析（device 为 deviceId，
+ * 浏览器 user 发起时为 `"user:" + socketId`）。
+ */
 export interface AgentRunFrame {
   streamId: string;
   requesterDeviceId: string;
@@ -157,7 +173,7 @@ export interface AgentRunFrame {
   event: string;
   payload: unknown;
 }
-/** L3:B→A 流终止。 */
+/** L3:B→A 流终止。requesterDeviceId 同 AgentRunFrame，由 B 端原样回填。 */
 export interface AgentRunEnd {
   streamId: string;
   requesterDeviceId: string;
