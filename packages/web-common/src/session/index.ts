@@ -78,6 +78,12 @@ export {
   type SessionConversationViewProps,
 } from "./session-conversation-view";
 export { createSessionSocketAdapter } from "./session-socket-adapter";
+export {
+  SessionTree,
+  type SessionTreeLabels,
+  type SessionTreeNodeInfo,
+  type SessionTreeProps,
+} from "./session-tree";
 export type { SessionSocketLike } from "./socket-like";
 export {
   claimSubagentOnTimeline,
