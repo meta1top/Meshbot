@@ -45,6 +45,14 @@ interface MessageListProps {
    * 与 nested 语义正交——nested 是「视觉收窄」，readOnly 是「禁写」。
    */
   readOnly?: boolean;
+  /**
+   * 提交 ask_question 型 HITL 的回答（透传给 ToolCallBlock/AskQuestionCard）。
+   * HITL 收敛（Task 8）：调用方统一传 `useSessionStream().answer`。
+   */
+  onAnswer: (
+    toolCallId: string,
+    answers: { selected: string[]; other?: string }[],
+  ) => Promise<void>;
 }
 
 /**
@@ -64,6 +72,7 @@ export function MessageList({
   usageByMessage,
   nested,
   readOnly,
+  onAnswer,
 }: MessageListProps) {
   const t = useTranslations("session");
   const user = useAtomValue(currentUserAtom);
@@ -158,6 +167,7 @@ export function MessageList({
                           key={tc.toolCallId}
                           tool={tc}
                           sessionId={sessionId}
+                          onAnswer={onAnswer}
                         />
                       ))}
                     </div>

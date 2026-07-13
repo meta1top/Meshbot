@@ -35,16 +35,26 @@ import { TodoList } from "./todo-list";
 export function ToolCallBlock({
   tool,
   sessionId,
+  onAnswer,
 }: {
   tool: ToolCallView;
   sessionId: string;
+  /**
+   * 提交 ask_question 型 HITL 的回答。HITL 收敛点（Task 5 裁定，Task 8 落地）：
+   * 上游统一传入 `useSessionStream().answer`（本地/远程分支已下沉到
+   * SessionTransport 内部），本组件与卡片自身不再感知 local/remote。
+   */
+  onAnswer: (
+    toolCallId: string,
+    answers: { selected: string[]; other?: string }[],
+  ) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
   if (tool.name === "im_send_message" && tool.status !== "streaming") {
     return <ImSendConfirmCard tool={tool} sessionId={sessionId} />;
   }
   if (tool.name === "ask_question" && tool.status !== "streaming") {
-    return <AskQuestionCard tool={tool} sessionId={sessionId} />;
+    return <AskQuestionCard tool={tool} onAnswer={onAnswer} />;
   }
   if (tool.name === "present_file" && tool.status !== "streaming") {
     return <ArtifactFileCard tool={tool} />;

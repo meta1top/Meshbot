@@ -6,6 +6,10 @@ export {
 } from "./artifact-file-card";
 export { type ArtifactKind, artifactKind } from "./artifact-kind";
 export {
+  AskQuestionCard,
+  type AskQuestionCardProps,
+} from "./ask-question-card";
+export {
   AssistantMessageActions,
   type AssistantMessageActionsLabels,
   type AssistantMessageActionsProps,

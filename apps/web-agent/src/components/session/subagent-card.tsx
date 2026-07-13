@@ -291,6 +291,7 @@ export function SubagentCard({ tool }: { tool: ToolCallView }) {
               sessionId={subSessionId}
               running={sub.running}
               onRegenerateOptimisticCut={() => {}}
+              onAnswer={sub.answer}
             />
           </div>
           <div className="flex items-center gap-2 border-t border-border px-3 py-1 text-[11px] tabular-nums text-muted-foreground/60">

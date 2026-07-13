@@ -185,6 +185,7 @@ export function AssistantDock({ chromeless }: { chromeless?: boolean } = {}) {
             running={stream.running}
             usageByMessage={usageByMessage}
             onRegenerateOptimisticCut={() => {}}
+            onAnswer={stream.answer}
           />
         ) : (
           <div className="flex flex-1 items-center justify-center px-4 text-center text-[12.5px] text-muted-foreground">
