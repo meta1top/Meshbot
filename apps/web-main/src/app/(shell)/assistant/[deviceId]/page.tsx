@@ -1,28 +1,49 @@
 "use client";
 
-import { Card, CardContent, cn, Skeleton } from "@meshbot/design";
+import { Card, CardContent, Skeleton } from "@meshbot/design";
 import { PageShellView } from "@meshbot/web-common/shell";
 import { Monitor } from "lucide-react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { Suspense } from "react";
 import { DeviceSublist } from "@/components/assistant/device-sublist";
+import { RemoteSessionView } from "@/components/assistant/remote-session-view";
+import { SessionSublist } from "@/components/assistant/session-sublist";
 import { useDeviceOnline, useDevicePresenceSync } from "@/rest/agent-devices";
+import { useProfile } from "@/rest/auth";
 import { useDevices } from "@/rest/devices";
 
 /**
- * 设备详情占位页（二期远程会话留位）：名称/平台/在线状态/最后活跃 + 占位条。
- * 设备不存在（未找到/已吊销/加载失败）与设备离线是两种不同的文案分支——前者
- * 整页替换为「设备不存在」空态，后者仍渲染完整详情卡（在线态字段本身即显示离线），
- * 仅底部占位条文案额外提示需设备在线才能发起远程会话。
+ * 设备详情页：在线 → 完整远程会话界面（会话子栏 + `RemoteSessionView`）；
+ * 离线 → 设备详情卡（在线态字段已显示离线）+ 禁止输入的提示；设备不存在
+ * （未找到/已吊销/加载失败）→ 空态。`?session=` 决定当前查看/新建的会话
+ * （无该参数 = 展示「新建会话」态输入框），`?streamId=` 只在本页自己刚发起
+ * create 后由 `RemoteSessionView.onSessionCreated` 写入，用于把首轮
+ * running/interrupt 路由带过去——直接导航进一个已有会话（点会话列表 /
+ * 刷新页面）时天然没有这个参数，重连活跃流不在 V1 范围（见任务报告）。
  */
 export default function AssistantDevicePage() {
+  return (
+    <Suspense fallback={null}>
+      <AssistantDeviceView />
+    </Suspense>
+  );
+}
+
+function AssistantDeviceView() {
   const t = useTranslations("assistant");
   const tDevices = useTranslations("devices");
   const params = useParams<{ deviceId: string }>();
   const deviceId = params.deviceId;
+  const searchParams = useSearchParams();
+  const sessionId = searchParams.get("session");
+  const streamId = searchParams.get("streamId");
+  const router = useRouter();
   const { data: devices, isPending, error } = useDevices();
   const { data: onlineData } = useDeviceOnline(deviceId);
   useDevicePresenceSync();
+  const profile = useProfile();
+  const orgId = profile.data?.activeOrg?.id ?? null;
 
   const device = devices?.find((d) => d.id === deviceId);
   const notFound = !isPending && (error || !device || device.revokedAt != null);
@@ -30,11 +51,23 @@ export default function AssistantDevicePage() {
 
   return (
     <>
-      <DeviceSublist />
-      <PageShellView>
-        {isPending ? (
+      {isPending || notFound ? (
+        <DeviceSublist />
+      ) : (
+        <SessionSublist
+          deviceId={deviceId}
+          deviceName={device?.name ?? ""}
+          online={online}
+          activeSessionId={sessionId}
+        />
+      )}
+
+      {isPending ? (
+        <PageShellView>
           <DeviceDetailSkeleton />
-        ) : notFound ? (
+        </PageShellView>
+      ) : notFound ? (
+        <PageShellView>
           <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
             <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
               <Monitor className="h-7 w-7" />
@@ -46,8 +79,10 @@ export default function AssistantDevicePage() {
               {t("notFoundHint")}
             </div>
           </div>
-        ) : (
-          device && (
+        </PageShellView>
+      ) : !online ? (
+        <PageShellView>
+          {device && (
             <div className="flex flex-1 items-center justify-center">
               <Card className="w-full max-w-sm">
                 <CardContent className="flex flex-col items-center gap-4 py-8 text-center">
@@ -69,15 +104,8 @@ export default function AssistantDevicePage() {
                         {tDevices("colOnline")}
                       </dt>
                       <dd className="flex items-center gap-2 text-foreground">
-                        <span
-                          className={cn(
-                            "h-2 w-2 shrink-0 rounded-full",
-                            online
-                              ? "bg-[#16a34a]"
-                              : "bg-(--shell-sidebar-fg)/30",
-                          )}
-                        />
-                        {online ? tDevices("online") : tDevices("offline")}
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-(--shell-sidebar-fg)/30" />
+                        {tDevices("offline")}
                       </dd>
                     </div>
                     <div className="flex items-center justify-between gap-3">
@@ -92,16 +120,31 @@ export default function AssistantDevicePage() {
                     </div>
                   </dl>
                   <div className="w-full rounded-md border border-dashed border-border bg-muted/40 px-3 py-2 text-[12px] text-muted-foreground">
-                    {online
-                      ? t("remoteSessionComingSoon")
-                      : t("remoteSessionOfflineHint")}
+                    {t("remoteSessionOfflineHint")}
                   </div>
                 </CardContent>
               </Card>
             </div>
-          )
-        )}
-      </PageShellView>
+          )}
+        </PageShellView>
+      ) : !orgId ? (
+        <PageShellView>
+          <DeviceDetailSkeleton />
+        </PageShellView>
+      ) : (
+        <RemoteSessionView
+          key={deviceId}
+          deviceId={deviceId}
+          sessionId={sessionId}
+          streamId={streamId}
+          orgId={orgId}
+          onSessionCreated={(newSessionId, newStreamId) =>
+            router.replace(
+              `/assistant/${deviceId}?session=${newSessionId}&streamId=${newStreamId}`,
+            )
+          }
+        />
+      )}
     </>
   );
 }

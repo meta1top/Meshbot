@@ -34,11 +34,75 @@
     "selectDeviceHint": "从左侧选择一个已授权设备，查看详情",
     "notFoundTitle": "设备不存在",
     "notFoundHint": "该设备可能已被吊销或不属于当前组织，请返回左侧列表重新选择。",
-    "remoteSessionComingSoon": "远程会话将在后续版本开通",
-    "remoteSessionOfflineHint": "设备当前离线，远程会话将在后续版本开通"
+    "remoteSessionOfflineHint": "设备当前离线，无法发起远程会话，请等待设备上线后重试",
+    "newSessionTitle": "开始新会话",
+    "newSessionHint": "输入你的任务或问题，发送后将在该设备上创建新会话",
+    "remoteSessionTitle": "远程会话"
   },
   "assistantSidebar": {
-    "title": "设备"
+    "title": "设备",
+    "newSession": "新会话",
+    "backToDevices": "返回设备列表",
+    "offlineSessionsHint": "设备离线，无法加载会话列表",
+    "remoteLoadFailed": "会话列表加载失败",
+    "remoteEmpty": "该设备暂无会话"
+  },
+  "session": {
+    "assistantName": "助手",
+    "youName": "你",
+    "scrollToBottom": "滚动到底部",
+    "generatingReply": "正在生成回复",
+    "editPending": "编辑",
+    "deletePending": "删除",
+    "reasoningProcess": "思考过程",
+    "reasoningThinking": "思考中 {seconds}s",
+    "reasoningThought": "已思考 {seconds}s",
+    "runErrorPrefix": "运行失败：",
+    "remoteLoadFailed": "会话历史加载失败",
+    "actionFailed": "操作失败，请重试",
+    "createFailed": "会话创建失败，设备可能已离线，请重试",
+    "dismiss": "关闭",
+    "modelSelect": "选择模型",
+    "input": {
+      "placeholder": "输入你的任务或问题",
+      "send": "发送",
+      "stop": "中断"
+    },
+    "compaction": {
+      "bannerThreshold": "会话历史压缩中…",
+      "bannerCtxExceeded": "上下文已满，正在压缩历史以继续…",
+      "rowTitle": "已压缩 {count} 条早期消息"
+    },
+    "subagent": {
+      "fallbackTitle": "子任务",
+      "starting": "启动中…",
+      "running": "运行中",
+      "done": "已完成",
+      "error": "失败",
+      "aborted": "已中止",
+      "stop": "停止",
+      "backgroundTag": "后台",
+      "toolsCount": "{count} 工具",
+      "elapsed": "用时 {elapsed}",
+      "runningAction": "正在执行",
+      "streamFooterRunning": "子会话 · {count} 条消息 · 输出实时滴流中",
+      "streamFooterDone": "子会话 · {count} 条消息",
+      "abortedResult": "已手动停止；已完成部分保留在子会话中",
+      "errorResult": "子 Agent 运行失败，未产出结果"
+    },
+    "artifact": {
+      "presentFailed": "呈现失败",
+      "loading": "加载中…",
+      "loadFailed": "产物已不存在或已变更",
+      "unsupported": "该类型不支持预览，请下载查看",
+      "tooLarge": "文件较大（{size} MB），无法直接远程预览",
+      "download": "下载",
+      "close": "关闭",
+      "uploadToDrive": "上传到网盘",
+      "uploading": "上传中…",
+      "uploadSuccess": "已上传到网盘：{name}",
+      "uploadFailed": "上传失败，请重试"
+    }
   },
   "loading": "",
   "validation": {
