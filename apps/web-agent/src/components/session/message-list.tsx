@@ -176,7 +176,6 @@ export function MessageList({
                         <ToolCallBlock
                           key={tc.toolCallId}
                           tool={tc}
-                          sessionId={sessionId}
                           onConfirm={onConfirm}
                           onAnswer={onAnswer}
                         />

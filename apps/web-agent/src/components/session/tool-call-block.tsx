@@ -36,12 +36,10 @@ import { TodoList } from "./todo-list";
  */
 export function ToolCallBlock({
   tool,
-  sessionId,
   onConfirm,
   onAnswer,
 }: {
   tool: ToolCallView;
-  sessionId: string;
   /**
    * 确认/取消 im_send_message / drive 分享类 HITL。HITL 收敛点同 onAnswer。
    */
@@ -88,7 +86,7 @@ export function ToolCallBlock({
     return <DriveShareCard tool={tool} onConfirm={onConfirm} />;
   }
   if (tool.name === "drive_create_share" && tool.status !== "streaming") {
-    return <DriveCreateShareCard tool={tool} sessionId={sessionId} />;
+    return <DriveCreateShareCard tool={tool} onConfirm={onConfirm} />;
   }
   if (tool.name === "todo_write" && tool.status !== "streaming") {
     const todos = ((tool.args ?? {}) as { todos?: TodoItem[] }).todos ?? [];

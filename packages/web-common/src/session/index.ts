@@ -15,6 +15,10 @@ export {
   type AssistantMessageActionsProps,
 } from "./assistant-message-actions";
 export {
+  DriveCreateShareCard,
+  type DriveCreateShareCardProps,
+} from "./drive-create-share-card";
+export {
   DriveShareCard,
   type DriveShareCardProps,
 } from "./drive-share-card";
