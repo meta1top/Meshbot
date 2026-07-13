@@ -91,6 +91,7 @@ export {
 export { sanitizeMeshbotPaths, toolDisplayName } from "./tool-display";
 export {
   FrameSequencer,
+  MulticastRunEvents,
   type SessionRunEvents,
   type SessionTransport,
   type StartRunInput,

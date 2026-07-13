@@ -12,7 +12,7 @@ import {
 import { PageShellView } from "@meshbot/web-common/shell";
 import { Sparkles } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChatScroll } from "@/hooks/use-chat-scroll";
 import { useRemoteSessions } from "@/hooks/use-remote-sessions";
 import { createRemoteSessionTransport } from "@/lib/session-transport";
@@ -140,6 +140,14 @@ export function RemoteSessionView({
     () => createRemoteSessionTransport(deviceId),
     [deviceId],
   );
+  // 释放 transport 常驻的三个 socket 监听器：本组件持有本 transport 实例的
+  // 生命周期（子代理卡复用同一实例但不自行 dispose，归本组件统一管理），
+  // deviceId 切换/组件卸载都要清理，否则在 module 级单例 socket 上无界累积。
+  useEffect(() => {
+    return () => {
+      transport.dispose?.();
+    };
+  }, [transport]);
   const socketAdapter = useMemo(
     () => createSessionSocketAdapter(transport),
     [transport],
@@ -354,6 +362,8 @@ export function RemoteSessionView({
             <RemoteSubagentCard
               tool={subTool}
               deviceId={deviceId}
+              transport={transport}
+              streamId={stream.getStreamId()}
               onPreviewArtifact={handlePreviewArtifact}
             />
           )}

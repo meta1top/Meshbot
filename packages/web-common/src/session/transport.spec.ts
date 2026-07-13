@@ -1,4 +1,4 @@
-import { FrameSequencer } from "./transport";
+import { FrameSequencer, MulticastRunEvents } from "./transport";
 
 describe("FrameSequencer", () => {
   let sequencer: FrameSequencer;
@@ -121,5 +121,91 @@ describe("FrameSequencer", () => {
       { event: "run.chunk", payload: "first" },
       { event: "run.done", payload: null },
     ]);
+  });
+});
+
+describe("MulticastRunEvents", () => {
+  it("单一订阅者收到广播事件", () => {
+    const bus = new MulticastRunEvents();
+    const received: unknown[] = [];
+    bus.subscribe({
+      onEvent: (event, payload) => received.push({ event, payload }),
+    });
+    bus.emit("run.chunk", { delta: "a" });
+    expect(received).toEqual([{ event: "run.chunk", payload: { delta: "a" } }]);
+  });
+
+  it("双订阅者同帧都收到（修复单 current 指针漏洞的核心断言）", () => {
+    const bus = new MulticastRunEvents();
+    const a: unknown[] = [];
+    const b: unknown[] = [];
+    bus.subscribe({ onEvent: (event, payload) => a.push({ event, payload }) });
+    bus.subscribe({ onEvent: (event, payload) => b.push({ event, payload }) });
+    bus.emit("run.done", { messageId: "m1" });
+    expect(a).toEqual([{ event: "run.done", payload: { messageId: "m1" } }]);
+    expect(b).toEqual([{ event: "run.done", payload: { messageId: "m1" } }]);
+  });
+
+  it("退订一方不影响另一方继续收帧", () => {
+    const bus = new MulticastRunEvents();
+    const a: unknown[] = [];
+    const b: unknown[] = [];
+    const unsubA = bus.subscribe({
+      onEvent: (event, payload) => a.push({ event, payload }),
+    });
+    bus.subscribe({ onEvent: (event, payload) => b.push({ event, payload }) });
+    unsubA();
+    bus.emit("run.chunk", { delta: "x" });
+    expect(a).toEqual([]);
+    expect(b).toEqual([{ event: "run.chunk", payload: { delta: "x" } }]);
+  });
+
+  it("size 反映当前订阅者数量，退订后递减", () => {
+    const bus = new MulticastRunEvents();
+    expect(bus.size).toBe(0);
+    const unsub1 = bus.subscribe({ onEvent: () => {} });
+    bus.subscribe({ onEvent: () => {} });
+    expect(bus.size).toBe(2);
+    unsub1();
+    expect(bus.size).toBe(1);
+  });
+
+  it("同一订阅者重复退订是幂等的，不影响其余订阅者", () => {
+    const bus = new MulticastRunEvents();
+    const a: unknown[] = [];
+    const unsubA = bus.subscribe({
+      onEvent: (event, payload) => a.push({ event, payload }),
+    });
+    unsubA();
+    expect(() => unsubA()).not.toThrow();
+    bus.emit("run.chunk", {});
+    expect(a).toEqual([]);
+  });
+
+  it("reset 清空全部订阅者", () => {
+    const bus = new MulticastRunEvents();
+    const a: unknown[] = [];
+    bus.subscribe({ onEvent: (event, payload) => a.push({ event, payload }) });
+    bus.reset();
+    expect(bus.size).toBe(0);
+    bus.emit("run.chunk", {});
+    expect(a).toEqual([]);
+  });
+
+  it("订阅者回调内同步退订自身不影响本次广播的其余订阅者", () => {
+    const bus = new MulticastRunEvents();
+    const order: string[] = [];
+    const self = {
+      onEvent: (_event: string, _payload: unknown) => {
+        order.push("self");
+        unsubSelf();
+      },
+    };
+    const unsubSelf = bus.subscribe(self);
+    bus.subscribe({ onEvent: () => order.push("other") });
+    bus.emit("run.chunk", {});
+    expect(order).toEqual(["self", "other"]);
+    bus.emit("run.chunk", {});
+    expect(order).toEqual(["self", "other", "other"]);
   });
 });

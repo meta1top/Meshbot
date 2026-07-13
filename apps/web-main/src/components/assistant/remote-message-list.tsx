@@ -1,6 +1,9 @@
 "use client";
 
-import type { ArtifactPreviewTarget } from "@meshbot/web-common/session";
+import type {
+  ArtifactPreviewTarget,
+  SessionTransport,
+} from "@meshbot/web-common/session";
 import {
   MessageList as MessageListBase,
   type TimelineMessage,
@@ -24,6 +27,13 @@ interface RemoteMessageListProps {
   ) => Promise<void>;
   /** 该消息流所在的远程设备（嵌套子会话与父会话同设备）。 */
   deviceId: string;
+  /** 与调用方（`RemoteSubagentCard`）同一个 transport 实例，透传给本组件
+   * 渲染的嵌套子代理卡——多播 `subscribe()` 要求同一条 streamId 的父子会话
+   * 复用同一 transport 实例才能都收到帧（见 `RemoteSubagentCard` 类文档）。 */
+  transport: SessionTransport;
+  /** 本消息流当前有效的 streamId（调用方 `sub.getStreamId()`），透传给嵌套
+   * 子代理卡作为其 `remoteInitialStreamId` 初值。 */
+  streamId: string | null;
   onPreviewArtifact: (target: ArtifactPreviewTarget) => void;
 }
 
@@ -46,6 +56,8 @@ export function RemoteMessageList({
   onConfirm,
   onAnswer,
   deviceId,
+  transport,
+  streamId,
   onPreviewArtifact,
 }: RemoteMessageListProps) {
   const t = useTranslations("session");
@@ -68,6 +80,8 @@ export function RemoteMessageList({
         <RemoteSubagentCard
           tool={subTool}
           deviceId={deviceId}
+          transport={transport}
+          streamId={streamId}
           onPreviewArtifact={onPreviewArtifact}
         />
       )}

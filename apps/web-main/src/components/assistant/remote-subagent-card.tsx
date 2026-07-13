@@ -1,7 +1,10 @@
 "use client";
 
 import { cn } from "@meshbot/design";
-import type { ArtifactPreviewTarget } from "@meshbot/web-common/session";
+import type {
+  ArtifactPreviewTarget,
+  SessionTransport,
+} from "@meshbot/web-common/session";
 import {
   countToolCalls,
   createSessionSocketAdapter,
@@ -23,7 +26,6 @@ import {
 import { Check, ChevronDown, Square, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createRemoteSessionTransport } from "@/lib/session-transport";
 import { RemoteMessageList } from "./remote-message-list";
 
 /** 状态胶囊的样式与文案键（语义色不抢主 accent，运行中带呼吸点）。 */
@@ -78,6 +80,20 @@ interface RemoteSubagentCardProps {
   tool: ToolCallView;
   /** 子会话与父会话同一远程设备。 */
   deviceId: string;
+  /** 父组件（`RemoteSessionView`/`RemoteMessageList`）复用的同一 transport 实例
+   * ——不再各自新建。dispatch_subagent 的父子会话共享父 `streamId`（B 端按
+   * `allowedSessions` 白名单把子会话事件也转发到这同一条流），子卡必须复用
+   * 父 transport 才能收到属于自己 streamId 的帧：私有 transport 从未
+   * `register` 过这个 streamId，`RemoteRunTracker.handleFrame` 会因
+   * `owns(streamId)===false` 恒返回空，导致子卡实时帧永久丢失、
+   * `sub.interrupt()` 因 streamId 未就绪永久 no-op（T11 报告 finding 1）。
+   * transport 的生命周期归父组件管理，本卡不自行 dispose。 */
+  transport: SessionTransport;
+  /** 父会话当前有效的 streamId（父组件 `stream.getStreamId()`），作为本卡
+   * `useSessionStream` 的 `remoteInitialStreamId` 初值——父子共享同一
+   * streamId，传入后 `sub.interrupt`/`sub.confirm`/`sub.answer` 才能路由到
+   * 正确的目标设备（否则 streamId 为 null，HITL 控制帧调用会抛错/no-op）。 */
+  streamId: string | null;
   onPreviewArtifact: (target: ArtifactPreviewTarget) => void;
 }
 
@@ -86,16 +102,20 @@ interface RemoteSubagentCardProps {
  * `apps/web-agent/src/components/session/subagent-card.tsx`：认领/停止/
  * settled 纯逻辑与视觉逐一对齐，数据源改为固定走远程 transport
  * （web-main 只有远程会话，无需 `useRemoteSession()` context 判分支——
- * `deviceId` 直接由父组件通过 `renderSubagentCard` 闭包传入）。
+ * `deviceId`/`transport`/`streamId` 直接由父组件通过 `renderSubagentCard`
+ * 闭包传入）。
  *
- * 每张卡片各自 `useMemo` 一份独立 transport 实例（同 web-agent 惯例）：
- * 子会话与父会话共享同一条 `ws/im` 单例 socket，但各自的
- * `RemoteRunTracker`/`DeviceQueryClient` 按 streamId 隔离，互不干扰
- * （见 T10 报告"流归属过滤"设计）。
+ * 每张卡片各自 `useMemo` 一份独立 `SessionSocketLike` 适配器
+ * （`createSessionSocketAdapter`），但底层 transport 与父组件（及其余同层
+ * 兄弟子卡）共享同一实例——`transport.subscribe()` 是多播语义
+ * （`MulticastRunEvents`），支持任意数量并发订阅者互不干扰，各自靠
+ * `useSessionStream` 内部的 `sessionId` 匹配从共享的帧广播里筛出属于自己的事件。
  */
 export function RemoteSubagentCard({
   tool,
   deviceId,
+  transport,
+  streamId,
   onPreviewArtifact,
 }: RemoteSubagentCardProps) {
   const t = useTranslations("session.subagent");
@@ -103,10 +123,6 @@ export function RemoteSubagentCard({
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
 
-  const transport = useMemo(
-    () => createRemoteSessionTransport(deviceId),
-    [deviceId],
-  );
   const socketAdapter = useMemo(
     () => createSessionSocketAdapter(transport),
     [transport],
@@ -119,6 +135,7 @@ export function RemoteSubagentCard({
     getSocket,
     {},
     deviceId,
+    streamId,
   );
   const [collapse, setCollapse] = useState<SubagentCollapse>({
     mode: "manual",
@@ -303,6 +320,8 @@ export function RemoteSubagentCard({
               onConfirm={sub.confirm}
               onAnswer={sub.answer}
               deviceId={deviceId}
+              transport={transport}
+              streamId={sub.getStreamId()}
               onPreviewArtifact={onPreviewArtifact}
             />
           </div>
