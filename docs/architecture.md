@@ -66,8 +66,8 @@ meshbot/
 │   ├── desktop/                   # Electron 桌面壳
 │   ├── server-agent/              # NestJS 本地 Agent (port 3100)
 │   ├── server-main/               # NestJS 云平台后端 (port 3200)
-│   ├── web-agent/                 # Next.js 桌面端 UI (port 3001)
-│   └── web-main/                  # Next.js 云平台前端 (port 3002)
+│   ├── web-agent/                 # Next.js 桌面端 UI (port 3101)
+│   └── web-main/                  # Next.js 云平台前端 (port 3102)
 ├── libs/                          # 后端共享模块
 │   ├── types/                     # 全栈共享类型 (Zod + TS)
 │   └── shared/                    # NestJS 共享 (Guard/Interceptor)

@@ -10,8 +10,8 @@
 |------|------|
 | `pnpm dev:server-agent` | 本地 Agent 后端（NestJS watch，端口 3100） |
 | `pnpm dev:server-main` | 云协同后端（NestJS watch，端口 3200） |
-| `pnpm dev:web-agent` | 桌面端 UI（Next.js，端口 3001） |
-| `pnpm dev:web-main` | 云协同前端（Next.js，端口 3002） |
+| `pnpm dev:web-agent` | 桌面端 UI（Next.js，端口 3101） |
+| `pnpm dev:web-main` | 云协同前端（Next.js，端口 3102） |
 | `pnpm dev:desktop` | Electron 桌面壳 |
 | `pnpm dev:cli` | 命令行 Agent |
 

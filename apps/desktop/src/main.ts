@@ -4,7 +4,7 @@ import { startAgentRuntime, stopAgentRuntime } from "./agent-runtime";
 import { registerIpcHandlers } from "./ipc-handlers";
 
 const APP_NAME = "Meshbot";
-const DEV_AGENT_URL = "http://localhost:3001";
+const DEV_AGENT_URL = "http://localhost:3101";
 
 // 覆盖应用名（须在 app ready 前调用）：默认菜单的 About / Hide / Quit 文案取自 app.name，
 // 不改的话开发期会显示 package.json 的 "@meshbot/desktop"。注意 macOS 菜单栏首项的「粗体

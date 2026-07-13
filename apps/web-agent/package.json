@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "next build && node scripts/post-build.mjs",
-    "dev": "next dev --port 3001",
+    "dev": "next dev --port 3101",
     "start": "next start",
     "clean": "rm -rf .next out",
     "typecheck": "tsc --project tsconfig.json --noEmit"

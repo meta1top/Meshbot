@@ -96,7 +96,7 @@ export const AppConfigSchema = z.object({
   security: SecurityConfigSchema.default({}),
   assets: AssetsConfigSchema.default({}),
   /** web-main 前端基础 URL，用于拼分享链接。默认指向本地开发端口。 */
-  webMainBase: z.string().url().default("http://localhost:3002"),
+  webMainBase: z.string().url().default("http://localhost:3102"),
 });
 
 export type AppConfig = z.infer<typeof AppConfigSchema>;
