@@ -523,6 +523,10 @@ export function useSessionStream(
           hasMoreHistoryRef.current = history.hasMore;
           setHasMoreHistory(history.hasMore);
         })
+        .catch(() => {
+          // 历史拉取失败（如远程子会话在对端、瞬时网络）——留空白由实时流填充，
+          // 不让 rejection 冒泡成 dev overlay 崩屏/unhandled rejection。
+        })
         .finally(() => {
           if (!cancelled) setHistoryLoading(false);
         });
