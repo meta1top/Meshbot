@@ -10,6 +10,13 @@ export interface StartRunInput {
   mode: "create" | "append";
   sessionId?: string;
   content: string;
+  /**
+   * 客户端预生成的消息 id（雪花）。本机 append 场景由调用方（hook）在乐观插入
+   * user 气泡时生成，必须原样带给 startRun，使气泡 id 与后续 run.human 事件的
+   * messageId 精确匹配；不传则由适配器内部生成（无法被调用方提前得知，仅用于
+   * 无需匹配场景）。远程场景不使用此字段——B 侧自行生成 id。
+   */
+  messageId?: string;
 }
 
 /** 会话数据传输接口：hook 唯一数据入口。web-agent=本机(local+remote)；web-main=remote-only。 */

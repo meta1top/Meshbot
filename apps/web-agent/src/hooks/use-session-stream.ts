@@ -21,6 +21,7 @@ import {
   type SessionTitleUpdatedEvent,
 } from "@meshbot/types-agent";
 import { clientSnowflakeId } from "@meshbot/web-common";
+import type { SessionTransport } from "@meshbot/web-common/session";
 import { useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -36,13 +37,8 @@ import {
   claimSubagentOnTimeline,
   settleSubagentOnTimeline,
 } from "@/lib/subagent-card";
-import {
-  fetchRemoteHistory,
-  fetchRemoteRun,
-  interruptRemoteRun,
-  startRemoteRun,
-} from "@/rest/remote-devices";
-import { appendMessage, fetchHistory, fetchPending } from "@/rest/session";
+import { fetchRemoteRun } from "@/rest/remote-devices";
+import { fetchPending } from "@/rest/session";
 
 /**
  * B 侧 `RemoteRunInboundService`/`RemoteQueryInboundService` 直出
@@ -174,6 +170,19 @@ export interface SessionStream {
   remoteDeviceId: string | null;
   /** 读取当前有效的 streamId（remote 分支才有意义），供确认/作答卡片点击时取「实时」值，而非渲染时的闭包快照。 */
   getStreamId: () => string | null;
+  /** 确认/取消一次待发送的工具调用（im_send_message 等 confirm 型 HITL）；streamId 由内部按 remote/local 现取。 */
+  confirm: (
+    toolCallId: string,
+    decision: "send" | "cancel",
+    content?: string,
+  ) => Promise<void>;
+  /** 提交 ask_question 型 HITL 的回答。 */
+  answer: (
+    toolCallId: string,
+    answers: { selected: string[]; other?: string }[],
+  ) => Promise<void>;
+  /** 切换会话绑定模型（下一条消息生效）。 */
+  patchSessionModel: (modelConfigId: string) => Promise<void>;
 }
 
 /**
@@ -198,6 +207,7 @@ export interface SessionStream {
 export function useSessionStream(
   sessionId: string | null,
   scrollContainerRef: React.RefObject<HTMLDivElement | null>,
+  transport: SessionTransport,
   remoteDeviceId?: string | null,
   remoteInitialStreamId?: string | null,
 ): SessionStream {
@@ -334,10 +344,11 @@ export function useSessionStream(
           })
           .catch(() => {});
       }
-      // L3 remote：首屏历史走 L2c fetchRemoteHistory（防御式映射 B 侧原始行），
-      // 不查本地 fetchPending（远程无该概念）；不支持翻页（Phase A 范围外，
-      // loadMoreHistory 对 remote 直接 no-op）。
-      fetchRemoteHistory(remoteDeviceId, sessionId)
+      // L3 remote：首屏历史走 L2c fetchRemoteHistory（经 transport，防御式映射
+      // B 侧原始行），不查本地 fetchPending（远程无该概念）；不支持翻页（Phase A
+      // 范围外，loadMoreHistory 对 remote 直接 no-op）。
+      transport
+        .fetchHistory(sessionId)
         .then((res) => {
           if (cancelled) return;
           const raw = (res as unknown as RemoteRawHistory).messages ?? [];
@@ -364,7 +375,10 @@ export function useSessionStream(
           if (!cancelled) setHistoryLoading(false);
         });
     } else {
-      void Promise.all([fetchHistory(sessionId), fetchPending(sessionId)])
+      void Promise.all([
+        transport.fetchHistory(sessionId),
+        fetchPending(sessionId),
+      ])
         .then(([history, pending]) => {
           if (cancelled) return;
           const initial: TimelineMessage[] = history.messages.map(
@@ -923,6 +937,7 @@ export function useSessionStream(
     };
   }, [
     sessionId,
+    transport,
     remoteDeviceId,
     remoteInitialStreamId,
     apply,
@@ -965,7 +980,7 @@ export function useSessionStream(
         // 注入消息」同路径），只是要等一次 relay 往返才出现——用 setRunning(true)
         // 提前给出「已在处理」的即时反馈，减轻等待感。
         try {
-          const { streamId } = await startRemoteRun(remoteDeviceId, {
+          const { streamId } = await transport.startRun({
             mode: "append",
             sessionId,
             content: msg,
@@ -997,12 +1012,19 @@ export function useSessionStream(
         { id: messageId, role: "user", content: msg, pending: true },
       ]);
       try {
-        await appendMessage(sessionId, messageId, msg);
+        // messageId 显式传给 transport：本机乐观插入的气泡 id 必须与实际
+        // append 落库的 id 一致，run.human 到达时才能按 id 精确匹配迁移。
+        await transport.startRun({
+          mode: "append",
+          sessionId,
+          content: msg,
+          messageId,
+        });
       } catch (err) {
         console.error("追加消息失败", err);
       }
     },
-    [sessionId, apply, remoteDeviceId, running],
+    [sessionId, apply, remoteDeviceId, running, transport],
   );
 
   /**
@@ -1014,22 +1036,17 @@ export function useSessionStream(
   const interrupt = useCallback(() => {
     if (!sessionId) return;
     if (remoteDeviceId) {
-      const streamId = remoteStreamIdRef.current;
-      if (!streamId) {
-        console.warn(
-          "远程会话当前无可用 streamId，无法中断（可能是刷新/直接进入一个仍在跑的远程会话）",
-        );
-        return;
-      }
-      void interruptRemoteRun(remoteDeviceId, { streamId, sessionId }).catch(
-        (err) => {
+      // streamId 为 null 时的 warn + no-op 已下沉到 transport.interrupt 内部
+      // （与本函数原有文案逐字一致，见 lib/session-transport.ts），此处不再重复判断。
+      void transport
+        .interrupt(remoteStreamIdRef.current, sessionId)
+        .catch((err) => {
           console.error("远程中断失败", err);
-        },
-      );
+        });
       return;
     }
-    getSessionSocket().emit(SESSION_WS_EVENTS.interrupt, { sessionId });
-  }, [sessionId, remoteDeviceId]);
+    void transport.interrupt(null, sessionId);
+  }, [sessionId, remoteDeviceId, transport]);
 
   /**
    * 滚动到顶部触发：拉早于当前最旧消息的下一批 history。
@@ -1050,7 +1067,7 @@ export function useSessionStream(
     const prevScrollHeight = scroller?.scrollHeight ?? 0;
     const prevScrollTop = scroller?.scrollTop ?? 0;
     try {
-      const res = await fetchHistory(sessionId, cursor);
+      const res = await transport.fetchHistory(sessionId, { before: cursor });
       apply((prev) => {
         const newMessages: TimelineMessage[] = res.messages.map(
           historyMessageToTimeline,
@@ -1076,7 +1093,55 @@ export function useSessionStream(
     } finally {
       loadingMoreRef.current = false;
     }
-  }, [sessionId, apply, appendUsageByMessage, remoteDeviceId]);
+  }, [sessionId, apply, appendUsageByMessage, remoteDeviceId, transport]);
+
+  /**
+   * 确认/取消一次待发送的工具调用（im_send_message / drive 分享类 confirm 型
+   * HITL）。streamId 与 confirm/answer 一样：本地忽略（transport 内部丢弃），
+   * remote 取 remoteStreamIdRef 当前值——为 null 时 transport.confirm 会抛错
+   * （"远程会话 streamId 未就绪，请稍候重试"），与原 RemoteSessionProvider
+   * 行为一致。
+   */
+  const confirm = useCallback(
+    async (
+      toolCallId: string,
+      decision: "send" | "cancel",
+      content?: string,
+    ) => {
+      if (!sessionId) return;
+      const streamId = remoteDeviceId ? remoteStreamIdRef.current : null;
+      await transport.confirm(
+        streamId,
+        sessionId,
+        toolCallId,
+        decision,
+        content,
+      );
+    },
+    [sessionId, remoteDeviceId, transport],
+  );
+
+  /** 提交 ask_question 型 HITL 的回答，streamId 处理同 confirm。 */
+  const answer = useCallback(
+    async (
+      toolCallId: string,
+      answers: { selected: string[]; other?: string }[],
+    ) => {
+      if (!sessionId) return;
+      const streamId = remoteDeviceId ? remoteStreamIdRef.current : null;
+      await transport.answer(streamId, sessionId, toolCallId, answers);
+    },
+    [sessionId, remoteDeviceId, transport],
+  );
+
+  /** 切换会话绑定模型：本地/远程分支判断已下沉到 transport 内部。 */
+  const patchSessionModel = useCallback(
+    async (modelConfigId: string) => {
+      if (!sessionId) return;
+      await transport.patchSessionModel(sessionId, modelConfigId);
+    },
+    [sessionId, transport],
+  );
 
   return {
     messages,
@@ -1091,5 +1156,8 @@ export function useSessionStream(
     loadMoreHistory,
     remoteDeviceId: remoteDeviceId ?? null,
     getStreamId: () => remoteStreamIdRef.current,
+    confirm,
+    answer,
+    patchSessionModel,
   };
 }

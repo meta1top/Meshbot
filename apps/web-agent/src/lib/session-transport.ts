@@ -138,7 +138,9 @@ export function createLocalSessionTransport(): SessionTransport {
       if (!input.sessionId) {
         throw new Error("append 模式必须携带 sessionId");
       }
-      const messageId = clientSnowflakeId();
+      // messageId 优先用调用方预生成的（本地乐观插入气泡要与之精确匹配）；
+      // 未传时兜底自生成，保持无匹配需求调用方的可用性。
+      const messageId = input.messageId ?? clientSnowflakeId();
       await appendMessage(input.sessionId, messageId, input.content);
       return { streamId: null };
     },
