@@ -13,6 +13,7 @@ import {
   confirmRemote,
   fetchRemoteArtifact,
   fetchRemoteHistory,
+  fetchRemoteRun,
   fetchRemoteSessions,
   interruptRemoteRun,
   patchRemoteSessionModel,
@@ -24,6 +25,7 @@ import {
   confirmAnswers,
   confirmSend,
   fetchHistory,
+  fetchPending,
   listSessions,
   patchSession,
 } from "@/rest/session";
@@ -161,6 +163,19 @@ export function createLocalSessionTransport(): SessionTransport {
       await patchSession(sessionId, { modelConfigId });
     },
 
+    async fetchPending(sessionId) {
+      return fetchPending(sessionId);
+    },
+
+    async fetchActiveRun(_sessionId) {
+      // 本地会话无独立 streamId 概念（append 语义由 sessionId 直接定位，
+      // interrupt/confirm/answer 恒忽略 streamId）——use-session-stream 只在
+      // remote 分支调用本方法，如实抛错而非伪造一个 null 结果掩盖误用。
+      throw new Error(
+        "本地会话无 streamId reclaim 概念（SessionTransport.fetchActiveRun 仅远程会话适用）",
+      );
+    },
+
     async readArtifact(_sessionId, path) {
       // 本地预览实际走 previewArtifactAtom + artifactRawUrl 直连
       // apiClient（见 artifact-body.tsx），不经本 transport；这里仍给出与
@@ -252,6 +267,19 @@ export function createRemoteSessionTransport(
 
     async patchSessionModel(sessionId, modelConfigId) {
       await patchRemoteSessionModel(deviceId, sessionId, modelConfigId);
+    },
+
+    async fetchPending(_sessionId) {
+      // 远程 relay 无「排队未处理」语义（B 侧 appendMessage 直接落库/触发 run，
+      // 没有本机 PendingMessage 表）——use-session-stream 只在 local 分支调用
+      // 本方法，如实抛错而非伪造一个空列表掩盖误用。
+      throw new Error(
+        "远程会话不支持 pending 查询（SessionTransport.fetchPending 仅本地会话适用）",
+      );
+    },
+
+    async fetchActiveRun(sessionId) {
+      return fetchRemoteRun(deviceId, { sessionId });
     },
 
     async readArtifact(sessionId, path) {
