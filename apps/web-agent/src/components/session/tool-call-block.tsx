@@ -85,7 +85,7 @@ export function ToolCallBlock({
     return <ArtifactFileCard tool={tool} />;
   }
   if (tool.name === "drive_share" && tool.status !== "streaming") {
-    return <DriveShareCard tool={tool} sessionId={sessionId} />;
+    return <DriveShareCard tool={tool} onConfirm={onConfirm} />;
   }
   if (tool.name === "drive_create_share" && tool.status !== "streaming") {
     return <DriveCreateShareCard tool={tool} sessionId={sessionId} />;

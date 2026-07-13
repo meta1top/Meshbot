@@ -14,6 +14,10 @@ export {
   type AssistantMessageActionsLabels,
   type AssistantMessageActionsProps,
 } from "./assistant-message-actions";
+export {
+  DriveShareCard,
+  type DriveShareCardProps,
+} from "./drive-share-card";
 export { formatTokens } from "./format-tokens";
 export {
   ImSendConfirmCard,
