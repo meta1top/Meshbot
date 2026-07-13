@@ -1,3 +1,4 @@
+import { artifactKind } from "@meshbot/web-common/session";
 import {
   File,
   FileCode,
@@ -7,7 +8,6 @@ import {
   Image as ImageIcon,
   type LucideIcon,
 } from "lucide-react";
-import { artifactKind } from "./artifact";
 
 /**
  * 按节点类型/扩展名返回文件图标 + 颜色类（网盘列表用，文件管理器式分色）。

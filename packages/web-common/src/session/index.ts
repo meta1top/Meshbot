@@ -1,4 +1,11 @@
 export {
+  ArtifactFileCard,
+  type ArtifactFileCardLabels,
+  type ArtifactFileCardProps,
+  type ArtifactPreviewTarget,
+} from "./artifact-file-card";
+export { type ArtifactKind, artifactKind } from "./artifact-kind";
+export {
   AssistantMessageActions,
   type AssistantMessageActionsLabels,
   type AssistantMessageActionsProps,

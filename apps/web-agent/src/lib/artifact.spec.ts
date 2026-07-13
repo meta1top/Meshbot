@@ -1,18 +1,6 @@
-import { artifactKind, artifactRawUrl } from "./artifact";
+import { artifactRawUrl } from "./artifact";
 
-describe("artifactKind", () => {
-  it("按扩展名分发", () => {
-    expect(artifactKind("a.html")).toBe("html");
-    expect(artifactKind("a.pdf")).toBe("pdf");
-    expect(artifactKind("a.PNG")).toBe("image");
-    expect(artifactKind("a.svg")).toBe("image");
-    expect(artifactKind("a.md")).toBe("markdown");
-    expect(artifactKind("a.csv")).toBe("text");
-    expect(artifactKind("a.json")).toBe("text");
-    expect(artifactKind("a.zip")).toBe("binary");
-    expect(artifactKind("noext")).toBe("binary");
-  });
-});
+// artifactKind 测试已随实现迁至 packages/web-common/src/session/artifact-kind.spec.ts（Task 8）
 
 describe("artifactRawUrl", () => {
   it("构造 serving URL（path 编码）", () => {

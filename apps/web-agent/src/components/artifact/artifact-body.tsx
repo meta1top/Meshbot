@@ -1,12 +1,13 @@
 "use client";
 
 import { apiClient } from "@meshbot/web-common";
+import { artifactKind } from "@meshbot/web-common/session";
 import { useSetAtom } from "jotai";
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { previewArtifactAtom } from "@/atoms/assistant-panel";
 import { MarkdownContent } from "@/components/session/markdown-content";
-import { artifactKind, artifactRawUrl } from "@/lib/artifact";
+import { artifactRawUrl } from "@/lib/artifact";
 import { getFileUrl } from "@/rest/drive";
 import {
   fetchRemoteArtifact,
