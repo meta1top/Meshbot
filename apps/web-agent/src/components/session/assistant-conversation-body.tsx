@@ -215,8 +215,10 @@ export function AssistantConversationBody({
   };
 
   // 提取成变量避免 remote/本地两个渲染分支各写一遍——远程会话下外面套
-  // RemoteSessionProvider（深层 HITL 卡片经 useRemoteSession 拿 confirm/answer
-  // 走远程端点），本地会话直接渲染，不包 Provider（useRemoteSession 返回 null）。
+  // RemoteSessionProvider（深层的产物预览卡/嵌套子代理卡经 useRemoteSession
+  // 拿 remoteDeviceId/sessionId 选跨设备通道），本地会话直接渲染，不包
+  // Provider（useRemoteSession 返回 null）。HITL 确认/回答已收敛为
+  // MessageList 的 onConfirm/onAnswer props，不再经此 context。
   const messageListNode = (
     <MessageList
       messages={timelineMessages}
@@ -270,8 +272,6 @@ export function AssistantConversationBody({
               <RemoteSessionProvider
                 remoteDeviceId={remoteDeviceId}
                 sessionId={id}
-                confirm={stream.confirm}
-                answer={stream.answer}
               >
                 {messageListNode}
               </RemoteSessionProvider>

@@ -61,6 +61,12 @@ export type { TimelineMessage, ToolCallView } from "./timeline";
 export { TodoList } from "./todo-list";
 export { todoStatusMeta } from "./todo-status";
 export {
+  ToolCallBlock,
+  type ToolCallBlockLabels,
+  type ToolCallBlockProps,
+} from "./tool-call-block";
+export { sanitizeMeshbotPaths, toolDisplayName } from "./tool-display";
+export {
   FrameSequencer,
   type SessionRunEvents,
   type SessionTransport,
