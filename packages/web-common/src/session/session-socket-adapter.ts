@@ -14,13 +14,12 @@ import type { SessionTransport } from "./transport";
  * 各个 listener，使 `useSessionStream` 可以零改动消费 remote-only transport。
  *
  * 关键设计：
- * - **惰性订阅**：直到第一次 `on()` 调用才真正调用 `transport.subscribe()`——
- *   `SessionTransport.subscribe()` 内部只维护一个 `current` 指针（见
- *   `createRemoteSessionTransport`），提前订阅会在 `sessionId` 仍为 `null`
- *   （如「新建会话」组合，先 `startRun` 拿 streamId、临时监听首帧解析
- *   sessionId）阶段抢占这个指针，导致临时监听收不到帧。惰性订阅让
- *   `useSessionStream` 在 `sessionId` 有效前不触碰 `transport.subscribe()`，
- *   与其它临时消费方（如新建会话流程）互不冲突。
+ * - **惰性订阅**：直到第一次 `on()` 调用才真正调用 `transport.subscribe()`。
+ *   `SessionTransport.subscribe()` 内部是 `MulticastRunEvents`（Set 语义，
+ *   任意数量并发订阅者各自独立、互不覆盖，见 `createRemoteSessionTransport`）
+ *   ——并发订阅本身不会互相冲突，惰性只是避免在还没有真实 listener 时就
+ *   白登记一路空转的订阅；`ensureSubscribed()` 只在首次 `on()` 时调用一次，
+ *   之后的 `on()` 复用同一路。
  * - **`connected` 恒为 `true`**：远程流的可用性由 transport 内部的 socket 单例
  *   自行管理（`getImSocket()` 常驻连接），不依赖 `useSessionStream` 感知的
  *   显式握手时序，adapter 对外呈现「随时已连接」。
@@ -28,8 +27,11 @@ import type { SessionTransport } from "./transport";
  *   `SESSION_WS_EVENTS.subscribe`/`unsubscribe`（本地会话的 socket.io room
  *   语义）；远程流按 `streamId`（非 room）关联，无需该握手。
  *
- * 每个 adapter 实例绑定一个 transport 实例；调用方应对同一 transport 用
- * `useMemo` 稳定复用同一个 adapter（与 transport 的既有惯例一致）。
+ * 每个 adapter 实例绑定一个 transport 实例；多个消费方共享同一个 transport
+ * 时（如父会话视图与嵌套子代理卡，见 `remote-subagent-card.tsx`），各自
+ * 新建的 adapter 实例各登记一路独立订阅、互不干扰（`MulticastRunEvents`
+ * 保证）。调用方应对同一 transport 用 `useMemo` 稳定复用同一个 adapter
+ * （与 transport 的既有惯例一致）。
  */
 export function createSessionSocketAdapter(
   transport: SessionTransport,

@@ -6,6 +6,7 @@ import type {
 } from "@meshbot/web-common/session";
 import {
   createSessionSocketAdapter,
+  MessageSkeleton,
   SessionConversationView,
   useSessionStream,
 } from "@meshbot/web-common/session";
@@ -108,9 +109,56 @@ interface RemoteSessionViewProps {
 }
 
 /**
- * 设备远程会话主视图（web-main）：`useSessionStream`（web-common）+
- * remote-only transport + `SessionSocketLike` 适配器 + `SessionConversationView`
- * 装配，镜像 `apps/web-agent/src/components/session/assistant-conversation-body.tsx`
+ * 设备远程会话主视图（web-main）：拥有 transport 生命周期的外层壳。
+ *
+ * `createRemoteSessionTransport()` 会立即注册三个 socket 监听器（真实副作用），
+ * 不能放渲染期的 `useMemo`/`useState` 惰性初始化器里构建——两者在 Strict Mode
+ * 下都会被「调用两次、只留一份」，被丢弃的那份监听器永远等不到 dispose，在
+ * module 级单例 socket（`getImSocket()`）上无界累积（一期 `messages-view.tsx`
+ * 同款问题的修复先例）。改为在 `useEffect` 里构建，`useState` 持有；effect 的
+ * 清理函数里显式 `dispose()`——与 `useMemo`/`useState` 初始化器不同，
+ * `useEffect` 的清理在 Strict Mode 的「挂载→卸载→再挂载」之间真实触发一次，
+ * 不会漏掉丢弃的那份。
+ *
+ * 代价：挂载首帧到 effect 建成之间存在一个 `transport` 为 `null` 的短暂窗口。
+ * 不能在这个窗口内调用下方 {@link RemoteSessionViewReady} 里那些依赖 transport
+ * 的 hook（`useSessionStream`/`useRemoteSessions` 等）——按 React hooks 规则，
+ * 同一组件实例的两次渲染必须调用同样数量/顺序的 hook，不能等 `transport` 就绪
+ * 后再多调用一批 hook。因此把「依赖 transport 的一切」（含
+ * `renderSubagentCard` 闭包对 transport 的引用）整体下沉到只在 transport
+ * 就绪后才挂载的子组件，未就绪时只渲染 `MessageSkeleton` 占位（复用
+ * `SessionConversationView` 历史加载态的同一块骨架），不渲染会话区。
+ */
+export function RemoteSessionView(props: RemoteSessionViewProps) {
+  const { deviceId } = props;
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const [transport, setTransport] = useState<SessionTransport | null>(null);
+  useEffect(() => {
+    const created = createRemoteSessionTransport(deviceId);
+    setTransport(created);
+    // 三个监听器挂在 module 级单例 socket 上，deviceId 切换/组件卸载都要
+    // 显式 dispose，否则无界累积（同 transport.dispose() 既有惯例）。
+    return () => {
+      created.dispose?.();
+    };
+  }, [deviceId]);
+
+  if (!transport) {
+    return (
+      <PageShellView scrollContainerRef={scrollRef}>
+        <MessageSkeleton />
+      </PageShellView>
+    );
+  }
+
+  return <RemoteSessionViewReady {...props} transport={transport} />;
+}
+
+/**
+ * transport 就绪后才挂载：`useSessionStream`（web-common）+ remote-only
+ * transport + `SessionSocketLike` 适配器 + `SessionConversationView` 装配，
+ * 镜像 `apps/web-agent/src/components/session/assistant-conversation-body.tsx`
  * 的角色。
  *
  * `sessionId` 为 null 时渲染「新建会话」态（仅输入框，无历史/无工具流）；
@@ -118,13 +166,14 @@ interface RemoteSessionViewProps {
  * `onSessionCreated`——调用方（页面）据此把 `?session=` 写进 URL，本组件
  * 自身不做导航，只暴露状态转移。
  */
-export function RemoteSessionView({
+function RemoteSessionViewReady({
   deviceId,
   sessionId,
   streamId,
   orgId,
   onSessionCreated,
-}: RemoteSessionViewProps) {
+  transport,
+}: RemoteSessionViewProps & { transport: SessionTransport }) {
   const t = useTranslations("session");
   const tAssistant = useTranslations("assistant");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -134,20 +183,6 @@ export function RemoteSessionView({
     profile.data?.user?.email ??
     t("youName");
 
-  // 同一 deviceId 稳定复用一份 transport（T10 惯例）：query()/startRun() 独立于
-  // subscribe() 生命周期，随时可调用；三个 socket 监听器随实例常驻。
-  const transport = useMemo(
-    () => createRemoteSessionTransport(deviceId),
-    [deviceId],
-  );
-  // 释放 transport 常驻的三个 socket 监听器：本组件持有本 transport 实例的
-  // 生命周期（子代理卡复用同一实例但不自行 dispose，归本组件统一管理），
-  // deviceId 切换/组件卸载都要清理，否则在 module 级单例 socket 上无界累积。
-  useEffect(() => {
-    return () => {
-      transport.dispose?.();
-    };
-  }, [transport]);
   const socketAdapter = useMemo(
     () => createSessionSocketAdapter(transport),
     [transport],
