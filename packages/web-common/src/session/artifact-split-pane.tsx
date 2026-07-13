@@ -111,6 +111,8 @@ export function ArtifactSplitPane({
                 url: target.url,
                 name: title,
                 fetchLocal,
+                remote: target.remote,
+                transport,
               })
             }
             className={cn(

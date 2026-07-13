@@ -5,6 +5,7 @@ import type {
   SessionTransport,
 } from "@meshbot/web-common/session";
 import {
+  ArtifactSplitPane,
   ChatInput,
   createSessionSocketAdapter,
   MessageSkeleton,
@@ -19,7 +20,6 @@ import { useChatScroll } from "@/hooks/use-chat-scroll";
 import { useRemoteSessions } from "@/hooks/use-remote-sessions";
 import { createRemoteSessionTransport } from "@/lib/session-transport";
 import { useProfile } from "@/rest/auth";
-import { ArtifactPreviewPanel } from "./artifact-preview-panel";
 import { RemoteModelSelect } from "./remote-model-select";
 import { RemoteSubagentCard } from "./remote-subagent-card";
 
@@ -176,6 +176,7 @@ function RemoteSessionViewReady({
 }: RemoteSessionViewProps & { transport: SessionTransport }) {
   const t = useTranslations("session");
   const tAssistant = useTranslations("assistant");
+  const tArtifact = useTranslations("session.artifact");
   const scrollRef = useRef<HTMLDivElement>(null);
   const profile = useProfile();
   const userName =
@@ -213,6 +214,27 @@ function RemoteSessionViewReady({
       })
     | null
   >(null);
+  // 上传网盘成功提示：web-main 无网盘 presigned URL 前端基础设施，不像 web-agent
+  // 那样能上传后自动切换预览源（见 Task 3 报告「大文件网盘路径复用」两种取舍），
+  // 简化为面板内一条可关闭的成功提示；切换/关闭预览目标时清空（下方 effect）。
+  const [uploadNotice, setUploadNotice] = useState<{ name: string } | null>(
+    null,
+  );
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: preview 是「切换预览目标」触发器，切目标/关闭都要清旧上传提示
+  useEffect(() => {
+    setUploadNotice(null);
+  }, [preview]);
+
+  // ESC 关产物面板（对齐旧弹窗 `artifact-preview-panel.tsx` 的既有行为）。
+  useEffect(() => {
+    if (!preview) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPreview(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [preview]);
 
   const timelineMessages = useMemo(
     () => stream.messages.filter((m) => !m.pending),
@@ -321,47 +343,122 @@ function RemoteSessionViewReady({
     </div>
   );
 
+  /**
+   * 产物右侧滑入面板（对齐 web-agent `(shell)/layout.tsx` 的 `ArtifactSplitPane`
+   * aside 挂法，删掉的旧版是居中弹窗 `artifact-preview-panel.tsx`）：条件挂载
+   * （非常驻 + `absolute` 覆盖，不参与 flex 布局），落在 `(shell)/layout.tsx`
+   * 已有的 `relative overflow-hidden` 容器内（`AssistantLayout`/`AssistantSidebar`
+   * 均是透传 Fragment/Context.Provider，不产生额外 DOM 节点，本组件的输出直接是
+   * 该容器的 DOM 子节点）——web-main 无 Electron，不需要 web-agent 那套
+   * `titleBarClassName`/`actionButtonClassName` 拖拽区类名注入。
+   *
+   * `transport` 直接复用本组件已持有的同一 `SessionTransport` 实例（Task 3 报告
+   * 「数据注入形态」：其 `readArtifact`/`uploadArtifactToDrive` 与共享
+   * `ArtifactRemoteTransport` 结构类型一致），不像旧弹窗那样为每次预览另起一个
+   * transport 实例（省一份三监听器 + dispose 生命周期管理）。
+   *
+   * `renderPdf` 不传：web-main 无 react-pdf 依赖，退化为 `ArtifactBody` 内置的
+   * 原生 `<iframe>` PDF 查看器，与旧弹窗行为一致（本期不做 PDF 专属渲染）。
+   *
+   * `onUploadedToDrive`：web-main 无网盘 presigned URL REST 客户端，不像
+   * web-agent 那样自动切换预览源，退化为面板内提示成功（`uploadNotice`
+   * state，沿用旧弹窗 `uploadSuccess` 文案）——Task 3 报告已记录两种取舍均可。
+   */
+  const previewAside = preview && (
+    <aside
+      style={{ width: "min(440px, 92vw)" }}
+      className="absolute top-0 right-0 bottom-0 z-30 flex animate-in fade-in slide-in-from-right-4 flex-col overflow-hidden border-l border-border bg-(--shell-content) shadow-[-8px_0_24px_-12px_rgba(0,0,0,0.18)] duration-200"
+    >
+      {uploadNotice && (
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-emerald-600/10 px-3 py-2 text-[12px] text-emerald-700 dark:text-emerald-400">
+          <span className="min-w-0 flex-1 truncate">
+            {tArtifact("uploadSuccess", { name: uploadNotice.name })}
+          </span>
+          <button
+            type="button"
+            onClick={() => setUploadNotice(null)}
+            className="shrink-0 text-emerald-700/70 hover:text-emerald-700 dark:text-emerald-400/70"
+          >
+            ×
+          </button>
+        </div>
+      )}
+      <div className="min-h-0 flex-1">
+        <ArtifactSplitPane
+          target={preview}
+          onClose={() => setPreview(null)}
+          labels={{
+            empty: tArtifact("empty"),
+            untitled: tArtifact("untitled"),
+            download: tArtifact("download"),
+            close: tArtifact("close"),
+            body: {
+              loading: tArtifact("loading"),
+              loadFailed: tArtifact("loadFailed"),
+              unsupported: tArtifact("unsupported"),
+              tooLarge: (sizeMb: string) =>
+                tArtifact("tooLarge", { size: sizeMb }),
+              tooLargeHint: tArtifact("tooLargeHint"),
+              uploadFailed: tArtifact("uploadFailed"),
+              uploading: tArtifact("uploading"),
+              uploadToDrive: tArtifact("uploadToDrive"),
+              previewTitle: tArtifact("previewTitle"),
+              imageAlt: tArtifact("imageAlt"),
+            },
+          }}
+          transport={transport}
+          onUploadedToDrive={(up) => {
+            setUploadNotice({ name: up.name });
+          }}
+        />
+      </div>
+    </aside>
+  );
+
   if (!sessionId) {
     return (
-      <PageShellView scrollContainerRef={scrollRef}>
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-(--shell-accent)/12 text-(--shell-accent)">
-            <Sparkles className="h-7 w-7" />
-          </span>
-          <div className="text-[15px] font-semibold text-foreground">
-            {tAssistant("newSessionTitle")}
+      <>
+        <PageShellView scrollContainerRef={scrollRef}>
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+            <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-(--shell-accent)/12 text-(--shell-accent)">
+              <Sparkles className="h-7 w-7" />
+            </span>
+            <div className="text-[15px] font-semibold text-foreground">
+              {tAssistant("newSessionTitle")}
+            </div>
+            <div className="max-w-[320px] text-[13px] text-muted-foreground">
+              {tAssistant("newSessionHint")}
+            </div>
           </div>
-          <div className="max-w-[320px] text-[13px] text-muted-foreground">
-            {tAssistant("newSessionHint")}
+          {errorBanner}
+          <div className="sticky bottom-4 mt-auto w-full bg-background">
+            {/* Task 1 抽出的完整 ChatInput（web-agent 同款）。leadingActions
+                （技能/连应用/权限，本地语境专属）不传 → 底部动作栏不渲染这一块，
+                达到「远程模式隐藏」；tokenUsage 同样不传，退化为无用量环的简版
+                （web-common 的 `useSessionStream` 用量走回调而非返回值，remote
+                侧未接线，见类文档 `UseSessionStreamCallbacks`）。 */}
+            <ChatInput
+              value={draft}
+              onChange={setDraft}
+              onSend={(text) => void handleSend(text)}
+              isLoading={creating}
+              placeholder={t("input.placeholder")}
+              trailingActions={
+                <RemoteModelSelect
+                  orgId={orgId}
+                  value={modelOverride}
+                  onChange={(mid) => void handleModelChange(mid)}
+                />
+              }
+              labels={{
+                attachment: t("input.attachment"),
+                interrupt: t("input.stop"),
+              }}
+            />
           </div>
-        </div>
-        {errorBanner}
-        <div className="sticky bottom-4 mt-auto w-full bg-background">
-          {/* Task 1 抽出的完整 ChatInput（web-agent 同款）。leadingActions
-              （技能/连应用/权限，本地语境专属）不传 → 底部动作栏不渲染这一块，
-              达到「远程模式隐藏」；tokenUsage 同样不传，退化为无用量环的简版
-              （web-common 的 `useSessionStream` 用量走回调而非返回值，remote
-              侧未接线，见类文档 `UseSessionStreamCallbacks`）。 */}
-          <ChatInput
-            value={draft}
-            onChange={setDraft}
-            onSend={(text) => void handleSend(text)}
-            isLoading={creating}
-            placeholder={t("input.placeholder")}
-            trailingActions={
-              <RemoteModelSelect
-                orgId={orgId}
-                value={modelOverride}
-                onChange={(mid) => void handleModelChange(mid)}
-              />
-            }
-            labels={{
-              attachment: t("input.attachment"),
-              interrupt: t("input.stop"),
-            }}
-          />
-        </div>
-      </PageShellView>
+        </PageShellView>
+        {previewAside}
+      </>
     );
   }
 
@@ -458,7 +555,7 @@ function RemoteSessionViewReady({
           }}
         />
       </PageShellView>
-      <ArtifactPreviewPanel target={preview} onClose={() => setPreview(null)} />
+      {previewAside}
     </>
   );
 }

@@ -559,7 +559,12 @@
       "uploadToDrive": "Upload to Drive",
       "uploading": "Uploading…",
       "uploadSuccess": "Uploaded to Drive: {name}",
-      "uploadFailed": "Upload failed, please retry"
+      "uploadFailed": "Upload failed, please retry",
+      "tooLargeHint": "Once uploaded, you can view it in the org drive",
+      "previewTitle": "Artifact preview",
+      "imageAlt": "Artifact",
+      "empty": "No artifact selected",
+      "untitled": "Untitled file"
     }
   }
 }

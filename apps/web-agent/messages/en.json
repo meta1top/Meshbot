@@ -244,7 +244,9 @@
       "tooLargeHint": "Upload to the org drive to preview it locally",
       "uploadFailed": "Upload failed, please retry",
       "uploading": "Uploading…",
-      "uploadToDrive": "Upload to drive and preview"
+      "uploadToDrive": "Upload to drive and preview",
+      "previewTitle": "Artifact preview",
+      "imageAlt": "Artifact"
     },
     "runErrorPrefix": "Run failed: "
   },

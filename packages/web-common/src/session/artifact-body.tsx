@@ -25,6 +25,10 @@ export interface ArtifactBodyLabels {
   uploadFailed: string;
   uploading: string;
   uploadToDrive: string;
+  /** pdf/html 预览 iframe 的 title 属性（无障碍 + 悬浮提示）。 */
+  previewTitle: string;
+  /** 图片预览的 alt 文案。 */
+  imageAlt: string;
 }
 
 /**
@@ -189,17 +193,28 @@ function useArtifactContent(
 }
 
 /**
- * 下载产物，支持两种来源：
+ * 下载产物，支持三种来源：
  * - url 源（网盘 presigned）：直接设 a.href=url + a.download=name（presigned 自带凭证）
- * - path 源（本机产物）：经注入的 `fetchLocal` 取 blob → a.download
+ * - remote 源（跨设备产物）：经注入的 `transport.readArtifact` 取 base64 → blob →
+ *   a.download。too-large 场景无法内联下载，静默跳过（与 {@link ArtifactBody}
+ *   的 tooLarge 态一致——下载入口在标题栏，看不到产物是否触发了 too-large，
+ *   跳过优于误下载一个空/错误文件）。
+ * - path 源（本机产物，`remote` 未传时）：经注入的 `fetchLocal` 取 blob → a.download
+ *
+ * 曾经的缺口（web-agent/web-main 两端右面板下载按钮共用本函数）：`remote` 存在时
+ * 仍误用 `fetchLocal`（本机 apiClient）读取**对端**工作区相对路径，本机没有这个
+ * 文件，恒 404/取到无关内容——本次显式拆出 remote 分支修复，remote 优先于
+ * fetchLocal 判断，不会再误落到 fetchLocal 分支。
  */
 export async function downloadArtifact(opts: {
   path?: string;
   url?: string;
   name?: string;
   fetchLocal?: FetchLocalArtifact;
+  remote?: { deviceId: string; sessionId: string };
+  transport?: ArtifactRemoteTransport;
 }): Promise<void> {
-  const { path, url, name, fetchLocal } = opts;
+  const { path, url, name, fetchLocal, remote, transport } = opts;
   const filename = name ?? path?.split("/").pop() ?? "file";
 
   if (url) {
@@ -208,6 +223,20 @@ export async function downloadArtifact(opts: {
     a.href = url;
     a.download = filename;
     a.click();
+    return;
+  }
+
+  if (path && remote) {
+    if (!transport) return;
+    const r = await transport.readArtifact(remote.sessionId, path);
+    if (r.kind === "too-large") return;
+    const bytes = base64ToBytes(r.base64);
+    const blobUrl = URL.createObjectURL(new Blob([bytes]));
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(blobUrl);
     return;
   }
 
@@ -325,7 +354,7 @@ export function ArtifactBody({
     }
     return (
       <iframe
-        title="产物预览"
+        title={labels.previewTitle}
         src={blobUrl}
         className="h-full w-full border-0"
       />
@@ -335,7 +364,7 @@ export function ArtifactBody({
     if (text === null) return <Loading text={labels.loading} />;
     return (
       <iframe
-        title="产物预览"
+        title={labels.previewTitle}
         srcDoc={text}
         sandbox=""
         className="h-full w-full border-0 bg-white"
@@ -348,7 +377,7 @@ export function ArtifactBody({
       <div className="flex h-full items-center justify-center p-3">
         <img
           src={blobUrl}
-          alt="产物"
+          alt={labels.imageAlt}
           className="max-h-full max-w-full object-contain"
         />
       </div>

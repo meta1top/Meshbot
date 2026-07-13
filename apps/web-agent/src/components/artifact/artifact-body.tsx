@@ -64,6 +64,8 @@ export function useArtifactBodyLabels(): ArtifactBodyLabels {
     uploadFailed: t("uploadFailed"),
     uploading: t("uploading"),
     uploadToDrive: t("uploadToDrive"),
+    previewTitle: t("previewTitle"),
+    imageAlt: t("imageAlt"),
   };
 }
 

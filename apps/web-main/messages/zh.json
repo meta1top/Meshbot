@@ -102,7 +102,12 @@
       "uploadToDrive": "上传到网盘",
       "uploading": "上传中…",
       "uploadSuccess": "已上传到网盘：{name}",
-      "uploadFailed": "上传失败，请重试"
+      "uploadFailed": "上传失败，请重试",
+      "tooLargeHint": "上传成功后可在企业网盘中查看",
+      "previewTitle": "产物预览",
+      "imageAlt": "产物",
+      "empty": "未选中预览产物",
+      "untitled": "未命名文件"
     }
   },
   "loading": "",

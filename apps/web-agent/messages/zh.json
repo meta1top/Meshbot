@@ -244,7 +244,9 @@
       "tooLargeHint": "可上传到企业网盘后在本机预览",
       "uploadFailed": "上传失败，请重试",
       "uploading": "上传中…",
-      "uploadToDrive": "上传到网盘并预览"
+      "uploadToDrive": "上传到网盘并预览",
+      "previewTitle": "产物预览",
+      "imageAlt": "产物"
     },
     "runErrorPrefix": "运行失败："
   },
