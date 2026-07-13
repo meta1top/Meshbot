@@ -1,3 +1,4 @@
+export { MarkdownContent } from "./markdown-content";
 export type { SessionSocketLike } from "./socket-like";
 export {
   claimSubagentOnTimeline,
