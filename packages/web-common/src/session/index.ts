@@ -1,4 +1,5 @@
 export { MarkdownContent } from "./markdown-content";
+export { MessageSkeleton } from "./message-skeleton";
 export type { SessionSocketLike } from "./socket-like";
 export {
   claimSubagentOnTimeline,
