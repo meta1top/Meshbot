@@ -1,10 +1,24 @@
 export {
+  ArtifactBody,
+  type ArtifactBodyLabels,
+  type ArtifactBodyProps,
+  type ArtifactRemoteTransport,
+  downloadArtifact,
+  type FetchLocalArtifact,
+} from "./artifact-body";
+export {
   ArtifactFileCard,
   type ArtifactFileCardLabels,
   type ArtifactFileCardProps,
   type ArtifactPreviewTarget,
 } from "./artifact-file-card";
 export { type ArtifactKind, artifactKind } from "./artifact-kind";
+export {
+  ArtifactSplitPane,
+  type ArtifactSplitPaneLabels,
+  type ArtifactSplitPaneProps,
+  type ArtifactSplitPaneTarget,
+} from "./artifact-split-pane";
 export {
   AskQuestionCard,
   type AskQuestionCardProps,

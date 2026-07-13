@@ -236,7 +236,15 @@
       "errorResult": "子 Agent 运行失败，未产出结果"
     },
     "artifact": {
-      "presentFailed": "呈现失败"
+      "presentFailed": "呈现失败",
+      "loading": "加载中…",
+      "loadFailed": "产物已不存在或已变更",
+      "unsupported": "该类型不支持预览，请下载查看。",
+      "tooLarge": "文件较大（{size} MB），无法直接远程预览",
+      "tooLargeHint": "可上传到企业网盘后在本机预览",
+      "uploadFailed": "上传失败，请重试",
+      "uploading": "上传中…",
+      "uploadToDrive": "上传到网盘并预览"
     },
     "runErrorPrefix": "运行失败："
   },
