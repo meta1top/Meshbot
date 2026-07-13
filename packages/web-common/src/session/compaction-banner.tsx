@@ -1,19 +1,30 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+export interface CompactionBannerLabels {
+  bannerThreshold: string;
+  bannerCtxExceeded: string;
+}
 
-interface CompactionBannerProps {
+export interface CompactionBannerProps {
   visible: boolean;
   reason?: "threshold" | "ctx-exceeded";
+  labels: CompactionBannerLabels;
 }
 
 /**
  * Session 顶部的"会话历史压缩中"提示条。
  *
+ * 从 `apps/web-agent/src/components/common/compaction-banner.tsx` 迁入
+ * （Task 9 骨干批，随 `SessionConversationView` 一并迁移——该视图渲染结构里
+ * 唯一消费方）。`useTranslations` 改 `labels` props。
+ *
  * visible=true 时显示；reason 决定文案细微差别。
  */
-export function CompactionBanner({ visible, reason }: CompactionBannerProps) {
-  const t = useTranslations("session.compaction");
+export function CompactionBanner({
+  visible,
+  reason,
+  labels,
+}: CompactionBannerProps) {
   if (!visible) return null;
   return (
     <div
@@ -24,8 +35,8 @@ export function CompactionBanner({ visible, reason }: CompactionBannerProps) {
       <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-primary/70" />
       <span>
         {reason === "ctx-exceeded"
-          ? t("bannerCtxExceeded")
-          : t("bannerThreshold")}
+          ? labels.bannerCtxExceeded
+          : labels.bannerThreshold}
       </span>
     </div>
   );

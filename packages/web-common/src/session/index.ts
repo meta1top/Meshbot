@@ -15,6 +15,11 @@ export {
   type AssistantMessageActionsProps,
 } from "./assistant-message-actions";
 export {
+  CompactionBanner,
+  type CompactionBannerLabels,
+  type CompactionBannerProps,
+} from "./compaction-banner";
+export {
   CompactionRow,
   type CompactionRowLabels,
   type CompactionRowProps,
@@ -45,6 +50,11 @@ export {
   type PendingListLabels,
   type PendingListProps,
 } from "./pending-list";
+export {
+  SessionConversationView,
+  type SessionConversationViewLabels,
+  type SessionConversationViewProps,
+} from "./session-conversation-view";
 export type { SessionSocketLike } from "./socket-like";
 export {
   claimSubagentOnTimeline,
