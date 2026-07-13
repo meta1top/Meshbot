@@ -523,7 +523,8 @@
     "input": {
       "placeholder": "Type your task or question",
       "send": "Send",
-      "stop": "Stop"
+      "stop": "Stop",
+      "attachment": "Add attachment"
     },
     "compaction": {
       "bannerThreshold": "Compacting conversation history…",

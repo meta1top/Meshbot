@@ -5,6 +5,7 @@ import type {
   SessionTransport,
 } from "@meshbot/web-common/session";
 import {
+  ChatInput,
   createSessionSocketAdapter,
   MessageSkeleton,
   SessionConversationView,
@@ -19,7 +20,6 @@ import { useRemoteSessions } from "@/hooks/use-remote-sessions";
 import { createRemoteSessionTransport } from "@/lib/session-transport";
 import { useProfile } from "@/rest/auth";
 import { ArtifactPreviewPanel } from "./artifact-preview-panel";
-import { RemoteChatInput } from "./remote-chat-input";
 import { RemoteModelSelect } from "./remote-model-select";
 import { RemoteSubagentCard } from "./remote-subagent-card";
 
@@ -337,12 +337,16 @@ function RemoteSessionViewReady({
         </div>
         {errorBanner}
         <div className="sticky bottom-4 mt-auto w-full bg-background">
-          <RemoteChatInput
+          {/* Task 1 抽出的完整 ChatInput（web-agent 同款）。leadingActions
+              （技能/连应用/权限，本地语境专属）不传 → 底部动作栏不渲染这一块，
+              达到「远程模式隐藏」；tokenUsage 同样不传，退化为无用量环的简版
+              （web-common 的 `useSessionStream` 用量走回调而非返回值，remote
+              侧未接线，见类文档 `UseSessionStreamCallbacks`）。 */}
+          <ChatInput
             value={draft}
             onChange={setDraft}
             onSend={(text) => void handleSend(text)}
             isLoading={creating}
-            disabled={creating}
             placeholder={t("input.placeholder")}
             trailingActions={
               <RemoteModelSelect
@@ -351,7 +355,10 @@ function RemoteSessionViewReady({
                 onChange={(mid) => void handleModelChange(mid)}
               />
             }
-            labels={{ send: t("input.send"), stop: t("input.stop") }}
+            labels={{
+              attachment: t("input.attachment"),
+              interrupt: t("input.stop"),
+            }}
           />
         </div>
       </PageShellView>
@@ -405,7 +412,7 @@ function RemoteSessionViewReady({
           stickToBottom={stickToBottom}
           onScrollToBottom={scrollToBottom}
           renderInput={() => (
-            <RemoteChatInput
+            <ChatInput
               value={draft}
               onChange={setDraft}
               onSend={(text) => void handleSend(text)}
@@ -419,7 +426,10 @@ function RemoteSessionViewReady({
                   onChange={(mid) => void handleModelChange(mid)}
                 />
               }
-              labels={{ send: t("input.send"), stop: t("input.stop") }}
+              labels={{
+                attachment: t("input.attachment"),
+                interrupt: t("input.stop"),
+              }}
             />
           )}
           labels={{

@@ -66,7 +66,8 @@
     "input": {
       "placeholder": "输入你的任务或问题",
       "send": "发送",
-      "stop": "中断"
+      "stop": "中断",
+      "attachment": "添加附件"
     },
     "compaction": {
       "bannerThreshold": "会话历史压缩中…",
