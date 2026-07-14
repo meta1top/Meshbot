@@ -57,6 +57,7 @@ function makeServices(opts: {
     new ToolRegistry(
       { getProviders: () => [] } as never,
       new AccountContextService(),
+      new AgentContextService(),
     );
   const eventEmitter = opts.eventEmitter ?? new EventEmitter2();
   const modelResolver = new ModelResolver(
@@ -121,6 +122,7 @@ describe("ContextBuilder core 记忆注入系统提示", () => {
     const toolRegistry = new ToolRegistry(
       { getProviders: () => [] } as never,
       new AccountContextService(),
+      new AgentContextService(),
     );
     const fakeModel = {
       stream: async () => {
@@ -273,6 +275,7 @@ describe("ContextBuilder.buildContextMessage", () => {
     const toolRegistry = new ToolRegistry(
       { getProviders: () => [] } as never,
       new AccountContextService(),
+      new AgentContextService(),
     );
     const fakeModel = {
       stream: async () => {

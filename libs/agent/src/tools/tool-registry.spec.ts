@@ -2,6 +2,7 @@ import { tool as createLcTool } from "@langchain/core/tools";
 import { DiscoveryService } from "@nestjs/core";
 import { z } from "zod";
 import { AccountContextService } from "../account/account-context.service";
+import { AgentContextService } from "../account/agent-context.service";
 import { Tool } from "./tool.decorator";
 import { ToolRegistry } from "./tool-registry";
 import type { MeshbotTool, ToolContext } from "./tool.types";
@@ -67,56 +68,116 @@ function makeLcTool(name: string) {
   });
 }
 
-describe("ToolRegistry — per-account MCP 工具", () => {
-  let ctx: AccountContextService;
+describe("ToolRegistry — 按「账号+Agent」隔离 MCP 工具", () => {
+  let account: AccountContextService;
+  let agentCtx: AgentContextService;
   let registry: ToolRegistry;
-  let mcpToolU1: MeshbotTool;
-  let mcpToolU2: MeshbotTool;
-  let lcU1: ReturnType<typeof makeLcTool>;
-  let lcU2: ReturnType<typeof makeLcTool>;
+  let toolA: MeshbotTool;
+  let toolB: MeshbotTool;
+  let lcToolA: ReturnType<typeof makeLcTool>;
+  let lcToolB: ReturnType<typeof makeLcTool>;
+
+  function makeRegistry(): ToolRegistry {
+    const alpha = new FakeAlphaTool();
+    const r = new ToolRegistry(fakeDiscovery([alpha]), account, agentCtx);
+    r.onModuleInit();
+    return r;
+  }
 
   beforeEach(() => {
-    ctx = new AccountContextService();
-    const alpha = new FakeAlphaTool();
-    registry = new ToolRegistry(fakeDiscovery([alpha]), ctx);
-    registry.onModuleInit();
-    mcpToolU1 = makeMcpTool("mcp-u1");
-    mcpToolU2 = makeMcpTool("mcp-u2");
-    lcU1 = makeLcTool("mcp-u1");
-    lcU2 = makeLcTool("mcp-u2");
+    account = new AccountContextService();
+    agentCtx = new AgentContextService();
+    registry = makeRegistry();
+    toolA = makeMcpTool("tool-a");
+    toolB = makeMcpTool("tool-b");
+    lcToolA = makeLcTool("tool-a");
+    lcToolB = makeLcTool("tool-b");
   });
 
-  it("asLangChainBindable = 内置 + 当前账号 MCP 工具", () => {
-    registry.registerForAccount("u1", mcpToolU1, lcU1);
-    registry.registerForAccount("u2", mcpToolU2, lcU2);
-    const u1 = ctx.run("u1", () => registry.list().map((t) => t.name));
-    expect(u1).toContain("alpha");
-    expect(u1).toContain(mcpToolU1.name);
-    expect(u1).not.toContain(mcpToolU2.name);
+  it("两个 Agent 的 MCP 工具互不可见", () => {
+    registry.registerForAgent("acct-1", "agent-a", toolA, lcToolA);
+    registry.registerForAgent("acct-1", "agent-b", toolB, lcToolB);
+    account.run("acct-1", () => {
+      agentCtx.run("agent-a", () => {
+        const names = registry.asLangChainBindable().map((t) => t.name);
+        expect(names).toContain("tool-a");
+        expect(names).not.toContain("tool-b");
+        expect(registry.get("tool-b")).toBeUndefined();
+      });
+      agentCtx.run("agent-b", () => {
+        expect(registry.get("tool-b")).toBeDefined();
+      });
+    });
   });
 
-  it("无账号上下文只见内置工具（不抛错）", () => {
-    registry.registerForAccount("u1", mcpToolU1, lcU1);
+  it("内置工具对所有 Agent 都可见", () => {
+    account.run("acct-1", () => {
+      agentCtx.run("agent-a", () => {
+        expect(registry.get("alpha")).toBeDefined();
+      });
+    });
+  });
+
+  it("unregisterAccount 清掉该账号下全部 Agent 的工具", () => {
+    registry.registerForAgent("acct-1", "agent-a", toolA, lcToolA);
+    registry.registerForAgent("acct-1", "agent-b", toolB, lcToolB);
+    registry.unregisterAccount("acct-1");
+    account.run("acct-1", () => {
+      agentCtx.run("agent-a", () => {
+        expect(registry.get("tool-a")).toBeUndefined();
+      });
+      agentCtx.run("agent-b", () => {
+        expect(registry.get("tool-b")).toBeUndefined();
+      });
+    });
+  });
+
+  it("unregisterAgent 只清掉该 Agent 的工具，兄弟 Agent 不受影响", () => {
+    registry.registerForAgent("acct-1", "agent-a", toolA, lcToolA);
+    registry.registerForAgent("acct-1", "agent-b", toolB, lcToolB);
+    registry.unregisterAgent("acct-1", "agent-a");
+    account.run("acct-1", () => {
+      agentCtx.run("agent-a", () => {
+        expect(registry.get("tool-a")).toBeUndefined();
+      });
+      agentCtx.run("agent-b", () => {
+        expect(registry.get("tool-b")).toBeDefined();
+      });
+    });
+  });
+
+  it("同 Agent 重名工具覆盖（upsert）", () => {
+    registry.registerForAgent("acct-1", "agent-a", toolA, lcToolA);
+    const toolA2 = makeMcpTool("tool-a");
+    registry.registerForAgent("acct-1", "agent-a", toolA2, lcToolA);
+    account.run("acct-1", () => {
+      agentCtx.run("agent-a", () => {
+        expect(registry.get("tool-a")).toBe(toolA2);
+      });
+    });
+  });
+
+  it("缺账号或缺 Agent 上下文只见内置工具，不抛错", () => {
+    registry.registerForAgent("acct-1", "agent-a", toolA, lcToolA);
+    // 完全无上下文。
     expect(() => registry.list()).not.toThrow();
-    expect(registry.list().map((t) => t.name)).not.toContain(mcpToolU1.name);
-    expect(registry.list().map((t) => t.name)).toContain("alpha");
-  });
-
-  it("get(name) 解析当前账号 MCP 工具；他账号不可达", () => {
-    registry.registerForAccount("u1", mcpToolU1, lcU1);
-    expect(ctx.run("u2", () => registry.get(mcpToolU1.name))).toBeUndefined();
-    expect(ctx.run("u1", () => registry.get(mcpToolU1.name))).toBeDefined();
-  });
-
-  it("unregisterAccount 清掉该账号 MCP 工具", () => {
-    registry.registerForAccount("u1", mcpToolU1, lcU1);
-    registry.unregisterAccount("u1");
-    expect(ctx.run("u1", () => registry.get(mcpToolU1.name))).toBeUndefined();
+    expect(registry.list().map((t) => t.name)).toEqual(["alpha"]);
+    // 只有账号，无 Agent。
+    account.run("acct-1", () => {
+      expect(() => registry.list()).not.toThrow();
+      expect(registry.list().map((t) => t.name)).toEqual(["alpha"]);
+    });
+    // 只有 Agent，无账号。
+    agentCtx.run("agent-a", () => {
+      expect(() => registry.list()).not.toThrow();
+      expect(registry.list().map((t) => t.name)).toEqual(["alpha"]);
+    });
   });
 });
 
 describe("ToolRegistry", () => {
-  const noopCtx = new AccountContextService();
+  const noopAccount = new AccountContextService();
+  const noopAgent = new AgentContextService();
 
   it("onModuleInit 注册所有带 @Tool() 的 provider", () => {
     const alpha = new FakeAlphaTool();
@@ -124,7 +185,8 @@ describe("ToolRegistry", () => {
     const other = new NotATool();
     const registry = new ToolRegistry(
       fakeDiscovery([alpha, beta, other]),
-      noopCtx,
+      noopAccount,
+      noopAgent,
     );
     registry.onModuleInit();
     expect(registry.get("alpha")).toBe(alpha);
@@ -140,14 +202,22 @@ describe("ToolRegistry", () => {
   it("重复 name 启动期抛错", () => {
     const a = new FakeAlphaTool();
     const dup = new DuplicateAlphaTool();
-    const registry = new ToolRegistry(fakeDiscovery([a, dup]), noopCtx);
+    const registry = new ToolRegistry(
+      fakeDiscovery([a, dup]),
+      noopAccount,
+      noopAgent,
+    );
     expect(() => registry.onModuleInit()).toThrow(/Duplicate tool name: alpha/);
   });
 
   it("asLangChainBindable 返回数组长度匹配 tool 数", () => {
     const alpha = new FakeAlphaTool();
     const beta = new FakeBetaTool();
-    const registry = new ToolRegistry(fakeDiscovery([alpha, beta]), noopCtx);
+    const registry = new ToolRegistry(
+      fakeDiscovery([alpha, beta]),
+      noopAccount,
+      noopAgent,
+    );
     registry.onModuleInit();
     const tools = registry.asLangChainBindable();
     expect(tools).toHaveLength(2);
@@ -157,7 +227,8 @@ describe("ToolRegistry", () => {
   it("get 不存在的 name 返 undefined", () => {
     const registry = new ToolRegistry(
       fakeDiscovery([new FakeAlphaTool()]),
-      noopCtx,
+      noopAccount,
+      noopAgent,
     );
     registry.onModuleInit();
     expect(registry.get("nonexistent")).toBeUndefined();
@@ -166,7 +237,8 @@ describe("ToolRegistry", () => {
   it("register 动态加入 tool；unregister 移除", () => {
     const registry = new ToolRegistry(
       fakeDiscovery([new FakeAlphaTool()]),
-      noopCtx,
+      noopAccount,
+      noopAgent,
     );
     registry.onModuleInit();
     const gamma: MeshbotTool<{ z: string }, string> = {
@@ -188,7 +260,8 @@ describe("ToolRegistry", () => {
   it("register 重名抛错", () => {
     const registry = new ToolRegistry(
       fakeDiscovery([new FakeAlphaTool()]),
-      noopCtx,
+      noopAccount,
+      noopAgent,
     );
     registry.onModuleInit();
     const dup: MeshbotTool<{ x: number }, string> = {

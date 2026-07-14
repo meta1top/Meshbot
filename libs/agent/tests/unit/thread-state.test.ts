@@ -47,6 +47,7 @@ function makeServices(opts: {
     new ToolRegistry(
       { getProviders: () => [] } as never,
       new AccountContextService(),
+      new AgentContextService(),
     );
   const eventEmitter = opts.eventEmitter ?? new EventEmitter2();
   const modelResolver = new ModelResolver(

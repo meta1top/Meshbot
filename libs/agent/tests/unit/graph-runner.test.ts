@@ -53,6 +53,7 @@ function makeServices(opts: {
     new ToolRegistry(
       { getProviders: () => [] } as never,
       new AccountContextService(),
+      new AgentContextService(),
     );
   const eventEmitter = opts.eventEmitter ?? new EventEmitter2();
   const modelResolver = new ModelResolver(
@@ -301,6 +302,7 @@ describe("GraphRunner", () => {
     const toolRegistry2 = new ToolRegistry(
       fakeDisc as never,
       new AccountContextService(),
+      new AgentContextService(),
     );
     toolRegistry2.onModuleInit();
     // echoTool 是纯对象（无 @Tool() 装饰器），onModuleInit 扫不到，需手动注册
@@ -385,6 +387,7 @@ describe("GraphRunner", () => {
     const toolRegistry3 = new ToolRegistry(
       { getProviders: () => [] } as never,
       new AccountContextService(),
+      new AgentContextService(),
     );
     const { graphRunner: gr3 } = makeServices({
       configService: cfg3,
@@ -441,6 +444,7 @@ describe("GraphRunner system:ctx 刷新不累积", () => {
     const toolRegistry = new ToolRegistry(
       { getProviders: () => [] } as never,
       new AccountContextService(),
+      new AgentContextService(),
     );
 
     // 使用能正确驱动 messages 流的 BaseChatModel 子类

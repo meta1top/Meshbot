@@ -63,10 +63,14 @@ class TestMcpService extends McpService {
   }
 }
 
-function makeRegistry(account: AccountContextService): ToolRegistry {
+function makeRegistry(
+  account: AccountContextService,
+  agentCtx: AgentContextService,
+): ToolRegistry {
   const r = new ToolRegistry(
     { getProviders: () => [] } as unknown as DiscoveryService,
     account,
+    agentCtx,
   );
   r.onModuleInit();
   return r;
@@ -103,8 +107,8 @@ describe("McpService 每账号 init/teardown", () => {
     account = new AccountContextService();
     agentCtx = new AgentContextService();
     config = new MeshbotConfigService(account, agentCtx);
-    reg = makeRegistry(account);
-    svc = new TestMcpService(config, reg);
+    reg = makeRegistry(account, agentCtx);
+    svc = new TestMcpService(config, reg, agentCtx);
   });
 
   afterEach(() => {
@@ -118,11 +122,11 @@ describe("McpService 每账号 init/teardown", () => {
     ).toBeUndefined();
   });
 
-  it("initAccount 在账号上下文内读该账号 mcp.json，注册到 registerForAccount", async () => {
+  it("initAccount 在账号+Agent 上下文内读该账号 mcp.json，注册到 registerForAgent", async () => {
     writeMcpJson(home, "u1", ONE_SERVER);
     const stub = makeStubClient([fakeLcTool("mcp__fs__read")]);
     svc.stubs = [stub];
-    const spy = vi.spyOn(reg, "registerForAccount");
+    const spy = vi.spyOn(reg, "registerForAgent");
 
     await runInContext("u1", async () => {
       await svc.initAccount("u1");
@@ -131,16 +135,17 @@ describe("McpService 每账号 init/teardown", () => {
     expect(stub.getTools).toHaveBeenCalledTimes(1);
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy.mock.calls[0][0]).toBe("u1");
-    // 第二个参数是 meshbot adapter，name 透传自 LC tool。
-    expect(spy.mock.calls[0][1].name).toBe("mcp__fs__read");
-    // 该账号上下文下 registry.list() 能看到这颗工具。
-    account.run("u1", () => {
+    expect(spy.mock.calls[0][1]).toBe(AGENT_ID);
+    // 第三个参数是 meshbot adapter，name 透传自 LC tool。
+    expect(spy.mock.calls[0][2].name).toBe("mcp__fs__read");
+    // 该账号+Agent 上下文下 registry.list() 能看到这颗工具。
+    runInContext("u1", () => {
       expect(reg.list().map((t) => t.name)).toContain("mcp__fs__read");
     });
   });
 
   it("无 mcp.json → no-op，不注册任何工具，不构造 client", async () => {
-    const spy = vi.spyOn(reg, "registerForAccount");
+    const spy = vi.spyOn(reg, "registerForAgent");
     await runInContext("u1", async () => {
       await svc.initAccount("u1");
     });
@@ -150,7 +155,7 @@ describe("McpService 每账号 init/teardown", () => {
 
   it("空 mcpServers → no-op，不构造 client", async () => {
     writeMcpJson(home, "u1", { mcpServers: {} });
-    const spy = vi.spyOn(reg, "registerForAccount");
+    const spy = vi.spyOn(reg, "registerForAgent");
     await runInContext("u1", async () => {
       await svc.initAccount("u1");
     });
@@ -172,7 +177,7 @@ describe("McpService 每账号 init/teardown", () => {
     expect(unregSpy).toHaveBeenCalledWith("u1");
     expect(stub.close).toHaveBeenCalledTimes(1);
     // u1 上下文下不再有该工具。
-    account.run("u1", () => {
+    runInContext("u1", () => {
       expect(reg.list().map((t) => t.name)).not.toContain("mcp__fs__read");
     });
     // 重复 teardown 幂等：close 不再被调（perAccount 已无 u1）。
@@ -222,12 +227,12 @@ describe("McpService 每账号 init/teardown", () => {
       await svc.initAccount("u2");
     });
 
-    account.run("u1", () => {
+    runInContext("u1", () => {
       const names = reg.list().map((t) => t.name);
       expect(names).toContain("mcp__fs__read");
       expect(names).not.toContain("mcp__web__fetch");
     });
-    account.run("u2", () => {
+    runInContext("u2", () => {
       const names = reg.list().map((t) => t.name);
       expect(names).toContain("mcp__web__fetch");
       expect(names).not.toContain("mcp__fs__read");

@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { Injectable, Logger, type OnModuleDestroy } from "@nestjs/common";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 import { MultiServerMCPClient } from "@langchain/mcp-adapters";
+import { AgentContextService } from "../account/agent-context.service";
 import { MeshbotConfigService } from "../config/meshbot-config.service";
 import { ToolRegistry } from "../tools/tool-registry";
 import { buildMcpToolAdapter } from "./mcp-tool.adapter";
@@ -37,14 +38,16 @@ export class McpService implements OnModuleDestroy {
   constructor(
     private readonly config: MeshbotConfigService,
     private readonly registry: ToolRegistry,
+    private readonly agentCtx: AgentContextService,
   ) {}
 
   /**
-   * 为指定账号加载 mcp.json、启动 MCP client、把所有 tool 注册到该账号名下。
+   * 为指定账号加载 mcp.json、启动 MCP client、把所有 tool 注册到该账号当前 Agent 名下。
    *
-   * **契约：必须在 `accountContext.run(cloudUserId, ...)` 内调用** —— loadConfig
-   * 读的是账号化路径 `getMcpConfigPath()`，依赖 ALS 当前账号；脱离账号上下文会抛
-   * NO_ACCOUNT_CONTEXT。传入的 cloudUserId 应与当前账号上下文一致。
+   * **契约：必须在 `accountContext.run(cloudUserId, () => agentContext.run(agentId, ...))`
+   * 双层上下文内调用** —— loadConfig 读的是账号+Agent 化路径 `getMcpConfigPath()`，
+   * 注册也按当前 ALS 的账号+Agent 分桶（`registry.registerForAgent`）；脱离任一上下文
+   * 都会出错。传入的 cloudUserId 应与当前账号上下文一致。
    *
    * 幂等：先 teardown 旧运行态再重建，重复调用不会泄漏 client。mcp.json 不存在
    * 或无 server 时直接返回，不注册任何 tool。单个 tool 注册失败只打日志不中断。
@@ -65,7 +68,12 @@ export class McpService implements OnModuleDestroy {
       for (const lcTool of tools) {
         try {
           const { meshbot } = buildMcpToolAdapter(lcTool);
-          this.registry.registerForAccount(cloudUserId, meshbot, lcTool);
+          this.registry.registerForAgent(
+            cloudUserId,
+            this.agentCtx.getOrThrow(),
+            meshbot,
+            lcTool,
+          );
           names.add(meshbot.name);
         } catch (err) {
           // 单颗 tool 适配 / 注册失败只跳过，不拖垮其他 server。

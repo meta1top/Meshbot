@@ -52,6 +52,7 @@ describe("GraphService compaction hooks", () => {
     const toolRegistry = new ToolRegistry(
       { getProviders: () => [] } as never,
       new AccountContextService(),
+      new AgentContextService(),
     );
     modelResolver = new ModelResolver(
       configService,
