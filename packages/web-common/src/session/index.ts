@@ -77,6 +77,11 @@ export {
   type SessionConversationViewLabels,
   type SessionConversationViewProps,
 } from "./session-conversation-view";
+export {
+  SessionLauncher,
+  type SessionLauncherLabels,
+  type SessionLauncherProps,
+} from "./session-launcher";
 export { createSessionSocketAdapter } from "./session-socket-adapter";
 export {
   SessionTree,

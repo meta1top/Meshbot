@@ -1,9 +1,9 @@
 "use client";
 
 import { cn } from "@meshbot/design";
-import { ChatInput } from "@meshbot/web-common/session";
+import { SessionLauncher } from "@meshbot/web-common/session";
 import { useQueries } from "@tanstack/react-query";
-import { Bot, ChevronDown } from "lucide-react";
+import { ChevronRight, MonitorSmartphone } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
@@ -13,29 +13,32 @@ import {
   fetchDeviceOnline,
   useDevicePresenceSync,
 } from "@/rest/agent-devices";
+import { useProfile } from "@/rest/auth";
 import { useDevices } from "@/rest/devices";
+import { RemoteModelSelect } from "./remote-model-select";
 
 /**
- * `/assistant` 启动台（对齐 web-agent `launcher-home`）：居中 composer——
- * 输入框 + 目标设备选择，发送即在该设备上新建远程会话。
+ * `/assistant` 起手台：渲染与 web-agent 同一个共享 `SessionLauncher`
+ * （品牌大标题 + 场景分段 + 建议 chips + 暖色 composer 面板），只把
+ * 「本地/工作区」目标条换成「设备选择」——web-main 无本机 agent，任务必须
+ * 交给一台已授权在线设备。技能/连应用/权限（本地专属）远程模式不注入即隐藏。
  *
- * web-main 无本机 agent，所以「agent 选择」只列已授权设备（离线不可选）。
- *
- * 发送不在本页直接建会话：web-main 是 L3 协议里真正的 A（浏览器），拿不到
- * web-agent 那种「轮询本机 server-agent 的 fetchRemoteRun 回填 sessionId」的
- * 能力（见 remote-session-view 的 fetchActiveRun 契约说明）。改为把草稿
- * stash 进 sessionStorage + 跳设备页，由 `RemoteSessionView` 已经能工作的
- * create 流程（`startNewRemoteSession` → 首帧回报 sessionId）接手发送——
- * 复用既有链路，不新造第二条建会话路径。
+ * 发送不在本页建会话：web-main 是 L3 的 A（浏览器），没有 web-agent 那种
+ * 「轮询本机 server-agent 的 fetchRemoteRun 回填 sessionId」的能力。改为把草稿
+ * stash 进 sessionStorage（一次性 token，读即删）+ 跳设备页，由
+ * `RemoteSessionView` 已能工作的 create 流程接手发送，复用既有链路。
  */
 export function Launcher() {
   const t = useTranslations("assistant");
   const tDevices = useTranslations("devices");
   const router = useRouter();
+  const profile = useProfile();
+  const orgId = profile.data?.activeOrg?.id ?? null;
+
   const { data: allDevices } = useDevices();
   useDevicePresenceSync();
-
   const devices = (allDevices ?? []).filter((d) => !d.revokedAt);
+
   const onlineQueries = useQueries({
     queries: devices.map((d) => ({
       queryKey: deviceOnlineQueryKey(d.id),
@@ -43,25 +46,25 @@ export function Launcher() {
       staleTime: 30_000,
     })),
   });
-  const onlineDevices = devices.filter(
-    (_, i) => onlineQueries[i]?.data?.online ?? false,
-  );
+  const deviceRows = devices.map((d, i) => ({
+    id: d.id,
+    name: d.name,
+    online: onlineQueries[i]?.data?.online ?? false,
+  }));
+  const onlineRows = deviceRows.filter((d) => d.online);
 
   const [draft, setDraft] = useState("");
   const [deviceId, setDeviceId] = useState<string | null>(null);
+  const [modelConfigId, setModelConfigId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // 只有一台在线设备时默认选中（多台不预选，避免误发到错误设备）。
   const autoPicked = useRef(false);
   useEffect(() => {
-    if (autoPicked.current || deviceId) return;
-    if (onlineDevices.length === 1) {
-      autoPicked.current = true;
-      setDeviceId(onlineDevices[0].id);
-    }
-  }, [onlineDevices, deviceId]);
-
-  const target = devices.find((d) => d.id === deviceId) ?? null;
+    if (autoPicked.current || deviceId || onlineRows.length !== 1) return;
+    autoPicked.current = true;
+    setDeviceId(onlineRows[0].id);
+  }, [onlineRows, deviceId]);
 
   const handleSend = (text: string) => {
     if (!text.trim()) return;
@@ -70,112 +73,105 @@ export function Launcher() {
       return;
     }
     setError(null);
-    // 草稿交接给设备会话页（一次性 token，读即删）
     const token = stashLauncherDraft(text);
     setDraft("");
     router.push(`/assistant/${deviceId}?draft=${token}`);
   };
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center px-6">
-      <div className="w-full max-w-[720px]">
-        <div className="mb-6 flex flex-col items-center gap-3 text-center">
-          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-(--shell-accent)/12 text-(--shell-accent)">
-            <Bot className="h-7 w-7" />
-          </span>
-          <h1 className="text-[20px] font-bold tracking-tight text-foreground">
-            {t("launcher.title")}
-          </h1>
-          <p className="text-[13px] text-muted-foreground">
-            {t("launcher.subtitle")}
-          </p>
-        </div>
-
-        {/* composer：暖色圆角底板包裹 ChatInput（对齐 web-agent 启动台层次） */}
-        <div className="rounded-2xl border border-border bg-(--shell-content) p-2 shadow-sm">
-          <ChatInput
-            value={draft}
-            onChange={setDraft}
-            onSend={handleSend}
-            placeholder={t("launcher.placeholder")}
-            // 本地专属项（技能/连应用/权限）远程模式不注入 → 隐藏
-            trailingActions={
-              <DevicePicker
-                devices={devices.map((d, i) => ({
-                  id: d.id,
-                  name: d.name,
-                  online: onlineQueries[i]?.data?.online ?? false,
-                }))}
-                value={deviceId}
-                onChange={(id) => {
-                  setDeviceId(id);
-                  setError(null);
-                }}
-                placeholder={t("launcher.pickDevice")}
-                offlineLabel={tDevices("offline")}
-              />
-            }
-            labels={{
-              attachment: t("input.attachment"),
-              interrupt: t("input.stop"),
+    <div className="flex min-h-0 flex-1 flex-col">
+      <SessionLauncher
+        draft={draft}
+        onDraftChange={setDraft}
+        onSend={handleSend}
+        // 建议 chips：web-main 无后端建议接口，用 i18n 默认列表（空数组则隐藏）
+        suggestions={[]}
+        // 本地专属项（技能/连应用/权限）远程模式不注入 → 隐藏
+        trailingActions={
+          orgId ? (
+            <RemoteModelSelect
+              orgId={orgId}
+              value={modelConfigId}
+              onChange={setModelConfigId}
+            />
+          ) : undefined
+        }
+        targetBar={
+          <DeviceTargetBar
+            devices={deviceRows}
+            value={deviceId}
+            onChange={(id) => {
+              setDeviceId(id);
+              setError(null);
             }}
+            placeholder={t("launcher.pickDevice")}
+            offlineLabel={tDevices("offline")}
+            error={error}
           />
-        </div>
-
-        {error && (
-          <p className="mt-2 text-center text-[12px] text-destructive">
-            {error}
-          </p>
-        )}
-        {!error && target && (
-          <p className="mt-2 text-center text-[12px] text-muted-foreground">
-            {t("launcher.willRunOn", { device: target.name })}
-          </p>
-        )}
-      </div>
+        }
+        labels={{
+          brand: "MeshBot",
+          slogan: t("launcher.slogan"),
+          scenes: {
+            daily: t("launcher.scenes.daily"),
+            code: t("launcher.scenes.code"),
+            design: t("launcher.scenes.design"),
+          },
+          placeholder: t("launcher.placeholder"),
+          chatInput: {
+            attachment: t("input.attachment"),
+            interrupt: t("input.stop"),
+          },
+        }}
+      />
     </div>
   );
 }
 
-/** 目标设备选择器：列已授权设备，离线不可选（置灰）。 */
-function DevicePicker({
+/**
+ * composer 面板内、输入框下方的目标选择条（对位 web-agent 的 ComposerTargetBar
+ * 「本地 › 默认工作区」）：web-main 这里选的是「哪台设备的 Agent 执行」。
+ */
+function DeviceTargetBar({
   devices,
   value,
   onChange,
   placeholder,
   offlineLabel,
+  error,
 }: {
   devices: Array<{ id: string; name: string; online: boolean }>;
   value: string | null;
   onChange: (id: string) => void;
   placeholder: string;
   offlineLabel: string;
+  error: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const current = devices.find((d) => d.id === value) ?? null;
 
   return (
-    <div className="relative">
+    <div className="relative flex items-center gap-1 px-2 pt-1.5">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex h-8 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        className={cn(
+          "flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] transition-colors hover:bg-muted",
+          error
+            ? "text-destructive"
+            : "text-muted-foreground hover:text-foreground",
+        )}
       >
-        <span
-          className={cn(
-            "h-2 w-2 shrink-0 rounded-full",
-            current?.online ? "bg-[#16a34a]" : "bg-muted-foreground/30",
-          )}
-        />
-        <span className="max-w-[160px] truncate">
+        <MonitorSmartphone className="h-3.5 w-3.5" />
+        <span className="max-w-[220px] truncate">
           {current?.name ?? placeholder}
         </span>
-        <ChevronDown className="h-3 w-3" />
+        <ChevronRight className="h-3 w-3" />
       </button>
+      {error && <span className="text-[12px] text-destructive">{error}</span>}
 
       {open && (
         <>
-          {/* 点外部关闭 */}
           <button
             type="button"
             aria-hidden
@@ -183,7 +179,7 @@ function DevicePicker({
             className="fixed inset-0 z-40 cursor-default"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute right-0 bottom-full z-50 mb-1 max-h-64 w-56 overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-md">
+          <div className="absolute bottom-full left-2 z-50 mb-1 max-h-64 w-64 overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-md">
             {devices.map((d) => (
               <button
                 key={d.id}

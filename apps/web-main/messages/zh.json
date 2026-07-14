@@ -45,7 +45,13 @@
       "placeholder": "输入你的任务或问题",
       "pickDevice": "选择设备",
       "pickDeviceFirst": "请先选择要执行任务的设备",
-      "willRunOn": "将在 {device} 上执行"
+      "willRunOn": "将在 {device} 上执行",
+      "slogan": "你的工作副驾",
+      "scenes": {
+        "daily": "日常办公",
+        "code": "代码开发",
+        "design": "设计创意"
+      }
     },
     "input": {
       "attachment": "",
