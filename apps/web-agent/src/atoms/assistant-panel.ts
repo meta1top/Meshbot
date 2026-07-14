@@ -1,4 +1,4 @@
-import { QUICK_ASSISTANT_DEFAULT_NAME } from "@meshbot/types-agent";
+import { DEFAULT_AGENT_NAME } from "@meshbot/types-agent";
 import { atom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 
@@ -8,10 +8,12 @@ export const assistantPanelOpenAtom = atomWithStorage(
   false,
 );
 
-/** 随手问当前名字（dock 标题）。默认回退默认名；dock 打开时从 REST 拉取，ws renamed 事件实时更新。 */
-export const quickAssistantNameAtom = atom<string>(
-  QUICK_ASSISTANT_DEFAULT_NAME,
-);
+/**
+ * 随手问当前名字（dock 标题）。默认回退默认 Agent 名（`DEFAULT_AGENT_NAME`，
+ * 名字已统一由 `agent.name` 提供，不再有独立的「随手问名字」概念）；
+ * dock 打开时从 REST 拉取，ws renamed 事件实时更新。
+ */
+export const quickAssistantNameAtom = atom<string>(DEFAULT_AGENT_NAME);
 
 /** 面板当前随手问会话 id；null = 尚未开始（首条消息惰性创建）。 */
 export const currentQuickSessionIdAtom = atom<string | null>(null);

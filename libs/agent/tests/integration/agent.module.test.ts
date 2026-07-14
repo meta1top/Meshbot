@@ -7,12 +7,12 @@ import { CLOUD_TOKEN_PORT } from "../../src/graph/cloud-token.port";
 import { GraphRunner } from "../../src/graph/graph-runner.service";
 import { RUNTIME_CONTEXT_PORT } from "../../src/graph/runtime-context.port";
 import { PromptService } from "../../src/prompt/prompt.service";
+import { AGENT_RENAME_PORT } from "../../src/tools/agent-rename.port";
 import { ASK_QUESTION_PORT } from "../../src/tools/ask-question.port";
 import { DISPATCH_SUBAGENT_PORT } from "../../src/tools/dispatch-subagent.port";
 import { DRIVE_PORT } from "../../src/tools/drive.port";
 import { IM_CONTEXT_PORT } from "../../src/tools/im-context.port";
 import { IM_SEND_PORT } from "../../src/tools/im-send.port";
-import { QUICK_ASSISTANT_PORT } from "../../src/tools/quick-assistant.port";
 import { SCHEDULE_TOOLS_PORT } from "../../src/tools/schedule-tools.port";
 import { SKILL_TOOLS_PORT } from "../../src/tools/skill-tools.port";
 import { ToolRegistry } from "../../src/tools/tool-registry";
@@ -23,13 +23,13 @@ import { ToolRegistry } from "../../src/tools/tool-registry";
  * 测试给全部 port 最小 stub：只为让模块图可解析，不含任何行为。
  */
 const HOST_PORTS = [
+  AGENT_RENAME_PORT,
   ASK_QUESTION_PORT,
   CLOUD_TOKEN_PORT,
   DISPATCH_SUBAGENT_PORT,
   DRIVE_PORT,
   IM_CONTEXT_PORT,
   IM_SEND_PORT,
-  QUICK_ASSISTANT_PORT,
   RUNTIME_CONTEXT_PORT,
   SCHEDULE_TOOLS_PORT,
   SKILL_TOOLS_PORT,

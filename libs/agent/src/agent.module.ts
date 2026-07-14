@@ -35,7 +35,7 @@ import { ScheduleListTool } from "./tools/builtins/schedule-list.tool";
 import { SkillInstallTool } from "./tools/builtins/skill-install.tool";
 import { SkillListTool } from "./tools/builtins/skill-list.tool";
 import { SkillLoadTool } from "./tools/builtins/skill-load.tool";
-import { RenameQuickAssistantTool } from "./tools/builtins/rename-quick-assistant.tool";
+import { RenameAgentTool } from "./tools/builtins/rename-agent.tool";
 import { ImUnreadOverviewTool } from "./tools/builtins/im-unread-overview.tool";
 import { ImReadConversationTool } from "./tools/builtins/im-read-conversation.tool";
 import { ImListMembersTool } from "./tools/builtins/im-list-members.tool";
@@ -87,7 +87,7 @@ import { DispatchSubagentTool } from "./tools/builtins/dispatch-subagent.tool";
     SkillUninstallTool,
     SkillSearchMarketTool,
     SkillPublishTool,
-    RenameQuickAssistantTool,
+    RenameAgentTool,
     ImUnreadOverviewTool,
     ImReadConversationTool,
     ImListMembersTool,

@@ -52,9 +52,9 @@ export {
   type CloudTokenPort,
 } from "./graph/cloud-token.port";
 export {
-  QUICK_ASSISTANT_PORT,
-  type QuickAssistantPort,
-} from "./tools/quick-assistant.port";
+  AGENT_RENAME_PORT,
+  type AgentRenamePort,
+} from "./tools/agent-rename.port";
 export {
   IM_CONTEXT_PORT,
   type ImContextPort,

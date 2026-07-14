@@ -181,8 +181,10 @@ export class EventsGateway extends BaseWebSocketGateway {
   /**
    * 本地随手问改名 → 信封投递给所属账号浏览器，dock 标题实时刷新。
    *
-   * QuickAssistantService.setName（agent 改名 tool / UI 改名）经 EventEmitter2 触发，
-   * 在账号上下文内 emit，故 emitEnvelope 能取到账号路由到 acct 房间。
+   * QuickAssistantController.rename（UI 改名，写默认 Agent 的 name）经 EventEmitter2 触发，
+   * 在账号上下文内 emit，故 emitEnvelope 能取到账号路由到 acct 房间。注意：`rename_agent`
+   * 工具改名走 AGENT_RENAME_PORT，不经过此处，不会触发这个事件（已知取舍，见
+   * QuickAssistantController 的 JSDoc）。
    */
   @OnEvent(QUICK_ASSISTANT_EVENTS.renamed)
   onQuickAssistantRenamed(payload: QuickAssistantRenamedEvent): void {

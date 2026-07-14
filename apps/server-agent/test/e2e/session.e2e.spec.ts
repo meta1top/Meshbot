@@ -1,6 +1,8 @@
 import "reflect-metadata";
 import {
   AccountContextModule,
+  AGENT_RENAME_PORT,
+  type AgentRenamePort,
   AgentModule,
   ASK_QUESTION_PORT,
   type AskQuestionPort,
@@ -12,8 +14,6 @@ import {
   type ImContextPort,
   IM_SEND_PORT,
   type ImSendPort,
-  QUICK_ASSISTANT_PORT,
-  type QuickAssistantPort,
   SCHEDULE_TOOLS_PORT,
   type ScheduleToolsPort,
   SKILL_TOOLS_PORT,
@@ -75,9 +75,9 @@ const STUB_SKILL_PORT: SkillToolsPort = {
 class StubSkillToolsModule {}
 
 /** 桩：本 e2e 只测会话 CRUD，不触发任何 agent 内置工具。AgentModule 里各工具靠
- *  @Global port 注入，这里统一提供桩端口（QUICK_ASSISTANT / IM_CONTEXT / IM_SEND /
+ *  @Global port 注入，这里统一提供桩端口（AGENT_RENAME / IM_CONTEXT / IM_SEND /
  *  ASK_QUESTION / DRIVE / SCHEDULE_TOOLS），让模块图可解析。 */
-const STUB_QUICK_ASSISTANT_PORT: QuickAssistantPort = {
+const STUB_AGENT_RENAME_PORT: AgentRenamePort = {
   rename: async () => {},
 };
 const STUB_IM_CONTEXT_PORT: ImContextPort = {
@@ -110,7 +110,7 @@ const STUB_SCHEDULE_TOOLS_PORT: ScheduleToolsPort = {
 @Global()
 @Module({
   providers: [
-    { provide: QUICK_ASSISTANT_PORT, useValue: STUB_QUICK_ASSISTANT_PORT },
+    { provide: AGENT_RENAME_PORT, useValue: STUB_AGENT_RENAME_PORT },
     { provide: IM_CONTEXT_PORT, useValue: STUB_IM_CONTEXT_PORT },
     { provide: IM_SEND_PORT, useValue: STUB_IM_SEND_PORT },
     { provide: ASK_QUESTION_PORT, useValue: STUB_ASK_QUESTION_PORT },
@@ -118,7 +118,7 @@ const STUB_SCHEDULE_TOOLS_PORT: ScheduleToolsPort = {
     { provide: SCHEDULE_TOOLS_PORT, useValue: STUB_SCHEDULE_TOOLS_PORT },
   ],
   exports: [
-    QUICK_ASSISTANT_PORT,
+    AGENT_RENAME_PORT,
     IM_CONTEXT_PORT,
     IM_SEND_PORT,
     ASK_QUESTION_PORT,

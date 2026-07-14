@@ -1,4 +1,5 @@
 import {
+  AGENT_RENAME_PORT,
   CLOUD_TOKEN_PORT,
   RUNTIME_CONTEXT_PORT,
   AccountContextService,
@@ -13,10 +14,15 @@ import { Setting } from "./entities/setting.entity";
 import { AgentService } from "./services/agent.service";
 import { CloudIdentityService } from "./services/cloud-identity.service";
 import { SettingService } from "./services/setting.service";
-import type { CloudTokenPort, RuntimeContextPort } from "@meshbot/lib-agent";
+import type {
+  AgentRenamePort,
+  CloudTokenPort,
+  RuntimeContextPort,
+} from "@meshbot/lib-agent";
 
 /**
- * @Global RuntimeContextModule：为 AgentModule 提供 RUNTIME_CONTEXT_PORT / CLOUD_TOKEN_PORT 绑定。
+ * @Global RuntimeContextModule：为 AgentModule 提供 RUNTIME_CONTEXT_PORT / CLOUD_TOKEN_PORT /
+ * AGENT_RENAME_PORT 绑定。
  *
  * 两个端口的 resolve() 都在账号上下文内被调（GraphService.run / ModelResolver.resolveModel 内），
  * AccountContextService.getOrThrow() 安全。全 best-effort：displayName 无身份返 null、
@@ -87,7 +93,16 @@ import type { CloudTokenPort, RuntimeContextPort } from "@meshbot/lib-agent";
       }),
       inject: [AccountContextService, CloudIdentityService],
     },
+    {
+      provide: AGENT_RENAME_PORT,
+      useFactory: (agents: AgentService): AgentRenamePort => ({
+        async rename(agentId, name) {
+          await agents.update(agentId, { name });
+        },
+      }),
+      inject: [AgentService],
+    },
   ],
-  exports: [RUNTIME_CONTEXT_PORT, CLOUD_TOKEN_PORT],
+  exports: [RUNTIME_CONTEXT_PORT, CLOUD_TOKEN_PORT, AGENT_RENAME_PORT],
 })
 export class RuntimeContextModule {}
