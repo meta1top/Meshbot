@@ -1,4 +1,12 @@
-import { parse as parseBestEffort } from "best-effort-json-parser";
+import {
+  disableErrorLogging,
+  parse as parseBestEffort,
+} from "best-effort-json-parser";
+
+// 我们本就是故意解析流式（未闭合/带多余 token）的 tool_call args——库内部对
+// 「多余 token」会 console.error（非致命，解析结果照常返回），但 Next dev overlay
+// 会把它弹成报错、且我们的 try/catch 抓不到它。流式场景下这是预期噪声，静音。
+disableErrorLogging();
 
 /**
  * 尽力解析流式（可能未闭合）的 tool_call args JSON。
