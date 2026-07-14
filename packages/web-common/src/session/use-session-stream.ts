@@ -55,6 +55,8 @@ interface RemoteRawMessage {
 
 interface RemoteRawHistory {
   messages?: RemoteRawMessage[];
+  /** B 侧 `SessionMessageService.listPage` 原样返回（与本地 HistoryResponse 同源字段）。 */
+  hasMore?: boolean;
   [key: string]: unknown;
 }
 
@@ -192,7 +194,7 @@ export interface SessionStream {
   send: (msg: string) => Promise<void>;
   /** 中断当前 run：本地经 WS，remote 经 relay 控制帧。 */
   interrupt: () => void;
-  /** 上拉加载更早历史（含滚动锚定，需传 scrollContainerRef）。remote 分支 Phase A 暂不支持，no-op。 */
+  /** 上拉加载更早历史（含滚动锚定，需传 scrollContainerRef）。local/remote 均支持。 */
   loadMoreHistory: () => Promise<void>;
   /** 本地会话为 null；远程会话为目标设备 id，供 RemoteSessionProvider 使用。 */
   remoteDeviceId: string | null;
@@ -391,13 +393,16 @@ export function useSessionStream(
           .catch(() => {});
       }
       // L3 remote：首屏历史走 L2c fetchHistory（经 transport，防御式映射
-      // B 侧原始行），不查本地 fetchPending（远程无该概念）；不支持翻页（Phase A
-      // 范围外，loadMoreHistory 对 remote 直接 no-op）。
+      // B 侧原始行），不查本地 fetchPending（远程无该概念）。不显式传 limit
+      // （与本地首屏一致，交由 B 端 listPage 默认值 50 兜底）；hasMore 读
+      // B 侧 listPage 原样返回的字段（与本地 HistoryResponse 同源），翻页见
+      // loadMoreHistory。
       transport
         .fetchHistory(sessionId)
         .then((res) => {
           if (cancelled) return;
-          const raw = (res as unknown as RemoteRawHistory).messages ?? [];
+          const rawRes = res as unknown as RemoteRawHistory;
+          const raw = rawRes.messages ?? [];
           const initial: TimelineMessage[] = raw
             // role="tool" 行是工具执行结果的落库行，不是可展示的时间线消息
             .filter((m) => m.role !== "tool")
@@ -409,8 +414,9 @@ export function useSessionStream(
             return [...initial, ...socketArrived];
           });
           oldestMessageIdRef.current = initial[0]?.id ?? null;
-          hasMoreHistoryRef.current = false;
-          setHasMoreHistory(false);
+          const hasMore = rawRes.hasMore ?? false;
+          hasMoreHistoryRef.current = hasMore;
+          setHasMoreHistory(hasMore);
         })
         .catch((err) => {
           if (cancelled) return;
@@ -1100,12 +1106,14 @@ export function useSessionStream(
    * 滚动到顶部触发：拉早于当前最旧消息的下一批 history。
    * - 锚定视口：prepend 前后 scrollTop 自动补偿，使用户当前看的消息不动
    * - 并发去重：loadingMoreRef 期间忽略重复触发
-   * - remote 分支 Phase A 不支持翻页（B 侧原始行 cursor 语义未打通），no-op
+   * - remote 与 local 共用 cursor 分页（B 侧 listPage 与本地同源实现，`before`
+   *   语义一致）；remote 行需走防御式 remoteMessageToTimeline + 过滤
+   *   role="tool"（B 侧原始行，非真正 HistoryMessage，与首屏一致），且响应
+   *   无 byMessage（B 侧 listPage 不带 usage 汇总），不调 onUsageBatch。
    */
   // biome-ignore lint/correctness/useExhaustiveDependencies: scrollContainerRef 是 RefObject，.current 故意不进依赖（与原实现一致）
   const loadMoreHistory = useCallback(async () => {
     if (!sessionId) return;
-    if (remoteDeviceId) return;
     if (!hasMoreHistoryRef.current) return;
     if (loadingMoreRef.current) return;
     const cursor = oldestMessageIdRef.current;
@@ -1116,19 +1124,36 @@ export function useSessionStream(
     const prevScrollTop = scroller?.scrollTop ?? 0;
     try {
       const res = await transport.fetchHistory(sessionId, { before: cursor });
-      apply((prev) => {
+      let newHasMore: boolean;
+      if (remoteDeviceId) {
+        const rawRes = res as unknown as RemoteRawHistory;
+        const raw = rawRes.messages ?? [];
+        const newMessages: TimelineMessage[] = raw
+          .filter((m) => m.role !== "tool")
+          .map(remoteMessageToTimeline);
+        apply((prev) => {
+          const existingIds = new Set(prev.map((m) => m.id));
+          const fresh = newMessages.filter((m) => !existingIds.has(m.id));
+          return [...fresh, ...prev];
+        });
+        oldestMessageIdRef.current = raw[0]?.id ?? cursor;
+        newHasMore = rawRes.hasMore ?? false;
+      } else {
         const newMessages: TimelineMessage[] = res.messages.map(
           historyMessageToTimeline,
         );
-        // 去重：socket 抢先到的或本地已有的不重复 prepend
-        const existingIds = new Set(prev.map((m) => m.id));
-        const fresh = newMessages.filter((m) => !existingIds.has(m.id));
-        return [...fresh, ...prev];
-      });
-      onUsageBatch?.(sessionId, res.byMessage);
-      oldestMessageIdRef.current = res.messages[0]?.id ?? cursor;
-      hasMoreHistoryRef.current = res.hasMore;
-      setHasMoreHistory(res.hasMore);
+        apply((prev) => {
+          // 去重：socket 抢先到的或本地已有的不重复 prepend
+          const existingIds = new Set(prev.map((m) => m.id));
+          const fresh = newMessages.filter((m) => !existingIds.has(m.id));
+          return [...fresh, ...prev];
+        });
+        onUsageBatch?.(sessionId, res.byMessage);
+        oldestMessageIdRef.current = res.messages[0]?.id ?? cursor;
+        newHasMore = res.hasMore;
+      }
+      hasMoreHistoryRef.current = newHasMore;
+      setHasMoreHistory(newHasMore);
       // 锚定视口：等 DOM 完成 prepend 后补偿 scrollTop
       requestAnimationFrame(() => {
         if (!scroller) return;
