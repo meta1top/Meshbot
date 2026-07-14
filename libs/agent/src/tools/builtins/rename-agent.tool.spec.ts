@@ -1,9 +1,40 @@
+import { QUICK_ASSISTANT_NAME_MAX } from "@meshbot/types-agent";
 import { vi } from "vitest";
 import { AgentContextService } from "../../account/agent-context.service";
 import type { AgentRenamePort } from "../agent-rename.port";
 import { RenameAgentTool } from "./rename-agent.tool";
 
 describe("rename_agent tool", () => {
+  it("schema 长度上限与 REST 侧 QUICK_ASSISTANT_NAME_MAX 对齐", async () => {
+    const agentCtx = new AgentContextService();
+    const port: AgentRenamePort = {
+      rename: vi.fn().mockResolvedValue(undefined),
+    };
+    const tool = new RenameAgentTool(agentCtx, port);
+
+    const tooLong = "名".repeat(QUICK_ASSISTANT_NAME_MAX + 1);
+    expect(tool.schema.safeParse({ name: tooLong }).success).toBe(false);
+
+    const exactlyMax = "名".repeat(QUICK_ASSISTANT_NAME_MAX);
+    expect(tool.schema.safeParse({ name: exactlyMax }).success).toBe(true);
+  });
+
+  it("schema trim 掉首尾空白；纯空格名被拒绝", async () => {
+    const agentCtx = new AgentContextService();
+    const port: AgentRenamePort = {
+      rename: vi.fn().mockResolvedValue(undefined),
+    };
+    const tool = new RenameAgentTool(agentCtx, port);
+
+    expect(tool.schema.safeParse({ name: "   " }).success).toBe(false);
+
+    const parsed = tool.schema.safeParse({ name: "  小助手  " });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.name).toBe("小助手");
+    }
+  });
+
   it("rename_agent 改当前 Agent 的名字", async () => {
     const agentCtx = new AgentContextService();
     const port: AgentRenamePort = {

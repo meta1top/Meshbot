@@ -6,8 +6,13 @@ import {
   AgentContextService,
 } from "@meshbot/lib-agent";
 import { TxTypeOrmModule } from "@meshbot/common";
-import { DEFAULT_AGENT_NAME } from "@meshbot/types-agent";
+import {
+  DEFAULT_AGENT_NAME,
+  QUICK_ASSISTANT_EVENTS,
+  type QuickAssistantRenamedEvent,
+} from "@meshbot/types-agent";
 import { Global, Module } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { AgentsModule } from "./agents.module";
 import { AuthModule } from "./auth.module";
 import { Setting } from "./entities/setting.entity";
@@ -19,6 +24,33 @@ import type {
   CloudTokenPort,
   RuntimeContextPort,
 } from "@meshbot/lib-agent";
+
+/**
+ * AGENT_RENAME_PORT 工厂逻辑：抽成具名函数便于单测（无需起 Nest 容器，同
+ * ImContextModule.createImContextPort 范式）。
+ *
+ * 「随手问」面板绑定的是账号默认 Agent（`AgentService.ensureDefault()` 语义：
+ * list() 第一个，零 agent 时创建）。只有被改名的 agentId 恰好是默认 Agent 时才
+ * emit `QUICK_ASSISTANT_EVENTS.renamed`，改非默认 Agent 不应刷新随手问面板标题。
+ * `ensureDefault()` 此处必然命中「已有 agent」分支（agentId 刚被 update 过，账号下
+ * 至少有一个 agent），不会触发建默认 agent 的副作用。
+ */
+export function createAgentRenamePort(
+  agents: AgentService,
+  emitter: EventEmitter2,
+): AgentRenamePort {
+  return {
+    async rename(agentId, name) {
+      await agents.update(agentId, { name });
+      const defaultAgent = await agents.ensureDefault();
+      if (defaultAgent.id === agentId) {
+        emitter.emit(QUICK_ASSISTANT_EVENTS.renamed, {
+          name,
+        } satisfies QuickAssistantRenamedEvent);
+      }
+    },
+  };
+}
 
 /**
  * @Global RuntimeContextModule：为 AgentModule 提供 RUNTIME_CONTEXT_PORT / CLOUD_TOKEN_PORT /
@@ -95,12 +127,8 @@ import type {
     },
     {
       provide: AGENT_RENAME_PORT,
-      useFactory: (agents: AgentService): AgentRenamePort => ({
-        async rename(agentId, name) {
-          await agents.update(agentId, { name });
-        },
-      }),
-      inject: [AgentService],
+      useFactory: createAgentRenamePort,
+      inject: [AgentService, EventEmitter2],
     },
   ],
   exports: [RUNTIME_CONTEXT_PORT, CLOUD_TOKEN_PORT, AGENT_RENAME_PORT],

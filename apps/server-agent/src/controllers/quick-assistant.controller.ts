@@ -30,8 +30,9 @@ export class QuickAssistantController {
 
   /**
    * 改随手问名字：写默认 Agent 的 name + ws 实时推送，多窗口/agent 改名一致刷新。
-   * 注意：`rename_agent` 工具改名走 AGENT_RENAME_PORT，不经过此处，不会触发这个
-   * ws 事件——工具触发的改名要等前端下次拉取（如重开面板）才可见，属已知取舍。
+   * 注意：`rename_agent` 工具改名走 AGENT_RENAME_PORT（不经过此 Controller），
+   * 但当改名目标是默认 Agent 时，该端口的实现（runtime-context.module.ts 的
+   * `createAgentRenamePort`）也会 emit 同一个 ws 事件，两条路径对齐。
    */
   @Patch("name")
   async rename(

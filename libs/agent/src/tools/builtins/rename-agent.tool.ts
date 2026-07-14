@@ -1,3 +1,4 @@
+import { QUICK_ASSISTANT_NAME_MAX } from "@meshbot/types-agent";
 import { Inject, Injectable } from "@nestjs/common";
 import { z } from "zod";
 import { AgentContextService } from "../../account/agent-context.service";
@@ -5,8 +6,10 @@ import { AGENT_RENAME_PORT, type AgentRenamePort } from "../agent-rename.port";
 import { Tool } from "../tool.decorator";
 import type { MeshbotTool } from "../tool.types";
 
+// 长度上限复用 REST 侧同一个常量（QUICK_ASSISTANT_NAME_MAX），避免工具改名与
+// 面板手动改名对同一个 agents.name 字段出现两套上限；trim() 防纯空格名。
 const RenameAgentArgsSchema = z.object({
-  name: z.string().min(1).max(32),
+  name: z.string().trim().min(1).max(QUICK_ASSISTANT_NAME_MAX),
 });
 type RenameAgentArgs = z.infer<typeof RenameAgentArgsSchema>;
 
