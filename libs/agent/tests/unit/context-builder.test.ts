@@ -17,6 +17,7 @@ import { ThreadStateService } from "../../src/graph/thread-state.service.js";
 import type { RuntimeContextPort } from "../../src/graph/runtime-context.port";
 import { MEMORY_GUIDE } from "../../src/memory/memory-guide";
 import type { MemoryService } from "../../src/memory/memory.service";
+import { LLMUSE_GUIDE } from "../../src/prompt/llmuse-guide.js";
 import { PromptService } from "../../src/prompt/prompt.service";
 import { ToolRegistry } from "../../src/tools/tool-registry";
 
@@ -83,7 +84,6 @@ function makeServices(opts: {
   );
   const threadState = new ThreadStateService(accountGraphProvider);
   const graphRunner = new GraphRunner(
-    opts.promptService,
     accountGraphProvider,
     modelResolver,
     contextBuilder,
@@ -324,13 +324,14 @@ describe("ContextBuilder.buildContextMessage", () => {
     expect(content).not.toMatch(/\d{4}-\d{2}-\d{2}/);
   });
 
-  it("quickAssistantName 非空：assistantName 注入所有会话类型（不再限 quick）", async () => {
+  it("agentName 非空：assistantName 注入所有会话类型（不再限 quick）", async () => {
     const fakePort: RuntimeContextPort = {
       resolve: async () => ({
         displayName: "Grant",
         language: "zh",
         timezone: "Asia/Shanghai",
-        quickAssistantName: "小M",
+        agentName: "小M",
+        agentSystemPrompt: null,
       }),
     };
     const { contextBuilder, ctx } = makeGs(fakePort);
@@ -357,5 +358,100 @@ describe("ContextBuilder.buildContextMessage", () => {
     // 无 port → 无 user/language 行
     expect(content).not.toContain("user:");
     expect(content).not.toContain("language:");
+  });
+});
+
+// ─── buildPersonaMessage ────────────────────────────────────────────────────
+//
+// 人格必须每轮刷新（稳定 id system:persona，reducer 原地替换）而非首轮写死：
+// 多 Agent 下用户随时可改 Agent 的 systemPrompt 或切换 Agent，首轮写死会让老
+// 会话永远带着旧人格，且静默不报错（本案全案最容易踩的坑，见 Task 7）。
+
+describe("ContextBuilder.buildPersonaMessage", () => {
+  let testDir: string;
+
+  beforeEach(() => {
+    testDir = mkdtempSync(path.join(tmpdir(), "meshbot-persona-msg-test-"));
+    mkdirSync(path.join(testDir, "prompt"), { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(testDir, { recursive: true, force: true });
+  });
+
+  /** 构造带可选 runtimeContext / memory 的 ContextBuilder。 */
+  function makeGs(
+    runtimeContext?: RuntimeContextPort,
+    fakeMemory?: Partial<MemoryService>,
+  ): { contextBuilder: ContextBuilder } {
+    const ctx = new AccountContextService();
+    const configService = new MeshbotConfigService(
+      ctx,
+      new AgentContextService(),
+    );
+    (configService as unknown as Record<string, string>).meshbotDir = testDir;
+    const promptService = new PromptService(configService, ctx);
+    const toolRegistry = new ToolRegistry(
+      { getProviders: () => [] } as never,
+      new AccountContextService(),
+      new AgentContextService(),
+    );
+    const fakeModel = {
+      stream: async () => {
+        async function* gen() {
+          yield new AIMessageChunk({ id: "x", content: "ok" });
+        }
+        return gen();
+      },
+    };
+    const { contextBuilder } = makeServices({
+      configService,
+      promptService,
+      account: ctx,
+      fakeModel,
+      toolRegistry,
+      runtimeContext,
+      memory: fakeMemory as MemoryService | undefined,
+    });
+    return { contextBuilder };
+  }
+
+  it("buildPersonaMessage 用稳定 id system:persona", async () => {
+    const { contextBuilder } = makeGs();
+    const msg = await contextBuilder.buildPersonaMessage();
+    expect(msg.id).toBe("system:persona");
+  });
+
+  it("人格 = Agent 的 systemPrompt + 记忆段 + LLMUSE 指南", async () => {
+    const fakePort: RuntimeContextPort = {
+      resolve: async () => ({
+        displayName: null,
+        language: null,
+        timezone: null,
+        agentName: "研发助手",
+        agentSystemPrompt: "你是研发助手，只写 TypeScript。",
+      }),
+    };
+    const { contextBuilder } = makeGs(fakePort, { readCore: () => "" });
+    const msg = await contextBuilder.buildPersonaMessage();
+    const content = String(msg.content);
+    expect(content).toContain("你是研发助手，只写 TypeScript。");
+    expect(content).toContain(MEMORY_GUIDE);
+    expect(content).toContain(LLMUSE_GUIDE);
+  });
+
+  it("systemPrompt 为空时不产生前导空行", async () => {
+    const fakePort: RuntimeContextPort = {
+      resolve: async () => ({
+        displayName: null,
+        language: null,
+        timezone: null,
+        agentName: "M",
+        agentSystemPrompt: "",
+      }),
+    };
+    const { contextBuilder } = makeGs(fakePort);
+    const msg = await contextBuilder.buildPersonaMessage();
+    expect(String(msg.content).startsWith("\n")).toBe(false);
   });
 });

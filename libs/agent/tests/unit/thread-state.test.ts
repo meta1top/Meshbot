@@ -73,7 +73,6 @@ function makeServices(opts: {
   );
   const threadState = new ThreadStateService(accountGraphProvider);
   const graphRunner = new GraphRunner(
-    opts.promptService,
     accountGraphProvider,
     modelResolver,
     contextBuilder,

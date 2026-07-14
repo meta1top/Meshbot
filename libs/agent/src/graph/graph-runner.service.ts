@@ -8,14 +8,10 @@ import {
   HumanMessage,
   isAIMessageChunk,
   RemoveMessage,
-  SystemMessage,
 } from "@langchain/core/messages";
 import { Injectable } from "@nestjs/common";
-import { LLMUSE_GUIDE } from "../prompt/llmuse-guide";
-import { PromptService } from "../prompt/prompt.service";
 import { AccountGraphProvider } from "./account-graph.provider";
 import { ContextBuilder } from "./context-builder";
-import type { GraphState } from "./graph.builder";
 import { ModelResolver } from "./model-resolver.service";
 import { ThreadStateService } from "./thread-state.service";
 import type { AgentConfig, StreamChunk, ThreadId } from "./graph.types";
@@ -211,7 +207,6 @@ function resolveRecursionLimit(): number {
 @Injectable()
 export class GraphRunner {
   constructor(
-    private readonly promptService: PromptService,
     private readonly accountGraphProvider: AccountGraphProvider,
     private readonly modelResolver: ModelResolver,
     private readonly contextBuilder: ContextBuilder,
@@ -221,10 +216,10 @@ export class GraphRunner {
   /**
    * 创建会话，返回 thread id。
    *
-   * 仅生成 UUID；system prompt 在每次 streamMessage 时按需前置，
+   * 仅生成 UUID；人格 / 上下文消息在每次 streamMessage 时按需前置，
    * 不在此处写入 checkpointer（checkpointer.put 直写 API 易出错）。
-   * config 当前完全未使用（含 systemPrompt —— 系统提示统一由 PromptService 提供）；
-   * 保留入参便于后续接入 temperature / model。
+   * config 当前完全未使用（含 systemPrompt —— 人格统一由 ContextBuilder.buildPersonaMessage
+   * 从当前 Agent 的 systemPrompt 组装，每轮刷新）；保留入参便于后续接入 temperature / model。
    */
   async startSession(_config: AgentConfig): Promise<ThreadId> {
     const threadId = randomUUID();
@@ -245,7 +240,8 @@ export class GraphRunner {
    *
    * 每条入参构造一条带显式 id 的 HumanMessage（id = 调用方的 PendingMessage.id），
    * 让 checkpointer 里的 user 消息与 pending 表可对齐去重。
-   * system prompt 仅在首轮注入（无历史时），避免在 checkpointer 状态里重复累加。
+   * system:persona / system:ctx / system:skills 均以稳定 id **每轮**刷新推送，
+   * reducer 按 id 原地替换、不累积（详见 graph.builder.ts 的 mergeMessages）。
    * 透传 signal 支持中断。
    *
    * @param inputs 至少一条 —— 调用方保证非空批次。
@@ -266,27 +262,13 @@ export class GraphRunner {
     signal?: AbortSignal,
     opts?: { subAgent?: boolean },
   ): AsyncGenerator<StreamChunk> {
-    this.promptService.reloadIfChanged();
-    const systemPrompt = [
-      this.promptService.getPrompt("system"),
-      this.contextBuilder.buildMemorySection(),
-      LLMUSE_GUIDE,
-    ]
-      .filter(Boolean)
-      .join("\n\n");
     await this.threadState.sanitizeOrphanToolCalls(threadId);
-    const state = await this.pickGraph(opts).getState({
-      configurable: { thread_id: threadId },
-    });
-    const hasHistory =
-      Array.isArray((state.values as GraphState)?.messages) &&
-      (state.values as GraphState).messages.length > 0;
     const inputMessages: BaseMessage[] = [];
-    if (systemPrompt && !hasHistory) {
-      inputMessages.push(new SystemMessage(systemPrompt));
-    }
-    // system:ctx / system:skills 用稳定 id 每轮重发；reducer 按 id 原地更新
-    //（位置不变、不累积），无需先 RemoveMessage 再 Add。
+    // system:persona / system:ctx / system:skills 全部用稳定 id 每轮重发；
+    // reducer 按 id 原地更新（位置不变、不累积），无需先 RemoveMessage 再 Add。
+    // 人格必须每轮刷新：Agent 的 systemPrompt 随时可改，首轮写死会让老会话
+    // 永远带旧人格（静默错误）。
+    inputMessages.push(await this.contextBuilder.buildPersonaMessage());
     inputMessages.push(await this.contextBuilder.buildContextMessage(threadId));
     if (this.contextBuilder.hasSkills()) {
       inputMessages.push(this.contextBuilder.buildSkillsMessage());
@@ -332,6 +314,8 @@ export class GraphRunner {
       threadId,
       {
         messages: [
+          new RemoveMessage({ id: "system:persona" }),
+          await this.contextBuilder.buildPersonaMessage(),
           new RemoveMessage({ id: "system:ctx" }),
           await this.contextBuilder.buildContextMessage(threadId),
         ],

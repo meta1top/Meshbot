@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { AIMessageChunk, ToolMessage } from "@langchain/core/messages";
+import type { BaseMessage } from "@langchain/core/messages";
 import { ChatGenerationChunk } from "@langchain/core/outputs";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -79,7 +80,6 @@ function makeServices(opts: {
   );
   const threadState = new ThreadStateService(accountGraphProvider);
   const graphRunner = new GraphRunner(
-    opts.promptService,
     accountGraphProvider,
     modelResolver,
     contextBuilder,
@@ -532,6 +532,200 @@ describe("GraphRunner system:ctx 刷新不累积", () => {
       typeof ctxMsgs[0].content === "string" ? ctxMsgs[0].content : "";
     expect(ctxContent).toContain("sessionId:");
     expect(ctxContent).toContain("cloudUserId:");
+  });
+});
+
+// ─── system:persona 每轮刷新 ────────────────────────────────────────────────
+//
+// 背景（Task 7，全案最容易踩的坑）：人格若只在首轮注入 checkpointer，之后永不
+// 刷新——多 Agent 下用户改了 Agent 的 systemPrompt 或换了 Agent，旧会话仍带旧
+// 人格，且静默不报错。这里直接拦截 pickGraph().stream 收到的真实
+// input.messages（而非只看最终 state），因为「仅首轮注入」的回归不会清掉
+// state 里已有的 system:persona，光看最终快照抓不到「第二轮没有重发」的坏味。
+
+describe("GraphRunner system:persona 每轮刷新", () => {
+  let testDir: string;
+
+  beforeEach(() => {
+    testDir = mkdtempSync(path.join(tmpdir(), "meshbot-persona-refresh-test-"));
+    mkdirSync(path.join(testDir, "prompt"), { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(testDir, { recursive: true, force: true });
+  });
+
+  it("system:persona 每轮都推送（不是只在首轮）", async () => {
+    const ctx = new AccountContextService();
+    const configService = new MeshbotConfigService(
+      ctx,
+      new AgentContextService(),
+    );
+    (configService as unknown as Record<string, string>).meshbotDir = testDir;
+    const promptService = new PromptService(configService, ctx);
+    const toolRegistry = new ToolRegistry(
+      { getProviders: () => [] } as never,
+      new AccountContextService(),
+      new AgentContextService(),
+    );
+
+    class SimpleModel extends (
+      await import("@langchain/core/language_models/chat_models")
+    ).BaseChatModel {
+      private callCount = 0;
+      _llmType() {
+        return "simple-fake";
+      }
+      async _generate(): Promise<never> {
+        throw new Error("不应走 _generate");
+      }
+      async *_streamResponseChunks(): AsyncGenerator<ChatGenerationChunk> {
+        this.callCount += 1;
+        const msgId = `msg-persona-${this.callCount}`;
+        yield new ChatGenerationChunk({
+          message: new AIMessageChunk({ id: msgId, content: "ok" }),
+          text: "ok",
+        });
+      }
+    }
+
+    const fakePort: RuntimeContextPort = {
+      resolve: async () => ({
+        displayName: null,
+        language: null,
+        timezone: null,
+        agentName: "M",
+        agentSystemPrompt: "初始人格",
+      }),
+    };
+
+    const { graphRunner: gr } = makeServices({
+      configService,
+      promptService,
+      account: ctx,
+      fakeModel: new SimpleModel({}),
+      toolRegistry,
+      runtimeContext: fakePort,
+    });
+
+    const threadId = await gr.startSession({ model: "fake" });
+
+    // 第一轮：真实跑一次，建立 checkpointer 历史
+    await ctx.run(TEST_ACCOUNT, async () => {
+      for await (const _ of gr.streamMessage(threadId, [
+        { id: "pm-1", content: "hi" },
+      ])) {
+        // 消费完
+      }
+    });
+
+    // 第二轮：拦截 pickGraph().stream 的真实 input，验证 system:persona 仍被推送
+    const sent: BaseMessage[] = [];
+    (gr as unknown as { pickGraph: (opts?: unknown) => unknown }).pickGraph =
+      () => ({
+        stream: (input: { messages: BaseMessage[] }) => {
+          sent.push(...input.messages);
+          return (async function* () {})();
+        },
+      });
+
+    await ctx.run(TEST_ACCOUNT, async () => {
+      for await (const _ of gr.streamMessage(threadId, [
+        { id: "pm-2", content: "hello" },
+      ])) {
+        // 消费完
+      }
+    });
+
+    expect(sent.some((m) => m.id === "system:persona")).toBe(true);
+  });
+
+  it("改了 Agent 的 systemPrompt，下一轮的 system:persona 内容跟着变", async () => {
+    const ctx = new AccountContextService();
+    const configService = new MeshbotConfigService(
+      ctx,
+      new AgentContextService(),
+    );
+    (configService as unknown as Record<string, string>).meshbotDir = testDir;
+    const promptService = new PromptService(configService, ctx);
+    const toolRegistry = new ToolRegistry(
+      { getProviders: () => [] } as never,
+      new AccountContextService(),
+      new AgentContextService(),
+    );
+
+    class SimpleModel extends (
+      await import("@langchain/core/language_models/chat_models")
+    ).BaseChatModel {
+      private callCount = 0;
+      _llmType() {
+        return "simple-fake";
+      }
+      async _generate(): Promise<never> {
+        throw new Error("不应走 _generate");
+      }
+      async *_streamResponseChunks(): AsyncGenerator<ChatGenerationChunk> {
+        this.callCount += 1;
+        const msgId = `msg-persona-b-${this.callCount}`;
+        yield new ChatGenerationChunk({
+          message: new AIMessageChunk({ id: msgId, content: "ok" }),
+          text: "ok",
+        });
+      }
+    }
+
+    // 可变 RuntimeContextPort：模拟两轮之间用户改了 Agent 的 systemPrompt
+    let currentPrompt = "初始人格";
+    const mutablePort: RuntimeContextPort = {
+      resolve: async () => ({
+        displayName: null,
+        language: null,
+        timezone: null,
+        agentName: "M",
+        agentSystemPrompt: currentPrompt,
+      }),
+    };
+
+    const { graphRunner: gr } = makeServices({
+      configService,
+      promptService,
+      account: ctx,
+      fakeModel: new SimpleModel({}),
+      toolRegistry,
+      runtimeContext: mutablePort,
+    });
+
+    const threadId = await gr.startSession({ model: "fake" });
+
+    await ctx.run(TEST_ACCOUNT, async () => {
+      for await (const _ of gr.streamMessage(threadId, [
+        { id: "pm-1", content: "hi" },
+      ])) {
+        // 消费完
+      }
+    });
+
+    currentPrompt = "全新人格";
+
+    const sent: BaseMessage[] = [];
+    (gr as unknown as { pickGraph: (opts?: unknown) => unknown }).pickGraph =
+      () => ({
+        stream: (input: { messages: BaseMessage[] }) => {
+          sent.push(...input.messages);
+          return (async function* () {})();
+        },
+      });
+
+    await ctx.run(TEST_ACCOUNT, async () => {
+      for await (const _ of gr.streamMessage(threadId, [
+        { id: "pm-2", content: "hello" },
+      ])) {
+        // 消费完
+      }
+    });
+
+    const persona = sent.find((m) => m.id === "system:persona");
+    expect(String(persona?.content)).toContain("全新人格");
   });
 });
 

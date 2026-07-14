@@ -13,7 +13,6 @@ import { GraphRunner } from "../../src/graph/graph-runner.service.js";
 import { ModelResolver } from "../../src/graph/model-resolver.service.js";
 import { ModelRunContext } from "../../src/graph/model-run-context.js";
 import { ThreadStateService } from "../../src/graph/thread-state.service.js";
-import { PromptService } from "../../src/prompt/prompt.service";
 import { ToolRegistry } from "../../src/tools/tool-registry";
 
 const TEST_ACCOUNT = "test-compaction-account";
@@ -35,7 +34,6 @@ describe("GraphService compaction hooks", () => {
       new AgentContextService(),
     );
     (configService as unknown as Record<string, string>).meshbotDir = testDir;
-    const promptService = new PromptService(configService, ctx);
     invokeCalls = [];
     const fakeModel = {
       stream: async () => {
@@ -72,7 +70,6 @@ describe("GraphService compaction hooks", () => {
     const contextBuilder = new ContextBuilder(ctx);
     threadState = new ThreadStateService(accountGraphProvider);
     graphRunner = new GraphRunner(
-      promptService,
       accountGraphProvider,
       modelResolver,
       contextBuilder,
