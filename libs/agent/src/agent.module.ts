@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { DiscoveryModule } from "@nestjs/core";
 import { EventEmitterModule } from "@nestjs/event-emitter";
 import { AccountContextModule } from "./account/account-context.module";
+import { AgentContextService } from "./account/agent-context.service";
 import { MeshbotConfigModule } from "./config/meshbot-config.module";
 import { AccountGraphProvider } from "./graph/account-graph.provider";
 import { ContextBuilder } from "./graph/context-builder";
@@ -108,6 +109,7 @@ import { DispatchSubagentTool } from "./tools/builtins/dispatch-subagent.tool";
     PromptService,
     ModelResolver,
     ModelRunContext,
+    AgentContextService,
     AccountGraphProvider,
     ContextBuilder,
     ThreadStateService,
@@ -117,6 +119,7 @@ import { DispatchSubagentTool } from "./tools/builtins/dispatch-subagent.tool";
     GraphRunner,
     ModelResolver,
     ModelRunContext,
+    AgentContextService,
     ThreadStateService,
     PromptService,
     ToolRegistry,

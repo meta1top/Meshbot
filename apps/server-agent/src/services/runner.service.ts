@@ -1,5 +1,6 @@
 import {
   AccountContextService,
+  AgentContextService,
   GraphRunner,
   ModelRunContext,
 } from "@meshbot/lib-agent";
@@ -11,6 +12,7 @@ import {
 import { Injectable, Logger, type OnModuleInit } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
 import { EventEmitter2 } from "@nestjs/event-emitter";
+import { AgentService } from "./agent.service";
 import { ContextCompactor } from "./context-compactor.service";
 import { isContextLengthError } from "./context-compactor.utils";
 import { LlmCallService } from "./llm-call.service";
@@ -91,6 +93,8 @@ export class RunnerService implements OnModuleInit {
     private readonly modelConfig: ModelConfigService,
     private readonly account: AccountContextService,
     private readonly modelRunCtx: ModelRunContext,
+    private readonly agentCtx: AgentContextService,
+    private readonly agents: AgentService,
   ) {}
 
   /** 启动时把遗留的 processing 消息退回 pending（重启 inflight 丢失后可重跑）。 */
@@ -472,10 +476,12 @@ export class RunnerService implements OnModuleInit {
   }
 
   /**
-   * stream 消费入口：先读 session 拿 kind（subAgent 判定）与 modelConfigId
-   * （per-run 模型覆盖），再把「建流 + for-await 消费 + finally」整段包进
-   * ModelRunContext.run —— async generator 的 next() 跑在调用方（本方法）
-   * 的 ALS 上下文里，包裹范围必须覆盖整个消费循环，只包建流无效。
+   * stream 消费入口：先读 session 拿 kind（subAgent 判定）、agentId、modelConfigId，
+   * 再把「建流 + for-await 消费 + finally」整段包进 AgentContext + ModelRunContext ——
+   * async generator 的 next() 跑在调用方（本方法）的 ALS 上下文里，包裹范围必须
+   * 覆盖整个消费循环，只包建流无效。
+   *
+   * 模型三级优先级：会话覆盖 > Agent 默认 > 账号启用首行（最后一级由 ModelResolver 兜底）。
    */
   private async consumeRunStream(
     sessionId: string,
@@ -486,14 +492,20 @@ export class RunnerService implements OnModuleInit {
   ): Promise<void> {
     const session = await this.sessions.findOrNull(sessionId);
     const subAgent = session?.kind === "subagent";
-    await this.modelRunCtx.run(session?.modelConfigId ?? null, () =>
-      this.consumeRunStreamInCtx(
-        sessionId,
-        batch,
-        run,
-        resume,
-        runStartedAt,
-        subAgent,
+    const agentId = session?.agentId ?? (await this.agents.ensureDefault()).id;
+    const agent = await this.agents.findOrNull(agentId);
+    const modelOverride =
+      session?.modelConfigId ?? agent?.defaultModelConfigId ?? null;
+    await this.agentCtx.run(agentId, () =>
+      this.modelRunCtx.run(modelOverride, () =>
+        this.consumeRunStreamInCtx(
+          sessionId,
+          batch,
+          run,
+          resume,
+          runStartedAt,
+          subAgent,
+        ),
       ),
     );
   }
