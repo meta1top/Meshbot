@@ -44,6 +44,7 @@ import { ModelConfigController } from "./controllers/model-config.controller";
 import { SettingController } from "./controllers/setting.controller";
 import { SetupController } from "./controllers/setup.controller";
 import { EnvSchema } from "./env.schema";
+import { Agent } from "./entities/agent.entity";
 import { CloudIdentity } from "./entities/cloud-identity.entity";
 import { CronJob } from "./entities/cron-job.entity";
 import { LlmCall } from "./entities/llm-call.entity";
@@ -53,6 +54,7 @@ import { Session } from "./entities/session.entity";
 import { SessionMessage } from "./entities/session-message.entity";
 import { Setting } from "./entities/setting.entity";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
+import { AgentService } from "./services/agent.service";
 import { SettingService } from "./services/setting.service";
 import { SessionModule } from "./session.module";
 import { StaticModule } from "./static.module";
@@ -89,6 +91,7 @@ const meshbotDir = resolveMeshbotDir();
       type: "better-sqlite3",
       database: path.join(meshbotDir, "main.db"),
       entities: [
+        Agent,
         LlmCall,
         ModelConfig,
         Setting,
@@ -114,7 +117,7 @@ const meshbotDir = resolveMeshbotDir();
         db.pragma("busy_timeout = 5000");
       },
     }),
-    TxTypeOrmModule.forFeature([Setting]),
+    TxTypeOrmModule.forFeature([Agent, Setting]),
     // Phase 5 Track B3：限流（本地轨较宽，单进程仅做防风暴）
     ThrottlerModule.forRoot([
       { name: "short", ttl: 1000, limit: 50 },
@@ -147,6 +150,7 @@ const meshbotDir = resolveMeshbotDir();
     SetupController,
   ],
   providers: [
+    AgentService,
     SettingService,
     RedisHealthIndicator,
     // 注意：guard 注册顺序 = 执行顺序（先 throttle、后 jwt）
@@ -154,5 +158,6 @@ const meshbotDir = resolveMeshbotDir();
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_INTERCEPTOR, useClass: AccountContextInterceptor },
   ],
+  exports: [AgentService],
 })
 export class AppModule {}
