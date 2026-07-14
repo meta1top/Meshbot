@@ -38,7 +38,19 @@
     "remoteSessionOfflineHint": "设备当前离线，无法发起远程会话，请等待设备上线后重试",
     "newSessionTitle": "开始新会话",
     "newSessionHint": "输入你的任务或问题，发送后将在该设备上创建新会话",
-    "remoteSessionTitle": "远程会话"
+    "remoteSessionTitle": "远程会话",
+    "launcher": {
+      "title": "开始一个任务",
+      "subtitle": "选择一台已授权设备，把任务交给它的 Agent",
+      "placeholder": "输入你的任务或问题",
+      "pickDevice": "选择设备",
+      "pickDeviceFirst": "请先选择要执行任务的设备",
+      "willRunOn": "将在 {device} 上执行"
+    },
+    "input": {
+      "attachment": "",
+      "stop": ""
+    }
   },
   "assistantSidebar": {
     "title": "设备",

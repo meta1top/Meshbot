@@ -38,7 +38,19 @@
     "remoteSessionOfflineHint": "This device is currently offline and cannot start a remote session. Please try again once it comes back online.",
     "newSessionTitle": "Start a new session",
     "newSessionHint": "Type your task or question — a new session will be created on this device once you send it",
-    "remoteSessionTitle": "Remote session"
+    "remoteSessionTitle": "Remote session",
+    "launcher": {
+      "title": "Start a task",
+      "subtitle": "Pick an authorized device and hand the task to its Agent",
+      "placeholder": "Enter your task or question",
+      "pickDevice": "Select device",
+      "pickDeviceFirst": "Please select a device to run the task",
+      "willRunOn": "Will run on {device}"
+    },
+    "input": {
+      "attachment": "",
+      "stop": ""
+    }
   },
   "assistantSidebar": {
     "title": "Devices",

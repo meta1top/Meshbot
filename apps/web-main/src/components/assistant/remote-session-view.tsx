@@ -18,6 +18,7 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChatScroll } from "@/hooks/use-chat-scroll";
 import { useRemoteSessions } from "@/hooks/use-remote-sessions";
+import { takeLauncherDraft } from "@/lib/launcher-draft";
 import { createRemoteSessionTransport } from "@/lib/session-transport";
 import { useProfile } from "@/rest/auth";
 import { RemoteModelSelect } from "./remote-model-select";
@@ -105,6 +106,8 @@ interface RemoteSessionViewProps {
   /** 当前组织 id（模型选择器用）。 */
   orgId: string;
   /** 新建会话解析出 sessionId 后回调（调用方负责把它同步进 URL）。 */
+  /** 启动台交接来的一次性草稿 token；挂载后取回并自动发送（新建会话首轮）。 */
+  draftToken?: string | null;
   onSessionCreated: (sessionId: string, streamId: string) => void;
 }
 
@@ -171,6 +174,7 @@ function RemoteSessionViewReady({
   sessionId,
   streamId,
   orgId,
+  draftToken,
   onSessionCreated,
   transport,
 }: RemoteSessionViewProps & { transport: SessionTransport }) {
@@ -284,6 +288,21 @@ function RemoteSessionViewReady({
     setDraft("");
     await stream.send(text);
   };
+
+  // 启动台草稿：挂载后取回（读即删）并自动发起首轮 create。
+  // - 必须在 effect 里取，不能放渲染期——takeLauncherDraft 有「读即删」副作用；
+  // - draftSentRef 守卫确保只发一次（StrictMode 双挂载 / 重渲染都不重复发送）；
+  // - handleSend 走 ref 取当次最新实现，从而不必进依赖数组（进了会随每次渲染重跑）。
+  const handleSendRef = useRef(handleSend);
+  handleSendRef.current = handleSend;
+  const draftSentRef = useRef(false);
+  useEffect(() => {
+    if (draftSentRef.current || !draftToken || sessionId) return;
+    const text = takeLauncherDraft(draftToken);
+    if (!text) return;
+    draftSentRef.current = true;
+    void handleSendRef.current(text);
+  }, [draftToken, sessionId]);
 
   const guardedConfirm = useCallback(
     async (

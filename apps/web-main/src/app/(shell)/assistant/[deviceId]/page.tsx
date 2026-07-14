@@ -36,6 +36,8 @@ function AssistantDeviceView() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("session");
   const streamId = searchParams.get("streamId");
+  // 启动台交接来的一次性草稿 token（读即删，见 lib/launcher-draft.ts）
+  const draftToken = searchParams.get("draft");
   const router = useRouter();
   const { data: devices, isPending, error } = useDevices();
   const { data: onlineData } = useDeviceOnline(deviceId);
@@ -125,6 +127,7 @@ function AssistantDeviceView() {
           deviceId={deviceId}
           sessionId={sessionId}
           streamId={streamId}
+          draftToken={draftToken}
           orgId={orgId}
           onSessionCreated={(newSessionId, newStreamId) =>
             router.replace(
