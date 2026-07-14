@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { AIMessageChunk, ToolMessage } from "@langchain/core/messages";
-import type { BaseMessage } from "@langchain/core/messages";
 import { ChatGenerationChunk } from "@langchain/core/outputs";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -539,9 +538,14 @@ describe("GraphRunner system:ctx 刷新不累积", () => {
 //
 // 背景（Task 7，全案最容易踩的坑）：人格若只在首轮注入 checkpointer，之后永不
 // 刷新——多 Agent 下用户改了 Agent 的 systemPrompt 或换了 Agent，旧会话仍带旧
-// 人格，且静默不报错。这里直接拦截 pickGraph().stream 收到的真实
-// input.messages（而非只看最终 state），因为「仅首轮注入」的回归不会清掉
-// state 里已有的 system:persona，光看最终快照抓不到「第二轮没有重发」的坏味。
+// 人格，且静默不报错。同时人格靠稳定 id "system:persona" + mergeMessages
+// reducer「同 id 原地替换」防止在 checkpointer 里越攒越多；如果这个 id 被写
+// 错（大小写 / 拼写），reducer 不会命中替换，新旧两条人格消息会同时留在
+// checkpointer 里、一起进 LLM context——静默故障。
+//
+// 两个用例都真实跑两轮（不替换 pickGraph、不 mock stream），直接读
+// checkpointer 的 getState() 快照断言，跟上面 system:ctx 的验证方式一致：
+// 只看最终 state 才能同时抓住「累积成两条」和「内容没刷新成最新」两类回归。
 
 describe("GraphRunner system:persona 每轮刷新", () => {
   let testDir: string;
@@ -555,7 +559,7 @@ describe("GraphRunner system:persona 每轮刷新", () => {
     rmSync(testDir, { recursive: true, force: true });
   });
 
-  it("system:persona 每轮都推送（不是只在首轮）", async () => {
+  it("连续两轮 streamMessage 后 checkpointer 里 system:persona 恰好 1 条（不累积）", async () => {
     const ctx = new AccountContextService();
     const configService = new MeshbotConfigService(
       ctx,
@@ -599,7 +603,7 @@ describe("GraphRunner system:persona 每轮刷新", () => {
       }),
     };
 
-    const { graphRunner: gr } = makeServices({
+    const { graphRunner: gr, threadState: ts } = makeServices({
       configService,
       promptService,
       account: ctx,
@@ -619,16 +623,8 @@ describe("GraphRunner system:persona 每轮刷新", () => {
       }
     });
 
-    // 第二轮：拦截 pickGraph().stream 的真实 input，验证 system:persona 仍被推送
-    const sent: BaseMessage[] = [];
-    (gr as unknown as { pickGraph: (opts?: unknown) => unknown }).pickGraph =
-      () => ({
-        stream: (input: { messages: BaseMessage[] }) => {
-          sent.push(...input.messages);
-          return (async function* () {})();
-        },
-      });
-
+    // 第二轮：仍然真实跑（不替换 pickGraph），systemPrompt 未变——验证即便内容
+    // 相同，reducer 也是原地替换而不是每轮多攒一条
     await ctx.run(TEST_ACCOUNT, async () => {
       for await (const _ of gr.streamMessage(threadId, [
         { id: "pm-2", content: "hello" },
@@ -637,10 +633,17 @@ describe("GraphRunner system:persona 每轮刷新", () => {
       }
     });
 
-    expect(sent.some((m) => m.id === "system:persona")).toBe(true);
+    // 直接从 checkpointer 读最终 state 快照，而非拦截 stream 的中间 input——
+    // 只有读最终 state 才能同时抓住「累积成两条」这类回归
+    const snapshot = await ctx.run(TEST_ACCOUNT, () =>
+      ts.getMessagesSnapshot(threadId),
+    );
+    const personaMsgs = snapshot.filter((m) => m.id === "system:persona");
+    expect(personaMsgs.length).toBe(1);
+    expect(String(personaMsgs[0].content)).toContain("初始人格");
   });
 
-  it("改了 Agent 的 systemPrompt，下一轮的 system:persona 内容跟着变", async () => {
+  it("改了 Agent 的 systemPrompt，checkpointer 里的 system:persona 仍恰好 1 条且内容是新人格", async () => {
     const ctx = new AccountContextService();
     const configService = new MeshbotConfigService(
       ctx,
@@ -686,7 +689,7 @@ describe("GraphRunner system:persona 每轮刷新", () => {
       }),
     };
 
-    const { graphRunner: gr } = makeServices({
+    const { graphRunner: gr, threadState: ts } = makeServices({
       configService,
       promptService,
       account: ctx,
@@ -697,6 +700,7 @@ describe("GraphRunner system:persona 每轮刷新", () => {
 
     const threadId = await gr.startSession({ model: "fake" });
 
+    // 第一轮：真实跑一次，把「初始人格」写进 checkpointer 历史
     await ctx.run(TEST_ACCOUNT, async () => {
       for await (const _ of gr.streamMessage(threadId, [
         { id: "pm-1", content: "hi" },
@@ -707,15 +711,8 @@ describe("GraphRunner system:persona 每轮刷新", () => {
 
     currentPrompt = "全新人格";
 
-    const sent: BaseMessage[] = [];
-    (gr as unknown as { pickGraph: (opts?: unknown) => unknown }).pickGraph =
-      () => ({
-        stream: (input: { messages: BaseMessage[] }) => {
-          sent.push(...input.messages);
-          return (async function* () {})();
-        },
-      });
-
+    // 第二轮：仍然真实跑（不替换 pickGraph），走真实的 StateGraph /
+    // checkpointer / mergeMessages reducer
     await ctx.run(TEST_ACCOUNT, async () => {
       for await (const _ of gr.streamMessage(threadId, [
         { id: "pm-2", content: "hello" },
@@ -724,8 +721,18 @@ describe("GraphRunner system:persona 每轮刷新", () => {
       }
     });
 
-    const persona = sent.find((m) => m.id === "system:persona");
-    expect(String(persona?.content)).toContain("全新人格");
+    // 直接读 checkpointer 最终 state 快照断言：
+    // 1) system:persona 恰好 1 条——证明 reducer 原地替换、没有把旧的一条也
+    //    留下攒成两条（id 写错时会退化成两条不同 id 的消息，这里就会不等于 1）
+    // 2) 内容是第二轮的新人格、且不含第一轮的旧人格
+    const snapshot = await ctx.run(TEST_ACCOUNT, () =>
+      ts.getMessagesSnapshot(threadId),
+    );
+    const personaMsgs = snapshot.filter((m) => m.id === "system:persona");
+    expect(personaMsgs.length).toBe(1);
+    const personaContent = String(personaMsgs[0].content);
+    expect(personaContent).toContain("全新人格");
+    expect(personaContent).not.toContain("初始人格");
   });
 });
 
