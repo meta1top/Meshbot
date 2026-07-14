@@ -39,6 +39,9 @@ function make() {
   };
   const emitter = makeEmitter();
   const registry = new RemoteRunRegistryService();
+  const agents = {
+    ensureDefault: jest.fn().mockResolvedValue({ id: "agent-default" }),
+  };
   const svc = new RemoteRunInboundService(
     sessions as never,
     runner as never,
@@ -46,8 +49,9 @@ function make() {
     account as never,
     emitter as never,
     registry,
+    agents as never,
   );
-  return { svc, sessions, runner, relay, account, emitter, registry };
+  return { svc, sessions, runner, relay, account, emitter, registry, agents };
 }
 
 const fwd = (over: object) => ({
@@ -71,6 +75,7 @@ describe("RemoteRunInboundService", () => {
       expect(account.run).toHaveBeenCalledWith("u1", expect.any(Function));
       expect(sessions.createSession).toHaveBeenCalledWith({
         content: "hello",
+        agentId: "agent-default",
       });
       expect(runner.kick).toHaveBeenCalledWith("s-new");
     });

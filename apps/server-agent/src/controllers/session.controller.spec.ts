@@ -52,6 +52,7 @@ describe("SessionController.history byMessage（id==langgraphId 回归）", () =
       {} as unknown as SessionTitleService,
       undefined as never,
       undefined as never,
+      undefined as never,
     );
 
     const res = await controller.history("s1", { limit: "10" });
@@ -98,6 +99,7 @@ describe("SessionController.history 嵌套卡 subSessionId 关联", () => {
         listPage: async () => ({ messages: [assistantRow], hasMore: false }),
       } as unknown as SessionMessageService,
       {} as unknown as SessionTitleService,
+      undefined as never,
       undefined as never,
       undefined as never,
     );

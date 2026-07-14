@@ -74,6 +74,8 @@ export const CreateSessionSchema = z.object({
   kind: z.enum(["user", "quick"]).optional(),
   /** 会话使用的模型配置 id；缺省走账号默认（首个 enabled）。 */
   modelConfigId: z.string().optional(),
+  /** 会话归属的 Agent id；缺省由 Controller 兜底取账号默认 Agent（ensureDefault）。 */
+  agentId: z.string().optional(),
 });
 export type CreateSessionInput = z.infer<typeof CreateSessionSchema>;
 

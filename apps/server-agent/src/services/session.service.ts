@@ -79,21 +79,26 @@ export class SessionService {
   /**
    * 创建会话：建 Session(running) + 写首条 pending 消息。
    * 跨两表写入 —— 用 @Transactional 包裹的私有方法。
+   *
+   * `agentId` 必填：会话归属的 Agent 决定人格/技能/MCP/记忆/工作区如何解析，调用方
+   * （Controller / 远程 run 入站等）须自行给出真实来源，拿不到就调
+   * `AgentService.ensureDefault()`——本方法不做兜底，杜绝空字符串静默落库。
    */
   async createSession(
-    input: CreateSessionInput,
+    input: CreateSessionInput & { agentId: string },
   ): Promise<{ sessionId: string; session: SessionSummary }> {
     return this.createSessionInTx(input);
   }
 
   @Transactional()
   private async createSessionInTx(
-    input: CreateSessionInput,
+    input: CreateSessionInput & { agentId: string },
   ): Promise<{ sessionId: string; session: SessionSummary }> {
     const saved = (await this.sessionRepo.save({
       title: stripLlmuse(input.content).slice(0, TITLE_MAX),
       status: "running" as const,
       kind: input.kind ?? "user",
+      agentId: input.agentId,
       // 会话级模型选择：runner 每次 run 经 ModelRunContext 读此列做 override。
       modelConfigId: input.modelConfigId ?? null,
     })) as Session;
@@ -108,6 +113,9 @@ export class SessionService {
   /**
    * 建子 Agent 子会话：Session(kind:"subagent" + parent 关联, running) + 首条 pending(task)。
    * 跨两表写入，@Transactional 包裹。须在父 run 账号上下文内调用（作用域仓库自动盖 cloudUserId）。
+   *
+   * `agentId` 继承父会话——子 Agent 必须跑在同一个 Agent 的技能/工作区里，故不接受
+   * 调用方传入，而是读父会话落库值（父会话必然存在且已有合法 agentId）。
    */
   async createSubSession(input: {
     parentSessionId: string;
@@ -129,6 +137,7 @@ export class SessionService {
     background?: boolean;
     modelConfigId?: string | null;
   }): Promise<{ subSessionId: string }> {
+    const parent = await this.findSessionOrFail(input.parentSessionId);
     const title = (input.description ?? stripLlmuse(input.task)).slice(
       0,
       TITLE_MAX,
@@ -137,6 +146,7 @@ export class SessionService {
       title,
       status: "running" as const,
       kind: "subagent" as const,
+      agentId: parent.agentId,
       parentSessionId: input.parentSessionId,
       parentToolCallId: input.parentToolCallId,
       background: input.background ? 1 : 0,

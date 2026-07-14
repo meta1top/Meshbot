@@ -1,6 +1,7 @@
 import { AgentModule } from "@meshbot/lib-agent";
 import { TxTypeOrmModule } from "@meshbot/common";
 import { Module } from "@nestjs/common";
+import { AgentsModule } from "./agents.module";
 import { CheckpointerCleanupService } from "./services/checkpointer-cleanup.service";
 import { ContextCompactor } from "./services/context-compactor.service";
 import { SessionController } from "./controllers/session.controller";
@@ -50,6 +51,7 @@ import { SessionGateway } from "./ws/session.gateway";
       ModelConfig,
     ]),
     AgentModule,
+    AgentsModule,
     AuthModule,
   ],
   controllers: [SessionController, StatsController, SuggestionController],

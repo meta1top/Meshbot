@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { AccountContextService, ThreadStateService } from "@meshbot/lib-agent";
+import type { CreateSessionInput } from "@meshbot/types-agent";
 import { DataSource } from "typeorm";
 import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
 import { LlmCall } from "../entities/llm-call.entity";
@@ -19,6 +20,24 @@ import { SessionService } from "./session.service";
 /** 默认测试账号：作用域仓库要求每次调用都处于账号上下文内。 */
 const DEFAULT_USER = "test-user";
 
+/**
+ * 本文件绝大多数用例不关心「会话归属哪个 Agent」这件事本身（专门测 agentId
+ * 行为的用例会显式传值覆盖）；`createSession` 的 `agentId` 变必填后，若要求
+ * 全文件几十处既有调用逐一补一个不relevant 的字面量，纯属噪音。故走
+ * `service`（自动账号上下文代理）时，Proxy 在 createSession 一处兜底补默认值。
+ */
+const TEST_AGENT_ID = "test-agent-default";
+
+/**
+ * 供 `service`（Proxy）使用的宽松类型：createSession 的 agentId 允许省略
+ * （由 Proxy 兜底注入），其余方法签名与真实 SessionService 完全一致。
+ */
+type ProxiedSessionService = Omit<SessionService, "createSession"> & {
+  createSession(
+    input: Omit<CreateSessionInput, "agentId"> & { agentId?: string },
+  ): ReturnType<SessionService["createSession"]>;
+};
+
 describe("SessionService", () => {
   let ds: DataSource;
   let ctx: AccountContextService;
@@ -28,7 +47,19 @@ describe("SessionService", () => {
    * 自动包账号上下文的 service 代理：每个方法调用都跑在 DEFAULT_USER 上下文内，
    * 让既有单测无需逐一改写。隔离测试用 rawService + ctx.run 显式切账号。
    */
-  let service: SessionService;
+  let service: ProxiedSessionService;
+
+  /**
+   * 造一条最小 session 行，仅供只关心「父会话必须存在」但不关心其余字段的
+   * 测试用——`createSubSession` 会读父会话的 agentId，需要一行真实的父记录
+   * （此前这些测试用编造的雪花 id 当父会话 id，parent 本身从未真正建过）。
+   */
+  async function seedParentSession(id: string): Promise<void> {
+    await ds.query(
+      `INSERT INTO sessions (id, cloud_user_id, title, agent_id) VALUES (?, ?, 'seed-parent', 'seed-agent')`,
+      [id, DEFAULT_USER],
+    );
+  }
 
   beforeEach(async () => {
     ds = new DataSource({
@@ -130,16 +161,29 @@ describe("SessionService", () => {
       rawService as unknown as { __ds: DataSource; __graph: typeof fakeGraph }
     ).__graph = fakeGraph;
     // 自动账号上下文代理：方法调用统一跑在 DEFAULT_USER 下，非函数属性透传。
+    // createSession 额外兜底：未显式传 agentId 时补一个占位值（见 TEST_AGENT_ID 注释）。
     service = new Proxy(rawService, {
       get(target, prop, receiver) {
         const value = Reflect.get(target, prop, receiver);
         if (typeof value !== "function") return value;
-        return (...args: unknown[]) =>
-          ctx.run(DEFAULT_USER, () =>
+        return (...args: unknown[]) => {
+          if (
+            prop === "createSession" &&
+            args[0] &&
+            typeof args[0] === "object" &&
+            (args[0] as { agentId?: string }).agentId === undefined
+          ) {
+            args = [
+              { ...(args[0] as object), agentId: TEST_AGENT_ID },
+              ...args.slice(1),
+            ];
+          }
+          return ctx.run(DEFAULT_USER, () =>
             (value as (...a: unknown[]) => unknown).apply(target, args),
           );
+        };
       },
-    });
+    }) as unknown as ProxiedSessionService;
   });
 
   afterEach(async () => {
@@ -553,6 +597,35 @@ describe("SessionService", () => {
     });
   });
 
+  describe("agentId —— 会话绑定 Agent", () => {
+    it("建会话必须带 agentId，并原样落库", async () => {
+      await ctx.run("acct-1", async () => {
+        const { sessionId } = await rawService.createSession({
+          content: "新会话",
+          agentId: "agent-1",
+        });
+        const found = await rawService.findOrNull(sessionId);
+        expect(found?.agentId).toBe("agent-1");
+      });
+    });
+
+    it("subagent 子会话继承父会话的 agentId", async () => {
+      await ctx.run("acct-1", async () => {
+        const parent = await rawService.createSession({
+          content: "父",
+          agentId: "agent-7",
+        });
+        const { subSessionId } = await rawService.createSubSession({
+          parentSessionId: parent.sessionId,
+          parentToolCallId: "tc-1",
+          task: "子",
+        });
+        const child = await rawService.findOrNull(subSessionId);
+        expect(child?.agentId).toBe("agent-7");
+      });
+    });
+  });
+
   describe("patch / patchIfNotGenerated — title generation", () => {
     it("patch({ title }) 同步 mark titleGenerated=true", async () => {
       const { sessionId } = await service.createSession({ content: "old" });
@@ -692,6 +765,8 @@ describe("SessionService", () => {
 
     it("listChildren 按父会话返回子会话 id + parentToolCallId；不含他父的子会话", async () => {
       const parentId = "990000000000000001";
+      await seedParentSession(parentId);
+      await seedParentSession("990000000000000002");
       expect(await service.listChildren(parentId)).toEqual([]);
       const a = await service.createSubSession({
         parentSessionId: parentId,
@@ -718,6 +793,7 @@ describe("SessionService", () => {
     });
 
     it("createSubSession 可写 background 与 modelConfigId；setBackground 可置回 0", async () => {
+      await seedParentSession("990000000000000010");
       const { subSessionId } = await service.createSubSession({
         parentSessionId: "990000000000000010",
         parentToolCallId: "tc-bg",
@@ -733,6 +809,7 @@ describe("SessionService", () => {
     });
 
     it("缺省 background=0、modelConfigId=null（前台不受影响）", async () => {
+      await seedParentSession("990000000000000010");
       const { subSessionId } = await service.createSubSession({
         parentSessionId: "990000000000000010",
         parentToolCallId: "tc-fg",
@@ -776,6 +853,7 @@ describe("SessionService", () => {
     });
 
     it("listPendingBackgroundSubagentsUnscoped 只返回 background=1 的 subagent 会话（跨账号）", async () => {
+      await seedParentSession("990000000000000010");
       const a = await service.createSubSession({
         parentSessionId: "990000000000000010",
         parentToolCallId: "tc-1",
@@ -854,6 +932,7 @@ describe("SessionService", () => {
 
   describe("listOrphanForegroundSubagentsUnscoped", () => {
     it("只挑 kind=subagent 且 background=0 且仍有活跃 pending 的会话（孤儿）", async () => {
+      await seedParentSession("990000000000000030");
       // 正常跑完的前台子会话：pending 已 processed，无活跃条目 → 不是孤儿
       const doneSub = await service.createSubSession({
         parentSessionId: "990000000000000030",
@@ -904,8 +983,12 @@ describe("SessionService", () => {
 
   describe("账号隔离（ScopedRepository）", () => {
     it("两账号会话互不可见", async () => {
-      await ctx.run("u1", () => rawService.createSession({ content: "s-u1" }));
-      await ctx.run("u2", () => rawService.createSession({ content: "s-u2" }));
+      await ctx.run("u1", () =>
+        rawService.createSession({ content: "s-u1", agentId: TEST_AGENT_ID }),
+      );
+      await ctx.run("u2", () =>
+        rawService.createSession({ content: "s-u2", agentId: TEST_AGENT_ID }),
+      );
       const listU1 = await ctx.run("u1", () => rawService.listAllSorted());
       expect(listU1).toHaveLength(1);
       expect(listU1[0].title).toBe("s-u1");
@@ -916,7 +999,7 @@ describe("SessionService", () => {
 
     it("跨账号取他人 session 返回空", async () => {
       const { sessionId } = await ctx.run("u1", () =>
-        rawService.createSession({ content: "s" }),
+        rawService.createSession({ content: "s", agentId: TEST_AGENT_ID }),
       );
       expect(
         await ctx.run("u2", () => rawService.findOrNull(sessionId)),
@@ -929,7 +1012,7 @@ describe("SessionService", () => {
 
     it("跨账号删他人 pending 消息不生效（NotFound）", async () => {
       const { sessionId } = await ctx.run("u1", () =>
-        rawService.createSession({ content: "m1" }),
+        rawService.createSession({ content: "m1", agentId: TEST_AGENT_ID }),
       );
       const messageId = randomUUID();
       await ctx.run("u1", () =>
@@ -953,7 +1036,7 @@ describe("SessionService", () => {
 
     it("findOwner 无账号上下文反查归属账号（系统级，runner/cron 建上下文用）", async () => {
       const { sessionId } = await ctx.run("u1", () =>
-        rawService.createSession({ content: "s" }),
+        rawService.createSession({ content: "s", agentId: TEST_AGENT_ID }),
       );
       // 故意不包 ctx.run：findOwner 必须能在无账号上下文时跑（证明它是 unscoped）。
       expect(await rawService.findOwner(sessionId)).toBe("u1");
@@ -965,10 +1048,10 @@ describe("SessionService", () => {
 
     it("rollbackProcessingToPending 跨账号全量重置（无上下文也可跑）", async () => {
       const u1 = await ctx.run("u1", () =>
-        rawService.createSession({ content: "a" }),
+        rawService.createSession({ content: "a", agentId: TEST_AGENT_ID }),
       );
       const u2 = await ctx.run("u2", () =>
-        rawService.createSession({ content: "b" }),
+        rawService.createSession({ content: "b", agentId: TEST_AGENT_ID }),
       );
       await ctx.run("u1", () => rawService.claimPending(u1.sessionId));
       await ctx.run("u2", () => rawService.claimPending(u2.sessionId));

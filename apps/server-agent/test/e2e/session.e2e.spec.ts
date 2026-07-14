@@ -32,6 +32,7 @@ import request from "supertest";
 import { AccountContextInterceptor } from "../../src/account/account-context.interceptor";
 import { AccountModule } from "../../src/account/account.module";
 import { SessionController } from "../../src/controllers/session.controller";
+import { Agent } from "../../src/entities/agent.entity";
 import { CronJob } from "../../src/entities/cron-job.entity";
 import { CronJobModule } from "../../src/cron-job.module";
 import { LlmCall } from "../../src/entities/llm-call.entity";
@@ -39,6 +40,7 @@ import { PendingMessage } from "../../src/entities/pending-message.entity";
 import { Session } from "../../src/entities/session.entity";
 import { SessionMessage } from "../../src/entities/session-message.entity";
 import { JwtAuthGuard } from "../../src/guards/jwt-auth.guard";
+import { AgentService } from "../../src/services/agent.service";
 import { CheckpointerCleanupService } from "../../src/services/checkpointer-cleanup.service";
 import { ConfirmationService } from "../../src/services/confirmation.service";
 import { ContextCompactor } from "../../src/services/context-compactor.service";
@@ -157,6 +159,7 @@ describe("Session e2e", () => {
           type: "better-sqlite3",
           database: ":memory:",
           entities: [
+            Agent,
             Session,
             PendingMessage,
             LlmCall,
@@ -167,6 +170,7 @@ describe("Session e2e", () => {
           synchronize: true,
         }),
         TxTypeOrmModule.forFeature([
+          Agent,
           Session,
           PendingMessage,
           LlmCall,
@@ -190,6 +194,7 @@ describe("Session e2e", () => {
       controllers: [SessionController],
       providers: [
         SessionService,
+        AgentService,
         RunnerService,
         LlmCallService,
         SessionMessageService,

@@ -36,6 +36,7 @@ import {
   SessionPatchDto,
   SessionSummaryDto,
 } from "../dto/session.dto";
+import { AgentService } from "../services/agent.service";
 import { ConfirmationService } from "../services/confirmation.service";
 import { LlmCallService } from "../services/llm-call.service";
 import { RunnerService } from "../services/runner.service";
@@ -55,15 +56,22 @@ export class SessionController {
     private readonly titleService: SessionTitleService,
     private readonly confirmation: ConfirmationService,
     private readonly account: AccountContextService,
+    private readonly agents: AgentService,
   ) {}
 
-  /** 创建会话：写库后异步发起 run，立即返回 sessionId + session 完整对象。 */
+  /**
+   * 创建会话：写库后异步发起 run，立即返回 sessionId + session 完整对象。
+   * agentId 由前端显式指定；未指定时兜底取当前账号默认 Agent（ensureDefault，
+   * 保证至少有一个，绝不用空字符串落库）。
+   */
   @Post()
   async create(@Body() dto: CreateSessionDto): Promise<CreateSessionResponse> {
+    const agentId = dto.agentId ?? (await this.agents.ensureDefault()).id;
     const result = await this.sessions.createSession({
       content: dto.content,
       kind: dto.kind,
       modelConfigId: dto.modelConfigId,
+      agentId,
     });
     this.runner.kick(result.sessionId);
     this.titleService.schedule(result.sessionId, dto.content);

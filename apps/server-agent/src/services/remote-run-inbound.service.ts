@@ -14,6 +14,7 @@ import {
   IM_RELAY_EVENTS,
   type ImRelayAgentRunRequestEvent,
 } from "../cloud/im-relay.events";
+import { AgentService } from "./agent.service";
 import { RemoteRunRegistryService } from "./remote-run-registry.service";
 import { RunnerService } from "./runner.service";
 import { SessionService } from "./session.service";
@@ -103,9 +104,14 @@ export class RemoteRunInboundService {
     private readonly account: AccountContextService,
     private readonly emitter: EventEmitter2,
     private readonly registry: RemoteRunRegistryService,
+    private readonly agents: AgentService,
   ) {}
 
-  /** relay 收到云端转发的 agent.run.start（B 侧入站）时触发。 */
+  /**
+   * relay 收到云端转发的 agent.run.start（B 侧入站）时触发。
+   * `forwarded` 里没有 agentId 概念（IM 侧尚无「选择哪个 Agent」的交互），
+   * 建会话统一走 `AgentService.ensureDefault()` 兜底取当前账号默认 Agent。
+   */
   @OnEvent(IM_RELAY_EVENTS.agentRunRequest)
   async onAgentRunRequest(evt: ImRelayAgentRunRequestEvent): Promise<void> {
     const { cloudUserId, forwarded } = evt;
@@ -114,7 +120,12 @@ export class RemoteRunInboundService {
       await this.account.run(cloudUserId, async () => {
         const sessionId =
           mode === "create"
-            ? (await this.sessions.createSession({ content })).sessionId
+            ? (
+                await this.sessions.createSession({
+                  content,
+                  agentId: (await this.agents.ensureDefault()).id,
+                })
+              ).sessionId
             : await this.appendToExisting(forwarded.sessionId, content);
         this.subscribeAndForward(
           cloudUserId,
