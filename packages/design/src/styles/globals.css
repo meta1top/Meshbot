@@ -197,3 +197,14 @@ html.theme-switching *::before,
 html.theme-switching *::after {
   transition: none !important;
 }
+
+/* TipTap 输入框占位符：Placeholder 扩展给空段落加 .is-editor-empty + data-placeholder，
+   需配套 ::before 才显示（扩展本身不注入样式）。ChatInput 在 web-common，两端共用，
+   所以规则必须放共享样式里——只写在某个 app 的 globals 里，另一端占位符就是隐形的。 */
+.tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--muted-foreground);
+  pointer-events: none;
+}

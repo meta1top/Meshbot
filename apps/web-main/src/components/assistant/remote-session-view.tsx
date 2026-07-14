@@ -26,6 +26,7 @@ import { useStoredWidth } from "@/hooks/use-stored-width";
 import { takeLauncherDraft } from "@/lib/launcher-draft";
 import { createRemoteSessionTransport } from "@/lib/session-transport";
 import { useProfile } from "@/rest/auth";
+import { ComposerActions } from "./composer-actions";
 import { RemoteModelSelect } from "./remote-model-select";
 import { RemoteSubagentCard } from "./remote-subagent-card";
 
@@ -474,16 +475,17 @@ function RemoteSessionViewReady({
           {errorBanner}
           <div className="sticky bottom-4 mt-auto w-full bg-background">
             {/* Task 1 抽出的完整 ChatInput（web-agent 同款）。leadingActions
-                （技能/连应用/权限，本地语境专属）不传 → 底部动作栏不渲染这一块，
-                达到「远程模式隐藏」；tokenUsage 同样不传，退化为无用量环的简版
-                （web-common 的 `useSessionStream` 用量走回调而非返回值，remote
-                侧未接线，见类文档 `UseSessionStreamCallbacks`）。 */}
+                （技能/连应用/权限）是共享的占位动作链，云端与本地端 composer 一致；
+                tokenUsage 不传，退化为无用量环的简版（web-common 的
+                `useSessionStream` 用量走回调而非返回值，remote 侧未接线，
+                见类文档 `UseSessionStreamCallbacks`）。 */}
             <ChatInput
               value={draft}
               onChange={setDraft}
               onSend={(text) => void handleSend(text)}
               isLoading={creating}
               placeholder={t("input.placeholder")}
+              leadingActions={<ComposerActions />}
               trailingActions={
                 <RemoteModelSelect
                   orgId={orgId}
@@ -557,6 +559,7 @@ function RemoteSessionViewReady({
               onInterrupt={stream.interrupt}
               isLoading={stream.running}
               placeholder={t("input.placeholder")}
+              leadingActions={<ComposerActions />}
               trailingActions={
                 <RemoteModelSelect
                   orgId={orgId}

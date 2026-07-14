@@ -15,6 +15,7 @@ import {
 } from "@/rest/agent-devices";
 import { useProfile } from "@/rest/auth";
 import { useDevices } from "@/rest/devices";
+import { ComposerActions } from "./composer-actions";
 import { RemoteModelSelect } from "./remote-model-select";
 
 /**
@@ -86,7 +87,8 @@ export function Launcher() {
         onSend={handleSend}
         // 建议 chips：web-main 无后端建议接口，用 i18n 默认列表（空数组则隐藏）
         suggestions={[]}
-        // 本地专属项（技能/连应用/权限）远程模式不注入 → 隐藏
+        // 技能 / 连应用 / 权限：与 web-agent 同一份占位动作链（点击无副作用）
+        leadingActions={<ComposerActions />}
         trailingActions={
           orgId ? (
             <RemoteModelSelect

@@ -108,16 +108,6 @@ pre code.hljs {
   }
 }
 
-/* TipTap 输入框占位符：Placeholder 扩展给空段落加 .is-editor-empty + data-placeholder，
-   需配套 ::before 才显示（扩展本身不注入样式）。 */
-.tiptap p.is-editor-empty:first-child::before {
-  content: attr(data-placeholder);
-  float: left;
-  height: 0;
-  color: var(--muted-foreground);
-  pointer-events: none;
-}
-
 @source "../../../../packages/design/src";
 @source "../../../../packages/web-common/src";
 

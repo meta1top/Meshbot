@@ -54,8 +54,8 @@
       }
     },
     "input": {
-      "attachment": "",
-      "stop": ""
+      "attachment": "Add attachment",
+      "stop": "Stop"
     }
   },
   "assistantSidebar": {
@@ -585,5 +585,11 @@
       "empty": "No artifact selected",
       "untitled": "Untitled file"
     }
+  },
+  "composer": {
+    "skills": "Skills",
+    "apps": "Connect apps",
+    "permissions": "Permissions",
+    "comingSoon": "Coming soon"
   }
 }

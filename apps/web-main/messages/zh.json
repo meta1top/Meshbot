@@ -54,8 +54,8 @@
       }
     },
     "input": {
-      "attachment": "",
-      "stop": ""
+      "attachment": "添加附件",
+      "stop": "中断"
     }
   },
   "assistantSidebar": {
@@ -585,5 +585,11 @@
     "placeholder": "输入消息…",
     "send": "发送",
     "attachment": "添加附件"
+  },
+  "composer": {
+    "skills": "技能",
+    "apps": "连应用",
+    "permissions": "权限",
+    "comingSoon": "即将上线"
   }
 }

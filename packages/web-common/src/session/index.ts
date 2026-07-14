@@ -44,6 +44,10 @@ export {
   type CompactionRowLabels,
   type CompactionRowProps,
 } from "./compaction-row";
+export {
+  ComposerActions,
+  type ComposerActionsLabels,
+} from "./composer-actions";
 export { DeviceQueryClient } from "./device-query-client";
 export {
   DriveCreateShareCard,
