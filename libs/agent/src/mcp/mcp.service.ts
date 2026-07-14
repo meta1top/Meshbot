@@ -54,6 +54,17 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
   /** `${cloudUserId}:${agentId}` → 该 Agent 的 MCP 运行态。 */
   private readonly perAgent = new Map<string, AgentMcp>();
 
+  /**
+   * `ensureAgent` 按 key 缓存进行中的 promise（进程内 in-flight 去重）。
+   * check-then-act（`perAgent.get` 读 → `createClient`/`getTools` 写）之间
+   * 隔着真实 stdio MCP 握手的 await 边界（几百 ms 到几秒），同一 Agent 被
+   * 两个会话（多标签页 / 主会话+子代理）并发首次使用时会各自读到「未就绪」
+   * 并各建一个 client，需要复用同一个 in-flight promise 避免子进程泄漏
+   * （与 `apps/server-agent/src/services/agent.service.ts` 的
+   * `ensureDefault()` 同款模式）。
+   */
+  private readonly ensureAgentInFlight = new Map<string, Promise<void>>();
+
   private sweepTimer: NodeJS.Timeout | null = null;
 
   constructor(
@@ -71,6 +82,12 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
    * mcp.json 不存在 / 无 server / 加载失败时**也登记一个空运行态**，避免每次 run
    * 都重复读盘重试。配置改动后由 REST 层调 `teardownAgent` 使其失效。
    *
+   * **并发去重**：check（`perAgent.get`）与 act（`createClient` + `getTools`）
+   * 之间隔着真实 stdio MCP 握手的 await 边界，同一 Agent 被两个会话并发
+   * 首次使用时，未就绪判断会同时命中——按 key 缓存 in-flight promise，
+   * 并发调用复用同一个 promise，避免各自建 client 导致后者覆盖前者、
+   * 前者从此在 `perAgent` 里不可见而永久泄漏子进程。
+   *
    * @param cloudUserId 账号 ID（= JWT sub）
    * @param agentId Agent ID
    */
@@ -81,21 +98,35 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
       existing.lastUsedAt = Date.now();
       return;
     }
+    const inFlight = this.ensureAgentInFlight.get(key);
+    if (inFlight) {
+      return inFlight;
+    }
+    const promise = this.doEnsureAgent(cloudUserId, agentId).finally(() => {
+      // 成功失败都要清，否则失败一次就把错误 promise 永久缓存住。
+      this.ensureAgentInFlight.delete(key);
+    });
+    this.ensureAgentInFlight.set(key, promise);
+    return promise;
+  }
+
+  /** ensureAgent 去重后的实际加载逻辑：读配置、建 client、注册工具。 */
+  private async doEnsureAgent(
+    cloudUserId: string,
+    agentId: string,
+  ): Promise<void> {
+    const key = agentKey(cloudUserId, agentId);
     const cfg = this.loadConfig();
     if (!cfg || Object.keys(cfg.mcpServers).length === 0) {
-      this.perAgent.set(key, {
-        client: null,
-        names: new Set(),
-        refCount: 0,
-        lastUsedAt: Date.now(),
-      });
+      this.registerEmptyRuntime(key);
       return;
     }
     const mcpServers = mapServersToLangchainShape(cfg.mcpServers);
-    const client = this.createClient(mcpServers);
-    const names = new Set<string>();
+    let client: MultiServerMCPClient | undefined;
     try {
+      client = this.createClient(mcpServers);
       const tools = (await client.getTools()) as StructuredToolInterface[];
+      const names = new Set<string>();
       for (const lcTool of tools) {
         try {
           const { meshbot } = buildMcpToolAdapter(lcTool);
@@ -108,32 +139,40 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
           );
         }
       }
-    } catch (err) {
-      this.logger.error(
-        `Failed to load MCP tools for ${key}: ${err instanceof Error ? err.message : String(err)}`,
-      );
-      try {
-        await client.close();
-      } catch {
-        // best-effort 清理，已记主错。
-      }
       this.perAgent.set(key, {
-        client: null,
-        names: new Set(),
+        client,
+        names,
         refCount: 0,
         lastUsedAt: Date.now(),
       });
-      return;
+      this.logger.log(
+        `MCP ready for ${key}: ${names.size} tools from ${Object.keys(mcpServers).length} server(s).`,
+      );
+    } catch (err) {
+      // createClient 同步抛错时 client 仍是 undefined，无需 / 无法 close；
+      // getTools 抛错时 client 已建出，best-effort 关掉，不留泄漏的子进程。
+      this.logger.error(
+        `Failed to load MCP tools for ${key}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      if (client) {
+        try {
+          await client.close();
+        } catch {
+          // best-effort 清理，已记主错。
+        }
+      }
+      this.registerEmptyRuntime(key);
     }
+  }
+
+  /** 登记一个空运行态（无 MCP 配置 / 加载失败），避免重复读盘重试。 */
+  private registerEmptyRuntime(key: string): void {
     this.perAgent.set(key, {
-      client,
-      names,
+      client: null,
+      names: new Set(),
       refCount: 0,
       lastUsedAt: Date.now(),
     });
-    this.logger.log(
-      `MCP ready for ${key}: ${names.size} tools from ${Object.keys(mcpServers).length} server(s).`,
-    );
   }
 
   /** 标记该 Agent 有活跃 run（回收保护）。 */

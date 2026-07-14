@@ -43,6 +43,43 @@ function makeStubClient(tools: StructuredToolInterface[]): {
 }
 
 /**
+ * 造一个 getTools 延时 resolve 的 stub client，模拟真实 stdio MCP 握手要
+ * 几百 ms 到几秒的耗时，用来在测试里制造 check-then-act 的并发竞态窗口。
+ */
+function makeDelayedStubClient(
+  tools: StructuredToolInterface[],
+  delayMs: number,
+): {
+  client: MultiServerMCPClient;
+  close: ReturnType<typeof vi.fn>;
+  getTools: ReturnType<typeof vi.fn>;
+} {
+  const close = vi.fn(async () => {});
+  const getTools = vi.fn(
+    () =>
+      new Promise<StructuredToolInterface[]>((resolve) => {
+        setTimeout(() => resolve(tools), delayMs);
+      }),
+  );
+  const client = { getTools, close } as unknown as MultiServerMCPClient;
+  return { client, close, getTools };
+}
+
+/** 造一个 getTools 直接 reject 的 stub client，模拟 MCP 握手失败。 */
+function makeFailingStubClient(error: Error): {
+  client: MultiServerMCPClient;
+  close: ReturnType<typeof vi.fn>;
+  getTools: ReturnType<typeof vi.fn>;
+} {
+  const close = vi.fn(async () => {});
+  const getTools = vi.fn(async () => {
+    throw error;
+  });
+  const client = { getTools, close } as unknown as MultiServerMCPClient;
+  return { client, close, getTools };
+}
+
+/**
  * 测试子类：覆盖 createClient 工厂，记录每次构造时拿到的 server 形状，
  * 并返回外部预置的 stub client（按构造顺序取）。
  */
@@ -137,6 +174,32 @@ describe("McpService 按 Agent 懒加载 + 引用计数 + 闲置回收", () => {
     expect(svc.createdServers).toHaveLength(1);
   });
 
+  it("并发 ensureAgent（同一 Agent）应 in-flight 去重：createClient 只调用 1 次，不泄漏子进程", async () => {
+    // Critical 复现：ensureAgent 的 check-then-act 之间隔着 await client.getTools()
+    // 的巨大时间窗口（真实 stdio 握手要几百 ms 到几秒）。同一 Agent 被两个会话
+    // （多标签页 / 主会话+子代理）几乎同时首次使用时，若没有 in-flight 去重，
+    // 两次调用都会各自 createClient 拉起一个子进程，后完成的那次覆盖 perAgent，
+    // 先起来的那个 client 从此在 perAgent 里不可见——teardown* 系列全靠
+    // perAgent 定位目标，永远够不到它，子进程泄漏到进程退出。
+    writeMcpJson(home, "u1", "agent-a", ONE_SERVER);
+    const stubA = makeDelayedStubClient([fakeLcTool("mcp__fs__read")], 20);
+    const stubB = makeDelayedStubClient([fakeLcTool("mcp__fs__read")], 20);
+    svc.stubs = [stubA, stubB];
+
+    await runInContext("u1", "agent-a", () =>
+      Promise.all([
+        svc.ensureAgent("u1", "agent-a"),
+        svc.ensureAgent("u1", "agent-a"),
+      ]),
+    );
+
+    expect(svc.createdServers).toHaveLength(1);
+
+    await svc.teardownAccount("u1");
+    expect(stubA.close).toHaveBeenCalledTimes(1);
+    expect(stubB.close).not.toHaveBeenCalled();
+  });
+
   it("两个 Agent 各起各的 client，工具注册到各自名下", async () => {
     writeMcpJson(home, "u1", "agent-a", {
       mcpServers: { fs: { command: "echo", args: ["a"] } },
@@ -191,6 +254,23 @@ describe("McpService 按 Agent 懒加载 + 引用计数 + 闲置回收", () => {
     expect(svc.createdServers).toHaveLength(0);
   });
 
+  it("client.getTools() 抛错 → 登记空运行态，且已建出的 client 被 close 掉", async () => {
+    writeMcpJson(home, "u1", "agent-a", ONE_SERVER);
+    const failing = makeFailingStubClient(new Error("handshake failed"));
+    svc.stubs = [failing];
+    const registerSpy = vi.spyOn(reg, "registerForAgent");
+
+    await runInContext("u1", "agent-a", () => svc.ensureAgent("u1", "agent-a"));
+
+    // 已建出的 client 要被 best-effort close 掉，不能泄漏子进程。
+    expect(failing.close).toHaveBeenCalledTimes(1);
+    expect(registerSpy).not.toHaveBeenCalled();
+
+    // 空运行态已登记：重复 ensureAgent 不重新读盘 / 不重新 createClient。
+    await runInContext("u1", "agent-a", () => svc.ensureAgent("u1", "agent-a"));
+    expect(svc.createdServers).toHaveLength(1);
+  });
+
   it("sweepIdle 回收闲置且无活跃 run 的 Agent", async () => {
     writeMcpJson(home, "u1", "agent-a", ONE_SERVER);
     const stub = makeStubClient([fakeLcTool("mcp__fs__read")]);
@@ -213,6 +293,27 @@ describe("McpService 按 Agent 懒加载 + 引用计数 + 闲置回收", () => {
     await runInContext("u1", "agent-a", () => svc.ensureAgent("u1", "agent-a"));
     svc.acquire("u1", "agent-a");
 
+    await svc.sweepIdle(Date.now() + 31 * 60_000);
+    expect(unregSpy).not.toHaveBeenCalled();
+    expect(stub.close).not.toHaveBeenCalled();
+
+    svc.release("u1", "agent-a");
+    await svc.sweepIdle(Date.now() + 31 * 60_000);
+    expect(unregSpy).toHaveBeenCalledWith("u1", "agent-a");
+    expect(stub.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("双重 acquire 只 release 一次仍受回收保护，release 两次后才允许回收", async () => {
+    writeMcpJson(home, "u1", "agent-a", ONE_SERVER);
+    const stub = makeStubClient([fakeLcTool("mcp__fs__read")]);
+    svc.stubs = [stub];
+    const unregSpy = vi.spyOn(reg, "unregisterAgent");
+
+    await runInContext("u1", "agent-a", () => svc.ensureAgent("u1", "agent-a"));
+    svc.acquire("u1", "agent-a");
+    svc.acquire("u1", "agent-a");
+
+    svc.release("u1", "agent-a");
     await svc.sweepIdle(Date.now() + 31 * 60_000);
     expect(unregSpy).not.toHaveBeenCalled();
     expect(stub.close).not.toHaveBeenCalled();
@@ -312,6 +413,16 @@ describe("McpService 按 Agent 懒加载 + 引用计数 + 闲置回收", () => {
 
     expect(s1.close).toHaveBeenCalledTimes(1);
     expect(s2.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("onModuleDestroy 应 clearInterval 停掉 sweep 定时器（防误删回归）", async () => {
+    const clearIntervalSpy = vi.spyOn(global, "clearInterval");
+    svc.onModuleInit();
+
+    await svc.onModuleDestroy();
+
+    expect(clearIntervalSpy).toHaveBeenCalledTimes(1);
+    clearIntervalSpy.mockRestore();
   });
 
   it("onModuleInit 起一个 unref 的定时器扫描闲置", () => {
