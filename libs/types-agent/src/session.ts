@@ -40,8 +40,14 @@ export const SessionPatchSchema = z
   .object({
     title: z.string().min(1).max(200).optional(),
     pinned: z.boolean().optional(),
-    /** 切换会话模型（下一条消息生效）；须为当前账号存在的 ModelConfig id。 */
-    modelConfigId: z.string().optional(),
+    /**
+     * 切换会话模型（下一条消息生效）；须为当前账号存在的 ModelConfig id。
+     * `.min(1)`——同 `CreateSessionSchema.agentId` 的陷阱：`??` 只挡 null/undefined，
+     * 空字符串会原样通过、在 runner 的三级优先级里被误判为「已覆盖」，静默吞掉
+     * Agent 默认模型这一级。当前无「传值清除覆盖」语义（只能不传字段），故加
+     * `.min(1)` 不影响既有行为。
+     */
+    modelConfigId: z.string().min(1).optional(),
   })
   .refine(
     (d) =>
@@ -72,8 +78,12 @@ export const CreateSessionSchema = z.object({
   content: z.string().min(1),
   /** "quick" = 随手问临时会话（不进侧栏）；缺省 "user"。 */
   kind: z.enum(["user", "quick"]).optional(),
-  /** 会话使用的模型配置 id；缺省走账号默认（首个 enabled）。 */
-  modelConfigId: z.string().optional(),
+  /**
+   * 会话使用的模型配置 id；缺省走三级优先级（会话覆盖 > Agent 默认 > 账号启用首行）。
+   * `.min(1)` 与 `agentId` 同款陷阱——`??` 只认 null/undefined，空串会绕过三级优先级
+   * 原样落库，被误判为「已覆盖」，静默吞掉 Agent 默认模型这一级。
+   */
+  modelConfigId: z.string().min(1).optional(),
   /**
    * 会话归属的 Agent id；缺省由 Controller 兜底取账号默认 Agent（ensureDefault）。
    * `.min(1)` 与同 schema 的 `content` 一致——挡住空字符串（`??` 只认 null/undefined，

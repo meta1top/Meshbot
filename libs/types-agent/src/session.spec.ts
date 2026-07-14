@@ -50,6 +50,18 @@ describe("session schemas", () => {
     });
   });
 
+  it("CreateSessionSchema 接受非空 modelConfigId", () => {
+    expect(
+      CreateSessionSchema.parse({ content: "hello", modelConfigId: "mc-1" }),
+    ).toEqual({ content: "hello", modelConfigId: "mc-1" });
+  });
+
+  it("CreateSessionSchema 拒绝空字符串 modelConfigId（防止绕过三级优先级落库空串，缺陷 1）", () => {
+    expect(() =>
+      CreateSessionSchema.parse({ content: "hello", modelConfigId: "" }),
+    ).toThrow();
+  });
+
   it("SessionStatus 枚举包含 idle / running", () => {
     expect(SessionStatus.options).toEqual(["idle", "running"]);
   });
@@ -175,6 +187,16 @@ describe("session schemas — sidebar list", () => {
     expect(() =>
       SessionPatchSchema.parse({ title: "x".repeat(201) }),
     ).toThrow();
+  });
+
+  it("SessionPatchSchema 接受非空 modelConfigId", () => {
+    expect(
+      SessionPatchSchema.parse({ modelConfigId: "mc-1" }).modelConfigId,
+    ).toBe("mc-1");
+  });
+
+  it("SessionPatchSchema 拒绝空字符串 modelConfigId（防止绕过三级优先级落库空串，缺陷 1）", () => {
+    expect(() => SessionPatchSchema.parse({ modelConfigId: "" })).toThrow();
   });
 
   it("SessionListResponseSchema 是 sessions 数组", () => {

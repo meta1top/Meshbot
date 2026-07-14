@@ -891,6 +891,95 @@ describe("RunnerService", () => {
 
     expect(overrides).toEqual(["m-agent", "m-session", null]);
   });
+
+  it("session.modelConfigId 为空字符串时降级到 agent 默认值（复现缺陷 1：?? 挡不住空串）", async () => {
+    const overrides: (string | null)[] = [];
+    const modelRunCtx = {
+      run(id: string | null, fn: () => unknown) {
+        overrides.push(id);
+        return fn();
+      },
+    };
+    const graph = {
+      async *streamMessage() {
+        yield {
+          kind: "assistant_done",
+          messageId: "m1",
+          content: "hi",
+          reasoning: "",
+          toolCalls: null,
+        };
+      },
+    };
+    const sess = fakeSessionService();
+    sess.findOrNull = async (sessionId: string) => ({
+      id: sessionId,
+      kind: "user" as const,
+      agentId: "agent-1",
+      modelConfigId: "",
+    });
+    sess.enqueue("s1", "hi");
+    const runner = new RunnerService(
+      sess as never,
+      graph as never,
+      new EventEmitter2(),
+      fakeLlmCallService() as never,
+      fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
+      new AccountContextService(),
+      modelRunCtx as never,
+      new AgentContextService(),
+      fakeAgentService("m-agent") as never,
+    );
+    await runner.kickAndWait("s1");
+    // 期望：空串会话覆盖被当作"未覆盖"，降级到 agent 默认值 "m-agent"。
+    // 修复前 `session?.modelConfigId ?? agent?.defaultModelConfigId ?? null`
+    // 会把 "" 原样传下去，这里会拿到 ""。
+    expect(overrides).toEqual(["m-agent"]);
+  });
+
+  it("session.agentId 为空字符串时走 ensureDefault 兜底，不把空串压进 ALS（复现缺陷 2）", async () => {
+    const agentCtx = new AgentContextService();
+    const seen: (string | null)[] = [];
+    const graph = {
+      async *streamMessage() {
+        // 直接读 ALS 里的 agentId：修复前会是 ""（被压进 ALS 的空串），
+        // 修复后应是 fakeAgentService().ensureDefault() 返回的 "agent-default"。
+        seen.push(agentCtx.get());
+        yield {
+          kind: "assistant_done",
+          messageId: "m1",
+          content: "hi",
+          reasoning: "",
+          toolCalls: null,
+        };
+      },
+    };
+    const sess = fakeSessionService();
+    sess.findOrNull = async (sessionId: string) => ({
+      id: sessionId,
+      kind: "user" as const,
+      agentId: "",
+      modelConfigId: null,
+    });
+    sess.enqueue("s1", "hi");
+    const runner = new RunnerService(
+      sess as never,
+      graph as never,
+      new EventEmitter2(),
+      fakeLlmCallService() as never,
+      fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
+      new AccountContextService(),
+      new ModelRunContext(),
+      agentCtx,
+      fakeAgentService() as never,
+    );
+    await runner.kickAndWait("s1");
+    expect(seen).toEqual(["agent-default"]);
+  });
 });
 
 describe("RunnerService context compaction integration", () => {

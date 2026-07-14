@@ -492,10 +492,17 @@ export class RunnerService implements OnModuleInit {
   ): Promise<void> {
     const session = await this.sessions.findOrNull(sessionId);
     const subAgent = session?.kind === "subagent";
-    const agentId = session?.agentId ?? (await this.agents.ensureDefault()).id;
+    // 真值判断而非 `??`：`??` 只在 null/undefined 时才走兜底，historical 存量行
+    // （迁移默认值 ''）或落库时漏校验的空字符串会原样通过 `??`，把空串压进
+    // ALS（AgentContextService.getOrThrow 判空会抛错）。用 `||` 让空串与
+    // null/undefined 一样触发 ensureDefault 兜底。
+    const agentId = session?.agentId || (await this.agents.ensureDefault()).id;
     const agent = await this.agents.findOrNull(agentId);
+    // 模型三级优先级同理：`??` 挡不住空串，空字符串会被误判为「会话已覆盖」，
+    // 静默跳过 Agent 默认模型这一级（ModelResolver 的三元把 '' 当 falsy 又
+    // 意外兜回账号默认，行为不崩但完全违背设计意图，且无任何日志）。
     const modelOverride =
-      session?.modelConfigId ?? agent?.defaultModelConfigId ?? null;
+      session?.modelConfigId || agent?.defaultModelConfigId || null;
     await this.agentCtx.run(agentId, () =>
       this.modelRunCtx.run(modelOverride, () =>
         this.consumeRunStreamInCtx(
