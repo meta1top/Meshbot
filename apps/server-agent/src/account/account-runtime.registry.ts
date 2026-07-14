@@ -1,6 +1,5 @@
 import {
   AccountContextService,
-  AgentContextService,
   McpService,
   PromptService,
 } from "@meshbot/lib-agent";
@@ -21,7 +20,6 @@ export class AccountRuntimeRegistry {
 
   constructor(
     private readonly ctx: AccountContextService,
-    private readonly agentCtx: AgentContextService,
     private readonly mcp: McpService,
     private readonly prompt: PromptService,
     private readonly relay: ImRelayClientService,
@@ -36,19 +34,14 @@ export class AccountRuntimeRegistry {
 
   /**
    * 构建某账号运行时（幂等：已存在先 teardown）。
-   * MCP init 在该账号上下文内（文件 getter 依赖 ALS）。
    *
-   * mcp.json 已下沉到 `agents/<agentId>/` 下，但 createRuntime 是账号级触发
-   * （登录/启动时），尚不知道要用哪个 Agent —— 本期用该账号默认 Agent
-   * （`ensureDefault()`）兜底初始化 MCP；MCP 按 Agent 隔离是后续任务。
+   * MCP 已改为按 Agent 懒加载（Task 6）：不再在登录时预热任何 Agent 的 MCP，
+   * 首次使用该 Agent（RunnerService 建流前）才由 `McpService.ensureAgent` 拉起。
    */
   async createRuntime(cloudUserId: string): Promise<void> {
     await this.teardownRuntime(cloudUserId);
     await this.ctx.run(cloudUserId, async () => {
-      const defaultAgent = await this.agents.ensureDefault();
-      await this.agentCtx.run(defaultAgent.id, async () => {
-        await this.mcp.initAccount(cloudUserId);
-      });
+      await this.agents.ensureDefault();
     });
     await this.relay.connect(cloudUserId);
     this.live.add(cloudUserId);

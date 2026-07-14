@@ -1,4 +1,4 @@
-import { AccountContextService, AgentContextService } from "@meshbot/lib-agent";
+import { AccountContextService } from "@meshbot/lib-agent";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { ACCOUNT_EVENTS } from "./account.events";
 import { AccountRuntimeRegistry } from "./account-runtime.registry";
@@ -6,10 +6,7 @@ import type { AgentService } from "../services/agent.service";
 import type { Agent } from "../entities/agent.entity";
 
 type StubMcp = jest.Mocked<
-  Pick<
-    import("@meshbot/lib-agent").McpService,
-    "initAccount" | "teardownAccount"
-  >
+  Pick<import("@meshbot/lib-agent").McpService, "teardownAccount">
 >;
 type StubPrompt = jest.Mocked<
   Pick<import("@meshbot/lib-agent").PromptService, "evict">
@@ -26,7 +23,6 @@ const DEFAULT_AGENT_ID = "agent-default";
 
 describe("AccountRuntimeRegistry", () => {
   let ctx: AccountContextService;
-  let agentCtx: AgentContextService;
   let mcp: StubMcp;
   let prompt: StubPrompt;
   let relay: StubRelay;
@@ -36,12 +32,8 @@ describe("AccountRuntimeRegistry", () => {
 
   beforeEach(() => {
     ctx = new AccountContextService();
-    agentCtx = new AgentContextService();
 
-    // mcp.initAccount captures the account context at call time so we can verify
-    // it was called inside ctx.run(cloudUserId, ...)
     mcp = {
-      initAccount: jest.fn().mockResolvedValue(undefined),
       teardownAccount: jest.fn().mockResolvedValue(undefined),
     };
 
@@ -60,7 +52,6 @@ describe("AccountRuntimeRegistry", () => {
 
     registry = new AccountRuntimeRegistry(
       ctx,
-      agentCtx,
       mcp as unknown as import("@meshbot/lib-agent").McpService,
       prompt as unknown as import("@meshbot/lib-agent").PromptService,
       relay as unknown as import("../cloud/im-relay-client.service").ImRelayClientService,
@@ -70,19 +61,17 @@ describe("AccountRuntimeRegistry", () => {
   });
 
   describe("createRuntime", () => {
-    it("mcp.initAccount(u1) が呼ばれ、かつアカウント + 默认 Agent コンテキスト内で呼ばれること", async () => {
+    it("不再预热 MCP（懒加载接管），只在账号上下文内兜底建默认 Agent", async () => {
       let capturedContext: string | null = null;
-      let capturedAgentContext: string | null = null;
-      mcp.initAccount.mockImplementation(async () => {
+      agents.ensureDefault.mockImplementation(async () => {
         capturedContext = ctx.get();
-        capturedAgentContext = agentCtx.get();
+        return { id: DEFAULT_AGENT_ID } as Agent;
       });
 
       await registry.createRuntime("u1");
 
-      expect(mcp.initAccount).toHaveBeenCalledWith("u1");
+      expect(agents.ensureDefault).toHaveBeenCalledTimes(1);
       expect(capturedContext).toBe("u1");
-      expect(capturedAgentContext).toBe(DEFAULT_AGENT_ID);
     });
 
     it("relay.connect(u1) が呼ばれること", async () => {
@@ -155,8 +144,9 @@ describe("AccountRuntimeRegistry", () => {
       mcp.teardownAccount.mockImplementation(async () => {
         calls.push("teardown");
       });
-      mcp.initAccount.mockImplementation(async () => {
-        calls.push("initAccount");
+      agents.ensureDefault.mockImplementation(async () => {
+        calls.push("ensureDefault");
+        return { id: DEFAULT_AGENT_ID } as Agent;
       });
       relay.connect.mockImplementation(async () => {
         calls.push("connect");
@@ -168,11 +158,11 @@ describe("AccountRuntimeRegistry", () => {
       await registry.reloadRuntime("u1");
 
       // teardown (mcp.teardownAccount + relay.disconnect) runs first inside createRuntime,
-      // then mcp.initAccount (inside ctx.run), then relay.connect
+      // then agents.ensureDefault (inside ctx.run), then relay.connect
       expect(calls).toEqual([
         "teardown",
         "disconnect",
-        "initAccount",
+        "ensureDefault",
         "connect",
       ]);
       expect(registry.has("u1")).toBe(true);

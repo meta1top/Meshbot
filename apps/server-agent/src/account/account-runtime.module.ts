@@ -10,8 +10,8 @@ import { AccountRuntimeRegistry } from "./account-runtime.registry";
  * 无需显式 import 本模块（解除 AuthModule 与本模块的循环依赖风险）。
  *
  * AgentsModule：AccountRuntimeRegistry 需要 AgentService.ensureDefault() 兜底
- * 取默认 Agent（mcp.json 已下沉到 agents/<agentId>/ 下，createRuntime 目前
- * 仍是账号级触发，尚未知道具体 agentId）。
+ * 取默认 Agent（登录时仅保证至少有一个 Agent 存在；MCP 已改为按 Agent 懒加载
+ * ——不再在这里预热，见 McpService.ensureAgent）。
  */
 @Global()
 @Module({

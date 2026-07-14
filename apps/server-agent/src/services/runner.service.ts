@@ -2,6 +2,7 @@ import {
   AccountContextService,
   AgentContextService,
   GraphRunner,
+  McpService,
   ModelRunContext,
 } from "@meshbot/lib-agent";
 import {
@@ -95,6 +96,7 @@ export class RunnerService implements OnModuleInit {
     private readonly modelRunCtx: ModelRunContext,
     private readonly agentCtx: AgentContextService,
     private readonly agents: AgentService,
+    private readonly mcp: McpService,
   ) {}
 
   /** 启动时把遗留的 processing 消息退回 pending（重启 inflight 丢失后可重跑）。 */
@@ -482,6 +484,11 @@ export class RunnerService implements OnModuleInit {
    * 覆盖整个消费循环，只包建流无效。
    *
    * 模型三级优先级：会话覆盖 > Agent 默认 > 账号启用首行（最后一级由 ModelResolver 兜底）。
+   *
+   * MCP 按 Agent 懒加载（Task 6）：在 AgentContext 内、建流之前 `ensureAgent`
+   * 拉起该 Agent 的 MCP（已就绪则只刷新 lastUsedAt），`acquire` 挂引用计数
+   * 防止闲置回收在 run 进行中把工具抽走；`release` 必须在 finally 里——否则
+   * run 抛错时引用计数永久泄漏，该 Agent 的 MCP 再也回收不掉。
    */
   private async consumeRunStream(
     sessionId: string,
@@ -490,6 +497,7 @@ export class RunnerService implements OnModuleInit {
     resume: boolean,
     runStartedAt: number,
   ): Promise<void> {
+    const cloudUserId = this.account.getOrThrow();
     const session = await this.sessions.findOrNull(sessionId);
     const subAgent = session?.kind === "subagent";
     // 真值判断而非 `??`：`??` 只在 null/undefined 时才走兜底，historical 存量行
@@ -503,18 +511,24 @@ export class RunnerService implements OnModuleInit {
     // 意外兜回账号默认，行为不崩但完全违背设计意图，且无任何日志）。
     const modelOverride =
       session?.modelConfigId || agent?.defaultModelConfigId || null;
-    await this.agentCtx.run(agentId, () =>
-      this.modelRunCtx.run(modelOverride, () =>
-        this.consumeRunStreamInCtx(
-          sessionId,
-          batch,
-          run,
-          resume,
-          runStartedAt,
-          subAgent,
-        ),
-      ),
-    );
+    await this.agentCtx.run(agentId, async () => {
+      await this.mcp.ensureAgent(cloudUserId, agentId);
+      this.mcp.acquire(cloudUserId, agentId);
+      try {
+        await this.modelRunCtx.run(modelOverride, () =>
+          this.consumeRunStreamInCtx(
+            sessionId,
+            batch,
+            run,
+            resume,
+            runStartedAt,
+            subAgent,
+          ),
+        );
+      } finally {
+        this.mcp.release(cloudUserId, agentId);
+      }
+    });
   }
 
   /**

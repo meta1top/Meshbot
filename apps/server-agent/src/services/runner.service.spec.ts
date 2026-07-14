@@ -200,6 +200,27 @@ function fakeAgentService(defaultModelConfigId: string | null = null) {
   };
 }
 
+/**
+ * McpService 替身：ensureAgent/acquire/release 只记调用，不真连 MCP。
+ * 供验证 RunnerService 是否按「ensureAgent → acquire → try/finally release」
+ * 顺序接线（Task 6）。
+ */
+function fakeMcpService() {
+  const calls: string[] = [];
+  return {
+    calls,
+    async ensureAgent(cloudUserId: string, agentId: string) {
+      calls.push(`ensure:${cloudUserId}:${agentId}`);
+    },
+    acquire(cloudUserId: string, agentId: string) {
+      calls.push(`acquire:${cloudUserId}:${agentId}`);
+    },
+    release(cloudUserId: string, agentId: string) {
+      calls.push(`release:${cloudUserId}:${agentId}`);
+    },
+  };
+}
+
 /** LlmCallService 替身（带 getLastBySession）。 */
 function fakeLlmCallServiceWithLast(lastInput: number) {
   return {
@@ -235,6 +256,7 @@ describe("RunnerService", () => {
       new ModelRunContext(),
       new AgentContextService(),
       fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.kickAndWait("s1");
     expect(
@@ -267,6 +289,7 @@ describe("RunnerService", () => {
       new ModelRunContext(),
       new AgentContextService(),
       fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.kickAndWait("s1");
     expect(sess.store).toHaveLength(2);
@@ -290,6 +313,7 @@ describe("RunnerService", () => {
       new ModelRunContext(),
       new AgentContextService(),
       fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     // 第一轮：消费 first，循环排空退出
     await runner.kickAndWait("s1");
@@ -321,6 +345,7 @@ describe("RunnerService", () => {
       new ModelRunContext(),
       new AgentContextService(),
       fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.kickAndWait("s1");
     expect(errs).toHaveLength(1);
@@ -347,6 +372,7 @@ describe("RunnerService", () => {
       new ModelRunContext(),
       new AgentContextService(),
       fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.kickRetryAndWait("s1");
     expect(sess.store[0].status).toBe("processed");
@@ -371,6 +397,7 @@ describe("RunnerService", () => {
       new ModelRunContext(),
       new AgentContextService(),
       fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     emitter.on("run.chunk", () => {
       snapshotDuringRun = runner.getInflight("s1");
@@ -436,6 +463,7 @@ describe("RunnerService", () => {
       new ModelRunContext(),
       new AgentContextService(),
       fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     const runPromise = runner.kickAndWait("s1");
     await reached;
@@ -502,6 +530,7 @@ describe("RunnerService", () => {
       new ModelRunContext(),
       new AgentContextService(),
       fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     const runPromise = runner.kickAndWait("s1");
     await reached;
@@ -547,6 +576,7 @@ describe("RunnerService", () => {
       new ModelRunContext(),
       new AgentContextService(),
       fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     emitter.on("run.chunk", () => runner.interrupt("s1"));
     await runner.kickAndWait("s1");
@@ -577,6 +607,7 @@ describe("RunnerService", () => {
       new ModelRunContext(),
       new AgentContextService(),
       fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.onModuleInit();
     expect(rolledBack).toBe(3);
@@ -601,6 +632,7 @@ describe("RunnerService", () => {
       new ModelRunContext(),
       new AgentContextService(),
       fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.kickAndWait("s1");
     expect(llmCalls.records).toHaveLength(1);
@@ -638,6 +670,7 @@ describe("RunnerService", () => {
       new ModelRunContext(),
       new AgentContextService(),
       fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.kickResumeAndWait("s1");
     expect(events).toContain("run.done");
@@ -671,6 +704,7 @@ describe("RunnerService", () => {
       new ModelRunContext(),
       new AgentContextService(),
       fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     // 入口处（account.run 之外）无上下文，证明上下文是 runner 显式建的而非外泄。
     expect(account.get()).toBeNull();
@@ -704,6 +738,7 @@ describe("RunnerService", () => {
       new ModelRunContext(),
       new AgentContextService(),
       fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.kickAndWait("orphan");
     expect(claimed).toBe(false);
@@ -745,6 +780,7 @@ describe("RunnerService", () => {
       runCtx,
       new AgentContextService(),
       fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.kickAndWait("s1");
     expect(seen).toEqual(["mc-9"]);
@@ -785,6 +821,7 @@ describe("RunnerService", () => {
       new ModelRunContext(),
       agentCtx,
       fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     // 入口处（run 之外）无上下文，证明上下文是 runner 显式建的而非外泄。
     expect(agentCtx.get()).toBeNull();
@@ -838,6 +875,7 @@ describe("RunnerService", () => {
       modelRunCtx as never,
       new AgentContextService(),
       fakeAgentService("m-agent") as never,
+      fakeMcpService() as never,
     );
     await runner1.kickAndWait("s1");
 
@@ -862,6 +900,7 @@ describe("RunnerService", () => {
       modelRunCtx as never,
       new AgentContextService(),
       fakeAgentService("m-agent") as never,
+      fakeMcpService() as never,
     );
     await runner2.kickAndWait("s2");
 
@@ -886,6 +925,7 @@ describe("RunnerService", () => {
       modelRunCtx as never,
       new AgentContextService(),
       fakeAgentService(null) as never,
+      fakeMcpService() as never,
     );
     await runner3.kickAndWait("s3");
 
@@ -931,6 +971,7 @@ describe("RunnerService", () => {
       modelRunCtx as never,
       new AgentContextService(),
       fakeAgentService("m-agent") as never,
+      fakeMcpService() as never,
     );
     await runner.kickAndWait("s1");
     // 期望：空串会话覆盖被当作"未覆盖"，降级到 agent 默认值 "m-agent"。
@@ -976,9 +1017,66 @@ describe("RunnerService", () => {
       new ModelRunContext(),
       agentCtx,
       fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.kickAndWait("s1");
     expect(seen).toEqual(["agent-default"]);
+  });
+
+  it("MCP 接线：正常 run 按 ensureAgent → acquire → release 顺序调用（Task 6）", async () => {
+    const sess = fakeSessionService();
+    const mcp = fakeMcpService();
+    sess.enqueue("s1", "hi");
+    const runner = new RunnerService(
+      sess as never,
+      fakeGraphRunner() as never,
+      new EventEmitter2(),
+      fakeLlmCallService() as never,
+      fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
+      new AccountContextService(),
+      new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      mcp as never,
+    );
+    await runner.kickAndWait("s1");
+    // session 固定 agentId="agent-1"（fakeSessionService.findOrNull），owner=OWNER="u1"。
+    expect(mcp.calls).toEqual([
+      "ensure:u1:agent-1",
+      "acquire:u1:agent-1",
+      "release:u1:agent-1",
+    ]);
+  });
+
+  it("MCP 接线：run 抛错时 release 仍在 finally 里被调用，不泄漏引用计数（Task 6 致命细节）", async () => {
+    const sess = fakeSessionService();
+    const mcp = fakeMcpService();
+    sess.enqueue("s1", "hi");
+    const runner = new RunnerService(
+      sess as never,
+      fakeGraphRunner({ throwErr: true }) as never,
+      new EventEmitter2(),
+      fakeLlmCallService() as never,
+      fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
+      new AccountContextService(),
+      new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      mcp as never,
+    );
+    await runner.kickAndWait("s1");
+    // streamMessage 抛错（非 ctx_exceeded）：consumeRunStreamInCtx 向外抛，
+    // release 必须仍被 finally 调用，否则该 Agent 的 refCount 永久泄漏，
+    // sweepIdle 永远跳过、MCP 子进程永远回收不掉。
+    expect(mcp.calls).toEqual([
+      "ensure:u1:agent-1",
+      "acquire:u1:agent-1",
+      "release:u1:agent-1",
+    ]);
   });
 });
 
@@ -1051,6 +1149,7 @@ describe("RunnerService context compaction integration", () => {
       new ModelRunContext(),
       new AgentContextService(),
       fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.kickAndWait("s1");
     expect(compactor.compactCalls).toHaveLength(1);
@@ -1077,6 +1176,7 @@ describe("RunnerService context compaction integration", () => {
       new ModelRunContext(),
       new AgentContextService(),
       fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.kickAndWait("s1");
     expect(compactor.compactCalls).toHaveLength(0);
@@ -1108,6 +1208,7 @@ describe("RunnerService context compaction integration", () => {
       new ModelRunContext(),
       new AgentContextService(),
       fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.kickAndWait("s1");
     expect(streamSpy).not.toHaveBeenCalled();
@@ -1135,6 +1236,7 @@ describe("RunnerService context compaction integration", () => {
       new ModelRunContext(),
       new AgentContextService(),
       fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.kickAndWait("s1");
     expect(compactor.compactCalls).toHaveLength(1);
@@ -1165,6 +1267,7 @@ describe("RunnerService context compaction integration", () => {
       new ModelRunContext(),
       new AgentContextService(),
       fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.kickAndWait("s1");
     expect(compactor.compactCalls).toHaveLength(0); // 兜底未触发
@@ -1196,6 +1299,7 @@ describe("RunnerService context compaction integration", () => {
       new ModelRunContext(),
       new AgentContextService(),
       fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.kickAndWait("s1");
     // 兜底压缩被调一次（force=true, ctx-exceeded）
