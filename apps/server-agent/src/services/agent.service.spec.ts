@@ -85,6 +85,17 @@ describe("AgentService", () => {
     });
   });
 
+  it("ensureDefault：并发调用只建一个默认 agent（in-flight 去重）", async () => {
+    await account.run("acct-1", async () => {
+      const [a, b] = await Promise.all([
+        service.ensureDefault(),
+        service.ensureDefault(),
+      ]);
+      expect(a.id).toBe(b.id);
+      expect(await service.list()).toHaveLength(1);
+    });
+  });
+
   it("update 只改传入字段", async () => {
     await account.run("acct-1", async () => {
       const a = await service.create({

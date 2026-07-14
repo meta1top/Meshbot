@@ -1,3 +1,4 @@
+import { AccountContextService } from "@meshbot/lib-agent";
 import {
   DEFAULT_AGENT_AVATAR,
   DEFAULT_AGENT_NAME,
@@ -21,10 +22,19 @@ export class AgentService {
   // biome-ignore lint/correctness/noUnusedPrivateClassMembers: findDataSource 反射读取
   private readonly txAnchorRepo: Repository<Agent>;
 
+  /**
+   * `ensureDefault()` 按账号 key 缓存进行中的 promise（进程内 in-flight 去重）。
+   * check-then-act（list 读 → create 写）之间有 await 边界，同账号并发调用会各自
+   * 读到零 agent 并各建一个，需要复用同一个 in-flight promise 避免建出重复默认 Agent；
+   * 本地轨单进程 + SQLite、无 Redis，这个量级足够，不需要 @WithLock。
+   */
+  private readonly ensureDefaultInFlight = new Map<string, Promise<Agent>>();
+
   constructor(
     @InjectRepository(Agent)
     rawRepo: Repository<Agent>,
     scopedFactory: ScopedRepositoryFactory,
+    private readonly accountContext: AccountContextService,
   ) {
     this.repo = scopedFactory.create(rawRepo);
     this.txAnchorRepo = rawRepo;
@@ -82,9 +92,24 @@ export class AgentService {
 
   /**
    * 保证当前账号至少有一个 Agent：零 agent 时建默认 Agent，否则返回第一个。
-   * 启动引导与登录后都会调；幂等。
+   * 启动引导与登录后都会调；幂等——按账号 key 做 in-flight 去重，同账号并发调用
+   * 复用同一个进行中的 promise，避免 list→create 之间的 await 边界导致重复建 Agent。
    */
   async ensureDefault(): Promise<Agent> {
+    const cloudUserId = this.accountContext.getOrThrow();
+    const existing = this.ensureDefaultInFlight.get(cloudUserId);
+    if (existing) {
+      return existing;
+    }
+    const inFlight = this.doEnsureDefault().finally(() => {
+      this.ensureDefaultInFlight.delete(cloudUserId);
+    });
+    this.ensureDefaultInFlight.set(cloudUserId, inFlight);
+    return inFlight;
+  }
+
+  /** ensureDefault 实际读写逻辑：零 agent 时建默认 Agent，否则返回第一个。 */
+  private async doEnsureDefault(): Promise<Agent> {
     const existing = await this.list();
     if (existing.length > 0) {
       return existing[0];
