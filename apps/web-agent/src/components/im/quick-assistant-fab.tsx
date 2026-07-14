@@ -1,17 +1,14 @@
 "use client";
+import { ResizableSheet } from "@meshbot/web-common/shell";
 import { useAtom, useAtomValue } from "jotai";
 import { Sparkles, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect } from "react";
 import {
   assistantDockWidthAtom,
   assistantPanelOpenAtom,
   quickAssistantNameAtom,
 } from "@/atoms/assistant-panel";
 import { AssistantDock } from "@/components/im/assistant-dock";
-
-/** 面板宽度下限（px）与最大占屏比。 */
-const MIN_WIDTH = 380;
-const MAX_VW_RATIO = 0.92;
 
 /**
  * 随手问：右下角浮动气泡；点击展开为「右侧全高浮层面板」。
@@ -22,8 +19,6 @@ export function QuickAssistantFab() {
   const [open, setOpen] = useAtom(assistantPanelOpenAtom);
   const name = useAtomValue(quickAssistantNameAtom);
   const [width, setWidth] = useAtom(assistantDockWidthAtom);
-  const [resizing, setResizing] = useState(false);
-  const asideRef = useRef<HTMLElement | null>(null);
 
   // 展开态按 ESC 收起（与 X 同义）；无展开时不挂监听。
   useEffect(() => {
@@ -34,34 +29,6 @@ export function QuickAssistantFab() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, setOpen]);
-
-  // 左缘拖拽调宽：面板锚定右侧，向左拖 = 变宽。clamp[380, 92vw]，存 px。
-  const startResize = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      const startX = e.clientX;
-      const startW = asideRef.current?.offsetWidth ?? MIN_WIDTH;
-      const maxW = Math.round(window.innerWidth * MAX_VW_RATIO);
-      setResizing(true);
-      document.body.style.userSelect = "none";
-      const onMove = (ev: MouseEvent) => {
-        const next = Math.min(
-          Math.max(startW + (startX - ev.clientX), MIN_WIDTH),
-          maxW,
-        );
-        setWidth(next);
-      };
-      const onUp = () => {
-        document.removeEventListener("mousemove", onMove);
-        document.removeEventListener("mouseup", onUp);
-        document.body.style.userSelect = "";
-        setResizing(false);
-      };
-      document.addEventListener("mousemove", onMove);
-      document.addEventListener("mouseup", onUp);
-    },
-    [setWidth],
-  );
 
   if (!open) {
     return (
@@ -77,50 +44,34 @@ export function QuickAssistantFab() {
     );
   }
 
-  // 默认 30% 窗宽（下限 380px、上限 92vw）；调过后用存的 px（同样 clamp）。
-  const widthCss =
-    width == null
-      ? "clamp(380px, 30vw, 92vw)"
-      : `clamp(380px, ${width}px, 92vw)`;
-
   return (
-    <>
-      <aside
-        ref={asideRef}
-        style={{ width: widthCss }}
-        className="app-no-drag absolute top-0 right-0 bottom-0 z-10000 flex flex-col overflow-hidden border-l border-border bg-(--shell-content) shadow-[-8px_0_24px_-12px_rgba(0,0,0,0.18)]"
-      >
-        {/* 左缘拖拽手柄（贴面板左内缘，避免被 overflow-hidden 裁掉） */}
+    <ResizableSheet
+      width={width}
+      onWidthChange={setWidth}
+      // 默认 30% 窗宽（下限 380px、上限 92vw）；调过后按存的 px 走。
+      defaultWidth="30vw"
+      // app-no-drag：z 抬到拖拽条（DragRegion, z-9999）之上，头部按钮才可点。
+      className="app-no-drag"
+    >
+      {/* 头部（高度对齐会话头 h-13）：drag-handle 恢复窗口拖动（面板整体
+          app-no-drag 挖掉了顶部拖拽条），按钮再 app-no-drag 凿洞保持可点。 */}
+      <div className="drag-handle flex h-13 shrink-0 items-center gap-2 border-b border-border pr-3 pl-4">
+        <Sparkles className="h-4 w-4 text-(--shell-accent)" />
+        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">
+          {name}
+        </span>
         <button
           type="button"
-          aria-label="resize"
-          onMouseDown={startResize}
-          className="group absolute top-0 bottom-0 left-0 z-10 flex w-2 cursor-col-resize items-stretch"
+          onClick={() => setOpen(false)}
+          aria-label="close"
+          className="app-no-drag flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
         >
-          <span className="h-full w-px bg-transparent transition-colors group-hover:bg-(--shell-accent)" />
+          <X className="h-4 w-4" />
         </button>
-        {/* 头部（高度对齐会话头 h-13）：drag-handle 恢复窗口拖动（面板整体
-            app-no-drag 挖掉了顶部拖拽条），按钮再 app-no-drag 凿洞保持可点。 */}
-        <div className="drag-handle flex h-13 shrink-0 items-center gap-2 border-b border-border pr-3 pl-4">
-          <Sparkles className="h-4 w-4 text-(--shell-accent)" />
-          <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">
-            {name}
-          </span>
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            aria-label="close"
-            className="app-no-drag flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-hidden">
-          <AssistantDock chromeless />
-        </div>
-      </aside>
-      {/* 拖拽时全屏罩：稳住鼠标事件，避免掠过 iframe/选中文本丢失拖拽 */}
-      {resizing && <div className="fixed inset-0 z-10001 cursor-col-resize" />}
-    </>
+      </div>
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <AssistantDock chromeless />
+      </div>
+    </ResizableSheet>
   );
 }
