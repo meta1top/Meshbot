@@ -98,6 +98,8 @@ DDL 走 `ddl-migration` 技能那套：纯 SQL 文件、幂等（`IF NOT EXISTS`
 
 `MeshbotConfigService` 的账号级 getter（memory / skills / mcp.json / workspace）改成从 ALS 取 `agentId`，拼 `agents/<agentId>/...`。
 
+**这一步是杠杆点**：`SkillService`、`MemoryService`、bash/文件工具的 cwd **全都只通过这些 getter 拿路径**，所以改完 getter 之后它们**零改动自动按 agent 隔离**。真正还要单独动的只有 `McpService`（它自己维护 `perAccount` Map）与 `ToolRegistry`（自己维护 `accountEntries` Map）。
+
 `PromptService` 不再负责人格（人格进了 DB），只保留 session-title / next-action-suggestions 两个模板，仍是账号级。
 
 ### 3.4 MCP：按 agent 隔离进程池 + 懒加载
@@ -114,9 +116,13 @@ DDL 走 `ddl-migration` 技能那套：纯 SQL 文件、幂等（`IF NOT EXISTS`
 
 图里绑的是惰性 provider，`ToolRegistry.asLangChainBindable()` 每轮重新求值（`libs/agent/src/graph/supervisor.node.ts:33`）。加 agent 维度只需在 `accountEntries` 的 key 上带 `agentId`，**图一行不改**。
 
-### 3.6 图缓存 key
+### 3.6 图缓存：**不用改**（写计划时读代码推翻的原判断）
 
-`AccountGraphProvider` 的两个 Map（`graphsByAccount` / `subGraphsByAccount`）key 从 `cloudUserId` 变成 `${cloudUserId}:${agentId}`，subagent 变体同理。**checkpointer 仍按账号取**（见 2.3）。
+初版设计说要把 `AccountGraphProvider` 的两个 Map key 扩成 `${cloudUserId}:${agentId}`。读完代码后确认**这是多余的**：
+
+`buildSupervisorGraph` 注入的是 `checkpointer`（账号级）、`modelResolver.provider()`（惰性闭包）、`registry`（对象，`asLangChainBindable()` 每轮从 ALS 现读）、`emitter`、`resolveMessageId` —— **没有一个是 agent 相关的常量**。工具集与模型都在每轮求值时从 ALS 解析（`graph.builder.ts:106`、`supervisor.node.ts:33`）。
+
+所以只要 `ToolRegistry` 与 `ModelResolver` 认 ALS 里的 `agentId`，**同一张图天然就为不同 agent 绑定不同工具集**。`AccountGraphProvider` 一行都不用改。
 
 ### 3.7 模型解析优先级
 
@@ -246,7 +252,7 @@ B 侧 `RemoteRunInboundService`（`apps/server-agent/src/services/remote-run-inb
 
 ```
 libs/agent/src/graph/graph-runner.service.ts        人格注入（3.2 核心改造点）
-libs/agent/src/graph/account-graph.provider.ts      图缓存 key / checkpointer 不变量
+libs/agent/src/graph/account-graph.provider.ts      不改（checkpointer 账号级不变量的持有者）
 libs/agent/src/graph/graph.builder.ts               reducer 原地替换机制
 libs/agent/src/graph/context-builder.ts             system:ctx / system:skills 组装
 libs/agent/src/graph/model-resolver.service.ts      模型解析三级优先级
