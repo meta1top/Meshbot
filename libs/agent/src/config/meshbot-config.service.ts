@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { Injectable } from "@nestjs/common";
 import { AccountContextService } from "../account/account-context.service";
+import { AgentContextService } from "../account/agent-context.service";
 
 function findRepoRoot(startDir: string): string | null {
   let currentDir = startDir;
@@ -47,7 +48,10 @@ function resolveMeshbotDir(): string {
 export class MeshbotConfigService {
   private readonly meshbotDir: string;
 
-  constructor(private readonly account: AccountContextService) {
+  constructor(
+    private readonly account: AccountContextService,
+    private readonly agent: AgentContextService,
+  ) {
     this.meshbotDir = resolveMeshbotDir();
   }
 
@@ -75,19 +79,23 @@ export class MeshbotConfigService {
   }
 
   /**
-   * Skills 根目录：<meshbotDir>/accounts/<account>/skills（按账号隔离）；
-   * 每个子目录一个 skill，含 SKILL.md。
+   * 当前 Agent 专属数据根：<meshbotDir>/accounts/<cloudUserId>/agents/<agentId>，自动 mkdir。
+   * 无 Agent 上下文时 getOrThrow 抛错——Agent 化文件 getter 必须在 Agent 上下文内调用。
    */
-  getSkillsDir(): string {
-    return path.join(this.accountDir(), "skills");
+  private agentDir(): string {
+    const dir = path.join(this.accountDir(), "agents", this.agent.getOrThrow());
+    mkdirSync(dir, { recursive: true });
+    return dir;
   }
 
-  /**
-   * MCP 配置：<meshbotDir>/accounts/<account>/mcp.json（按账号隔离）；
-   * 不存在视作无 MCP server。
-   */
+  /** Skills 根目录：<accountDir>/agents/<agentId>/skills（按 Agent 隔离）。 */
+  getSkillsDir(): string {
+    return path.join(this.agentDir(), "skills");
+  }
+
+  /** MCP 配置：<accountDir>/agents/<agentId>/mcp.json（按 Agent 隔离）。 */
   getMcpConfigPath(): string {
-    return path.join(this.accountDir(), "mcp.json");
+    return path.join(this.agentDir(), "mcp.json");
   }
 
   /**
@@ -108,22 +116,22 @@ export class MeshbotConfigService {
     return path.join(this.accountDir(), "agent.db");
   }
 
-  /** 记忆目录：<meshbotDir>/accounts/<account>/memory（按账号隔离）。 */
+  /** 记忆目录：<accountDir>/agents/<agentId>/memory（按 Agent 隔离）。 */
   getMemoryDir(): string {
-    return path.join(this.accountDir(), "memory");
+    return path.join(this.agentDir(), "memory");
   }
 
   /**
-   * Bash tool 默认 cwd —— 按账号隔离 <meshbotDir>/accounts/<account>/workspace，自动 mkdir。
-   * - prod：~/.meshbot/accounts/<account>/workspace
-   * - dev：<repoRoot>/.meshbot/accounts/<account>/workspace
-   * 可被环境变量 MESHBOT_WORKSPACE 覆盖（覆盖时不依赖账号上下文）。
+   * Bash tool 默认 cwd —— 按 Agent 隔离 <meshbotDir>/accounts/<account>/agents/<agentId>/workspace，自动 mkdir。
+   * - prod：~/.meshbot/accounts/<account>/agents/<agentId>/workspace
+   * - dev：<repoRoot>/.meshbot/accounts/<account>/agents/<agentId>/workspace
+   * 可被环境变量 MESHBOT_WORKSPACE 覆盖（覆盖时不依赖账号/Agent 上下文）。
    */
   getWorkspaceDir(): string {
     if (process.env.MESHBOT_WORKSPACE) {
       return process.env.MESHBOT_WORKSPACE;
     }
-    const dir = path.join(this.accountDir(), "workspace");
+    const dir = path.join(this.agentDir(), "workspace");
     mkdirSync(dir, { recursive: true });
     return dir;
   }

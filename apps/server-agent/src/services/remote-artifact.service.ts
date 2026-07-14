@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
-import { MeshbotConfigService } from "@meshbot/lib-agent";
+import { AgentContextService, MeshbotConfigService } from "@meshbot/lib-agent";
 import {
   ForbiddenException,
   Injectable,
@@ -8,6 +8,7 @@ import {
 } from "@nestjs/common";
 import { DriveToolService } from "./drive-tool.service";
 import { SessionMessageService } from "./session-message.service";
+import { SessionService } from "./session.service";
 
 /** 经查询通道内联回传的上限：产物基本是 markdown/html/代码，2MB 覆盖绝大多数。 */
 const MAX_INLINE_BYTES = 2 * 1024 * 1024;
@@ -36,9 +37,17 @@ export class RemoteArtifactService {
     private readonly config: MeshbotConfigService,
     private readonly messages: SessionMessageService,
     private readonly driveTool: DriveToolService,
+    private readonly agentCtx: AgentContextService,
+    private readonly sessions: SessionService,
   ) {}
 
-  /** 白名单 + 边界校验，返回绝对路径；任何不满足都抛（inbound 统一转 ok:false）。 */
+  /**
+   * 白名单 + 边界校验，返回绝对路径；任何不满足都抛（inbound 统一转 ok:false）。
+   *
+   * workspace 路径已下沉到 agents/<agentId>/（Task 4），本方法在该会话归属的
+   * Agent 上下文内解析 workspace —— 相比兜底取默认 Agent，这里能拿到真实
+   * sessionId 对应的 agentId（Task 2 起 sessions.agent_id 必填），精确寻址。
+   */
   private async resolveVerified(
     sessionId: string,
     filePath: string,
@@ -46,15 +55,18 @@ export class RemoteArtifactService {
     if (!(await this.messages.hasPresentedFile(sessionId, filePath))) {
       throw new ForbiddenException("file not presented in this session");
     }
-    const dir = this.config.getWorkspaceDir();
-    const abs = path.resolve(dir, filePath);
-    if (abs !== dir && !abs.startsWith(dir + path.sep)) {
-      throw new ForbiddenException("path outside workspace");
-    }
-    if (!existsSync(abs) || !statSync(abs).isFile()) {
-      throw new NotFoundException("artifact not found");
-    }
-    return abs;
+    const session = await this.sessions.findSessionOrFail(sessionId);
+    return this.agentCtx.run(session.agentId, () => {
+      const dir = this.config.getWorkspaceDir();
+      const abs = path.resolve(dir, filePath);
+      if (abs !== dir && !abs.startsWith(dir + path.sep)) {
+        throw new ForbiddenException("path outside workspace");
+      }
+      if (!existsSync(abs) || !statSync(abs).isFile()) {
+        throw new NotFoundException("artifact not found");
+      }
+      return abs;
+    });
   }
 
   /** 读产物：≤2MB 内联 base64 回传；超限返回 too-large 信号。 */
@@ -75,13 +87,20 @@ export class RemoteArtifactService {
     };
   }
 
-  /** 大文件路径：上传企业网盘（组织共享，A 侧可直接取 presigned URL 预览）。 */
+  /**
+   * 大文件路径：上传企业网盘（组织共享，A 侧可直接取 presigned URL 预览）。
+   * `driveTool.upload` 内部也会读 `getWorkspaceDir()`，同样需要该会话的 Agent
+   * 上下文——外层 `resolveVerified` 已校验通过，这里重新以同一 agentId 包一层。
+   */
   async uploadToDrive(
     sessionId: string,
     filePath: string,
   ): Promise<RemoteArtifactUploadResult> {
     const abs = await this.resolveVerified(sessionId, filePath);
-    const out = await this.driveTool.upload(filePath, null, undefined);
+    const session = await this.sessions.findSessionOrFail(sessionId);
+    const out = await this.agentCtx.run(session.agentId, () =>
+      this.driveTool.upload(filePath, null, undefined),
+    );
     if (out.startsWith("Error:")) {
       throw new NotFoundException(out);
     }

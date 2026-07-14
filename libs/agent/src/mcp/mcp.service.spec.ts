@@ -6,6 +6,7 @@ import type { StructuredToolInterface } from "@langchain/core/tools";
 import type { MultiServerMCPClient } from "@langchain/mcp-adapters";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AccountContextService } from "../account/account-context.service";
+import { AgentContextService } from "../account/agent-context.service";
 import { MeshbotConfigService } from "../config/meshbot-config.service";
 import { ToolRegistry } from "../tools/tool-registry";
 import { McpService } from "./mcp.service";
@@ -14,7 +15,12 @@ import { McpService } from "./mcp.service";
  * 测哲学：真连 MCP server 不现实，这里只锁定「按账号 init/teardown 的簿记 + 隔离」。
  * 用可注入的 createClient 工厂在测试子类里替换出 stub client：
  *   getTools() 返回假 LC tool，close() 是 spy。
+ *
+ * mcp.json 已下沉到 agents/<agentId>/ 下（Task 4），每个账号用固定的 AGENT_ID
+ * 兜底（本测试只锁定账号级 init/teardown 簿记，不测多 Agent 场景）。
  */
+
+const AGENT_ID = "agent-mcp-test";
 
 /** 造一个最小可用的假 LC tool（name 唯一即可，schema/desc 透传给 adapter）。 */
 function fakeLcTool(name: string): StructuredToolInterface {
@@ -67,7 +73,7 @@ function makeRegistry(account: AccountContextService): ToolRegistry {
 }
 
 function writeMcpJson(home: string, cloudUserId: string, json: unknown): void {
-  const dir = path.join(home, "accounts", cloudUserId);
+  const dir = path.join(home, "accounts", cloudUserId, "agents", AGENT_ID);
   mkdirSync(dir, { recursive: true });
   writeFileSync(path.join(dir, "mcp.json"), JSON.stringify(json), "utf8");
 }
@@ -81,15 +87,22 @@ const ONE_SERVER = {
 describe("McpService 每账号 init/teardown", () => {
   let home: string;
   let account: AccountContextService;
+  let agentCtx: AgentContextService;
   let config: MeshbotConfigService;
   let reg: ToolRegistry;
   let svc: TestMcpService;
+
+  /** 在账号 + Agent 双层上下文中运行 fn（mcp.json 已下沉到 agents/<agentId>/ 下）。 */
+  function runInContext<T>(cloudUserId: string, fn: () => T): T {
+    return account.run(cloudUserId, () => agentCtx.run(AGENT_ID, fn));
+  }
 
   beforeEach(() => {
     home = mkdtempSync(path.join(tmpdir(), "meshbot-mcp-"));
     process.env.MESHBOT_HOME = home;
     account = new AccountContextService();
-    config = new MeshbotConfigService(account);
+    agentCtx = new AgentContextService();
+    config = new MeshbotConfigService(account, agentCtx);
     reg = makeRegistry(account);
     svc = new TestMcpService(config, reg);
   });
@@ -111,7 +124,7 @@ describe("McpService 每账号 init/teardown", () => {
     svc.stubs = [stub];
     const spy = vi.spyOn(reg, "registerForAccount");
 
-    await account.run("u1", async () => {
+    await runInContext("u1", async () => {
       await svc.initAccount("u1");
     });
 
@@ -128,7 +141,7 @@ describe("McpService 每账号 init/teardown", () => {
 
   it("无 mcp.json → no-op，不注册任何工具，不构造 client", async () => {
     const spy = vi.spyOn(reg, "registerForAccount");
-    await account.run("u1", async () => {
+    await runInContext("u1", async () => {
       await svc.initAccount("u1");
     });
     expect(spy).not.toHaveBeenCalled();
@@ -138,7 +151,7 @@ describe("McpService 每账号 init/teardown", () => {
   it("空 mcpServers → no-op，不构造 client", async () => {
     writeMcpJson(home, "u1", { mcpServers: {} });
     const spy = vi.spyOn(reg, "registerForAccount");
-    await account.run("u1", async () => {
+    await runInContext("u1", async () => {
       await svc.initAccount("u1");
     });
     expect(spy).not.toHaveBeenCalled();
@@ -149,7 +162,7 @@ describe("McpService 每账号 init/teardown", () => {
     writeMcpJson(home, "u1", ONE_SERVER);
     const stub = makeStubClient([fakeLcTool("mcp__fs__read")]);
     svc.stubs = [stub];
-    await account.run("u1", async () => {
+    await runInContext("u1", async () => {
       await svc.initAccount("u1");
     });
 
@@ -179,7 +192,7 @@ describe("McpService 每账号 init/teardown", () => {
     const second = makeStubClient([fakeLcTool("mcp__fs__read")]);
     svc.stubs = [first, second];
 
-    await account.run("u1", async () => {
+    await runInContext("u1", async () => {
       await svc.initAccount("u1");
       await svc.initAccount("u1");
     });
@@ -202,10 +215,10 @@ describe("McpService 每账号 init/teardown", () => {
     const s2 = makeStubClient([fakeLcTool("mcp__web__fetch")]);
     svc.stubs = [s1, s2];
 
-    await account.run("u1", async () => {
+    await runInContext("u1", async () => {
       await svc.initAccount("u1");
     });
-    await account.run("u2", async () => {
+    await runInContext("u2", async () => {
       await svc.initAccount("u2");
     });
 
@@ -231,8 +244,8 @@ describe("McpService 每账号 init/teardown", () => {
     const s1 = makeStubClient([fakeLcTool("mcp__fs__read")]);
     const s2 = makeStubClient([fakeLcTool("mcp__web__fetch")]);
     svc.stubs = [s1, s2];
-    await account.run("u1", async () => svc.initAccount("u1"));
-    await account.run("u2", async () => svc.initAccount("u2"));
+    await runInContext("u1", async () => svc.initAccount("u1"));
+    await runInContext("u2", async () => svc.initAccount("u2"));
 
     await svc.onModuleDestroy();
 

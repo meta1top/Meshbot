@@ -4,6 +4,7 @@ import {
   type SkillToolsPort,
 } from "@meshbot/lib-agent";
 import { Global, Module } from "@nestjs/common";
+import { AgentsModule } from "./agents.module";
 import { AuthModule } from "./auth.module";
 import { SkillController } from "./controllers/skill.controller";
 import { ClawhubSource } from "./skills/sources/clawhub.source";
@@ -20,12 +21,14 @@ import { SkillInstallService } from "./skills/skill-install.service";
  *
  * 依赖：
  * - AgentModule：提供 SkillService（天然热 skills 列表扫描）+ MeshbotConfigService（re-export）
+ *   + AgentContextService（@Global AgentContextModule，AgentModule 已 import）
+ * - AgentsModule：提供 AgentService（SkillController REST 入口解析/校验 agentId）
  * - AuthModule：提供 CloudClientService + CloudIdentityService
  * - AccountContextService：来自 @Global AccountContextModule（AgentModule 已 import）
  */
 @Global()
 @Module({
-  imports: [AgentModule, AuthModule],
+  imports: [AgentModule, AgentsModule, AuthModule],
   controllers: [SkillController],
   providers: [
     GithubSource,

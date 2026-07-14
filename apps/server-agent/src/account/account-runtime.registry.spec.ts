@@ -1,7 +1,9 @@
-import { AccountContextService } from "@meshbot/lib-agent";
+import { AccountContextService, AgentContextService } from "@meshbot/lib-agent";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { ACCOUNT_EVENTS } from "./account.events";
 import { AccountRuntimeRegistry } from "./account-runtime.registry";
+import type { AgentService } from "../services/agent.service";
+import type { Agent } from "../entities/agent.entity";
 
 type StubMcp = jest.Mocked<
   Pick<
@@ -18,17 +20,23 @@ type StubRelay = jest.Mocked<
     "connect" | "disconnect"
   >
 >;
+type StubAgents = jest.Mocked<Pick<AgentService, "ensureDefault">>;
+
+const DEFAULT_AGENT_ID = "agent-default";
 
 describe("AccountRuntimeRegistry", () => {
   let ctx: AccountContextService;
+  let agentCtx: AgentContextService;
   let mcp: StubMcp;
   let prompt: StubPrompt;
   let relay: StubRelay;
+  let agents: StubAgents;
   let emitter: EventEmitter2;
   let registry: AccountRuntimeRegistry;
 
   beforeEach(() => {
     ctx = new AccountContextService();
+    agentCtx = new AgentContextService();
 
     // mcp.initAccount captures the account context at call time so we can verify
     // it was called inside ctx.run(cloudUserId, ...)
@@ -42,29 +50,39 @@ describe("AccountRuntimeRegistry", () => {
       connect: jest.fn().mockResolvedValue(undefined),
       disconnect: jest.fn(),
     };
+    agents = {
+      ensureDefault: jest
+        .fn()
+        .mockResolvedValue({ id: DEFAULT_AGENT_ID } as Agent),
+    };
     emitter = new EventEmitter2();
     jest.spyOn(emitter, "emit");
 
     registry = new AccountRuntimeRegistry(
       ctx,
+      agentCtx,
       mcp as unknown as import("@meshbot/lib-agent").McpService,
       prompt as unknown as import("@meshbot/lib-agent").PromptService,
       relay as unknown as import("../cloud/im-relay-client.service").ImRelayClientService,
       emitter,
+      agents as unknown as AgentService,
     );
   });
 
   describe("createRuntime", () => {
-    it("mcp.initAccount(u1) が呼ばれ、かつアカウントコンテキスト内で呼ばれること", async () => {
+    it("mcp.initAccount(u1) が呼ばれ、かつアカウント + 默认 Agent コンテキスト内で呼ばれること", async () => {
       let capturedContext: string | null = null;
+      let capturedAgentContext: string | null = null;
       mcp.initAccount.mockImplementation(async () => {
         capturedContext = ctx.get();
+        capturedAgentContext = agentCtx.get();
       });
 
       await registry.createRuntime("u1");
 
       expect(mcp.initAccount).toHaveBeenCalledWith("u1");
       expect(capturedContext).toBe("u1");
+      expect(capturedAgentContext).toBe(DEFAULT_AGENT_ID);
     });
 
     it("relay.connect(u1) が呼ばれること", async () => {

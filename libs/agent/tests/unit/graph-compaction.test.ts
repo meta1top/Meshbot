@@ -5,6 +5,7 @@ import { AIMessage } from "@langchain/core/messages";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AccountContextService } from "../../src/account/account-context.service";
+import { AgentContextService } from "../../src/account/agent-context.service";
 import { MeshbotConfigService } from "../../src/config/meshbot-config.service";
 import { AccountGraphProvider } from "../../src/graph/account-graph.provider";
 import { ContextBuilder } from "../../src/graph/context-builder.js";
@@ -29,7 +30,10 @@ describe("GraphService compaction hooks", () => {
     testDir = mkdtempSync(path.join(tmpdir(), "meshbot-compact-test-"));
     mkdirSync(path.join(testDir, "prompt"), { recursive: true });
     ctx = new AccountContextService();
-    const configService = new MeshbotConfigService(ctx);
+    const configService = new MeshbotConfigService(
+      ctx,
+      new AgentContextService(),
+    );
     (configService as unknown as Record<string, string>).meshbotDir = testDir;
     const promptService = new PromptService(configService, ctx);
     invokeCalls = [];

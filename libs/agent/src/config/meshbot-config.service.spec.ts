@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AccountContextService } from "../account/account-context.service";
+import { AgentContextService } from "../account/agent-context.service";
 import { MeshbotConfigService } from "./meshbot-config.service";
 
-describe("MeshbotConfigService 账号化文件 getter", () => {
+describe("MeshbotConfigService 账号化/Agent 化文件 getter", () => {
   const HOME = "/tmp/meshbot-config-spec-home";
   let ctx: AccountContextService;
+  let agentCtx: AgentContextService;
   let config: MeshbotConfigService;
   const originalHome = process.env.MESHBOT_HOME;
   const originalWorkspace = process.env.MESHBOT_WORKSPACE;
@@ -14,7 +16,8 @@ describe("MeshbotConfigService 账号化文件 getter", () => {
     // MESHBOT_WORKSPACE 会覆盖 getWorkspaceDir，账号化测试必须清掉。
     delete process.env.MESHBOT_WORKSPACE;
     ctx = new AccountContextService();
-    config = new MeshbotConfigService(ctx);
+    agentCtx = new AgentContextService();
+    config = new MeshbotConfigService(ctx, agentCtx);
   });
 
   afterEach(() => {
@@ -30,16 +33,24 @@ describe("MeshbotConfigService 账号化文件 getter", () => {
     }
   });
 
-  it("文件 getter 随当前账号返回 accounts/<id>/...", () => {
+  it("文件 getter 随当前账号/Agent 返回 accounts/<id>/agents/<agentId>/...（prompt 仍账号级）", () => {
     ctx.run("u1", () => {
-      expect(config.getSkillsDir().endsWith("/accounts/u1/skills")).toBe(true);
       expect(config.getPromptDir().endsWith("/accounts/u1/prompt")).toBe(true);
-      expect(config.getMcpConfigPath().endsWith("/accounts/u1/mcp.json")).toBe(
-        true,
-      );
-      expect(config.getWorkspaceDir().endsWith("/accounts/u1/workspace")).toBe(
-        true,
-      );
+      agentCtx.run("agent-1", () => {
+        expect(
+          config.getSkillsDir().endsWith("/accounts/u1/agents/agent-1/skills"),
+        ).toBe(true);
+        expect(
+          config
+            .getMcpConfigPath()
+            .endsWith("/accounts/u1/agents/agent-1/mcp.json"),
+        ).toBe(true);
+        expect(
+          config
+            .getWorkspaceDir()
+            .endsWith("/accounts/u1/agents/agent-1/workspace"),
+        ).toBe(true);
+      });
     });
   });
 

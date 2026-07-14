@@ -1,11 +1,13 @@
 import {
   AccountContextService,
+  AgentContextService,
   McpService,
   PromptService,
 } from "@meshbot/lib-agent";
 import { Injectable, Logger } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { ImRelayClientService } from "../cloud/im-relay-client.service";
+import { AgentService } from "../services/agent.service";
 import { ACCOUNT_EVENTS } from "./account.events";
 
 /**
@@ -19,10 +21,12 @@ export class AccountRuntimeRegistry {
 
   constructor(
     private readonly ctx: AccountContextService,
+    private readonly agentCtx: AgentContextService,
     private readonly mcp: McpService,
     private readonly prompt: PromptService,
     private readonly relay: ImRelayClientService,
     private readonly emitter: EventEmitter2,
+    private readonly agents: AgentService,
   ) {}
 
   /** 该账号运行时是否在线。 */
@@ -33,11 +37,18 @@ export class AccountRuntimeRegistry {
   /**
    * 构建某账号运行时（幂等：已存在先 teardown）。
    * MCP init 在该账号上下文内（文件 getter 依赖 ALS）。
+   *
+   * mcp.json 已下沉到 `agents/<agentId>/` 下，但 createRuntime 是账号级触发
+   * （登录/启动时），尚不知道要用哪个 Agent —— 本期用该账号默认 Agent
+   * （`ensureDefault()`）兜底初始化 MCP；MCP 按 Agent 隔离是后续任务。
    */
   async createRuntime(cloudUserId: string): Promise<void> {
     await this.teardownRuntime(cloudUserId);
     await this.ctx.run(cloudUserId, async () => {
-      await this.mcp.initAccount(cloudUserId);
+      const defaultAgent = await this.agents.ensureDefault();
+      await this.agentCtx.run(defaultAgent.id, async () => {
+        await this.mcp.initAccount(cloudUserId);
+      });
     });
     await this.relay.connect(cloudUserId);
     this.live.add(cloudUserId);

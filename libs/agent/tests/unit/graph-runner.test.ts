@@ -8,6 +8,7 @@ import { EventEmitter2 } from "@nestjs/event-emitter";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { AccountContextService } from "../../src/account/account-context.service";
+import { AgentContextService } from "../../src/account/agent-context.service";
 import { MeshbotConfigService } from "../../src/config/meshbot-config.service";
 import { AccountGraphProvider } from "../../src/graph/account-graph.provider";
 import { ContextBuilder } from "../../src/graph/context-builder.js";
@@ -28,7 +29,10 @@ function makeTestServices(testDir: string): {
   promptService: PromptService;
 } {
   const ctx = new AccountContextService();
-  const configService = new MeshbotConfigService(ctx);
+  const configService = new MeshbotConfigService(
+    ctx,
+    new AgentContextService(),
+  );
   (configService as unknown as Record<string, string>).meshbotDir = testDir;
   const promptService = new PromptService(configService, ctx);
   return { ctx, configService, promptService };
@@ -428,7 +432,10 @@ describe("GraphRunner system:ctx 刷新不累积", () => {
 
   it("连续两次 streamMessage 后 state 里 id===system:ctx 的消息恰好 1 条", async () => {
     const ctx = new AccountContextService();
-    const configService = new MeshbotConfigService(ctx);
+    const configService = new MeshbotConfigService(
+      ctx,
+      new AgentContextService(),
+    );
     (configService as unknown as Record<string, string>).meshbotDir = testDir;
     const promptService = new PromptService(configService, ctx);
     const toolRegistry = new ToolRegistry(
