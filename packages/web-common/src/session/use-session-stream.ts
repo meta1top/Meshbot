@@ -270,15 +270,14 @@ export function useSessionStream(
     null | "threshold" | "ctx-exceeded"
   >(null);
 
-  // 回调按调用点解构，避免依赖数组里塞一个每次渲染新引用的 `callbacks` 对象——
-  // web-agent 薄桥用 useCallback 稳定各回调引用，effect 依赖数组按各回调独立追踪。
-  const {
-    onUsageReset,
-    onUsageInitial,
-    onUsageEvent,
-    onUsageBatch,
-    onTitleUpdated,
-  } = callbacks;
+  // 回调一律经 ref 取最新值，**不进任何依赖数组**：它们只在事件/异步回调里被调用，
+  // 不参与渲染。若把它们直接当依赖，调用方传一个内联箭头（每渲染新引用）就会让下方
+  // 订阅 effect 每渲染重跑 → `setMessages([])` → 再渲染 → Maximum update depth exceeded。
+  // 用 ref 兜住后，调用方传不传 useCallback 都安全。
+  const callbacksRef = useRef(callbacks);
+  useEffect(() => {
+    callbacksRef.current = callbacks;
+  });
 
   /** 单一写入口：同步更新 ref 与 state。 */
   const apply = useCallback(
@@ -374,7 +373,7 @@ export function useSessionStream(
     remoteStreamIdRef.current = remoteDeviceId
       ? (remoteInitialStreamId ?? null)
       : null;
-    onUsageReset?.(sessionId);
+    callbacksRef.current.onUsageReset?.(sessionId);
     let cancelled = false;
     setHistoryLoading(true);
 
@@ -517,13 +516,13 @@ export function useSessionStream(
             return [...initial, ...socketArrived];
           });
           if (history.sessionTotals) {
-            onUsageInitial?.(sessionId, {
+            callbacksRef.current.onUsageInitial?.(sessionId, {
               sessionTotals: history.sessionTotals,
               byMessage: history.byMessage,
             });
           } else {
             // 防御：首次必有 sessionTotals
-            onUsageBatch?.(sessionId, history.byMessage);
+            callbacksRef.current.onUsageBatch?.(sessionId, history.byMessage);
           }
           oldestMessageIdRef.current = initial[0]?.id ?? null;
           hasMoreHistoryRef.current = history.hasMore;
@@ -757,12 +756,12 @@ export function useSessionStream(
     };
     const onUsage = (e: RunUsageEvent) => {
       if (e.sessionId !== sessionId) return;
-      onUsageEvent?.(sessionId, e);
+      callbacksRef.current.onUsageEvent?.(sessionId, e);
     };
     // 标题事件全局广播（不限当前 session）：按事件 sessionId patch 列表 + 标题栏
     //（两处都读 sessionsAtom）。后台 LLM 生成标题完成后实时刷新。
     const onTitleUpdatedEvent = (e: SessionTitleUpdatedEvent) => {
-      onTitleUpdated?.(e.sessionId, e.title);
+      callbacksRef.current.onTitleUpdated?.(e.sessionId, e.title);
     };
     const onToolArgsDelta = (e: RunToolCallArgsDeltaEvent) => {
       if (e.sessionId !== sessionId) return;
@@ -997,11 +996,6 @@ export function useSessionStream(
     apply,
     upsertChunk,
     migrateHumanToTimeline,
-    onUsageReset,
-    onUsageInitial,
-    onUsageEvent,
-    onUsageBatch,
-    onTitleUpdated,
   ]);
 
   /**
@@ -1148,7 +1142,7 @@ export function useSessionStream(
           const fresh = newMessages.filter((m) => !existingIds.has(m.id));
           return [...fresh, ...prev];
         });
-        onUsageBatch?.(sessionId, res.byMessage);
+        callbacksRef.current.onUsageBatch?.(sessionId, res.byMessage);
         oldestMessageIdRef.current = res.messages[0]?.id ?? cursor;
         newHasMore = res.hasMore;
       }
@@ -1166,7 +1160,7 @@ export function useSessionStream(
     } finally {
       loadingMoreRef.current = false;
     }
-  }, [sessionId, apply, onUsageBatch, remoteDeviceId, transport]);
+  }, [sessionId, apply, remoteDeviceId, transport]);
 
   /**
    * 确认/取消一次待发送的工具调用（im_send_message / drive 分享类 confirm 型
