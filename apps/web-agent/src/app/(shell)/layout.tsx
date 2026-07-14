@@ -28,15 +28,25 @@ function ShellInner({ children }: { children: ReactNode }) {
   const [isResizing, setIsResizing] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const asideRef = useRef<HTMLElement>(null);
+  const paneRef = useRef<HTMLDivElement>(null);
   const [slotEl, setSlotEl] = useState<HTMLElement | null>(null);
   // 默认 340px；下限 380px、上限 92vw（与随手问助手同套 clamp 语义）。
   const widthStyle = `clamp(380px, ${assistantWidth}px, 92vw)`;
 
   /**
-   * 左缘拖拽调宽。拖动期间**直接改 DOM 宽度**、松手才提交一次 atom——宽度存在
-   * ShellInner 的 jotai atom 里，每帧 setState 会连同 children（整条消息流 +
-   * 产物正文）一起重渲染，拖起来明显卡顿。随手问助手面板宽度是组件内 useState，
-   * 重渲染范围只有它自己，所以一直是顺的。
+   * 左缘拖拽调宽。两处刻意绕开每帧开销，否则拖起来跟不上鼠标：
+   *
+   * 1) React 退出拖拽循环：宽度存在 ShellInner 的 jotai atom 里，每帧 setState
+   *    会连同 children（整条消息流）一起重渲染。拖动期间直接写 DOM 宽度（rAF
+   *    合并多次 mousemove），松手才提交一次 atom。
+   * 2) 正文退出拖拽循环：产物正文是 react-markdown + rehype-highlight（大文件
+   *    上万个高亮节点）甚至 iframe，宽度每帧一变就要整棵重排——这才是主要开销。
+   *    拖动期间把正文冻结成「固定宽度 + 贴右缘绝对定位」：面板右缘本就不动，
+   *    看起来就是让出/收回空间（变宽时左侧露出底色，变窄时左侧被裁），零重排；
+   *    松手清掉内联样式，正文按最终宽度重排一次。
+   *
+   * 随手问助手面板一直是顺的：宽度是组件内 useState（重渲染范围只有它自己），
+   * 且正文是短聊天气泡，重排本就便宜——所以它不需要这套。
    */
   const startPanelResize = useCallback(
     (e: React.MouseEvent) => {
@@ -47,14 +57,38 @@ function ShellInner({ children }: { children: ReactNode }) {
       const maxW = Math.round(avail * 0.9);
       const startW = asideRef.current?.offsetWidth ?? 380;
       let latest = startW;
+      let frame = 0;
+
+      const pane = paneRef.current;
+      if (pane) {
+        pane.style.position = "absolute";
+        pane.style.top = "0";
+        pane.style.right = "0";
+        pane.style.bottom = "0";
+        pane.style.width = `${startW}px`;
+      }
+
+      const paint = () => {
+        frame = 0;
+        if (asideRef.current) asideRef.current.style.width = `${latest}px`;
+      };
       const onMove = (ev: MouseEvent) => {
         latest = Math.min(Math.max(startW + (startX - ev.clientX), 380), maxW);
-        if (asideRef.current) asideRef.current.style.width = `${latest}px`;
+        // rAF 合并：mousemove 每帧可能来好几个，宽度只需写一次
+        if (!frame) frame = requestAnimationFrame(paint);
       };
       const onUp = () => {
         document.removeEventListener("mousemove", onMove);
         document.removeEventListener("mouseup", onUp);
+        if (frame) cancelAnimationFrame(frame);
         document.body.style.userSelect = "";
+        if (pane) {
+          pane.style.position = "";
+          pane.style.top = "";
+          pane.style.right = "";
+          pane.style.bottom = "";
+          pane.style.width = "";
+        }
         setIsResizing(false);
         // 只在松手时落一次 state（持久化 + 让 style prop 重新接管 clamp 表达式）
         setAssistantWidth(latest);
@@ -116,7 +150,11 @@ function ShellInner({ children }: { children: ReactNode }) {
               >
                 <span className="h-full w-px bg-transparent transition-colors group-hover:bg-(--shell-accent)" />
               </button>
-              <ArtifactSplitPane />
+              {/* 正文包一层可冻结的容器：拖动期间由 startPanelResize 给它挂
+                  「固定宽度 + 贴右缘绝对定位」的内联样式，避免每帧重排整棵正文。 */}
+              <div ref={paneRef} className="flex min-h-0 flex-1 flex-col">
+                <ArtifactSplitPane />
+              </div>
             </aside>
           )}
           {isResizing && (
