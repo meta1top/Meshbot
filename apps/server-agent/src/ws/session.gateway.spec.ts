@@ -22,6 +22,14 @@ describe("SessionGateway", () => {
         content: "部分",
         reasoning: "想",
         reasoningStartedAt: 1234,
+        // 本轮 args 流到一半的工具调用：必须原样进快照，中途订阅者才接得上流
+        toolCalls: [
+          {
+            toolCallId: "tc-1",
+            name: "write_file",
+            argsText: '{"path":"a.txt","con',
+          },
+        ],
         status: "streaming" as const,
       }),
       interrupt: jest.fn(),
@@ -39,6 +47,13 @@ describe("SessionGateway", () => {
         reasoning: "想",
         content: "部分",
         reasoningStartedAt: 1234,
+        toolCalls: [
+          {
+            toolCallId: "tc-1",
+            name: "write_file",
+            argsText: '{"path":"a.txt","con',
+          },
+        ],
       },
     ]);
   });

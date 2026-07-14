@@ -1,15 +1,8 @@
 "use client";
 
-import { cn } from "@meshbot/design";
+import { ResizableSheet } from "@meshbot/web-common/shell";
 import { useAtom } from "jotai";
-import {
-  type ReactNode,
-  Suspense,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { type ReactNode, Suspense, useEffect, useState } from "react";
 import {
   assistantPanelWidthAtom,
   previewArtifactAtom,
@@ -26,39 +19,7 @@ function ShellInner({ children }: { children: ReactNode }) {
   const hasArtifact = previewArtifact != null;
   useGlobalEvents();
   const [assistantWidth, setAssistantWidth] = useAtom(assistantPanelWidthAtom);
-  const [isResizing, setIsResizing] = useState(false);
-  const contentRef = useRef<HTMLDivElement>(null);
   const [slotEl, setSlotEl] = useState<HTMLElement | null>(null);
-  // 默认 340px；下限 380px、上限 92vw（与随手问助手同套 clamp 语义）。
-  const widthStyle = `clamp(380px, ${assistantWidth}px, 92vw)`;
-
-  const startPanelResize = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      setIsResizing(true);
-      const startX = e.clientX;
-      const avail = contentRef.current?.clientWidth ?? window.innerWidth;
-      const maxW = Math.round(avail * 0.9);
-      const startW = assistantWidth;
-      const onMove = (ev: MouseEvent) => {
-        const next = Math.min(
-          Math.max(startW + (startX - ev.clientX), 380),
-          maxW,
-        );
-        setAssistantWidth(next);
-      };
-      const onUp = () => {
-        document.removeEventListener("mousemove", onMove);
-        document.removeEventListener("mouseup", onUp);
-        document.body.style.userSelect = "";
-        setIsResizing(false);
-      };
-      document.body.style.userSelect = "none";
-      document.addEventListener("mousemove", onMove);
-      document.addEventListener("mouseup", onUp);
-    },
-    [assistantWidth, setAssistantWidth],
-  );
 
   useEffect(() => {
     document.body.classList.add("app-shell-mode");
@@ -82,10 +43,7 @@ function ShellInner({ children }: { children: ReactNode }) {
       <DragRegion />
       <div className="flex min-h-0 flex-1">
         <WorkspaceSidebar sublistSlotRef={setSlotEl} />
-        <div
-          ref={contentRef}
-          className="relative flex min-h-0 flex-1 overflow-hidden bg-(--shell-content)"
-        >
+        <div className="relative flex min-h-0 flex-1 overflow-hidden bg-(--shell-content)">
           <SidebarSlotContext.Provider value={slotEl}>
             {children}
           </SidebarSlotContext.Provider>
@@ -96,24 +54,18 @@ function ShellInner({ children }: { children: ReactNode }) {
               no-drag 洞停留在收起态快照，首次点击被拖拽区吞掉（助手面板即条件
               挂载无此问题）。挂载产生真实布局变化，regions 必然重算。 */}
           {hasArtifact && (
-            <aside
-              style={{ width: widthStyle }}
-              className="app-no-drag absolute top-0 right-0 bottom-0 z-10000 flex animate-in fade-in slide-in-from-right-4 flex-col overflow-hidden border-l border-border bg-(--shell-content) shadow-[-8px_0_24px_-12px_rgba(0,0,0,0.18)] duration-200"
+            <ResizableSheet
+              width={assistantWidth}
+              onWidthChange={setAssistantWidth}
+              // 默认 50% 窗宽（下限 480px）；调过后按存的 px 走。
+              defaultWidth="50vw"
+              // app-no-drag：z 抬到拖拽条（z-9999）之上，顶部下载/关闭按钮才不被
+              // app-region:drag 吞。入场用 animation（不是 transition）——sheet 的
+              // width 靠内联样式实时写，任何 transition-duration 都会让它滞后于鼠标。
+              className="app-no-drag animate-in fade-in slide-in-from-right-4"
             >
-              {/* 左缘拖拽手柄（贴内缘，避免被 overflow-hidden 裁掉） */}
-              <button
-                type="button"
-                aria-label="resize"
-                onMouseDown={startPanelResize}
-                className="group absolute top-0 bottom-0 left-0 z-10 flex w-2 cursor-col-resize items-stretch"
-              >
-                <span className="h-full w-px bg-transparent transition-colors group-hover:bg-(--shell-accent)" />
-              </button>
               <ArtifactSplitPane />
-            </aside>
-          )}
-          {isResizing && (
-            <div className="fixed inset-0 z-10001 cursor-col-resize" />
+            </ResizableSheet>
           )}
           <QuickAssistantFab />
         </div>

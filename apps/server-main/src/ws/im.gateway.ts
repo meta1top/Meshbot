@@ -44,6 +44,15 @@ import {
 import type { Socket } from "socket.io";
 
 /**
+ * L3 发起方泛化：agent.run.* / device.query.* 的发起方既可能是设备连接
+ * （web-agent/CLI，room 稳定，deviceId 断线不变），也可能是浏览器用户连接
+ * （web-main，无 deviceId，room 语义不适用，断线即毁只能靠 socket.id 直发）。
+ */
+type RunRequester =
+  | { kind: "device"; deviceId: string }
+  | { kind: "user"; socketId: string };
+
+/**
  * IM WebSocket Gateway —— Phase 2 B6。
  *
  * 端点：`ws://<host>/ws/im`
@@ -76,13 +85,28 @@ export class ImGateway extends BaseWebSocketGateway {
 
   /**
    * L3 Phase A:agent.run.* 流的 streamId 路由表。
-   * agentRunStart 校验通过后登记 `{requesterDeviceId, targetDeviceId}`；
+   * agentRunStart 校验通过后登记 `{requester, targetDeviceId}`；
    * agentRunControl 据此校验发起方身份(越权拒)并定向下发；agentRunEnd 清理。
    * 进程内 Map，server-main 多实例部署时需迁移到共享存储(当前 Phase A 范围外)。
    */
   private readonly agentRunRoutes = new Map<
     string,
-    { requesterDeviceId: string; targetDeviceId: string }
+    { requester: RunRequester; targetDeviceId: string }
+  >();
+
+  /**
+   * L2c device.query.* 的 correlationId 一次性路由表（安全修复）：
+   * `handleDeviceQueryRequest` 转发成功（同账号 + 在线）才登记
+   * `{requester, targetDeviceId}`；`handleDeviceQueryResponse` 据此校验回流
+   * 发送方 = 登记的 targetDeviceId（否则任意已认证设备可伪造响应，
+   * 借 `"user:<socketId>"` 编码直发任意浏览器连接），通过后用**登记的**
+   * requester 路由（不再信任 body.requesterDeviceId）并删表项（一次性，
+   * 同 correlationId 第二次响应被丢弃）。与 agentRunRoutes 同源：进程内
+   * Map，server-main 多实例部署时需迁移到共享存储。
+   */
+  private readonly queryRoutes = new Map<
+    string,
+    { requester: RunRequester; targetDeviceId: string }
   >();
 
   constructor(
@@ -110,6 +134,82 @@ export class ImGateway extends BaseWebSocketGateway {
         .then((d) => ({ userId: d.userId, orgId: d.orgId, deviceId: d.id }));
     }
     return this.jwt.verify(token);
+  }
+
+  /** 从连接推导发起方身份：设备连接用 deviceId（room 稳定），用户连接用 socket.id（断线即毁）。 */
+  private requesterOf(client: Socket): RunRequester {
+    const deviceId = (client.data.user as { deviceId?: string })?.deviceId;
+    return deviceId
+      ? { kind: "device", deviceId }
+      : { kind: "user", socketId: client.id };
+  }
+
+  /** 转发帧 requesterDeviceId 字段编码（B 端原样回填不解析）。 */
+  private encodeRequester(r: RunRequester): string {
+    return r.kind === "device" ? r.deviceId : `user:${r.socketId}`;
+  }
+
+  /**
+   * 回流定向：device 走 `device:<id>` room；user 走 `<socketId>` room
+   * （socket.io 每个连接自动加入以自身 id 命名的 room，`this.server` 在本
+   * namespace gateway 里运行时是 Namespace 实例，用 `.to(id).emit(...)` 与
+   * device 分支同构，不能假设存在 `sockets.sockets` 二层 Map）。
+   * 目标 socket 已断连时 room 内无成员，emit 静默无操作（无异常）。
+   */
+  private emitToRequester(
+    r: RunRequester,
+    event: string,
+    payload: unknown,
+  ): void {
+    if (r.kind === "device") {
+      this.server.to(`device:${r.deviceId}`).emit(event, payload);
+      return;
+    }
+    this.server.to(r.socketId).emit(event, payload);
+  }
+
+  /** 校验两个发起方是否同一身份（kind + id 全等）；跨 kind 或 id 不同均视为不同发起方。 */
+  private sameRequester(a: RunRequester, b: RunRequester): boolean {
+    if (a.kind === "device" && b.kind === "device") {
+      return a.deviceId === b.deviceId;
+    }
+    if (a.kind === "user" && b.kind === "user") {
+      return a.socketId === b.socketId;
+    }
+    return false;
+  }
+
+  /**
+   * 断连清理共用逻辑（`agentRunRoutes` / `queryRoutes` 同构）：
+   * - device 分支：按 deviceId 键，双向清理（该连接作为发起方或目标涉及的路由项都删）。
+   * - user 分支：浏览器用户连接无 deviceId，断线即毁，仅按 client.id(socket.id) 清理其
+   *   作为发起方的路由（user 连接不会是 targetDeviceId，无需对称清理 target 侧）。
+   */
+  private cleanupRoutes(
+    routes: Map<string, { requester: RunRequester; targetDeviceId: string }>,
+    client: Socket,
+    deviceId: string | undefined,
+  ): void {
+    if (deviceId) {
+      for (const [key, route] of routes) {
+        if (
+          (route.requester.kind === "device" &&
+            route.requester.deviceId === deviceId) ||
+          route.targetDeviceId === deviceId
+        ) {
+          routes.delete(key);
+        }
+      }
+    } else {
+      for (const [key, route] of routes) {
+        if (
+          route.requester.kind === "user" &&
+          route.requester.socketId === client.id
+        ) {
+          routes.delete(key);
+        }
+      }
+    }
   }
 
   /**
@@ -219,18 +319,13 @@ export class ImGateway extends BaseWebSocketGateway {
         } satisfies PresenceState);
       }
 
-      // L3 Phase A:设备异常掉线时清理它参与的 agent.run 路由（作为发起方或目标），
-      // 防路由表泄漏 / 悬挂 streamId。orgId 无关（路由按 deviceId 键）。
-      if (deviceId) {
-        for (const [sid, route] of this.agentRunRoutes) {
-          if (
-            route.requesterDeviceId === deviceId ||
-            route.targetDeviceId === deviceId
-          ) {
-            this.agentRunRoutes.delete(sid);
-          }
-        }
-      }
+      // L3 发起方泛化:连接断开时清理它参与的 agent.run / device.query 路由
+      // (作为发起方或目标)，防路由表泄漏 / 悬挂 streamId・correlationId。
+      // - device 分支:按 deviceId 键(room 语义)，orgId 无关，行为不变。
+      // - user 分支:浏览器用户连接无 deviceId，断线即毁，按 client.id(socket.id) 键清理其为发起方的路由；
+      //   user 连接不会是 targetDeviceId(target 恒为设备)，无需对称清理。
+      this.cleanupRoutes(this.agentRunRoutes, client, deviceId);
+      this.cleanupRoutes(this.queryRoutes, client, deviceId);
 
       if (!userId || !orgId) return;
 
@@ -313,32 +408,27 @@ export class ImGateway extends BaseWebSocketGateway {
     }
   }
 
-  /** L2c:A 发起设备查询 → 校验同账号 + 在线 → 定向下发到目标设备 */
+  /**
+   * L2c / L3 发起方泛化:A 发起设备查询 → 校验同账号 + 在线 → 定向下发到目标设备。
+   * A 既可能是设备连接（deviceId），也可能是浏览器用户连接（无 deviceId，用 socketId）。
+   */
   @SubscribeMessage(IM_WS_EVENTS.deviceQueryRequest)
   @UseGuards(WsAuthGuard)
   async handleDeviceQueryRequest(
     @MessageBody() body: DeviceQueryRequestInput,
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
-    const requester = client.data.user as {
-      userId?: string;
-      deviceId?: string;
-    };
-    // 提前收窄为局部 const：闭包捕获对象属性时 TS 不做跨函数边界收窄，
-    // 若直接用 requester.deviceId 会在 reply 闭包里退化回 string | undefined。
-    const requesterDeviceId = requester?.deviceId;
-    if (!requesterDeviceId) return;
+    const requesterUserId = (client.data.user as { userId?: string })?.userId;
+    const requester = this.requesterOf(client);
     const reply = (reason: DeviceQueryResponse["reason"]) =>
-      this.server
-        .to(`device:${requesterDeviceId}`)
-        .emit(IM_WS_EVENTS.deviceQueryResponse, {
-          correlationId: body.correlationId,
-          requesterDeviceId,
-          ok: false,
-          reason,
-        } satisfies DeviceQueryResponse);
+      this.emitToRequester(requester, IM_WS_EVENTS.deviceQueryResponse, {
+        correlationId: body.correlationId,
+        requesterDeviceId: this.encodeRequester(requester),
+        ok: false,
+        reason,
+      } satisfies DeviceQueryResponse);
     const target = await this.devices.findById(body.targetDeviceId);
-    if (!target || target.userId !== requester.userId) {
+    if (!target || target.userId !== requesterUserId) {
       reply("cross_account");
       return;
     }
@@ -350,31 +440,55 @@ export class ImGateway extends BaseWebSocketGateway {
       reply("offline");
       return;
     }
+    // 转发成功才登记一次性路由：handleDeviceQueryResponse 据此校验回流发送方
+    // 身份，不再信任 body 里可被任意已认证设备伪造的 requesterDeviceId。
+    this.queryRoutes.set(body.correlationId, {
+      requester,
+      targetDeviceId: target.id,
+    });
     this.server
       .to(`device:${target.id}`)
       .emit(IM_WS_EVENTS.deviceQueryRequest, {
         ...body,
-        requesterDeviceId,
+        requesterDeviceId: this.encodeRequester(requester),
       });
   }
 
-  /** L2c:目标设备回流 → 按 requesterDeviceId 定向回发起方 */
+  /**
+   * L2c / L3 发起方泛化:目标设备回流 → 按 correlationId 查 `queryRoutes`
+   * 登记表，校验发送方确为登记的 targetDeviceId（安全修复：任意已认证设备
+   * 都能发 deviceQueryResponse，仅挂 WsAuthGuard 不够，必须比对发送方 =
+   * handleDeviceQueryRequest 转发时登记的目标设备，否则可伪造响应借
+   * `"user:<socketId>"` 编码直发任意浏览器连接）。
+   * 无登记（未知/伪造 correlationId）或发送方非登记目标设备 → 静默丢弃。
+   * 校验通过：删除路由项（一次性，同 correlationId 第二次响应被丢弃）后，
+   * 用**登记的** requester 路由（不再信任 body.requesterDeviceId）。
+   */
   @SubscribeMessage(IM_WS_EVENTS.deviceQueryResponse)
   @UseGuards(WsAuthGuard)
   async handleDeviceQueryResponse(
     @MessageBody() body: DeviceQueryResponse,
-    @ConnectedSocket() _client: Socket,
+    @ConnectedSocket() client: Socket,
   ): Promise<void> {
-    this.server
-      .to(`device:${body.requesterDeviceId}`)
-      .emit(IM_WS_EVENTS.deviceQueryResponse, body);
+    const route = this.queryRoutes.get(body.correlationId);
+    const senderDeviceId = (client.data.user as { deviceId?: string })
+      ?.deviceId;
+    if (!route || senderDeviceId !== route.targetDeviceId) return; // 无登记/非目标设备回流,丢弃
+    this.queryRoutes.delete(body.correlationId);
+    this.emitToRequester(
+      route.requester,
+      IM_WS_EVENTS.deviceQueryResponse,
+      body,
+    );
   }
 
   /**
-   * L3 Phase A:A 发起远程 run → 校验同账号 + 在线 → 登记 streamId 路由 →
+   * L3 发起方泛化:A 发起远程 run → 校验同账号 + 在线 → 登记 streamId 路由 →
    * 定向下发到目标设备(附 requesterDeviceId)。
    * 离线时直接回 agentRunEnd{reason:offline} 给 requester，不登记路由
    * （A 侧无需再靠超时兜底判定失败）。
+   * A 既可能是设备连接（deviceId，room 语义不变），也可能是浏览器用户连接
+   * （无 deviceId，requesterDeviceId 编码为 `"user:" + socketId`，B 端原样回填不解析）。
    */
   @SubscribeMessage(IM_WS_EVENTS.agentRunStart)
   @UseGuards(WsAuthGuard)
@@ -382,40 +496,35 @@ export class ImGateway extends BaseWebSocketGateway {
     @MessageBody() body: AgentRunStartInput,
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
-    const requester = client.data.user as {
-      userId?: string;
-      deviceId?: string;
-    };
-    const requesterDeviceId = requester?.deviceId;
-    if (!requesterDeviceId) return;
+    const requesterUserId = (client.data.user as { userId?: string })?.userId;
+    const requester = this.requesterOf(client);
     const target = await this.devices.findById(body.targetDeviceId);
-    if (!target || target.userId !== requester.userId) return; // 静默拒(A 侧超时兜底)
+    if (!target || target.userId !== requesterUserId) return; // 静默拒(A 侧超时兜底)
     const online = await this.devicePresence.isOnline(
       target.orgId ?? "",
       target.id,
     );
     if (!online) {
-      this.server
-        .to(`device:${requesterDeviceId}`)
-        .emit(IM_WS_EVENTS.agentRunEnd, {
-          streamId: body.streamId,
-          requesterDeviceId,
-          reason: "offline",
-        } satisfies AgentRunEnd);
+      this.emitToRequester(requester, IM_WS_EVENTS.agentRunEnd, {
+        streamId: body.streamId,
+        requesterDeviceId: this.encodeRequester(requester),
+        reason: "offline",
+      } satisfies AgentRunEnd);
       return;
     }
     this.agentRunRoutes.set(body.streamId, {
-      requesterDeviceId,
+      requester,
       targetDeviceId: target.id,
     });
-    this.server
-      .to(`device:${target.id}`)
-      .emit(IM_WS_EVENTS.agentRunStart, { ...body, requesterDeviceId });
+    this.server.to(`device:${target.id}`).emit(IM_WS_EVENTS.agentRunStart, {
+      ...body,
+      requesterDeviceId: this.encodeRequester(requester),
+    });
   }
 
   /**
    * L3 Phase A:B 侧运行帧回流 → 按 streamId 查路由，校验发送方确为登记的目标设备(B)，
-   * 用**登记的** requesterDeviceId 定向回发起方。
+   * 用**登记的** requester 定向回发起方（device 走 room；user 直发 socket）。
    * 仅挂 WsAuthGuard 不够：任何已认证连接都能伪造 requesterDeviceId 向任意
    * device 房间注入帧，故必须比对发送方 = 登记的 targetDeviceId。
    */
@@ -429,14 +538,12 @@ export class ImGateway extends BaseWebSocketGateway {
     const senderDeviceId = (client.data.user as { deviceId?: string })
       ?.deviceId;
     if (!route || senderDeviceId !== route.targetDeviceId) return; // 仅登记的目标设备(B)可发帧
-    this.server
-      .to(`device:${route.requesterDeviceId}`)
-      .emit(IM_WS_EVENTS.agentRunFrame, body);
+    this.emitToRequester(route.requester, IM_WS_EVENTS.agentRunFrame, body);
   }
 
   /**
    * L3 Phase A:B 侧流终止回流 → 校验发送方确为登记的目标设备(B)后，先清理该
-   * streamId 的路由登记，再用**登记的** requesterDeviceId 定向回发起方。
+   * streamId 的路由登记，再用**登记的** requester 定向回发起方（device 走 room；user 直发 socket）。
    * 同 handleAgentRunFrame：防他人伪造 agent.run.end 提前终止 + 清空路由(DoS)。
    */
   @SubscribeMessage(IM_WS_EVENTS.agentRunEnd)
@@ -450,14 +557,12 @@ export class ImGateway extends BaseWebSocketGateway {
       ?.deviceId;
     if (!route || senderDeviceId !== route.targetDeviceId) return; // 仅登记的目标设备(B)可终止
     this.agentRunRoutes.delete(body.streamId);
-    this.server
-      .to(`device:${route.requesterDeviceId}`)
-      .emit(IM_WS_EVENTS.agentRunEnd, body);
+    this.emitToRequester(route.requester, IM_WS_EVENTS.agentRunEnd, body);
   }
 
   /**
-   * L3 Phase A:A 侧运行中控制帧(confirm/answer/interrupt) → 按 streamId 查路由，
-   * 发起方必须是登记该 streamId 的 requester，否则视为越权/未知流静默拒绝；
+   * L3 发起方泛化:A 侧运行中控制帧(confirm/answer/interrupt) → 按 streamId 查路由，
+   * 发起方必须是登记该 streamId 的 requester(kind + id 全等)，否则视为越权/未知流静默拒绝；
    * 通过后定向下发到登记的目标设备(附 requesterDeviceId)。
    */
   @SubscribeMessage(IM_WS_EVENTS.agentRunControl)
@@ -466,14 +571,14 @@ export class ImGateway extends BaseWebSocketGateway {
     @MessageBody() body: AgentRunControlInput,
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
-    const requester = client.data.user as { deviceId?: string };
+    const requester = this.requesterOf(client);
     const route = this.agentRunRoutes.get(body.streamId);
-    if (!route || route.requesterDeviceId !== requester?.deviceId) return; // 越权/未知拒
+    if (!route || !this.sameRequester(route.requester, requester)) return; // 越权/未知拒
     this.server
       .to(`device:${route.targetDeviceId}`)
       .emit(IM_WS_EVENTS.agentRunControl, {
         ...body,
-        requesterDeviceId: requester.deviceId,
+        requesterDeviceId: this.encodeRequester(requester),
       });
   }
 

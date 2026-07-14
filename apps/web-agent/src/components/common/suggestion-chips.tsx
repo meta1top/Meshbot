@@ -5,6 +5,36 @@ import { useEffect, useState } from "react";
 import { toI18nList } from "@/lib/i18n-list";
 import { fetchSuggestions } from "@/rest/stats";
 
+/**
+ * 建议数据 hook（供共享 `SessionLauncher` 用——它只要数据不要组件）：
+ * null = 加载中；[] = 隐藏（请求失败）；后端空则回落 i18n 默认建议。
+ */
+export function useSuggestions(): string[] | null {
+  const t = useTranslations("home");
+  const [items, setItems] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetchSuggestions()
+      .then((res) => {
+        if (!alive) return;
+        const list =
+          res.suggestions.length > 0
+            ? res.suggestions
+            : toI18nList(t.raw("defaultSuggestions"));
+        setItems(list);
+      })
+      .catch(() => {
+        if (alive) setItems([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [t]);
+
+  return items;
+}
+
 interface SuggestionChipsProps {
   /** 点击胶囊：把文本填入输入框（不自动发送）。 */
   onPick: (text: string) => void;

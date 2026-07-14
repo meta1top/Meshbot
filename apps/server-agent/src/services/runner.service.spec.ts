@@ -409,6 +409,76 @@ describe("RunnerService", () => {
     expect(snap?.messageId).toBeNull();
   });
 
+  it("getInflight：纯工具决策轮（无 chunk/reasoning）也设 messageId 并累计 args 前缀", async () => {
+    const sess = fakeSessionService();
+    const emitter = new EventEmitter2();
+    const llmCalls = fakeLlmCallService();
+    sess.enqueue("s1", "写个文件");
+    // 云网关下的「决策轮」：只流 tool_call args，没有 reasoning / chunk 事件。
+    // 卡在 args 流中途采样 —— 这正是「中途打开会话」看到的服务端状态。
+    let reachedResolve: () => void = () => {};
+    const reached = new Promise<void>((r) => {
+      reachedResolve = r;
+    });
+    let pauseResolve: () => void = () => {};
+    const pausePromise = new Promise<void>((r) => {
+      pauseResolve = r;
+    });
+    const graph = {
+      async *streamMessage() {
+        yield {
+          kind: "tool_call_args",
+          messageId: "msg-1",
+          toolCallId: "tc-1",
+          index: 0,
+          name: "write_file",
+          delta: '{"path":"a.txt","con',
+        };
+        yield {
+          kind: "tool_call_args",
+          messageId: "msg-1",
+          toolCallId: "tc-1",
+          index: 0,
+          name: "write_file",
+          delta: 'tent":"he',
+        };
+        reachedResolve();
+        await pausePromise;
+        yield {
+          kind: "assistant_done",
+          messageId: "msg-1",
+          content: "",
+          reasoning: "",
+          toolCalls: [{ id: "tc-1", name: "write_file", args: {} }],
+        };
+      },
+    };
+    const runner = new RunnerService(
+      sess as never,
+      graph as never,
+      emitter,
+      llmCalls as never,
+      fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
+      new AccountContextService(),
+      new ModelRunContext(),
+    );
+    const runPromise = runner.kickAndWait("s1");
+    await reached;
+    const snap = runner.getInflight("s1");
+    pauseResolve();
+    await runPromise;
+    expect(snap?.messageId).toBe("msg-1");
+    expect(snap?.toolCalls).toEqual([
+      {
+        toolCallId: "tc-1",
+        name: "write_file",
+        argsText: '{"path":"a.txt","content":"he',
+      },
+    ]);
+  });
+
   it("interrupt：中断 run 发 run.interrupted", async () => {
     const sess = fakeSessionService();
     const emitter = new EventEmitter2();

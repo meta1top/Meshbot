@@ -20,6 +20,10 @@
     "./im": {
       "types": "./src/im/index.ts",
       "default": "./src/im/index.ts"
+    },
+    "./session": {
+      "types": "./src/session/index.ts",
+      "default": "./src/session/index.ts"
     }
   },
   "scripts": {
@@ -39,6 +43,9 @@
     "axios": "^1.16.0",
     "best-effort-json-parser": "^1.4.1",
     "lucide-react": "^0.468",
+    "react-markdown": "^10.1.0",
+    "rehype-highlight": "^7.0.2",
+    "remark-gfm": "^4.0.1",
     "tiptap-markdown": "^0.9.0",
     "zod": "^3"
   },

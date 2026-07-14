@@ -236,7 +236,17 @@
       "errorResult": "Sub-agent failed to produce a result"
     },
     "artifact": {
-      "presentFailed": "Presentation failed"
+      "presentFailed": "Presentation failed",
+      "loading": "Loading…",
+      "loadFailed": "Artifact no longer exists or has changed",
+      "unsupported": "This file type can't be previewed, please download to view.",
+      "tooLarge": "File is large ({size} MB), can't preview remotely",
+      "tooLargeHint": "Upload to the org drive to preview it locally",
+      "uploadFailed": "Upload failed, please retry",
+      "uploading": "Uploading…",
+      "uploadToDrive": "Upload to drive and preview",
+      "previewTitle": "Artifact preview",
+      "imageAlt": "Artifact"
     },
     "runErrorPrefix": "Run failed: "
   },

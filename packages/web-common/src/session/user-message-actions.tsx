@@ -4,9 +4,8 @@ import { cn } from "@meshbot/design";
 import { stripLlmuse } from "@meshbot/types-agent";
 import { Check, Copy, Loader2, RotateCcw } from "lucide-react";
 import { useCallback, useState } from "react";
-import { regenerateMessage } from "@/rest/session";
 
-interface Props {
+export interface UserMessageActionsProps {
   sessionId: string;
   messageId: string;
   content: string;
@@ -19,12 +18,19 @@ interface Props {
    * 提供即时反馈，让用户不必等服务端响应才看到「之前的回复消失」。
    */
   onOptimisticCut: () => void;
+  /** 重生成请求（原 REST `regenerateMessage`，调用方注入）。 */
+  onRegenerate: (sessionId: string, messageId: string) => Promise<unknown>;
   /** 失败时父组件可弹 toast / log。 */
   onError?: (err: unknown) => void;
 }
 
 /**
  * user 气泡下方的操作按钮组：复制 + 重生成。
+ *
+ * 从 `apps/web-agent/src/components/session/user-message-actions.tsx` 迁入
+ * （Task 7）——`regenerateMessage` REST 调用改为 `onRegenerate` props 回调；
+ * 源文件本无 `useTranslations`（按钮文案是裸中文字面量），迁移零改动，
+ * 不引入 labels props（保持零行为变化）。
  *
  * - hover 气泡才显（failed 状态默认显，引导用户重试）
  * - 重试请求飞行期间 spinner + disabled，避免双击
@@ -37,8 +43,9 @@ export function UserMessageActions({
   failed,
   running,
   onOptimisticCut,
+  onRegenerate,
   onError,
-}: Props) {
+}: UserMessageActionsProps) {
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -57,13 +64,21 @@ export function UserMessageActions({
     setBusy(true);
     onOptimisticCut();
     try {
-      await regenerateMessage(sessionId, messageId);
+      await onRegenerate(sessionId, messageId);
     } catch (err) {
       onError?.(err);
     } finally {
       setBusy(false);
     }
-  }, [busy, running, sessionId, messageId, onOptimisticCut, onError]);
+  }, [
+    busy,
+    running,
+    sessionId,
+    messageId,
+    onOptimisticCut,
+    onRegenerate,
+    onError,
+  ]);
 
   return (
     <div

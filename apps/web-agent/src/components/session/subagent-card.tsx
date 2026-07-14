@@ -3,8 +3,13 @@
 import { cn } from "@meshbot/design";
 import { Check, ChevronDown, Square, X } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRemoteSession } from "@/hooks/remote-session-context";
 import { useSessionStream } from "@/hooks/use-session-stream";
+import {
+  createLocalSessionTransport,
+  createRemoteSessionTransport,
+} from "@/lib/session-transport";
 import {
   countToolCalls,
   deriveLiveAction,
@@ -86,7 +91,24 @@ export function SubagentCard({ tool }: { tool: ToolCallView }) {
   const subSessionId = resolveSubSessionId(tool);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
-  const sub = useSessionStream(subSessionId, scrollRef);
+  // 子会话与父会话同设备：远程会话（RemoteSessionProvider 内）走远程 transport
+  // （子会话历史/流经设备查询通道），本地会话走本机——硬编码 local 会让远程
+  // 嵌套卡打本机 REST 404。
+  const remote = useRemoteSession();
+  const transport = useMemo(
+    () =>
+      remote
+        ? createRemoteSessionTransport(remote.remoteDeviceId)
+        : createLocalSessionTransport(),
+    [remote],
+  );
+  // remoteDeviceId 驱动 hook 的 remote 语义分支（历史走设备查询/不调本机 fetchPending）
+  const sub = useSessionStream(
+    subSessionId,
+    scrollRef,
+    transport,
+    remote?.remoteDeviceId ?? null,
+  );
   const [collapse, setCollapse] = useState<SubagentCollapse>({
     mode: "manual",
     open: false,
@@ -269,6 +291,8 @@ export function SubagentCard({ tool }: { tool: ToolCallView }) {
               sessionId={subSessionId}
               running={sub.running}
               onRegenerateOptimisticCut={() => {}}
+              onConfirm={sub.confirm}
+              onAnswer={sub.answer}
             />
           </div>
           <div className="flex items-center gap-2 border-t border-border px-3 py-1 text-[11px] tabular-nums text-muted-foreground/60">

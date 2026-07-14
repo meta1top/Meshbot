@@ -3,5 +3,4 @@
 @import "@meshbot/design/src/styles/globals.css";
 
 @source "../../../../packages/design/src";
-@source "../../../../packages/web-common/src/im";
-@source "../../../../packages/web-common/src/shell";
+@source "../../../../packages/web-common/src";

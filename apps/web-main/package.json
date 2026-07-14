@@ -13,6 +13,7 @@
     "@hookform/resolvers": "^5",
     "@meshbot/design": "workspace:*",
     "@meshbot/types": "workspace:*",
+    "@meshbot/types-agent": "workspace:*",
     "@meshbot/types-main": "workspace:*",
     "@meshbot/web-common": "workspace:*",
     "@tanstack/react-query": "^5.100.9",

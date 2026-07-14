@@ -1,25 +1,73 @@
-"use client";
-
 import { cn } from "@meshbot/design";
 import type { TodoItem } from "@meshbot/types-agent";
+import { ChevronDown, Loader2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import {
   extractPartialString,
   parsePartialToolArgs,
-} from "@meshbot/web-common";
-import { ChevronDown, Loader2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { sanitizeMeshbotPaths, toolDisplayName } from "@/lib/tool-display";
+} from "../utils/partial-tool-args";
+import type { ArtifactPreviewTarget } from "./artifact-file-card";
 import { ArtifactFileCard } from "./artifact-file-card";
 import { AskQuestionCard } from "./ask-question-card";
 import { DriveCreateShareCard } from "./drive-create-share-card";
 import { DriveShareCard } from "./drive-share-card";
 import { ImSendConfirmCard } from "./im-send-confirm-card";
-import type { ToolCallView } from "./message-list";
-import { SubagentCard } from "./subagent-card";
+import type { ToolCallView } from "./timeline";
 import { TodoList } from "./todo-list";
+import { sanitizeMeshbotPaths, toolDisplayName } from "./tool-display";
+
+/** ArtifactFileCard 的唯一一处 i18n 文案，随 ToolCallBlock 一并透传。 */
+export interface ToolCallBlockLabels {
+  artifactPresentFailed: string;
+}
+
+export interface ToolCallBlockProps {
+  tool: ToolCallView;
+  /**
+   * 确认/取消 im_send_message / drive 分享类 HITL。HITL 收敛点（Task 5 裁定，
+   * Task 8 落地）：上游统一传入 `useSessionStream().confirm`（本地/远程分支
+   * 已下沉到 SessionTransport 内部），本组件与卡片自身不再感知 local/remote。
+   */
+  onConfirm: (
+    toolCallId: string,
+    decision: "send" | "cancel",
+    content?: string,
+  ) => Promise<void>;
+  /** 提交 ask_question 型 HITL 的回答，收敛点同 onConfirm。 */
+  onAnswer: (
+    toolCallId: string,
+    answers: { selected: string[]; other?: string }[],
+  ) => Promise<void>;
+  /**
+   * im_send_message 卡片的会话目标展示名解析：调用方按 conversationId 查本地
+   * IM 会话列表（jotai atom，web-common 不能碰），返回展示名。
+   */
+  resolveImTargetName: (conversationId: string | undefined) => string;
+  /** present_file 卡片点击预览：调用方负责实际打开（写 atom / 切面板等）。 */
+  onPreviewArtifact: (target: ArtifactPreviewTarget) => void;
+  /** 当前会话所在的远程设备信息（本地会话为 null/undefined），供产物预览用。 */
+  artifactRemote?: { deviceId: string; sessionId: string } | null;
+  labels: ToolCallBlockLabels;
+  /**
+   * dispatch_subagent 嵌套卡：整卡渲染委托给调用方（web-agent 侧
+   * `SubagentCard`）。特殊处理原因：该卡内部消费 `useSessionStream` + 会话
+   * transport 选择，并递归渲染 `MessageList`（尚未随本批迁入 web-common，
+   * 属 Task 9 骨干批范围）——若强行把整卡下沉，要么在 web-common 里重新发明
+   * 一份最小 useSessionStream 消费面（现阶段无场景需要），要么让 web-common
+   * 反向依赖尚未迁移的 web-agent 组件（违反依赖方向）。渲染插槽是当前对
+   * ToolCallBlock 抽包侵入最小、行为零变化的选择——纯展示子组件（图标/状态
+   * 胶囊样式）本身也没有独立复用场景，留在 web-agent 一起权衡最简单。
+   */
+  renderSubagentCard: (tool: ToolCallView) => React.ReactNode;
+}
 
 /**
  * 单次 tool 调用的「时间线事件」式展示。
+ *
+ * 从 `apps/web-agent/src/components/session/tool-call-block.tsx` 迁入
+ * （Task 8）。四个 HITL 特化卡（im_send_message/ask_question/drive_share/
+ * drive_create_share）与 present_file/todo_write 走 props 化的纯展示；
+ * dispatch_subagent 走 `renderSubagentCard` 插槽（见上方 JSDoc）。
  *
  * 设计：reasoning 用「左竖条」表示「连续的思考过程」，tool 用「圆点 + 缩进列表项」
  * 表示「离散的可观察事件」，两者视觉语言完全区分。
@@ -34,26 +82,44 @@ import { TodoList } from "./todo-list";
  */
 export function ToolCallBlock({
   tool,
-  sessionId,
-}: {
-  tool: ToolCallView;
-  sessionId: string;
-}) {
+  onConfirm,
+  onAnswer,
+  resolveImTargetName,
+  onPreviewArtifact,
+  artifactRemote,
+  labels,
+  renderSubagentCard,
+}: ToolCallBlockProps) {
   const [open, setOpen] = useState(false);
   if (tool.name === "im_send_message" && tool.status !== "streaming") {
-    return <ImSendConfirmCard tool={tool} sessionId={sessionId} />;
+    const args = (tool.args ?? {}) as { conversationId?: string };
+    const targetName = resolveImTargetName(args.conversationId);
+    return (
+      <ImSendConfirmCard
+        tool={tool}
+        targetName={targetName}
+        onConfirm={onConfirm}
+      />
+    );
   }
   if (tool.name === "ask_question" && tool.status !== "streaming") {
-    return <AskQuestionCard tool={tool} sessionId={sessionId} />;
+    return <AskQuestionCard tool={tool} onAnswer={onAnswer} />;
   }
   if (tool.name === "present_file" && tool.status !== "streaming") {
-    return <ArtifactFileCard tool={tool} />;
+    return (
+      <ArtifactFileCard
+        tool={tool}
+        labels={{ presentFailed: labels.artifactPresentFailed }}
+        remote={artifactRemote}
+        onPreview={onPreviewArtifact}
+      />
+    );
   }
   if (tool.name === "drive_share" && tool.status !== "streaming") {
-    return <DriveShareCard tool={tool} sessionId={sessionId} />;
+    return <DriveShareCard tool={tool} onConfirm={onConfirm} />;
   }
   if (tool.name === "drive_create_share" && tool.status !== "streaming") {
-    return <DriveCreateShareCard tool={tool} sessionId={sessionId} />;
+    return <DriveCreateShareCard tool={tool} onConfirm={onConfirm} />;
   }
   if (tool.name === "todo_write" && tool.status !== "streaming") {
     const todos = ((tool.args ?? {}) as { todos?: TodoItem[] }).todos ?? [];
@@ -67,7 +133,7 @@ export function ToolCallBlock({
     );
   }
   if (tool.name === "dispatch_subagent" && tool.status !== "streaming") {
-    return <SubagentCard tool={tool} />;
+    return <>{renderSubagentCard(tool)}</>;
   }
   const streaming = tool.status === "streaming";
   // streaming 阶段权威 args 还没到，用累积的 argsText 尽力部分解析。

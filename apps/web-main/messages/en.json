@@ -7,6 +7,7 @@
   },
   "appShell": {
     "newMessage": "New Message",
+    "newTask": "New task",
     "rail": {
       "assistant": "Assistant",
       "messages": "Messages",
@@ -34,11 +35,36 @@
     "selectDeviceHint": "Choose an authorized device on the left to view its details",
     "notFoundTitle": "Device not found",
     "notFoundHint": "This device may have been revoked or does not belong to the current organization. Please pick another one from the list on the left.",
-    "remoteSessionComingSoon": "Remote sessions will be available in a future release",
-    "remoteSessionOfflineHint": "This device is currently offline. Remote sessions will be available in a future release"
+    "remoteSessionOfflineHint": "This device is currently offline and cannot start a remote session. Please try again once it comes back online.",
+    "newSessionTitle": "Start a new session",
+    "newSessionHint": "Type your task or question — a new session will be created on this device once you send it",
+    "remoteSessionTitle": "Remote session",
+    "launcher": {
+      "title": "Start a task",
+      "subtitle": "Pick an authorized device and hand the task to its Agent",
+      "placeholder": "Enter your task or question",
+      "pickDevice": "Select device",
+      "pickDeviceFirst": "Please select a device to run the task",
+      "willRunOn": "Will run on {device}",
+      "slogan": "Your work copilot",
+      "scenes": {
+        "daily": "Daily work",
+        "code": "Coding",
+        "design": "Design"
+      }
+    },
+    "input": {
+      "attachment": "Add attachment",
+      "stop": "Stop"
+    }
   },
   "assistantSidebar": {
-    "title": "Devices"
+    "title": "Devices",
+    "newSession": "New session",
+    "backToDevices": "Back to devices",
+    "offlineSessionsHint": "Device is offline, sessions cannot be loaded",
+    "remoteLoadFailed": "Failed to load sessions",
+    "remoteEmpty": "No sessions on this device yet"
   },
   "loading": "",
   "validation": {
@@ -496,5 +522,74 @@
     "placeholder": "Type a message…",
     "send": "Send",
     "attachment": "Attachment"
+  },
+  "session": {
+    "assistantName": "Assistant",
+    "youName": "You",
+    "scrollToBottom": "Scroll to bottom",
+    "generatingReply": "Generating reply",
+    "editPending": "Edit",
+    "deletePending": "Delete",
+    "reasoningProcess": "Reasoning",
+    "reasoningThinking": "Thinking {seconds}s",
+    "reasoningThought": "Thought for {seconds}s",
+    "runErrorPrefix": "Run failed: ",
+    "remoteLoadFailed": "Failed to load session history",
+    "actionFailed": "Action failed, please retry",
+    "createFailed": "Failed to create session — the device may be offline. Please retry",
+    "dismiss": "Dismiss",
+    "modelSelect": "Select model",
+    "input": {
+      "placeholder": "Type your task or question",
+      "send": "Send",
+      "stop": "Stop",
+      "attachment": "Add attachment"
+    },
+    "compaction": {
+      "bannerThreshold": "Compacting conversation history…",
+      "bannerCtxExceeded": "Context full; compacting to continue…",
+      "rowTitle": "Compacted {count} earlier messages"
+    },
+    "subagent": {
+      "fallbackTitle": "Subtask",
+      "starting": "Starting…",
+      "running": "Running",
+      "done": "Done",
+      "error": "Failed",
+      "aborted": "Aborted",
+      "stop": "Stop",
+      "backgroundTag": "Background",
+      "toolsCount": "{count} tools",
+      "elapsed": "{elapsed} elapsed",
+      "runningAction": "Running",
+      "streamFooterRunning": "Sub-session · {count} messages · streaming live",
+      "streamFooterDone": "Sub-session · {count} messages",
+      "abortedResult": "Stopped manually; partial results remain in the sub-session",
+      "errorResult": "Sub-agent failed to produce a result"
+    },
+    "artifact": {
+      "presentFailed": "Presentation failed",
+      "loading": "Loading…",
+      "loadFailed": "This artifact no longer exists or has changed",
+      "unsupported": "This file type cannot be previewed, please download it instead",
+      "tooLarge": "File is large ({size} MB) and cannot be previewed remotely",
+      "download": "Download",
+      "close": "Close",
+      "uploadToDrive": "Upload to Drive",
+      "uploading": "Uploading…",
+      "uploadSuccess": "Uploaded to Drive: {name}",
+      "uploadFailed": "Upload failed, please retry",
+      "tooLargeHint": "Once uploaded, you can view it in the org drive",
+      "previewTitle": "Artifact preview",
+      "imageAlt": "Artifact",
+      "empty": "No artifact selected",
+      "untitled": "Untitled file"
+    }
+  },
+  "composer": {
+    "skills": "Skills",
+    "apps": "Connect apps",
+    "permissions": "Permissions",
+    "comingSoon": "Coming soon"
   }
 }

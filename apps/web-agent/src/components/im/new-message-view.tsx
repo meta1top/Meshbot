@@ -24,6 +24,7 @@ type Recipient =
 
 export function NewMessageView() {
   const t = useTranslations("newMessage");
+  const tChat = useTranslations("chatInput");
   const router = useRouter();
   const currentUser = useAtomValue(currentUserAtom);
   const conversations = useAtomValue(conversationsAtom);
@@ -183,6 +184,11 @@ export function NewMessageView() {
             onChange={setDraft}
             onSend={handleSend}
             placeholder={t("bodyPlaceholder")}
+            labels={{
+              attachment: tChat("attachment"),
+              interrupt: tChat("interrupt"),
+              send: tChat("send"),
+            }}
           />
         </div>
       ) : (

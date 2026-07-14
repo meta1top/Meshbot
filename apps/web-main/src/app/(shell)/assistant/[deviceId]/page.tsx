@@ -1,40 +1,75 @@
 "use client";
 
-import { Card, CardContent, cn, Skeleton } from "@meshbot/design";
+import { Card, CardContent, Skeleton } from "@meshbot/design";
 import { PageShellView } from "@meshbot/web-common/shell";
+import { useQueryClient } from "@tanstack/react-query";
 import { Monitor } from "lucide-react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { DeviceSublist } from "@/components/assistant/device-sublist";
+import { Suspense, useEffect } from "react";
+import { RemoteSessionView } from "@/components/assistant/remote-session-view";
+import { remoteSessionsQueryKey } from "@/hooks/use-remote-sessions";
 import { useDeviceOnline, useDevicePresenceSync } from "@/rest/agent-devices";
+import { useProfile } from "@/rest/auth";
 import { useDevices } from "@/rest/devices";
 
 /**
- * 设备详情占位页（二期远程会话留位）：名称/平台/在线状态/最后活跃 + 占位条。
- * 设备不存在（未找到/已吊销/加载失败）与设备离线是两种不同的文案分支——前者
- * 整页替换为「设备不存在」空态，后者仍渲染完整详情卡（在线态字段本身即显示离线），
- * 仅底部占位条文案额外提示需设备在线才能发起远程会话。
+ * 设备详情页：在线 → 完整远程会话界面（会话子栏 + `RemoteSessionView`）；
+ * 离线 → 设备详情卡（在线态字段已显示离线）+ 禁止输入的提示；设备不存在
+ * （未找到/已吊销/加载失败）→ 空态。`?session=` 决定当前查看的会话；既无
+ * `?session=` 也无 `?draft=`（起手台交接的建会话草稿）时重定向回 `/assistant`
+ * 起手台——「新建会话页」态已下线。`?streamId=` 只在本页自己刚发起
+ * create 后由 `RemoteSessionView.onSessionCreated` 写入，用于把首轮
+ * running/interrupt 路由带过去——直接导航进一个已有会话（点会话列表 /
+ * 刷新页面）时天然没有这个参数，重连活跃流不在 V1 范围（见任务报告）。
  */
 export default function AssistantDevicePage() {
+  return (
+    <Suspense fallback={null}>
+      <AssistantDeviceView />
+    </Suspense>
+  );
+}
+
+function AssistantDeviceView() {
   const t = useTranslations("assistant");
   const tDevices = useTranslations("devices");
   const params = useParams<{ deviceId: string }>();
   const deviceId = params.deviceId;
+  const searchParams = useSearchParams();
+  const sessionId = searchParams.get("session");
+  const streamId = searchParams.get("streamId");
+  // 启动台交接来的一次性草稿 token（读即删，见 lib/launcher-draft.ts）
+  const draftToken = searchParams.get("draft");
+  const router = useRouter();
+  const queryClient = useQueryClient();
   const { data: devices, isPending, error } = useDevices();
   const { data: onlineData } = useDeviceOnline(deviceId);
   useDevicePresenceSync();
+  const profile = useProfile();
+  const orgId = profile.data?.activeOrg?.id ?? null;
 
   const device = devices?.find((d) => d.id === deviceId);
   const notFound = !isPending && (error || !device || device.revokedAt != null);
   const online = onlineData?.online ?? false;
 
+  // 「新建会话页」态（无 session 也无草稿）已下线：新会话统一从起手台发起
+  // （选设备 + 写第一句），设备行不再有「新建」入口。直接输 URL / 旧书签落到
+  // 这里的，送回起手台。带 ?draft= 的是起手台自己交接进来的建会话流程，放行。
+  useEffect(() => {
+    if (sessionId || draftToken) return;
+    router.replace("/assistant");
+  }, [sessionId, draftToken, router]);
+
+  // 侧栏（设备→会话展开树）由段 layout 的 AssistantSidebar 持久渲染，本页只出主区。
   return (
     <>
-      <DeviceSublist />
-      <PageShellView>
-        {isPending ? (
+      {isPending ? (
+        <PageShellView>
           <DeviceDetailSkeleton />
-        ) : notFound ? (
+        </PageShellView>
+      ) : notFound ? (
+        <PageShellView>
           <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
             <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
               <Monitor className="h-7 w-7" />
@@ -46,8 +81,10 @@ export default function AssistantDevicePage() {
               {t("notFoundHint")}
             </div>
           </div>
-        ) : (
-          device && (
+        </PageShellView>
+      ) : !online ? (
+        <PageShellView>
+          {device && (
             <div className="flex flex-1 items-center justify-center">
               <Card className="w-full max-w-sm">
                 <CardContent className="flex flex-col items-center gap-4 py-8 text-center">
@@ -69,15 +106,8 @@ export default function AssistantDevicePage() {
                         {tDevices("colOnline")}
                       </dt>
                       <dd className="flex items-center gap-2 text-foreground">
-                        <span
-                          className={cn(
-                            "h-2 w-2 shrink-0 rounded-full",
-                            online
-                              ? "bg-[#16a34a]"
-                              : "bg-(--shell-sidebar-fg)/30",
-                          )}
-                        />
-                        {online ? tDevices("online") : tDevices("offline")}
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-(--shell-sidebar-fg)/30" />
+                        {tDevices("offline")}
                       </dd>
                     </div>
                     <div className="flex items-center justify-between gap-3">
@@ -92,16 +122,39 @@ export default function AssistantDevicePage() {
                     </div>
                   </dl>
                   <div className="w-full rounded-md border border-dashed border-border bg-muted/40 px-3 py-2 text-[12px] text-muted-foreground">
-                    {online
-                      ? t("remoteSessionComingSoon")
-                      : t("remoteSessionOfflineHint")}
+                    {t("remoteSessionOfflineHint")}
                   </div>
                 </CardContent>
               </Card>
             </div>
-          )
-        )}
-      </PageShellView>
+          )}
+        </PageShellView>
+      ) : !orgId || (!sessionId && !draftToken) ? (
+        // 后者是重定向回起手台的过渡帧：不挂 RemoteSessionView，免得白建一个
+        // transport（三个 socket 监听器）又立刻卸载。
+        <PageShellView>
+          <DeviceDetailSkeleton />
+        </PageShellView>
+      ) : (
+        <RemoteSessionView
+          key={deviceId}
+          deviceId={deviceId}
+          sessionId={sessionId}
+          streamId={streamId}
+          draftToken={draftToken}
+          orgId={orgId}
+          onSessionCreated={(newSessionId, newStreamId) => {
+            // 侧栏会话列表是 React Query 缓存——新建的远程会话不失效就不会出现，
+            // 用户也就无法在树里定位/切回它。失效后重拉，activeKey 随即高亮。
+            void queryClient.invalidateQueries({
+              queryKey: remoteSessionsQueryKey(deviceId),
+            });
+            router.replace(
+              `/assistant/${deviceId}?session=${newSessionId}&streamId=${newStreamId}`,
+            );
+          }}
+        />
+      )}
     </>
   );
 }

@@ -1,13 +1,7 @@
-"use client";
-
 import { cn } from "@meshbot/design";
-import { useSetAtom } from "jotai";
 import { FileText, FileWarning } from "lucide-react";
-import { useTranslations } from "next-intl";
-import { previewArtifactAtom } from "@/atoms/assistant-panel";
-import { useRemoteSession } from "@/hooks/remote-session-context";
-import { artifactKind } from "@/lib/artifact";
-import type { ToolCallView } from "./message-list";
+import { artifactKind } from "./artifact-kind";
+import type { ToolCallView } from "./timeline";
 
 const KIND_LABEL: Record<string, string> = {
   html: "网页",
@@ -17,6 +11,27 @@ const KIND_LABEL: Record<string, string> = {
   text: "文本",
   binary: "文件",
 };
+
+/** ArtifactFileCard 的 i18n 文案（原仅 1 处 t() 调用，labels 化）。 */
+export interface ArtifactFileCardLabels {
+  presentFailed: string;
+}
+
+/** 预览目标：本地会话省略 remote；远程会话（跨设备）带对端设备/会话 id。 */
+export interface ArtifactPreviewTarget {
+  path: string;
+  title?: string;
+  remote?: { deviceId: string; sessionId: string };
+}
+
+export interface ArtifactFileCardProps {
+  tool: ToolCallView;
+  labels: ArtifactFileCardLabels;
+  /** 当前会话所在的远程设备信息（本地会话为 null/undefined）。 */
+  remote?: { deviceId: string; sessionId: string } | null;
+  /** 点击卡片：调用方负责实际打开预览（写 atom / 换面板等）。 */
+  onPreview: (target: ArtifactPreviewTarget) => void;
+}
 
 /**
  * 解析 present_file 工具结果：成功返回后端归一化的工作区相对路径 + 文件名；
@@ -45,7 +60,13 @@ function parsePresented(
 }
 
 /**
- * present_file 的对话流文件框：点击在右侧 dock 打开预览。
+ * present_file 的对话流文件框：点击回调化交由调用方打开预览（本地会话/远程会话
+ * 预览面板由各自宿主决定，本组件不感知）。
+ *
+ * 从 `apps/web-agent/src/components/session/artifact-file-card.tsx` 迁入
+ * （Task 8）：`previewArtifactAtom`（jotai）→ `onPreview` 回调；
+ * `useRemoteSession()` 的 remoteDeviceId/sessionId → `remote` prop；
+ * `useTranslations("session.artifact")` 的唯一一处 t() → `labels.presentFailed`。
  *
  * - 成功：预览用**结果 JSON 的工作区相对路径**（后端已归一/校验），不用 LLM
  *   原始入参——绝对路径入参即使呈现成功，直传预览也可能出工作区边界。
@@ -53,12 +74,12 @@ function parsePresented(
  *   避免给用户一张永远打不开的「点击预览」卡。
  * - 运行中（无结果）：沿用入参渲染占位卡。
  */
-export function ArtifactFileCard({ tool }: { tool: ToolCallView }) {
-  const t = useTranslations("session.artifact");
-  const setArtifact = useSetAtom(previewArtifactAtom);
-  // 远程会话（RemoteSessionProvider 内）：产物在对端设备，预览走设备查询通道。
-  const remote = useRemoteSession();
-
+export function ArtifactFileCard({
+  tool,
+  labels,
+  remote,
+  onPreview,
+}: ArtifactFileCardProps) {
   const args = (tool.args ?? {}) as { path?: string; title?: string };
   const presented = parsePresented(tool.result);
   const failed = !!tool.result && !presented;
@@ -79,7 +100,7 @@ export function ArtifactFileCard({ tool }: { tool: ToolCallView }) {
             {name}
           </span>
           <span className="truncate text-xs text-muted-foreground/70">
-            {t("presentFailed")}
+            {labels.presentFailed}
             {detail && ` · ${detail}`}
           </span>
         </span>
@@ -89,12 +110,10 @@ export function ArtifactFileCard({ tool }: { tool: ToolCallView }) {
 
   const open = () => {
     if (!previewPath) return;
-    setArtifact({
+    onPreview({
       path: previewPath,
       title: args.title,
-      remote: remote
-        ? { deviceId: remote.remoteDeviceId, sessionId: remote.sessionId }
-        : undefined,
+      remote: remote ?? undefined,
     });
   };
 

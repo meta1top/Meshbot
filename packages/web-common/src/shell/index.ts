@@ -9,6 +9,10 @@ export {
 export { RailIconStrip, type RailIconStripProps } from "./rail-icon-strip";
 export { RailNav, type RailNavItemModel, type RailNavProps } from "./rail-nav";
 export { RailNavItem } from "./rail-nav-item";
+export {
+  ResizableSheet,
+  type ResizableSheetProps,
+} from "./resizable-sheet";
 export { SidebarHeader, type SidebarHeaderProps } from "./sidebar-header";
 export {
   isNavNodeActive,

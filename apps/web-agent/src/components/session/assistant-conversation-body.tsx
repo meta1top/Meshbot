@@ -1,10 +1,16 @@
 "use client";
 
 import { stripLlmuse } from "@meshbot/types-agent";
+import {
+  type ArtifactPreviewTarget,
+  SessionConversationView,
+} from "@meshbot/web-common/session";
 import { useAtomValue, useSetAtom } from "jotai";
-import { ArrowDown } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { previewArtifactAtom } from "@/atoms/assistant-panel";
+import { currentUserAtom } from "@/atoms/auth";
+import { conversationsAtom } from "@/atoms/im";
 import {
   loadRemoteSessionsAtom,
   remoteSessionsAtom,
@@ -18,21 +24,25 @@ import {
   ChatInput,
   type ChatInputHandle,
 } from "@/components/common/chat-input";
-import { CompactionBanner } from "@/components/common/compaction-banner";
 import { ComposerActions } from "@/components/common/composer-actions";
 import { ModelSelect } from "@/components/common/model-select";
-import { MessageSkeleton } from "@/components/im/message-skeleton";
-import { MessageList } from "@/components/session/message-list";
-import { PendingList } from "@/components/session/pending-list";
+import { SubagentCard } from "@/components/session/subagent-card";
 import { RemoteSessionProvider } from "@/hooks/remote-session-context";
 import { useAutoOpenArtifact } from "@/hooks/use-auto-open-artifact";
 import { useChatScroll } from "@/hooks/use-chat-scroll";
 import { useLlmusePrefix } from "@/hooks/use-llmuse-prefix";
 import { useSessionStream } from "@/hooks/use-session-stream";
 import { toI18nList } from "@/lib/i18n-list";
+import {
+  createLocalSessionTransport,
+  createRemoteSessionTransport,
+} from "@/lib/session-transport";
 import { useModelConfigs } from "@/rest/model-config";
-import { patchRemoteSessionModel } from "@/rest/remote-devices";
-import { deletePendingMessage, patchSession } from "@/rest/session";
+import {
+  deletePendingMessage,
+  regenerateMessage,
+  setMessageFeedback,
+} from "@/rest/session";
 
 interface AssistantConversationBodyProps {
   /** 当前会话 ID，由 page 传入（渲染时必有）。远程会话时是 B 上的会话 id。 */
@@ -50,7 +60,17 @@ interface AssistantConversationBodyProps {
   remoteInitialStreamId?: string | null;
 }
 
-/** 助手会话主体：stream、消息列表、pending、粘底输入。不含外壳/header。 */
+/**
+ * 助手会话主体：hook 装配/atoms 桥/transport 构造/RemoteSessionProvider，
+ * 渲染委托 web-common `SessionConversationView`（Task 9 骨干批拆分）。
+ *
+ * `RemoteSessionProvider` 保留在本容器（不进 `SessionConversationView`）：
+ * 远程会话时包一层 Provider，`SessionConversationView` 内部的
+ * `renderSubagentCard` 注入的 `SubagentCard` 仍能通过 `useRemoteSession()`
+ * 拿到 remoteDeviceId/sessionId（Provider 包的是整棵渲染树，不只消息列表，
+ * 与原实现行为等价——`ChatInput`/`PendingList` 等兄弟节点本就不消费该
+ * context）。
+ */
 export function AssistantConversationBody({
   id,
   scrollRef,
@@ -60,6 +80,7 @@ export function AssistantConversationBody({
   const t = useTranslations("session");
   const tHome = useTranslations("home");
   const tRemote = useTranslations("assistantSidebar");
+  const tChat = useTranslations("chatInput");
   const [draft, setDraft] = useState("");
   const chatInputRef = useRef<ChatInputHandle>(null);
 
@@ -98,14 +119,11 @@ export function AssistantConversationBody({
       ? (remoteSessions[remoteDeviceId]?.sessions.find((s) => s.id === id)
           ?.modelConfigId ?? null)
       : (allSessions.find((s) => s.id === id)?.modelConfigId ?? null));
+  // 经 transport 统一路由：本地 PATCH /api/sessions/:id，远程走 device query 通道
+  // （本地 PATCH 对远程会话 id 会 404）——分支判断已下沉到 session-transport.ts。
   const handleModelChange = async (mid: string) => {
     try {
-      if (remoteDeviceId) {
-        // 经 device query 通道写对端 session（本地 PATCH 会 404）
-        await patchRemoteSessionModel(remoteDeviceId, id, mid);
-      } else {
-        await patchSession(id, { modelConfigId: mid });
-      }
+      await stream.patchSessionModel(mid);
       setModelOverride(mid);
     } catch (err) {
       console.error("切换模型失败", err);
@@ -115,9 +133,19 @@ export function AssistantConversationBody({
   const contextWindow = enabledModel?.contextWindow ?? 128_000;
 
   const prefix = useLlmusePrefix();
+  // transport 按 remoteDeviceId 二选一：无状态工厂，deviceId 不变时引用稳定，
+  // 避免每次渲染重建导致 useSessionStream 内部 effect/callback 误判依赖变化。
+  const transport = useMemo(
+    () =>
+      remoteDeviceId
+        ? createRemoteSessionTransport(remoteDeviceId)
+        : createLocalSessionTransport(),
+    [remoteDeviceId],
+  );
   const stream = useSessionStream(
     id,
     scrollRef,
+    transport,
     remoteDeviceId,
     remoteInitialStreamId,
   );
@@ -204,12 +232,31 @@ export function AssistantConversationBody({
     }
   };
 
-  // 提取成变量避免 remote/本地两个渲染分支各写一遍——远程会话下外面套
-  // RemoteSessionProvider（深层 HITL 卡片经 useRemoteSession 拿 confirm/answer
-  // 走远程端点），本地会话直接渲染，不包 Provider（useRemoteSession 返回 null）。
-  const messageListNode = (
-    <MessageList
-      messages={timelineMessages}
+  // MessageList 内部渲染的数据装配（原先分散在三个 web-agent 薄容器里，
+  // 现直接在本容器接线，转发给 SessionConversationView）。
+  const user = useAtomValue(currentUserAtom);
+  const userName = user?.displayName ?? user?.email ?? t("youName");
+  const assistantName = t("assistantName");
+  const conversations = useAtomValue(conversationsAtom);
+  const setArtifact = useSetAtom(previewArtifactAtom);
+  const tArtifact = useTranslations("session.artifact");
+  const tCompaction = useTranslations("session.compaction");
+  // artifactRemote 直接用本组件已有的 remoteDeviceId/id，不经
+  // useRemoteSession() context——本容器渲染在 RemoteSessionProvider 之外
+  // （见下方 JSX），此处取 context 值会拿到 null。
+  const artifactRemote = remoteDeviceId
+    ? { deviceId: remoteDeviceId, sessionId: id }
+    : null;
+
+  const view = (
+    <SessionConversationView
+      historyLoading={stream.historyLoading}
+      historyError={!!stream.historyError}
+      hasMoreHistory={stream.hasMoreHistory}
+      topSentinelRef={topSentinelRef}
+      compacting={stream.compacting}
+      timelineMessages={timelineMessages}
+      queuedMessages={queuedMessages}
       sessionId={id}
       running={stream.running}
       readOnly={!!remoteDeviceId}
@@ -228,85 +275,32 @@ export function AssistantConversationBody({
         });
       }}
       usageByMessage={usageByMessage}
-    />
-  );
-
-  return (
-    <>
-      <div className="flex w-full flex-1 flex-col">
-        {stream.historyLoading ? (
-          <MessageSkeleton />
-        ) : stream.historyError ? (
-          // 目前仅 remote 分支会置位（跨设备 relay 更易超时/离线）；本地
-          // 分支历史拉取失败不置位，沿用原行为（历史留空，不额外提示）。
-          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-            {tRemote("remoteLoadFailed")}
-          </div>
-        ) : (
-          <>
-            {stream.hasMoreHistory && (
-              <div
-                ref={topSentinelRef}
-                className="flex justify-center py-2 text-xs text-muted-foreground/60"
-              />
-            )}
-            <CompactionBanner
-              visible={!!stream.compacting}
-              reason={stream.compacting ?? undefined}
-            />
-            {remoteDeviceId ? (
-              <RemoteSessionProvider
-                remoteDeviceId={remoteDeviceId}
-                sessionId={id}
-                getStreamId={stream.getStreamId}
-              >
-                {messageListNode}
-              </RemoteSessionProvider>
-            ) : (
-              messageListNode
-            )}
-          </>
-        )}
-      </div>
-      {/*
-        sticky 输入区：bottom-4 距底 16px；上方放绝对定位的渐变遮罩做软淡出。
-        下方那 16px 缝隙由独立 bottom-bar 覆盖，避免滚动文字从缝隙钻出。
-      */}
-      <div className="sticky bottom-4 mt-auto w-full bg-background">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-linear-to-b from-transparent to-background"
-        />
-        {/* 底部缝隙遮挡：与 sticky 容器的 bottom-4 一致，覆盖输入框与窗口底之间的间隙 */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 -bottom-4 h-4 bg-background"
-        />
-        {/* 滚到底按钮：仅在用户离开底部时显示；点击恢复 stickToBottom + 立即平滑滚到底 */}
-        {!stickToBottom && (
-          <button
-            type="button"
-            aria-label={t("scrollToBottom")}
-            className="absolute right-2 -top-12 flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background text-foreground shadow-sm hover:bg-muted"
-            onClick={scrollToBottom}
-          >
-            <ArrowDown className="h-4 w-4" />
-          </button>
-        )}
-        {queuedMessages.length > 0 && (
-          <div className="mb-2">
-            <PendingList
-              messages={queuedMessages}
-              onDelete={handleDeletePending}
-              onEdit={handleEditPending}
-            />
-          </div>
-        )}
+      onConfirm={stream.confirm}
+      onAnswer={stream.answer}
+      userName={userName}
+      assistantName={assistantName}
+      modelConfigs={modelConfigs}
+      onFeedback={setMessageFeedback}
+      onRegenerate={regenerateMessage}
+      resolveImTargetName={(conversationId) => {
+        const target = conversations.find((c) => c.id === conversationId);
+        return (
+          target?.name ?? target?.peer?.displayName ?? conversationId ?? "会话"
+        );
+      }}
+      onPreviewArtifact={(target: ArtifactPreviewTarget) => setArtifact(target)}
+      artifactRemote={artifactRemote}
+      renderSubagentCard={(subTool) => <SubagentCard tool={subTool} />}
+      stickToBottom={stickToBottom}
+      onScrollToBottom={scrollToBottom}
+      onDeletePending={handleDeletePending}
+      onEditPending={handleEditPending}
+      renderInput={() => (
         <ChatInput
           ref={chatInputRef}
           value={draft}
           onChange={setDraft}
-          onSend={(t) => stream.send(prefix(t))}
+          onSend={(text) => stream.send(prefix(text))}
           onInterrupt={stream.interrupt}
           isLoading={stream.running}
           placeholder={inputPlaceholder}
@@ -329,8 +323,65 @@ export function AssistantConversationBody({
               cumulativeTokens: sessionTotals.totalTokens,
             },
           }}
+          labels={{
+            attachment: tChat("attachment"),
+            interrupt: tChat("interrupt"),
+            send: tChat("send"),
+            usage: {
+              nextRequestLabel: t("usage.nextRequestLabel"),
+              inputLabel: t("usage.inputLabel"),
+              cacheLabel: t("usage.cacheLabel"),
+              outputLabel: t("usage.outputLabel"),
+              reasoningLabel: t("usage.reasoningLabel"),
+              cumulativeLabel: t("usage.cumulativeLabel"),
+              callCount: (count) => t("usage.callCount", { count }),
+            },
+          }}
         />
-      </div>
-    </>
+      )}
+      labels={{
+        scrollToBottom: t("scrollToBottom"),
+        remoteLoadFailed: tRemote("remoteLoadFailed"),
+        compaction: {
+          bannerThreshold: tCompaction("bannerThreshold"),
+          bannerCtxExceeded: tCompaction("bannerCtxExceeded"),
+        },
+        messageList: {
+          assistantName,
+          runErrorPrefix: t("runErrorPrefix"),
+          generatingReply: t("generatingReply"),
+          reasoningThinking: (seconds) => t("reasoningThinking", { seconds }),
+          reasoningThought: (seconds) => t("reasoningThought", { seconds }),
+          reasoningProcess: t("reasoningProcess"),
+          compactionRowTitle: (count) => tCompaction("rowTitle", { count }),
+        },
+        toolCall: { artifactPresentFailed: tArtifact("presentFailed") },
+        pendingList: {
+          editPending: t("editPending"),
+          deletePending: t("deletePending"),
+        },
+        assistantActions: {
+          copy: t("actions.copy"),
+          copied: t("actions.copied"),
+          usage: t("actions.usage"),
+          like: t("actions.like"),
+          dislike: t("actions.dislike"),
+          deletedModel: t("usage.deletedModel"),
+          inputLabel: t("usage.inputLabel"),
+          cacheLabel: t("usage.cacheLabel"),
+          outputLabel: t("usage.outputLabel"),
+          reasoningLabel: t("usage.reasoningLabel"),
+          totalLabel: t("usage.totalLabel"),
+        },
+      }}
+    />
+  );
+
+  return remoteDeviceId ? (
+    <RemoteSessionProvider remoteDeviceId={remoteDeviceId} sessionId={id}>
+      {view}
+    </RemoteSessionProvider>
+  ) : (
+    view
   );
 }

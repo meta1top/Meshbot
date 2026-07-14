@@ -3,14 +3,26 @@
 import { cn, Tooltip, TooltipContent, TooltipTrigger } from "@meshbot/design";
 import type { MessageUsage } from "@meshbot/types-agent";
 import { Check, Copy, Info, ThumbsDown, ThumbsUp } from "lucide-react";
-import { useTranslations } from "next-intl";
 import { useCallback, useState } from "react";
-import { formatTokens } from "@/lib/format-tokens";
-import { resolveModelName } from "@/lib/model-name";
-import { useModelConfigs } from "@/rest/model-config";
-import { setMessageFeedback } from "@/rest/session";
+import { formatTokens } from "./format-tokens";
+import { type ModelConfigLike, resolveModelName } from "./model-name";
 
-interface Props {
+export interface AssistantMessageActionsLabels {
+  copy: string;
+  copied: string;
+  usage: string;
+  like: string;
+  dislike: string;
+  /** usage.model 未命中任何配置行且是雪花 id 形态：配置已被删除的兜底文案。 */
+  deletedModel: string;
+  inputLabel: string;
+  cacheLabel: string;
+  outputLabel: string;
+  reasoningLabel: string;
+  totalLabel: string;
+}
+
+export interface AssistantMessageActionsProps {
   sessionId: string;
   messageId: string;
   content: string;
@@ -18,6 +30,15 @@ interface Props {
   usage?: MessageUsage;
   /** 初始反馈态（来自 history）。 */
   feedback?: "up" | "down" | null;
+  /** 用量 tooltip 解析模型友好名所需的配置列表（原 `useModelConfigs()`，调用方注入）。 */
+  modelConfigs?: ModelConfigLike[];
+  /** 反馈提交（原 REST `setMessageFeedback`，调用方注入）。 */
+  onFeedback: (
+    sessionId: string,
+    messageId: string,
+    value: "up" | "down" | null,
+  ) => Promise<unknown>;
+  labels: AssistantMessageActionsLabels;
 }
 
 const BTN =
@@ -25,6 +46,12 @@ const BTN =
 
 /**
  * assistant 气泡下方操作行：复制 / 用量 tooltip / 点赞 / 不喜欢。
+ *
+ * 从 `apps/web-agent/src/components/session/assistant-message-actions.tsx`
+ * 迁入（Task 7）——`useTranslations` 改 `labels` props；`useModelConfigs()`
+ * 改 `modelConfigs` props；`setMessageFeedback` REST 调用改 `onFeedback`
+ * props 回调；`resolveModelName`/`formatTokens` 纯函数随迁本目录。
+ *
  * hover 消息容器（外层 .group）才显示。点赞/不喜欢互斥 toggle，乐观 + 持久化。
  */
 export function AssistantMessageActions({
@@ -33,9 +60,10 @@ export function AssistantMessageActions({
   content,
   usage,
   feedback,
-}: Props) {
-  const t = useTranslations("session");
-  const { data: modelConfigs } = useModelConfigs();
+  modelConfigs,
+  onFeedback,
+  labels,
+}: AssistantMessageActionsProps) {
   const [copied, setCopied] = useState(false);
   const [current, setCurrent] = useState<"up" | "down" | null>(
     feedback ?? null,
@@ -60,7 +88,7 @@ export function AssistantMessageActions({
       setCurrent(target);
       setBusy(true);
       try {
-        await setMessageFeedback(sessionId, messageId, target);
+        await onFeedback(sessionId, messageId, target);
       } catch (err) {
         console.error("反馈失败", err);
         setCurrent(prev);
@@ -68,7 +96,7 @@ export function AssistantMessageActions({
         setBusy(false);
       }
     },
-    [busy, current, sessionId, messageId],
+    [busy, current, sessionId, messageId, onFeedback],
   );
 
   return (
@@ -76,7 +104,7 @@ export function AssistantMessageActions({
       <button
         type="button"
         onClick={handleCopy}
-        title={copied ? t("actions.copied") : t("actions.copy")}
+        title={copied ? labels.copied : labels.copy}
         className={BTN}
       >
         {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
@@ -85,7 +113,7 @@ export function AssistantMessageActions({
       {usage && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <button type="button" title={t("actions.usage")} className={BTN}>
+            <button type="button" title={labels.usage} className={BTN}>
               <Info className="h-3 w-3" />
             </button>
           </TooltipTrigger>
@@ -94,20 +122,20 @@ export function AssistantMessageActions({
               <div>
                 {usage.modelName ??
                   resolveModelName(modelConfigs, usage.model) ??
-                  t("usage.deletedModel")}
+                  labels.deletedModel}
               </div>
               <div>
-                {t("usage.inputLabel")} {formatTokens(usage.inputTokens)}
+                {labels.inputLabel} {formatTokens(usage.inputTokens)}
                 {usage.cacheReadTokens > 0 &&
-                  `（${t("usage.cacheLabel")} ${formatTokens(usage.cacheReadTokens)}）`}
+                  `（${labels.cacheLabel} ${formatTokens(usage.cacheReadTokens)}）`}
               </div>
               <div>
-                {t("usage.outputLabel")} {formatTokens(usage.outputTokens)}
+                {labels.outputLabel} {formatTokens(usage.outputTokens)}
                 {usage.reasoningTokens > 0 &&
-                  `（${t("usage.reasoningLabel")} ${formatTokens(usage.reasoningTokens)}）`}
+                  `（${labels.reasoningLabel} ${formatTokens(usage.reasoningTokens)}）`}
               </div>
               <div>
-                {t("usage.totalLabel")} {formatTokens(usage.totalTokens)}
+                {labels.totalLabel} {formatTokens(usage.totalTokens)}
               </div>
             </div>
           </TooltipContent>
@@ -118,7 +146,7 @@ export function AssistantMessageActions({
         type="button"
         onClick={() => handleFeedback("up")}
         disabled={busy}
-        title={t("actions.like")}
+        title={labels.like}
         className={cn(BTN, current === "up" && "text-accent hover:text-accent")}
       >
         <ThumbsUp className="h-3 w-3" />
@@ -127,7 +155,7 @@ export function AssistantMessageActions({
         type="button"
         onClick={() => handleFeedback("down")}
         disabled={busy}
-        title={t("actions.dislike")}
+        title={labels.dislike}
         className={cn(
           BTN,
           current === "down" && "text-accent hover:text-accent",

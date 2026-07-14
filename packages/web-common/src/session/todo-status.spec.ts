@@ -1,5 +1,4 @@
-import { describe, expect, it } from "@jest/globals";
-import { todoStatusMeta } from "./todo";
+import { todoStatusMeta } from "./todo-status";
 
 describe("todoStatusMeta", () => {
   it("三状态各有 label", () => {
