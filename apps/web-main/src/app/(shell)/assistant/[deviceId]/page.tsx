@@ -2,11 +2,13 @@
 
 import { Card, CardContent, Skeleton } from "@meshbot/design";
 import { PageShellView } from "@meshbot/web-common/shell";
+import { useQueryClient } from "@tanstack/react-query";
 import { Monitor } from "lucide-react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Suspense } from "react";
 import { RemoteSessionView } from "@/components/assistant/remote-session-view";
+import { remoteSessionsQueryKey } from "@/hooks/use-remote-sessions";
 import { useDeviceOnline, useDevicePresenceSync } from "@/rest/agent-devices";
 import { useProfile } from "@/rest/auth";
 import { useDevices } from "@/rest/devices";
@@ -39,6 +41,7 @@ function AssistantDeviceView() {
   // 启动台交接来的一次性草稿 token（读即删，见 lib/launcher-draft.ts）
   const draftToken = searchParams.get("draft");
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { data: devices, isPending, error } = useDevices();
   const { data: onlineData } = useDeviceOnline(deviceId);
   useDevicePresenceSync();
@@ -129,11 +132,16 @@ function AssistantDeviceView() {
           streamId={streamId}
           draftToken={draftToken}
           orgId={orgId}
-          onSessionCreated={(newSessionId, newStreamId) =>
+          onSessionCreated={(newSessionId, newStreamId) => {
+            // 侧栏会话列表是 React Query 缓存——新建的远程会话不失效就不会出现，
+            // 用户也就无法在树里定位/切回它。失效后重拉，activeKey 随即高亮。
+            void queryClient.invalidateQueries({
+              queryKey: remoteSessionsQueryKey(deviceId),
+            });
             router.replace(
               `/assistant/${deviceId}?session=${newSessionId}&streamId=${newStreamId}`,
-            )
-          }
+            );
+          }}
         />
       )}
     </>

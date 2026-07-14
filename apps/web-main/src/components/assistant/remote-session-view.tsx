@@ -13,11 +13,15 @@ import {
   useSessionStream,
 } from "@meshbot/web-common/session";
 import { PageShellView } from "@meshbot/web-common/shell";
+import { useQueryClient } from "@tanstack/react-query";
 import { Sparkles } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChatScroll } from "@/hooks/use-chat-scroll";
-import { useRemoteSessions } from "@/hooks/use-remote-sessions";
+import {
+  remoteSessionsQueryKey,
+  useRemoteSessions,
+} from "@/hooks/use-remote-sessions";
 import { takeLauncherDraft } from "@/lib/launcher-draft";
 import { createRemoteSessionTransport } from "@/lib/session-transport";
 import { useProfile } from "@/rest/auth";
@@ -194,12 +198,21 @@ function RemoteSessionViewReady({
   );
   const getSocket = useCallback(() => socketAdapter, [socketAdapter]);
 
+  const queryClient = useQueryClient();
   const stream = useSessionStream(
     sessionId,
     scrollRef,
     transport,
     getSocket,
-    {},
+    {
+      // B 端异步生成会话标题 → 失效侧栏会话列表，标题即时刷新
+      // （新建会话时列表里先是空标题，标题一到就补上）。
+      onTitleUpdated: () => {
+        void queryClient.invalidateQueries({
+          queryKey: remoteSessionsQueryKey(deviceId),
+        });
+      },
+    },
     deviceId,
     streamId,
   );
