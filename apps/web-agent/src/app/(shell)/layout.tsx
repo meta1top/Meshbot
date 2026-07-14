@@ -57,6 +57,8 @@ function ShellInner({ children }: { children: ReactNode }) {
             <ResizableSheet
               width={assistantWidth}
               onWidthChange={setAssistantWidth}
+              // 默认 50% 窗宽（下限 480px）；调过后按存的 px 走。
+              defaultWidth="50vw"
               // app-no-drag：z 抬到拖拽条（z-9999）之上，顶部下载/关闭按钮才不被
               // app-region:drag 吞。入场用 animation（不是 transition）——sheet 的
               // width 靠内联样式实时写，任何 transition-duration 都会让它滞后于鼠标。

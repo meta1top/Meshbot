@@ -12,7 +12,7 @@ import {
   SessionConversationView,
   useSessionStream,
 } from "@meshbot/web-common/session";
-import { PageShellView } from "@meshbot/web-common/shell";
+import { PageShellView, ResizableSheet } from "@meshbot/web-common/shell";
 import { useQueryClient } from "@tanstack/react-query";
 import { Sparkles } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -22,6 +22,7 @@ import {
   remoteSessionsQueryKey,
   useRemoteSessions,
 } from "@/hooks/use-remote-sessions";
+import { useStoredWidth } from "@/hooks/use-stored-width";
 import { takeLauncherDraft } from "@/lib/launcher-draft";
 import { createRemoteSessionTransport } from "@/lib/session-transport";
 import { useProfile } from "@/rest/auth";
@@ -231,6 +232,9 @@ function RemoteSessionViewReady({
       })
     | null
   >(null);
+  const [previewWidth, setPreviewWidth] = useStoredWidth(
+    "meshbot.artifactPanelWidth",
+  );
   // 上传网盘成功提示：web-main 无网盘 presigned URL 前端基础设施，不像 web-agent
   // 那样能上传后自动切换预览源（见 Task 3 报告「大文件网盘路径复用」两种取舍），
   // 简化为面板内一条可关闭的成功提示；切换/关闭预览目标时清空（下方 effect）。
@@ -395,11 +399,16 @@ function RemoteSessionViewReady({
    * `onUploadedToDrive`：web-main 无网盘 presigned URL REST 客户端，不像
    * web-agent 那样自动切换预览源，退化为面板内提示成功（`uploadNotice`
    * state，沿用旧弹窗 `uploadSuccess` 文案）——Task 3 报告已记录两种取舍均可。
+   *
+   * 壳与拖拽调宽复用 web-common 的 `ResizableSheet`（与 web-agent 随手问/产物预览
+   * 同一份实现）：默认 50% 窗宽、下限 480px，拖过之后按 px 记住。
    */
   const previewAside = preview && (
-    <aside
-      style={{ width: "min(440px, 92vw)" }}
-      className="absolute top-0 right-0 bottom-0 z-30 flex animate-in fade-in slide-in-from-right-4 flex-col overflow-hidden border-l border-border bg-(--shell-content) shadow-[-8px_0_24px_-12px_rgba(0,0,0,0.18)] duration-200"
+    <ResizableSheet
+      width={previewWidth}
+      onWidthChange={setPreviewWidth}
+      defaultWidth="50vw"
+      className="animate-in fade-in slide-in-from-right-4"
     >
       {uploadNotice && (
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-emerald-600/10 px-3 py-2 text-[12px] text-emerald-700 dark:text-emerald-400">
@@ -444,7 +453,7 @@ function RemoteSessionViewReady({
           }}
         />
       </div>
-    </aside>
+    </ResizableSheet>
   );
 
   if (!sessionId) {

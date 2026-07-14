@@ -9,7 +9,7 @@ export interface ResizableSheetProps {
   width: number | null;
   /** 松手时提交一次最终宽度（拖动过程中不回调，避免调用方每帧 setState）。 */
   onWidthChange: (width: number) => void;
-  /** 宽度下限（px）。 */
+  /** 宽度下限（px），默认 480。 */
   minWidth?: number;
   /** 宽度上限占屏比。 */
   maxVwRatio?: number;
@@ -35,7 +35,7 @@ export interface ResizableSheetProps {
 export function ResizableSheet({
   width,
   onWidthChange,
-  minWidth = 380,
+  minWidth = 480,
   maxVwRatio = 0.92,
   defaultWidth = "30vw",
   className,
