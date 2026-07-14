@@ -50,7 +50,8 @@ const SESSION_PREFIX = "session:";
  *   展开态——否则刷新 / 直达链接会因为 `SidebarNav` 的 `defaultOpen` 只读一次
  *   而被锁死在折叠态，看不到自动展开高亮；
  * - 点会话叶子 → `/assistant/[deviceId]?session=<id>` 打开主区；
- * - 设备行尾「新建」→ `/assistant/[deviceId]`（无 session 参数 = 新建态）；
+ * - 设备行尾不出「新建会话」按钮（不注入 `onNewSession`）：新会话统一从
+ *   `/assistant` 起手台发起（选设备 + 写第一句），设备行只负责展开会话列表；
  * - 会话全部远程只读（wire protocol 未提供 rename/delete 能力）：不传
  *   `onRenameSession`/`onDeleteSession`，`SessionTree` 按此自动不出三点菜单。
  */
@@ -189,20 +190,9 @@ export function AssistantSidebar() {
     setExpanded((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
   };
 
-  const handleNewSession = (node: NavNode) => {
-    const id = node.key.startsWith("device:")
-      ? node.key.slice("device:".length)
-      : undefined;
-    if (!id) return;
-    router.push(`/assistant/${id}`);
-  };
-
   const labels: SessionTreeLabels = useMemo(
-    () => ({
-      offline: tDevices("offline"),
-      newSession: t("newSession"),
-    }),
-    [tDevices, t],
+    () => ({ offline: tDevices("offline") }),
+    [tDevices],
   );
 
   if (!slot) return null;
@@ -227,7 +217,6 @@ export function AssistantSidebar() {
             activeSessionKey={activeSessionKey}
             nodeInfo={(node) => metaByKey.get(node.key)}
             onExpandDevice={handleExpandDevice}
-            onNewSession={handleNewSession}
             labels={labels}
           />
         )}

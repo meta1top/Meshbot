@@ -6,7 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Monitor } from "lucide-react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import { RemoteSessionView } from "@/components/assistant/remote-session-view";
 import { remoteSessionsQueryKey } from "@/hooks/use-remote-sessions";
 import { useDeviceOnline, useDevicePresenceSync } from "@/rest/agent-devices";
@@ -16,8 +16,9 @@ import { useDevices } from "@/rest/devices";
 /**
  * 设备详情页：在线 → 完整远程会话界面（会话子栏 + `RemoteSessionView`）；
  * 离线 → 设备详情卡（在线态字段已显示离线）+ 禁止输入的提示；设备不存在
- * （未找到/已吊销/加载失败）→ 空态。`?session=` 决定当前查看/新建的会话
- * （无该参数 = 展示「新建会话」态输入框），`?streamId=` 只在本页自己刚发起
+ * （未找到/已吊销/加载失败）→ 空态。`?session=` 决定当前查看的会话；既无
+ * `?session=` 也无 `?draft=`（起手台交接的建会话草稿）时重定向回 `/assistant`
+ * 起手台——「新建会话页」态已下线。`?streamId=` 只在本页自己刚发起
  * create 后由 `RemoteSessionView.onSessionCreated` 写入，用于把首轮
  * running/interrupt 路由带过去——直接导航进一个已有会话（点会话列表 /
  * 刷新页面）时天然没有这个参数，重连活跃流不在 V1 范围（见任务报告）。
@@ -51,6 +52,14 @@ function AssistantDeviceView() {
   const device = devices?.find((d) => d.id === deviceId);
   const notFound = !isPending && (error || !device || device.revokedAt != null);
   const online = onlineData?.online ?? false;
+
+  // 「新建会话页」态（无 session 也无草稿）已下线：新会话统一从起手台发起
+  // （选设备 + 写第一句），设备行不再有「新建」入口。直接输 URL / 旧书签落到
+  // 这里的，送回起手台。带 ?draft= 的是起手台自己交接进来的建会话流程，放行。
+  useEffect(() => {
+    if (sessionId || draftToken) return;
+    router.replace("/assistant");
+  }, [sessionId, draftToken, router]);
 
   // 侧栏（设备→会话展开树）由段 layout 的 AssistantSidebar 持久渲染，本页只出主区。
   return (
@@ -120,7 +129,9 @@ function AssistantDeviceView() {
             </div>
           )}
         </PageShellView>
-      ) : !orgId ? (
+      ) : !orgId || (!sessionId && !draftToken) ? (
+        // 后者是重定向回起手台的过渡帧：不挂 RemoteSessionView，免得白建一个
+        // transport（三个 socket 监听器）又立刻卸载。
         <PageShellView>
           <DeviceDetailSkeleton />
         </PageShellView>
