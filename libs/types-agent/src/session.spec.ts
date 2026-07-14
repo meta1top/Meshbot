@@ -32,6 +32,24 @@ describe("session schemas", () => {
     expect(() => CreateSessionSchema.parse({ content: "" })).toThrow();
   });
 
+  it("CreateSessionSchema 接受非空 agentId", () => {
+    expect(
+      CreateSessionSchema.parse({ content: "hello", agentId: "agent-1" }),
+    ).toEqual({ content: "hello", agentId: "agent-1" });
+  });
+
+  it("CreateSessionSchema 拒绝空字符串 agentId（防止绕过兜底落库空串）", () => {
+    expect(() =>
+      CreateSessionSchema.parse({ content: "hello", agentId: "" }),
+    ).toThrow();
+  });
+
+  it("CreateSessionSchema 未传 agentId 时省略该字段（走 Controller 兜底）", () => {
+    expect(CreateSessionSchema.parse({ content: "hello" })).toEqual({
+      content: "hello",
+    });
+  });
+
   it("SessionStatus 枚举包含 idle / running", () => {
     expect(SessionStatus.options).toEqual(["idle", "running"]);
   });

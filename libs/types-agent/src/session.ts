@@ -74,8 +74,12 @@ export const CreateSessionSchema = z.object({
   kind: z.enum(["user", "quick"]).optional(),
   /** 会话使用的模型配置 id；缺省走账号默认（首个 enabled）。 */
   modelConfigId: z.string().optional(),
-  /** 会话归属的 Agent id；缺省由 Controller 兜底取账号默认 Agent（ensureDefault）。 */
-  agentId: z.string().optional(),
+  /**
+   * 会话归属的 Agent id；缺省由 Controller 兜底取账号默认 Agent（ensureDefault）。
+   * `.min(1)` 与同 schema 的 `content` 一致——挡住空字符串（`??` 只认 null/undefined，
+   * 空串会绕过 Controller 兜底原样落库），Controller 侧还会再校验一层存在性/归属。
+   */
+  agentId: z.string().min(1).optional(),
 });
 export type CreateSessionInput = z.infer<typeof CreateSessionSchema>;
 

@@ -109,8 +109,16 @@ export class RemoteRunInboundService {
 
   /**
    * relay 收到云端转发的 agent.run.start（B 侧入站）时触发。
-   * `forwarded` 里没有 agentId 概念（IM 侧尚无「选择哪个 Agent」的交互），
-   * 建会话统一走 `AgentService.ensureDefault()` 兜底取当前账号默认 Agent。
+   *
+   * 【本期限制，非最终设计】`forwarded` payload（云端转发的 `agent.run.start` 载荷）
+   * 目前不携带 agentId——IM 侧协议尚未加入「选择哪个 Agent」的交互，云端也无从知道
+   * 目标设备上有几个 Agent 可选。故本期恒定走 `AgentService.ensureDefault()` 兜底取
+   * 当前账号默认 Agent，暂不支持「按 agentId 精确寻址到某个 Agent」。
+   *
+   * 下一期计划：`forwarded` 增加可选 `agentId` 字段（配合 IM 侧「选择 Agent」交互，
+   * 云端转发时带上），此处改为——有 `agentId` 就 `AgentService.findOrThrow(agentId)`
+   * 校验归属当前账号后使用（不存在/越权则失败，不落库未经校验的 id），否则仍回退
+   * `ensureDefault()`；与 `SessionController.create()` 的 agentId 解析逻辑对齐。
    */
   @OnEvent(IM_RELAY_EVENTS.agentRunRequest)
   async onAgentRunRequest(evt: ImRelayAgentRunRequestEvent): Promise<void> {

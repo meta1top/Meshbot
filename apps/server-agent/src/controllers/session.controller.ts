@@ -61,12 +61,21 @@ export class SessionController {
 
   /**
    * 创建会话：写库后异步发起 run，立即返回 sessionId + session 完整对象。
-   * agentId 由前端显式指定；未指定时兜底取当前账号默认 Agent（ensureDefault，
-   * 保证至少有一个，绝不用空字符串落库）。
+   *
+   * agentId 解析，两层防御（schema 层 `.min(1)` 已经拦截空串是第一层；这里是第二层，
+   * 不能只靠 `??`——`??` 只在 null/undefined 时才走右侧，空字符串是 truthy 判断意义上
+   * 的假值但不是 null/undefined，光用 `??` 会让空串原样落库）：
+   * - 未传 / 传空字符串：视为未指定，兜底取当前账号默认 Agent（`ensureDefault`，
+   *   保证账号至少有一个）。
+   * - 显式传非空 agentId：必须 `findOrThrow` 校验存在且归属当前账号
+   *   （`ScopedRepository` 自动按账号过滤，越权/编造的 id 天然查不到）——不存在则
+   *   抛 404，绝不把未经校验的 id 落库，杜绝悬空引用与越权引用其它账号的 Agent。
    */
   @Post()
   async create(@Body() dto: CreateSessionDto): Promise<CreateSessionResponse> {
-    const agentId = dto.agentId ?? (await this.agents.ensureDefault()).id;
+    const agentId = dto.agentId
+      ? (await this.agents.findOrThrow(dto.agentId)).id
+      : (await this.agents.ensureDefault()).id;
     const result = await this.sessions.createSession({
       content: dto.content,
       kind: dto.kind,
