@@ -4,6 +4,7 @@ import {
   ModelRunContext,
 } from "@meshbot/lib-agent";
 import {
+  type InflightToolCall,
   type RunToolCallEndEvent,
   SESSION_WS_EVENTS,
 } from "@meshbot/types-agent";
@@ -32,6 +33,12 @@ interface InflightRun {
    * 用途：getInflight 返回，前端刷新替换 onReasoning 现取 Date.now() 的错误兜底。
    */
   reasoningStartedAt: number | null;
+  /**
+   * 当前轮 args 流式中的工具调用（toolCallId → 累计 args 文本）；切轮清空。
+   * tool_call_args 本身是纯瞬态事件，不留痕的话中途订阅者只能收到 args 尾巴
+   * 片段（拼不出合法 JSON），工具卡要空转到 tool_call_start 才整包补齐。
+   */
+  toolCalls: Map<string, { name: string; argsText: string }>;
   status: "streaming" | "done" | "interrupted";
   abort: AbortController;
   /** ctx-exceeded 兜底重试标记；防止同一 run 重复触发兜底。 */
@@ -56,6 +63,8 @@ export interface InflightView {
    * 用途：getInflight 返回，前端刷新替换 onReasoning 现取 Date.now() 的错误兜底。
    */
   reasoningStartedAt: number | null;
+  /** 本轮 args 流式中的工具调用；已落库轮 / 无工具时为空数组。 */
+  toolCalls: InflightToolCall[];
   status: "streaming" | "done" | "interrupted";
 }
 
@@ -129,6 +138,7 @@ export class RunnerService implements OnModuleInit {
         content: "",
         reasoning: "",
         reasoningStartedAt: null,
+        toolCalls: [],
         status: run.status,
       };
     }
@@ -137,8 +147,33 @@ export class RunnerService implements OnModuleInit {
       content: run.content,
       reasoning: run.reasoning,
       reasoningStartedAt: run.reasoningStartedAt,
+      toolCalls: [...run.toolCalls].map(([toolCallId, tc]) => ({
+        toolCallId,
+        name: tc.name,
+        argsText: tc.argsText,
+      })),
       status: run.status,
     };
+  }
+
+  /**
+   * 进入新一轮 assistant（messageId 变了）时重置本轮累计快照。
+   *
+   * reasoning / chunk / tool_call_args 三个分支共用：其中 tool_call_args 尤其
+   * 关键——「决策轮」（只吐 tool_calls，无正文、云网关也不透传 reasoning）没有
+   * reasoning/chunk 事件，不在这里设 messageId 的话 run.messageId 永远是 null，
+   * getInflight 直接返 messageId:null → subscribe 一个快照都不发，中途打开会话
+   * 就完全看不到正在流式生成的工具调用。
+   */
+  private beginRoundIfNew(run: InflightRun, messageId: string): void {
+    if (run.messageId === messageId) return;
+    run.messageId = messageId;
+    run.content = "";
+    run.reasoning = "";
+    run.reasoningStartedAt = null;
+    run.toolCalls.clear();
+    // 进入新轮：上一轮的「已落库」标志失效，新轮重新作为活 partial 吐出。
+    run.partialPersisted = false;
   }
 
   /** 中断某 session 当前 run。 */
@@ -277,6 +312,7 @@ export class RunnerService implements OnModuleInit {
       content: "",
       reasoning: "",
       reasoningStartedAt: null,
+      toolCalls: new Map(),
       status: "streaming",
       abort: new AbortController(),
       partialPersisted: false,
@@ -517,14 +553,7 @@ export class RunnerService implements OnModuleInit {
       if (event.kind === "reasoning") {
         // 同步更新 inflight reasoning 快照，让 subscribe 中途接入也能 replay
         // 已收到的思考内容（多轮 ReAct 切轮时 messageId 变化会清空旧 reasoning）。
-        if (run.messageId !== event.messageId) {
-          run.messageId = event.messageId;
-          run.content = "";
-          run.reasoning = "";
-          run.reasoningStartedAt = null;
-          // 进入新轮：上一轮的「已落库」标志失效，新轮重新作为活 partial 吐出。
-          run.partialPersisted = false;
-        }
+        this.beginRoundIfNew(run, event.messageId);
         // 本轮首个 reasoning delta：记下 startedAt，刷新时前端能拿到真实开始时间
         if (run.reasoning === "" && event.delta) {
           run.reasoningStartedAt = Date.now();
@@ -552,8 +581,25 @@ export class RunnerService implements OnModuleInit {
         continue;
       }
       if (event.kind === "tool_call_args") {
-        // 纯瞬态：转发给前端做实时预览，不落库。必须在此 continue，
-        // 否则会落进末尾的 usage 兜底分支（event 字段不匹配 → 误记 LLM 调用）。
+        // 不落库，但要累进 inflight 快照：中途订阅者靠它续上「已经流过去的」args
+        // 前缀，否则只拿到尾巴片段、解析不出 JSON，工具卡空转到 tool_call_start
+        // 才整包补齐（写文件这类长 args 尤其明显）。同时这里也是「决策轮」唯一
+        // 能设 run.messageId 的地方（无 reasoning/chunk 事件），见 beginRoundIfNew。
+        this.beginRoundIfNew(run, event.messageId);
+        if (event.toolCallId) {
+          const cur = run.toolCalls.get(event.toolCallId);
+          if (cur) {
+            cur.argsText += event.delta;
+            if (event.name) cur.name = event.name;
+          } else {
+            run.toolCalls.set(event.toolCallId, {
+              name: event.name ?? "",
+              argsText: event.delta,
+            });
+          }
+        }
+        // 必须在此 continue，否则会落进末尾的 usage 兜底分支
+        // （event 字段不匹配 → 误记 LLM 调用）。
         this.emitter.emit(SESSION_WS_EVENTS.runToolCallArgsDelta, {
           sessionId,
           messageId: event.messageId,
@@ -576,14 +622,7 @@ export class RunnerService implements OnModuleInit {
         // 到的部分。否则 inflight.messageId 要等到 assistant_done 才有，订阅时
         // 「之前的输出」都看不到。轮切换时一并清 reasoning，避免上一轮 reasoning
         // 残留（与 reasoning handler 同款逻辑）。
-        if (run.messageId !== event.messageId) {
-          run.messageId = event.messageId;
-          run.content = "";
-          run.reasoning = "";
-          run.reasoningStartedAt = null;
-          // 进入新轮：上一轮的「已落库」标志失效，新轮重新作为活 partial 吐出。
-          run.partialPersisted = false;
-        }
+        this.beginRoundIfNew(run, event.messageId);
         run.content += event.delta;
         this.emitter.emit(SESSION_WS_EVENTS.runChunk, {
           sessionId,

@@ -1,6 +1,5 @@
 "use client";
 
-import { cn } from "@meshbot/design";
 import { useAtom } from "jotai";
 import {
   type ReactNode,
@@ -28,10 +27,17 @@ function ShellInner({ children }: { children: ReactNode }) {
   const [assistantWidth, setAssistantWidth] = useAtom(assistantPanelWidthAtom);
   const [isResizing, setIsResizing] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
+  const asideRef = useRef<HTMLElement>(null);
   const [slotEl, setSlotEl] = useState<HTMLElement | null>(null);
   // 默认 340px；下限 380px、上限 92vw（与随手问助手同套 clamp 语义）。
   const widthStyle = `clamp(380px, ${assistantWidth}px, 92vw)`;
 
+  /**
+   * 左缘拖拽调宽。拖动期间**直接改 DOM 宽度**、松手才提交一次 atom——宽度存在
+   * ShellInner 的 jotai atom 里，每帧 setState 会连同 children（整条消息流 +
+   * 产物正文）一起重渲染，拖起来明显卡顿。随手问助手面板宽度是组件内 useState，
+   * 重渲染范围只有它自己，所以一直是顺的。
+   */
   const startPanelResize = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
@@ -39,25 +45,25 @@ function ShellInner({ children }: { children: ReactNode }) {
       const startX = e.clientX;
       const avail = contentRef.current?.clientWidth ?? window.innerWidth;
       const maxW = Math.round(avail * 0.9);
-      const startW = assistantWidth;
+      const startW = asideRef.current?.offsetWidth ?? 380;
+      let latest = startW;
       const onMove = (ev: MouseEvent) => {
-        const next = Math.min(
-          Math.max(startW + (startX - ev.clientX), 380),
-          maxW,
-        );
-        setAssistantWidth(next);
+        latest = Math.min(Math.max(startW + (startX - ev.clientX), 380), maxW);
+        if (asideRef.current) asideRef.current.style.width = `${latest}px`;
       };
       const onUp = () => {
         document.removeEventListener("mousemove", onMove);
         document.removeEventListener("mouseup", onUp);
         document.body.style.userSelect = "";
         setIsResizing(false);
+        // 只在松手时落一次 state（持久化 + 让 style prop 重新接管 clamp 表达式）
+        setAssistantWidth(latest);
       };
       document.body.style.userSelect = "none";
       document.addEventListener("mousemove", onMove);
       document.addEventListener("mouseup", onUp);
     },
-    [assistantWidth, setAssistantWidth],
+    [setAssistantWidth],
   );
 
   useEffect(() => {
@@ -97,6 +103,7 @@ function ShellInner({ children }: { children: ReactNode }) {
               挂载无此问题）。挂载产生真实布局变化，regions 必然重算。 */}
           {hasArtifact && (
             <aside
+              ref={asideRef}
               style={{ width: widthStyle }}
               className="app-no-drag absolute top-0 right-0 bottom-0 z-10000 flex animate-in fade-in slide-in-from-right-4 flex-col overflow-hidden border-l border-border bg-(--shell-content) shadow-[-8px_0_24px_-12px_rgba(0,0,0,0.18)] duration-200"
             >

@@ -92,6 +92,9 @@ export class SessionGateway extends BaseWebSocketGateway {
         reasoning: inflight.reasoning,
         content: inflight.content,
         reasoningStartedAt: inflight.reasoningStartedAt,
+        // 本轮已流过去的 tool_call args 前缀：中途订阅者据此接上流式预览，
+        // 否则只收到尾巴片段（解析不出 JSON），工具卡空转到 tool_call_start。
+        toolCalls: inflight.toolCalls,
       });
     }
   }

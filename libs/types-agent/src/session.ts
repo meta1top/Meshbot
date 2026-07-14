@@ -148,10 +148,27 @@ export const MessageFeedbackSchema = z.object({
 });
 export type MessageFeedbackInput = z.infer<typeof MessageFeedbackSchema>;
 
+/**
+ * inflight 中「args 正在流式生成」的工具调用快照。
+ *
+ * tool_call args 是逐 token 流出来的，中途订阅者只能收到剩余尾巴片段——单靠尾巴
+ * 拼不出合法 JSON，工具卡只能空转到 run.tool_call_start 整包补齐才突然出现。
+ * 快照把「已经流过去的 args 前缀」补给新订阅者，后续增量再 append 就能接上。
+ */
+export const InflightToolCallSchema = z.object({
+  toolCallId: z.string(),
+  name: z.string(),
+  /** 已累计的 args JSON 片段（流式中途，通常未闭合）。 */
+  argsText: z.string(),
+});
+export type InflightToolCall = z.infer<typeof InflightToolCallSchema>;
+
 /** 当前未完成 assistant 消息快照。 */
 export const InflightSnapshotSchema = z.object({
   messageId: z.string().nullable(),
   content: z.string(),
+  /** 本轮 args 流式中的工具调用；已落库轮 / 无工具时为空数组。 */
+  toolCalls: z.array(InflightToolCallSchema),
   /** 已累积的 reasoning（思考过程），无则空串。 */
   reasoning: z.string(),
   /**
@@ -268,6 +285,8 @@ export const RunSnapshotEventSchema = z.object({
   reasoning: z.string(),
   content: z.string(),
   reasoningStartedAt: z.number().nullable(),
+  /** 本轮 args 流式中的工具调用（见 InflightToolCallSchema）。 */
+  toolCalls: z.array(InflightToolCallSchema),
 });
 export type RunSnapshotEvent = z.infer<typeof RunSnapshotEventSchema>;
 

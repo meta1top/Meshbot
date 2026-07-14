@@ -2,6 +2,7 @@
 
 import {
   type HistoryMessage,
+  type InflightToolCall,
   type MessageUsage,
   type RunChunkEvent,
   type RunDoneEvent,
@@ -136,6 +137,43 @@ function historyMessageToTimeline(m: HistoryMessage): TimelineMessage {
       : {}),
     feedback: m.feedback ?? null,
   };
+}
+
+/**
+ * 把 inflight 快照里的 tool_call args 前缀合并进消息的工具块。
+ *
+ * 中途订阅（刷新 / 切回会话 / 云端发起本地打开）时，args 的前半段已经流过去了，
+ * 只靠后续 delta 拼出来的是 JSON 尾巴片段（解析不出 → 工具卡空转到 tool_call_start
+ * 才整包补齐）。快照补上前缀后，后续 delta 继续 append 就能连成完整流。
+ *
+ * 只补 streaming 态的块：已经 running/终态的块有权威 args 与结果，快照是「补历史」，
+ * 不能把已推进的状态回退。
+ */
+function mergeInflightToolCalls(
+  existing: TimelineMessage["toolCalls"],
+  snapshot: readonly InflightToolCall[],
+): TimelineMessage["toolCalls"] {
+  if (snapshot.length === 0) return existing;
+  const list = existing ? [...existing] : [];
+  for (const tc of snapshot) {
+    const i = list.findIndex((t) => t.toolCallId === tc.toolCallId);
+    if (i === -1) {
+      list.push({
+        toolCallId: tc.toolCallId,
+        name: tc.name,
+        status: "streaming",
+        argsText: tc.argsText,
+      });
+      continue;
+    }
+    if (list[i].status !== "streaming") continue;
+    list[i] = {
+      ...list[i],
+      name: tc.name || list[i].name,
+      argsText: tc.argsText, // SET 覆盖：快照是本轮 args 的全量前缀，不累加
+    };
+  }
+  return list;
 }
 
 /**
@@ -453,7 +491,21 @@ export function useSessionStream(
                 id: history.inflight.messageId,
                 role: "assistant",
                 content: history.inflight.content,
-                streaming: true,
+                // 决策轮（只有工具、正文为空）不设 streaming：进行态由工具块自己
+                // 呈现，空正文挂闪烁光标没有意义（与 onSnapshot 同款判断）。
+                ...(history.inflight.content !== "" ||
+                history.inflight.toolCalls.length === 0
+                  ? { streaming: true as const }
+                  : {}),
+                // 已流过去的 tool_call args 前缀：中途打开会话时靠它接上流式预览。
+                ...(history.inflight.toolCalls.length > 0
+                  ? {
+                      toolCalls: mergeInflightToolCalls(
+                        undefined,
+                        history.inflight.toolCalls,
+                      ),
+                    }
+                  : {}),
                 ...(history.inflight.reasoning
                   ? {
                       reasoning: history.inflight.reasoning,
@@ -646,6 +698,9 @@ export function useSessionStream(
     const onSnapshot = (e: RunSnapshotEvent) => {
       if (e.sessionId !== sessionId) return;
       setRunning(true);
+      // 决策轮（只有工具、正文为空）不设 streaming：空正文的闪烁光标没有意义，
+      // 进行态由工具块自己呈现（与 onToolArgsDelta 建壳时的判断一致）。
+      const streaming = e.content !== "" || e.toolCalls.length === 0;
       apply((prev) => {
         const withoutLoading = prev.filter((m) => !m.loading);
         const idx = withoutLoading.findIndex((m) => m.id === e.messageId);
@@ -656,10 +711,13 @@ export function useSessionStream(
               id: e.messageId,
               role: "assistant" as const,
               content: e.content,
-              streaming: true,
+              ...(streaming ? { streaming: true } : {}),
               ...(e.reasoning ? { reasoning: e.reasoning } : {}),
               ...(e.reasoningStartedAt !== null
                 ? { reasoningStartedAt: e.reasoningStartedAt }
+                : {}),
+              ...(e.toolCalls.length > 0
+                ? { toolCalls: mergeInflightToolCalls(undefined, e.toolCalls) }
                 : {}),
             },
           ];
@@ -669,11 +727,12 @@ export function useSessionStream(
         copy[idx] = {
           ...existing,
           content: e.content, // SET 覆盖，不累加
-          streaming: true,
+          ...(streaming ? { streaming: true } : {}),
           // reasoning 仅在快照非空时覆盖，避免空快照抹掉已有 reasoning
           reasoning: e.reasoning || existing.reasoning,
           reasoningStartedAt:
             e.reasoningStartedAt ?? existing.reasoningStartedAt,
+          toolCalls: mergeInflightToolCalls(existing.toolCalls, e.toolCalls),
         };
         return copy;
       });
