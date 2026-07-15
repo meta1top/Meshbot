@@ -41,7 +41,7 @@ SessionTree 的 agent kind + AgentRow、`groupSessionsByAgent`、编辑抽屉、
 
 ---
 
-## Task R1：技能页主从视图（列所有 Agent → 看它的技能）
+## Task 1：（R1）技能页主从视图（列所有 Agent → 看它的技能）
 
 **Files:**
 - Modify: `apps/web-agent/src/app/(shell)/skills/page.tsx`
@@ -80,7 +80,7 @@ git add -A && git commit -m "feat(web-agent): 技能页改主从——列所有 
 
 ---
 
-## Task R2：起手台 + 新建会话改「选本机 Agent」
+## Task 2：（R2）起手台 + 新建会话改「选本机 Agent」
 
 **Files:**
 - Modify: `apps/web-agent/src/components/home/launcher-home.tsx`
@@ -116,7 +116,7 @@ git add -A && git commit -m "feat(web-agent): 起手台目标改「选本机 Age
 
 ---
 
-## Task R3：侧栏去当前 + 剩余消费方迁移
+## Task 3：（R3）侧栏去当前 + 剩余消费方迁移
 
 **Files:**
 - Modify: `apps/web-agent/src/components/shell/assistant-sidebar.tsx`
@@ -165,7 +165,7 @@ git add -A && git commit -m "feat(web-agent): 侧栏去当前态（列全部 Age
 
 ---
 
-## Task R4：删除 currentAgentIdAtom + 死代码清理 + 终验
+## Task 4：（R4）删除 currentAgentIdAtom + 死代码清理 + 终验
 
 **Files:**
 - Delete: `apps/web-agent/src/atoms/agent.ts`（若只剩这个 atom）
