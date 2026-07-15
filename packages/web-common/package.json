@@ -58,6 +58,12 @@
     }
   },
   "devDependencies": {
-    "@types/react": "^19"
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/react": "^19",
+    "jest-environment-jsdom": "^30.4.1",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
   }
 }

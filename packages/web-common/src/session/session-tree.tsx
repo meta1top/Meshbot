@@ -55,6 +55,8 @@ export interface SessionTreeLabels {
   deleteConfirmCancel?: string;
   /** 设备行内「新建会话」按钮 title（仅 onNewSession 注入时使用）。 */
   newSession?: string;
+  /** Agent 行编辑按钮 aria-label / title（仅 onEditAgent 注入时使用）。 */
+  editAgent?: string;
 }
 
 /**
@@ -88,6 +90,16 @@ export type SessionTreeNodeInfo =
       kind: "placeholder";
       /** skeleton：一段脉冲占位；note：纯文字提示（骨架/空态/加载失败）。 */
       variant: "skeleton" | "note";
+    }
+  | {
+      kind: "agent";
+      /** 头像 emoji（web-agent 侧已从「emoji|色值」拆好，本组件只管渲染）。 */
+      emoji: string;
+      /** 头像背景色（#hex）。 */
+      color: string;
+      name: string;
+      /** 该 Agent 名下有会话在跑 → 显示脉冲点。 */
+      running: boolean;
     };
 
 export interface SessionTreeProps {
@@ -108,6 +120,8 @@ export interface SessionTreeProps {
   onRenameSession?: (node: NavNode, title: string) => Promise<void> | void;
   /** 删除确认；成功后关闭确认框，失败时确认框留着、按钮恢复可点供重试/取消。 */
   onDeleteSession?: (node: NavNode) => Promise<void> | void;
+  /** Agent 行编辑按钮点击（不传则该按钮不出现）。 */
+  onEditAgent?: (node: NavNode) => void;
   labels: SessionTreeLabels;
 }
 
@@ -128,6 +142,7 @@ export function SessionTree({
   onNewSession,
   onRenameSession,
   onDeleteSession,
+  onEditAgent,
   labels,
 }: SessionTreeProps) {
   const renderRow = (node: NavNode, defaults: SidebarRowProps): ReactNode => {
@@ -166,6 +181,16 @@ export function SessionTree({
           >
             {node.label}
           </div>
+        );
+      case "agent":
+        return (
+          <AgentRow
+            node={node}
+            defaults={defaults}
+            info={info}
+            onEditAgent={onEditAgent}
+            labels={labels}
+          />
         );
     }
   };
@@ -243,6 +268,68 @@ function DeviceRow({
     row
   ) : (
     <div className="pointer-events-none opacity-50">{row}</div>
+  );
+}
+
+/** Agent 行：chevron（SidebarNav 已在 defaults.icon 给出）+ 圆形头像（色底 emoji）
+ *  + 名字 + running 脉冲点 + hover 编辑（复用 SidebarRow 的 actions 出现机制，
+ *  不额外造 hover 逻辑，同 DeviceRow/SessionRow 的按钮）。 */
+function AgentRow({
+  node,
+  defaults,
+  info,
+  onEditAgent,
+  labels,
+}: {
+  node: NavNode;
+  defaults: SidebarRowProps;
+  info: Extract<SessionTreeNodeInfo, { kind: "agent" }>;
+  onEditAgent?: (node: NavNode) => void;
+  labels: SessionTreeLabels;
+}) {
+  return (
+    <SidebarRow
+      icon={
+        <>
+          {defaults.icon}
+          <span
+            className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px]"
+            style={{ backgroundColor: info.color }}
+          >
+            {info.emoji}
+          </span>
+        </>
+      }
+      label={
+        <span className="flex items-center gap-1.5 font-semibold text-(--shell-sidebar-fg)">
+          {info.name}
+          {info.running ? (
+            <span
+              className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[#16a34a]"
+              aria-hidden
+            />
+          ) : null}
+        </span>
+      }
+      depth={defaults.depth}
+      onClick={defaults.onClick}
+      actions={
+        onEditAgent ? (
+          <button
+            type="button"
+            title={labels.editAgent}
+            aria-label={labels.editAgent}
+            onClick={(e) => {
+              e.stopPropagation();
+              onEditAgent(node);
+            }}
+            className="flex h-6 w-6 items-center justify-center rounded text-(--shell-sidebar-fg)/60 transition-colors hover:bg-(--shell-sidebar-hover) hover:text-(--shell-sidebar-fg)"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+        ) : undefined
+      }
+    />
   );
 }
 
