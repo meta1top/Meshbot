@@ -22,8 +22,8 @@ import { createSession } from "@/rest/session";
 type Recipient =
   | { kind: "channel"; id: string; label: string }
   | { kind: "member"; userId: string; label: string }
-  /** 就地选中的本机 Agent（起手台同款「哪个 Agent」维度，不读全局
-   * currentAgentIdAtom）——发起的新会话归这个 Agent。 */
+  /** 就地选中的本机 Agent（起手台同款「哪个 Agent」维度，不读任何全局
+   * 当前 Agent 状态）——发起的新会话归这个 Agent。 */
   | { kind: "session"; agentId: string; label: string };
 
 export function NewMessageView() {
