@@ -642,5 +642,9 @@
     "shareLinkExpire30": "30 天",
     "shareLinkExpireNever": "永久",
     "shareLinkPasswordPlaceholder": "设置访问密码（可选）"
+  },
+  "agent": {
+    "railLabel": "Agent 导航",
+    "newAgent": "新建 Agent"
   }
 }

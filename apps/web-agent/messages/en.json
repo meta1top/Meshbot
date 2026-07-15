@@ -642,5 +642,9 @@
     "shareLinkExpire30": "30 days",
     "shareLinkExpireNever": "Never",
     "shareLinkPasswordPlaceholder": "Set access password (optional)"
+  },
+  "agent": {
+    "railLabel": "Agent navigation",
+    "newAgent": "New agent"
   }
 }
