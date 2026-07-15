@@ -1,8 +1,29 @@
 # 计划二 · 2a：本机 Agent 为主体的侧栏 设计
 
 > 日期：2026-07-15
-> 状态：设计已确认，待写实施计划
+> 状态：**初版已实施（Task 1-4，commit f6e9102c..083ac749），2026-07-16 模型修订，见下方「修订 v2」**
 > 上游：`2026-07-15-multi-agent-per-device-design.md`（§9 计划二 IA 愿景）
+
+---
+
+## 修订 v2（2026-07-16）—— 去掉「全局当前 Agent」，Agent 为并列组织维度
+
+用户实机 review 初版后推翻了「单一全局当前 Agent」这个中间模型。**以下修订 supersede 本文档中所有关于 `currentAgentIdAtom`「单一当前 Agent」「点 Agent 设为当前 + 高亮」的表述**（§已确认决策的「当前 Agent 模型」、§侧栏结构里点节点设当前那条、以及初版 Task 2 里的 onSelectAgent / resolveCurrentAgentId / filterSessionsByAgent 语义）。
+
+**新模型：Agent 是「一直并列列出、每处独立挑选」的组织维度，没有全局当前态。**
+
+1. **彻底删除 `currentAgentIdAtom`**（全局单选语义）及其全部消费方的「当前」依赖。计划一 Task 12 曾把 6+ 处接到它，每处的 agentId 来源改为「就地选择」。
+2. **起手台（launcher）**：目标选择器从「设备下拉」改成「Agent 下拉」——下拉选项**直接就是各个本机 Agent**（扁平，不先展开「本地」）。选一个 Agent → 发起的本地会话归它。远程设备/Agent 留给 2c。
+3. **技能页**：从「按当前 Agent 过滤」改成**主从视图**——左侧列**所有**本机 Agent（含零技能的），点一个 → 右侧列它已装的技能 + 给它装新技能。
+4. **侧栏**：Agent→会话列表保留，但**去掉「点 Agent = 设为当前」和当前高亮**。点 Agent 行只展开/收起它的会话；点会话打开（会话自带 agentId，无歧义）；`onSelectAgent` 移除。新建会话走起手台的 Agent 下拉。
+
+**初版仍复用的部分**（不推翻）：SessionTree 的 `agent` kind + AgentRow（头像/running 点/编辑铅笔）、侧栏 Agent→会话分组（`groupSessionsByAgent`）、捞回的编辑抽屉、会话头显归属 Agent。
+
+**修订实施见**：`docs/superpowers/plans/2026-07-16-multi-agent-2a-revised.md`。
+
+下方为初版设计原文（当前 Agent 相关部分已被上面 supersede，保留作记录）。
+
+---
 
 ## 背景
 
