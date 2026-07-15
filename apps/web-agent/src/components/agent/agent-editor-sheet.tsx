@@ -40,15 +40,15 @@ import {
   QUICK_ASSISTANT_NAME_MAX,
 } from "@meshbot/types-agent";
 import { useQueryClient } from "@tanstack/react-query";
-import { useAtom } from "jotai";
+import { useAtomValue } from "jotai";
 import { Loader2 } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { forwardRef, useEffect, useState } from "react";
 import type { ZodType } from "zod";
-import { currentAgentIdAtom } from "@/atoms/agent";
+import { sessionsAtom } from "@/atoms/sessions";
 import { AgentAvatarField } from "@/components/agent/agent-avatar-field";
 import { McpEditor } from "@/components/agent/mcp-editor";
-import { nextSelectedAgentId } from "@/lib/next-selected-agent-id";
 import {
   agentsQueryKey,
   createAgent,
@@ -114,8 +114,11 @@ interface AgentEditorSheetProps {
  * 而 `agentId` 是父组件受控的 prop（由 `assistant-sidebar` 触发，只会传
  * null 或某个既有 agent id，不知道复制诞生的新 id）——用 `localAgentId`
  * 内部状态承接：每次抽屉从关到开都用 prop 重置一次，但打开期间可以被
- * `handleDuplicate` 改写，脱离 prop 独立驱动 UI，同时把 `currentAgentIdAtom`
- * 也切过去,让侧栏与抽屉的「当前 agent」认知保持一致。
+ * `handleDuplicate` 改写，脱离 prop 独立驱动 UI。
+ *
+ * 无全局「当前 Agent」概念（Agent 并列，各处就地选）：删除 Agent 后不再
+ * 切换任何「当前」，只在「正打开的会话恰好属于被删 Agent」时导航离开
+ * （见 `handleDelete`）。
  */
 export function AgentEditorSheet({
   agentId,
@@ -124,7 +127,10 @@ export function AgentEditorSheet({
 }: AgentEditorSheetProps) {
   const t = useTranslations("agent.editor");
   const queryClient = useQueryClient();
-  const [currentAgentId, setCurrentAgentId] = useAtom(currentAgentIdAtom);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const sessions = useAtomValue(sessionsAtom);
   const { data: agents } = useAgents();
   const { data: modelConfigs } = useModelConfigs();
 
@@ -175,9 +181,8 @@ export function AgentEditorSheet({
         await updateAgent(localAgentId, values);
         await invalidateAgents();
       } else {
-        const created = await createAgent(values);
+        await createAgent(values);
         await invalidateAgents();
-        setCurrentAgentId(created.id);
       }
       onOpenChange(false);
     } catch (err) {
@@ -194,7 +199,6 @@ export function AgentEditorSheet({
     try {
       const created = await duplicateAgent(sourceId);
       await invalidateAgents();
-      setCurrentAgentId(created.id);
       // 复制完成：脱离新建态，把这个已打开的抽屉直接切到编辑新 agent。
       setLocalAgentId(created.id);
     } catch (err) {
@@ -209,14 +213,19 @@ export function AgentEditorSheet({
     setDeleting(true);
     setError(null);
     try {
-      const remaining = (agents ?? []).filter((a) => a.id !== localAgentId);
       await deleteAgent(localAgentId);
       await invalidateAgents();
-      // 只有删的就是当前选中的 agent 才需要切走；删别的 agent 时当前选中保持不变
-      // （之前无条件切到 remaining[0]，会把用户正在对话的 agent 静默切走）。
-      setCurrentAgentId(
-        nextSelectedAgentId(localAgentId, currentAgentId, remaining),
-      );
+      // 无「当前 Agent」可切——只在「正打开的会话恰好属于被删 Agent」时导航
+      // 离开（该会话已不可续聊）；删除的是别的 Agent 时，当前打开的会话与
+      // 侧栏展开态都不受影响。
+      const openSessionId =
+        pathname === "/assistant" ? searchParams.get("id") : null;
+      const openSession = openSessionId
+        ? sessions.find((s) => s.id === openSessionId)
+        : null;
+      if (openSession?.agentId === localAgentId) {
+        router.push("/assistant");
+      }
       setDeleteConfirmOpen(false);
       onOpenChange(false);
     } catch (err) {

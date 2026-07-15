@@ -12,12 +12,11 @@ import {
   type NavNode,
   SidebarHeader,
 } from "@meshbot/web-common/shell";
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import { Plus, SquarePen } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { currentAgentIdAtom } from "@/atoms/agent";
 import {
   deviceOnlineAtom,
   devicesAtom,
@@ -43,7 +42,6 @@ import { loadSidebarAtom } from "@/atoms/sidebar";
 import { AgentEditorSheet } from "@/components/agent/agent-editor-sheet";
 import { parseAgentAvatar } from "@/lib/agent-avatar";
 import { groupSessionsByAgent } from "@/lib/group-sessions-by-agent";
-import { resolveCurrentAgentId } from "@/lib/resolve-current-agent";
 import { shouldShowSidebarSkeleton } from "@/lib/should-show-sidebar-skeleton";
 import { useAgents } from "@/rest/agents";
 import { fetchDeviceOnline } from "@/rest/devices";
@@ -78,7 +76,6 @@ export function AssistantSidebar() {
   const devicesStatus = useAtomValue(devicesStatusAtom);
   const online = useAtomValue(deviceOnlineAtom);
   const { data: agents, isLoading: agentsLoading } = useAgents();
-  const [currentAgentId, setCurrentAgentId] = useAtom(currentAgentIdAtom);
   // 本机全量会话（未按 agent 过滤）——分组本身按 agentId 切（groupSessionsByAgent），
   // 不能在这里前置过滤，否则其他 Agent 的会话永远看不到。
   const localSessions = useAtomValue(sessionsAtom);
@@ -102,15 +99,6 @@ export function AssistantSidebar() {
     void loadSidebar();
     void loadDevices();
   }, [loadSidebar, loadDevices]);
-
-  // 首屏自动选中：currentAgentIdAtom 为 null 或指向已不在列表中的 agent（被
-  // 删除/未加载）时，回退到列表第一个（resolveCurrentAgentId 语义，见
-  // lib/resolve-current-agent）。
-  useEffect(() => {
-    if (!agents) return;
-    const resolved = resolveCurrentAgentId(agents, currentAgentId);
-    if (resolved !== currentAgentId) setCurrentAgentId(resolved);
-  }, [agents, currentAgentId, setCurrentAgentId]);
 
   // URL 指向的远程设备：主动拉会话列表（defaultOpen 只影响树的展开态，
   // 不会走用户交互的 onExpand 回调，懒加载需在此显式触发）。
@@ -183,27 +171,22 @@ export function AssistantSidebar() {
     }
 
     // 祖先自动展开（SidebarNav：`node.defaultOpen ?? isNavNodeActive(...)`）：
-    // 这里 defaultOpen 永远是已判定的布尔值，`??` 的兜底分支不会生效，所以
-    // 「当前会话属于这个 Agent 但它不是 currentAgentId」的场景必须显式并入
-    // 判定条件，否则分享链接打开的会话所属 Agent 不会自动展开（风险 3）。
-    // 这个判定还依赖 sessionChildren 在 NavItem **首次挂载**时就是真实数据——
-    // `open` 状态只在 mount 时读一次 defaultOpen，之后 sessionsStatus 变化不会
-    // 重新计算，所以下面 SessionTree 的 `loading` 必须把 sessionsStatus 一并
-    // 纳入（否则设备先于会话加载完成时，Agent 节点会带着骨架占位子节点抢先
-    // 挂载，defaultOpen 判定到空 sessionChildren，永久错过这次自动展开）。
+    // 去当前态后，Agent 节点没有「全局当前」可比，defaultOpen 只看一件事——
+    // 「含当前 URL 会话的那个 Agent 自动展开」，其余折叠。这个判定还依赖
+    // sessionChildren 在 NavItem **首次挂载**时就是真实数据——`open` 状态只在
+    // mount 时读一次 defaultOpen，之后 sessionsStatus 变化不会重新计算，所以
+    // 下面 SessionTree 的 `loading` 必须把 sessionsStatus 一并纳入（否则设备
+    // 先于会话加载完成时，Agent 节点会带着骨架占位子节点抢先挂载，defaultOpen
+    // 判定到空 sessionChildren，永久错过这次自动展开）。
     const containsActiveSession = sessionChildren.some(
       (c) => c.key === activeSessionKey,
     );
     return {
       key: `${AGENT_PREFIX}${a.id}`,
       label: a.name,
-      defaultOpen: a.id === currentAgentId || containsActiveSession,
-      // 注意：这个 NavNode.onClick 在 SidebarNav 里永远不可达——Agent 节点
-      // 的 hasChildren 恒为真（loading/空态/会话三选一占位），NavItem 的
-      // onClick 分支会在 `if (hasChildren)` 里提前 return，走不到
-      // `node.onClick()`。「点 Agent 行 = 设为当前」改走下面 SessionTree 的
-      // `onSelectAgent`（AgentRow 行主体点击的平行通道，与展开/收起不冲突，
-      // 见 Critical 修复）。此处不设置 onClick，避免误导。
+      defaultOpen: containsActiveSession,
+      // 去当前态：Agent 行点击只做展开/收起（NavItem 默认行为），不设当前、
+      // 不高亮——不传 SessionTree 的 onSelectAgent（该回调已从 web-common 移除）。
       children: sessionChildren,
     };
   });
@@ -304,16 +287,6 @@ export function AssistantSidebar() {
     setEditor({ open: true, agentId: node.key.slice(AGENT_PREFIX.length) });
   }, []);
 
-  // Agent 行本体点击：设为当前 Agent（Critical 修复）。与 SidebarNav 内建的
-  // 展开/收起 toggle 平行触发（SessionTree 的 AgentRow 先转发 toggle 再调用
-  // 这个回调，不 stopPropagation），点一次 Agent 行「选中 + 展开/收起」都做。
-  // 这样才能切到一个还没有任何会话的 Agent 去开新会话（`rest/session.ts`
-  // 里新建会话的 agentId 就来自 currentAgentIdAtom）。
-  const onSelectAgent = useCallback(
-    (node: NavNode) => setCurrentAgentId(node.key.slice(AGENT_PREFIX.length)),
-    [setCurrentAgentId],
-  );
-
   const labels: SessionTreeLabels = useMemo(
     () => ({
       offline: t("offline"),
@@ -362,7 +335,6 @@ export function AssistantSidebar() {
             onRenameSession={onRenameSession}
             onDeleteSession={onDeleteSession}
             onEditAgent={onEditAgent}
-            onSelectAgent={onSelectAgent}
             labels={labels}
           />
         )}
