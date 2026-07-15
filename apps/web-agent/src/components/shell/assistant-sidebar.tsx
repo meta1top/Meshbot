@@ -12,11 +12,11 @@ import {
   type NavNode,
   SidebarHeader,
 } from "@meshbot/web-common/shell";
-import { useAtomValue, useSetAtom } from "jotai";
-import { SquarePen } from "lucide-react";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { Plus, SquarePen } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { currentAgentIdAtom } from "@/atoms/agent";
 import {
   deviceOnlineAtom,
@@ -40,18 +40,26 @@ import {
   sessionsStatusAtom,
 } from "@/atoms/sessions";
 import { loadSidebarAtom } from "@/atoms/sidebar";
-import { filterSessionsByAgent } from "@/lib/filter-sessions-by-agent";
+import { AgentEditorSheet } from "@/components/agent/agent-editor-sheet";
+import { parseAgentAvatar } from "@/lib/agent-avatar";
+import { groupSessionsByAgent } from "@/lib/group-sessions-by-agent";
+import { resolveCurrentAgentId } from "@/lib/resolve-current-agent";
+import { useAgents } from "@/rest/agents";
 import { fetchDeviceOnline } from "@/rest/devices";
 
 /** 本地会话 key 前缀（`s:<sessionId>`）。 */
 const LOCAL_PREFIX = "s:";
+/** Agent 节点 key 前缀（`ag:<agentId>`）。 */
+const AGENT_PREFIX = "ag:";
 
 /**
- * 助手二级侧栏：设备 → 会话两级树。一级 = 该账号所有注册设备（本机 + 其他，带在线点），
- * 本机默认展开列本地会话（sessionsAtom），其他设备展开时按需拉远程会话
- * （remoteSessionsAtom）。设备列表 / 在线态 / 本地会话 / 远程会话的订阅与拉取逻辑
- * 全部留在本组件（数据装配），实际树渲染 + 会话行（改名 / 删除 / 活动小红点 /
- * chevron / 自动展开高亮）交给共享 `SessionTree`（`@meshbot/web-common/session`）——
+ * 助手二级侧栏：上区「本机 Agent → 会话」嵌套树 + 下区「其他设备 → 远程会话」
+ * 两级树。上区每个 Agent 一个可展开节点（头像 + 名字 + running 脉冲点 +
+ * hover 编辑铅笔），子节点是该 Agent 名下的本地会话；下区沿用原有设备树，
+ * 去掉本机（本机已展开成上区的 Agent 列表，不再重复出现）。设备列表 / 在线态 /
+ * 本地会话 / 远程会话 / Agent 列表的订阅与拉取逻辑全部留在本组件（数据装配），
+ * 实际树渲染 + 行交互（改名 / 删除 / 活动小红点 / chevron / 自动展开高亮 /
+ * Agent 编辑入口）交给共享 `SessionTree`（`@meshbot/web-common/session`）——
  * 与 web-main 复用同一份交互逻辑。
  */
 export function AssistantSidebar() {
@@ -68,14 +76,11 @@ export function AssistantSidebar() {
   const devices = useAtomValue(devicesAtom);
   const devicesStatus = useAtomValue(devicesStatusAtom);
   const online = useAtomValue(deviceOnlineAtom);
-  const currentAgentId = useAtomValue(currentAgentIdAtom);
-  // 侧栏只展示当前选中 Agent 的会话——sessionsAtom 是全账号会话（未按 agent
-  // 过滤），本机设备节点渲染前先过滤掉其他 Agent 的会话，避免多 Agent 场景下
-  // 会话列表混在一起（同 usage atom 全局单例串台的坑，见 Task 12 报告）。
-  const sessions = filterSessionsByAgent(
-    useAtomValue(sessionsAtom),
-    currentAgentId,
-  );
+  const { data: agents } = useAgents();
+  const [currentAgentId, setCurrentAgentId] = useAtom(currentAgentIdAtom);
+  // 本机全量会话（未按 agent 过滤）——分组本身按 agentId 切（groupSessionsByAgent），
+  // 不能在这里前置过滤，否则其他 Agent 的会话永远看不到。
+  const localSessions = useAtomValue(sessionsAtom);
   const sessionsStatus = useAtomValue(sessionsStatusAtom);
   const remoteSessions = useAtomValue(remoteSessionsAtom);
   const scheduleActivity = useAtomValue(scheduleActivityAtom);
@@ -87,11 +92,24 @@ export function AssistantSidebar() {
   const clearScheduleActivity = useSetAtom(clearScheduleActivityAtom);
   const rename = useSetAtom(renameSessionAtom);
   const removeSession = useSetAtom(deleteSessionAtom);
+  const [editor, setEditor] = useState<{
+    open: boolean;
+    agentId: string | null;
+  }>({ open: false, agentId: null });
 
   useEffect(() => {
     void loadSidebar();
     void loadDevices();
   }, [loadSidebar, loadDevices]);
+
+  // 首屏自动选中：currentAgentIdAtom 为 null 或指向已不在列表中的 agent（被
+  // 删除/未加载）时，回退到列表第一个（resolveCurrentAgentId 语义，见
+  // lib/resolve-current-agent）。
+  useEffect(() => {
+    if (!agents) return;
+    const resolved = resolveCurrentAgentId(agents, currentAgentId);
+    if (resolved !== currentAgentId) setCurrentAgentId(resolved);
+  }, [agents, currentAgentId, setCurrentAgentId]);
 
   // URL 指向的远程设备：主动拉会话列表（defaultOpen 只影响树的展开态，
   // 不会走用户交互的 onExpand 回调，懒加载需在此显式触发）。
@@ -108,7 +126,7 @@ export function AssistantSidebar() {
 
   // 当前激活会话对应的树 key：本地 `s:<id>`，远程 `r:<deviceId>:<id>`。两者 key
   // 前缀不同、互斥，可安全合一成单个 activeSessionKey 交给 SessionTree（驱动
-  // 高亮 + 祖先设备分支自动展开）。
+  // 高亮 + 祖先 Agent/设备分支自动展开）。
   const activeSessionKey =
     pathname === "/assistant" && urlSessionId
       ? urlRemoteDevice
@@ -119,44 +137,75 @@ export function AssistantSidebar() {
   // 边装配树边登记每个 key 的渲染元数据（同一次 render 内，nodeInfo 回读复用）。
   const metaByKey = new Map<string, SessionTreeNodeInfo>();
 
-  // 装配某设备的会话子节点。子节点数组恒非空（loading/空/错误各给一个占位节点），
-  // 以保证设备节点 hasChildren=true——chevron 常驻、onExpand 可触发，与原
-  // DeviceNode「离线也显示 chevron」「展开才拉远程」一致。
-  const buildChildren = (d: DeviceView): NavNode[] => {
-    if (d.isCurrent) {
-      if (sessionsStatus === "idle" || sessionsStatus === "loading") {
-        metaByKey.set(`ph:${d.id}:load`, {
-          kind: "placeholder",
-          variant: "skeleton",
-        });
-        return [{ key: `ph:${d.id}:load`, label: "" }];
-      }
-      if (sessions.length === 0) {
-        metaByKey.set(`ph:${d.id}:empty`, {
-          kind: "placeholder",
-          variant: "note",
-        });
-        return [{ key: `ph:${d.id}:empty`, label: t("empty") }];
-      }
-      return sessions.map((s) => {
-        const key = `${LOCAL_PREFIX}${s.id}`;
+  // 上区：本机 Agent → 会话。agents 顺序决定分组顺序；running 脉冲点取自
+  // groupSessionsByAgent（该 Agent 名下有 status==="running" 的会话）。
+  const agentGroups = groupSessionsByAgent(agents ?? [], localSessions);
+  const agentNodes: NavNode[] = (agents ?? []).map((a) => {
+    const grp = agentGroups.find((g) => g.agentId === a.id);
+    const { emoji, color } = parseAgentAvatar(a.avatar);
+    metaByKey.set(`${AGENT_PREFIX}${a.id}`, {
+      kind: "agent",
+      emoji,
+      color,
+      name: a.name,
+      running: grp?.running ?? false,
+    });
+
+    let sessionChildren: NavNode[];
+    if (sessionsStatus === "idle" || sessionsStatus === "loading") {
+      const key = `ph:${AGENT_PREFIX}${a.id}:load`;
+      metaByKey.set(key, { kind: "placeholder", variant: "skeleton" });
+      sessionChildren = [{ key, label: "" }];
+    } else if ((grp?.sessions.length ?? 0) === 0) {
+      const key = `ph:${AGENT_PREFIX}${a.id}:empty`;
+      metaByKey.set(key, { kind: "placeholder", variant: "note" });
+      sessionChildren = [{ key, label: t("empty") }];
+    } else {
+      sessionChildren = (grp?.sessions ?? []).map((sn) => {
+        const key = `${LOCAL_PREFIX}${sn.id}`;
         metaByKey.set(key, {
           kind: "session",
-          title: s.title,
+          title: sn.title,
           editable: true,
           deletable: true,
-          hasActivity: scheduleActivity.has(s.id),
+          hasActivity: scheduleActivity.has(sn.id),
         });
         return {
           key,
-          label: s.title,
+          label: sn.title,
           onClick: () => {
-            clearScheduleActivity(s.id);
-            router.push(`/assistant?id=${s.id}`);
+            clearScheduleActivity(sn.id);
+            router.push(`/assistant?id=${sn.id}`);
           },
         };
       });
     }
+
+    // 祖先自动展开（SidebarNav：`node.defaultOpen ?? isNavNodeActive(...)`）：
+    // 这里 defaultOpen 永远是已判定的布尔值，`??` 的兜底分支不会生效，所以
+    // 「当前会话属于这个 Agent 但它不是 currentAgentId」的场景必须显式并入
+    // 判定条件，否则分享链接打开的会话所属 Agent 不会自动展开（风险 3）。
+    // 这个判定还依赖 sessionChildren 在 NavItem **首次挂载**时就是真实数据——
+    // `open` 状态只在 mount 时读一次 defaultOpen，之后 sessionsStatus 变化不会
+    // 重新计算，所以下面 SessionTree 的 `loading` 必须把 sessionsStatus 一并
+    // 纳入（否则设备先于会话加载完成时，Agent 节点会带着骨架占位子节点抢先
+    // 挂载，defaultOpen 判定到空 sessionChildren，永久错过这次自动展开）。
+    const containsActiveSession = sessionChildren.some(
+      (c) => c.key === activeSessionKey,
+    );
+    return {
+      key: `${AGENT_PREFIX}${a.id}`,
+      label: a.name,
+      defaultOpen: a.id === currentAgentId || containsActiveSession,
+      onClick: () => setCurrentAgentId(a.id),
+      children: sessionChildren,
+    };
+  });
+
+  // 装配某设备的会话子节点。子节点数组恒非空（loading/空/错误各给一个占位节点），
+  // 以保证设备节点 hasChildren=true——chevron 常驻、onExpand 可触发，与原
+  // DeviceNode「离线也显示 chevron」「展开才拉远程」一致。
+  const buildChildren = (d: DeviceView): NavNode[] => {
     const rs = remoteSessions[d.id];
     if (!rs || rs.status === "loading") {
       metaByKey.set(`ph:${d.id}:load`, {
@@ -188,10 +237,12 @@ export function AssistantSidebar() {
     });
   };
 
+  // 下区：其他设备（去本机——本机已展开成上区的 Agent 列表，不再重复出现）。
   const deviceNodes: NavNode[] = devices
     .filter((d) => !d.revokedAt)
+    .filter((d) => !d.isCurrent)
     .map((d) => {
-      const isOnline = d.isCurrent || (online[d.id] ?? false);
+      const isOnline = online[d.id] ?? false;
       const children = buildChildren(d);
       metaByKey.set(`dev:${d.id}`, {
         kind: "device",
@@ -200,23 +251,25 @@ export function AssistantSidebar() {
       });
       return {
         key: `dev:${d.id}`,
-        label: d.isCurrent ? `${d.name}（${t("thisDevice")}）` : d.name,
-        defaultOpen: d.isCurrent || d.id === urlRemoteDevice,
+        label: d.name,
+        defaultOpen: d.id === urlRemoteDevice,
         children,
       };
     });
 
-  const groups: NavGroup[] = [{ key: "devices", items: deviceNodes }];
+  const groups: NavGroup[] = [
+    { key: "agents", items: agentNodes },
+    { key: "devices", items: deviceNodes },
+  ];
 
   // 展开远程设备：按需拉会话列表 + 重探一次在线态（借「用户主动关心这台设备」
-  // 的信号刷新在线态，比等下次整页重探更及时）。本机 / 离线设备不触发
-  // （devices 数组里本机 isCurrent，离线设备 expandable=false 时 chevron 不可点，
-  // SidebarNav 不会为它触发 onExpand）。
+  // 的信号刷新在线态，比等下次整页重探更及时）。离线设备不触发（expandable=false
+  // 时 chevron 不可点，SidebarNav 不会为它触发 onExpand）。
   const handleExpandDevice = (node: NavNode) => {
     const id = node.key.startsWith("dev:") ? node.key.slice(4) : undefined;
     if (!id) return;
     const device = devices.find((d) => d.id === id);
-    if (!device || device.isCurrent) return;
+    if (!device) return;
     void loadRemoteSessions(id);
     fetchDeviceOnline(id)
       .then((v) => setDeviceOnline((m) => ({ ...m, [id]: v })))
@@ -240,6 +293,11 @@ export function AssistantSidebar() {
     [removeSession, activeSessionKey, router],
   );
 
+  // Agent 行的编辑铅笔：`ag:<agentId>` 去掉前缀即目标 agentId。
+  const onEditAgent = useCallback((node: NavNode) => {
+    setEditor({ open: true, agentId: node.key.slice(AGENT_PREFIX.length) });
+  }, []);
+
   const labels: SessionTreeLabels = useMemo(
     () => ({
       offline: t("offline"),
@@ -249,6 +307,7 @@ export function AssistantSidebar() {
       deleteConfirmDescription: tDeleteConfirm("description"),
       deleteConfirmConfirm: tDeleteConfirm("confirm"),
       deleteConfirmCancel: tDeleteConfirm("cancel"),
+      editAgent: t("editAgent"),
     }),
     [t, tSessionMenu, tDeleteConfirm],
   );
@@ -275,17 +334,38 @@ export function AssistantSidebar() {
           </div>
         ) : (
           <SessionTree
-            loading={devicesStatus === "idle" || devicesStatus === "loading"}
+            loading={
+              devicesStatus === "idle" ||
+              devicesStatus === "loading" ||
+              sessionsStatus === "idle" ||
+              sessionsStatus === "loading" ||
+              !agents
+            }
             groups={groups}
             activeSessionKey={activeSessionKey}
             nodeInfo={(node) => metaByKey.get(node.key)}
             onExpandDevice={handleExpandDevice}
             onRenameSession={onRenameSession}
             onDeleteSession={onDeleteSession}
+            onEditAgent={onEditAgent}
             labels={labels}
           />
         )}
       </div>
+      <div className="shrink-0 border-t border-border px-3 py-2">
+        <button
+          type="button"
+          onClick={() => setEditor({ open: true, agentId: null })}
+          className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] text-(--shell-sidebar-fg)/70 transition-colors hover:bg-(--shell-sidebar-hover) hover:text-(--shell-sidebar-fg)"
+        >
+          <Plus className="h-4 w-4" /> {t("newAgent")}
+        </button>
+      </div>
+      <AgentEditorSheet
+        agentId={editor.agentId}
+        open={editor.open}
+        onOpenChange={(open) => setEditor((s) => ({ ...s, open }))}
+      />
     </div>
   );
 }

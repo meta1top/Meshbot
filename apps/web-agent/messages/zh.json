@@ -294,7 +294,9 @@
     "devicesLoadFailed": "设备列表加载失败",
     "remoteSessionTitle": "远程会话",
     "remoteLoadFailed": "远程会话加载失败",
-    "remoteEmpty": "该设备暂无会话"
+    "remoteEmpty": "该设备暂无会话",
+    "editAgent": "编辑 Agent",
+    "newAgent": "新建 Agent"
   },
   "messages": {
     "title": "消息",

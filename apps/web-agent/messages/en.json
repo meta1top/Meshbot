@@ -294,7 +294,9 @@
     "devicesLoadFailed": "Failed to load devices",
     "remoteSessionTitle": "Remote session",
     "remoteLoadFailed": "Failed to load remote session",
-    "remoteEmpty": "No sessions on this device"
+    "remoteEmpty": "No sessions on this device",
+    "editAgent": "Edit agent",
+    "newAgent": "New agent"
   },
   "messages": {
     "title": "Messages",
