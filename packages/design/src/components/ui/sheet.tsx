@@ -2,6 +2,7 @@
 
 import { cva, type VariantProps } from "class-variance-authority";
 import { X } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Dialog as SheetPrimitive } from "radix-ui";
 import type * as React from "react";
 
@@ -76,6 +77,10 @@ function SheetContent({
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> &
   VariantProps<typeof sheetVariants>) {
+  // design 包把 next-intl 作为 peerDependency（同 `use-schema.ts` 的既有用法）：
+  // 这里用不带 namespace 的全局 t()，key 由消费方（web-agent / web-main）
+  // 各自在 messages 里的 `common.close` 提供翻译，design 包本身不持有文案内容。
+  const t = useTranslations();
   return (
     <SheetPortal>
       <SheetOverlay />
@@ -87,7 +92,7 @@ function SheetContent({
         {children}
         <SheetPrimitive.Close className="absolute top-4 right-4 rounded-xs opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
           <X className="size-4" />
-          <span className="sr-only">Close</span>
+          <span className="sr-only">{t("common.close")}</span>
         </SheetPrimitive.Close>
       </SheetPrimitive.Content>
     </SheetPortal>

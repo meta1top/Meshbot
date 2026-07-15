@@ -1,7 +1,8 @@
 {
   "common": {
     "switchToLightTheme": "切换到浅色",
-    "switchToDarkTheme": "切换到深色"
+    "switchToDarkTheme": "切换到深色",
+    "close": "关闭"
   },
   "login": {
     "title": "登录",

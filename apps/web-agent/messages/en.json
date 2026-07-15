@@ -1,7 +1,8 @@
 {
   "common": {
     "switchToLightTheme": "Switch to light theme",
-    "switchToDarkTheme": "Switch to dark theme"
+    "switchToDarkTheme": "Switch to dark theme",
+    "close": "Close"
   },
   "login": {
     "title": "Sign in",

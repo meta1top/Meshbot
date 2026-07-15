@@ -3,7 +3,8 @@
     "appTitle": "MeshBot Cloud",
     "switchToLightTheme": "Switch to light theme",
     "switchToDarkTheme": "Switch to dark theme",
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "close": "Close"
   },
   "appShell": {
     "newMessage": "New Message",

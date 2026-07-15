@@ -47,6 +47,7 @@ import { forwardRef, useEffect, useState } from "react";
 import type { ZodType } from "zod";
 import { currentAgentIdAtom } from "@/atoms/agent";
 import { AgentAvatarField } from "@/components/agent/agent-avatar-field";
+import { nextSelectedAgentId } from "@/lib/next-selected-agent-id";
 import {
   agentsQueryKey,
   createAgent,
@@ -122,7 +123,7 @@ export function AgentEditorSheet({
 }: AgentEditorSheetProps) {
   const t = useTranslations("agent.editor");
   const queryClient = useQueryClient();
-  const [, setCurrentAgentId] = useAtom(currentAgentIdAtom);
+  const [currentAgentId, setCurrentAgentId] = useAtom(currentAgentIdAtom);
   const { data: agents } = useAgents();
   const { data: modelConfigs } = useModelConfigs();
 
@@ -210,7 +211,11 @@ export function AgentEditorSheet({
       const remaining = (agents ?? []).filter((a) => a.id !== localAgentId);
       await deleteAgent(localAgentId);
       await invalidateAgents();
-      setCurrentAgentId(remaining[0]?.id ?? null);
+      // 只有删的就是当前选中的 agent 才需要切走；删别的 agent 时当前选中保持不变
+      // （之前无条件切到 remaining[0]，会把用户正在对话的 agent 静默切走）。
+      setCurrentAgentId(
+        nextSelectedAgentId(localAgentId, currentAgentId, remaining),
+      );
       setDeleteConfirmOpen(false);
       onOpenChange(false);
     } catch (err) {
