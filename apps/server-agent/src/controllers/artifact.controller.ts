@@ -44,14 +44,11 @@ export class ArtifactController {
 
   /**
    * 解析 agentId：未传/空串兜底取当前账号默认 Agent；显式传入必须校验存在且
-   * 归属当前账号（`findOrThrow` 经 `ScopedRepository` 自动按账号过滤，越权 id
-   * 天然 404）—— 与 `SessionController.create` 同一模式。
+   * 归属当前账号。收口到 `AgentService.resolveOrDefault()`（与
+   * `SessionController.create` / `SkillController` 同一实现，单点维护）。
    */
   private async resolveAgentId(agentId?: string): Promise<string> {
-    if (agentId) {
-      return (await this.agents.findOrThrow(agentId)).id;
-    }
-    return (await this.agents.ensureDefault()).id;
+    return (await this.agents.resolveOrDefault(agentId)).id;
   }
 
   /** 读取 workspace 内产物文件（预览/下载）。 */

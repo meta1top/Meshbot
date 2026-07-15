@@ -221,6 +221,15 @@ export class SessionService {
   }
 
   /**
+   * 列出某 Agent 下的全部会话（不区分 kind）。供「删除 Agent」级联清理其全部
+   * 会话使用——`agents.agent_id` 无数据库外键（项目禁止外键约束），删 Agent
+   * 前必须先把归属它的会话一起清掉，否则会留下指向已删 Agent 的悬空引用。
+   */
+  findByAgentId(agentId: string): Promise<Session[]> {
+    return this.sessionRepo.find({ where: { agentId } });
+  }
+
+  /**
    * 列出某父会话派生的全部子会话（id + 认领用的 parentToolCallId）。
    * 供 history 组装嵌套卡关联：子 run 进行中工具结果未落库，前端刷新后唯有
    * 此路能把 dispatch 工具卡认领到子会话。
@@ -501,6 +510,16 @@ export class SessionService {
     await this.deleteSessionInTx(sessionId);
     await this.schedules.deleteBySession(sessionId);
     await this.checkpointer.deleteThread(sessionId);
+  }
+
+  /**
+   * 删除一个会话及其消息——语义与 `deleteSession` 完全相同，只是换了个更贴合
+   * 「批量级联删除」语境的名字，供 `AgentService.removeWithData`（删 Agent 时
+   * 连同其全部会话一起清）调用。调用方已通过 `findByAgentId` 确认会话存在，
+   * 这里复用 `deleteSession` 而非另起一套实现，避免两份级联删除逻辑各自维护。
+   */
+  removeWithMessages(sessionId: string): Promise<void> {
+    return this.deleteSession(sessionId);
   }
 
   @Transactional()

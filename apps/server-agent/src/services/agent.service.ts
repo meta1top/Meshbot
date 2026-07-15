@@ -1,16 +1,26 @@
-import { AccountContextService } from "@meshbot/lib-agent";
+import { rmSync } from "node:fs";
+import { Transactional } from "@meshbot/common";
+import {
+  AccountContextService,
+  MeshbotConfigService,
+} from "@meshbot/lib-agent";
 import {
   DEFAULT_AGENT_AVATAR,
   DEFAULT_AGENT_NAME,
   type AgentCreateInput,
   type AgentUpdateInput,
 } from "@meshbot/types-agent";
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { ScopedRepository } from "../account/scoped-repository";
 import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
 import { Agent } from "../entities/agent.entity";
+import { SessionService } from "./session.service";
 
 /** Agent 表的归属 Service —— 一个设备下多个 Agent 的数据层（按账号隔离）。 */
 @Injectable()
@@ -35,6 +45,12 @@ export class AgentService {
     rawRepo: Repository<Agent>,
     scopedFactory: ScopedRepositoryFactory,
     private readonly accountContext: AccountContextService,
+    private readonly config: MeshbotConfigService,
+    // AgentsModule ↔ SessionModule 互相 import（AgentService 需要 SessionService
+    // 删会话，SessionModule 的 Controller/RunnerService 需要 AgentService 兜底取
+    // 默认 Agent），模块级形成环，用 forwardRef 打开；Service 层本身单向
+    // （SessionService 不反向依赖 AgentService），无需在此处也包 forwardRef。
+    private readonly sessions: SessionService,
   ) {
     this.repo = scopedFactory.create(rawRepo);
     this.txAnchorRepo = rawRepo;
@@ -84,10 +100,75 @@ export class AgentService {
     return this.repo.save(agent);
   }
 
-  /** 删除 Agent。注意：磁盘目录由调用方（Controller）负责清理。 */
-  async remove(id: string): Promise<void> {
+  /**
+   * 解析 agentId：未传 / 空字符串兜底取当前账号默认 Agent（`ensureDefault`）；
+   * 显式传入非空 agentId 必须校验存在且归属当前账号（`findOrThrow` 经
+   * `ScopedRepository` 自动按账号过滤，越权 id 天然 404）。
+   *
+   * 收口 `SessionController.create()` / `SkillController`/`ArtifactController`
+   * 的 `resolveAgentId()` 私有重复实现——四处语义完全一致，改为单点维护。
+   * 注意不能用 `??`：空字符串不是 `null`/`undefined`，`??` 只会原样把空串当
+   * 「已指定」传给 `findOrThrow`，必须用真值判断把空串也归入「未指定」分支。
+   */
+  async resolveOrDefault(agentId?: string | null): Promise<Agent> {
+    if (agentId) {
+      return this.findOrThrow(agentId);
+    }
+    return this.ensureDefault();
+  }
+
+  /**
+   * 删除 Agent —— 连同它的全部会话与磁盘目录一起清掉。
+   *
+   * 跨表写入（agents + sessions + session_messages 等），故内部挂
+   * `@Transactional()`；磁盘删除放在事务**之后**（文件系统不参与事务，先删
+   * 文件后回滚会丢数据，只能在 DB 事务确认提交后再删盘）。
+   *
+   * 不允许删到零 Agent：`sessions.agent_id` 是 NOT NULL，零 Agent 会让建
+   * 会话直接失败，故至少保留一个。
+   */
+  async removeWithData(id: string): Promise<void> {
+    const all = await this.list();
+    if (all.length <= 1) {
+      throw new BadRequestException("至少保留一个 Agent");
+    }
+    await this.removeInDb(id);
+    rmSync(this.config.agentDirOf(id), { recursive: true, force: true });
+  }
+
+  /**
+   * 删 Agent 及其会话（含消息）。磁盘目录由调用方（`removeWithData`）在事务外清理。
+   *
+   * tx-check: ignore (check:tx 的跨 service 写识别只认字段名以 `Service` 结尾；
+   * 本类把 `SessionService` 注入成 `private readonly sessions`，脚本看不到
+   * `this.sessions.removeWithMessages(...)` 这处写，只数到 `this.repo.delete(...)`
+   * 1 处、误判 REDUNDANT。实际跨 agents / sessions / session_messages /
+   * pending_messages / llm_calls 多表写入，`@Transactional()` 必须保留。)
+   */
+  @Transactional()
+  private async removeInDb(id: string): Promise<void> {
     await this.findOrThrow(id);
+    const sessions = await this.sessions.findByAgentId(id);
+    for (const s of sessions) {
+      await this.sessions.removeWithMessages(s.id);
+    }
     await this.repo.delete({ id });
+  }
+
+  /**
+   * 复制一个 Agent 的配置（名字加「(副本)」后缀）。
+   * 只复制元数据——记忆 / 工作区 / 已装技能 / MCP 配置**不复制**，副本从零开始
+   * （磁盘目录按新 id 首次访问时才 mkdir，不预先创建）。
+   */
+  async duplicate(id: string): Promise<Agent> {
+    const src = await this.findOrThrow(id);
+    return this.create({
+      name: `${src.name} (副本)`,
+      avatar: src.avatar,
+      description: src.description,
+      systemPrompt: src.systemPrompt,
+      defaultModelConfigId: src.defaultModelConfigId,
+    });
   }
 
   /**

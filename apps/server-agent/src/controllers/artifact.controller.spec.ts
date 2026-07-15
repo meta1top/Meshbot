@@ -16,13 +16,20 @@ function make(ws: string) {
     getWorkspaceDir: () => ws,
   } as unknown as MeshbotConfigService;
   const agentCtx = new AgentContextService();
+  const ensureDefault = jest
+    .fn()
+    .mockResolvedValue({ id: DEFAULT_AGENT_ID } as Agent);
+  const findOrThrow = jest
+    .fn()
+    .mockResolvedValue({ id: EXPLICIT_AGENT_ID } as Agent);
   const agents = {
-    ensureDefault: jest
-      .fn()
-      .mockResolvedValue({ id: DEFAULT_AGENT_ID } as Agent),
-    findOrThrow: jest
-      .fn()
-      .mockResolvedValue({ id: EXPLICIT_AGENT_ID } as Agent),
+    ensureDefault,
+    findOrThrow,
+    // 复刻真实 AgentService.resolveOrDefault 的分支逻辑，让本文件既有的
+    // ensureDefault/findOrThrow 断言继续生效。
+    resolveOrDefault: jest.fn((agentId?: string) =>
+      agentId ? findOrThrow(agentId) : ensureDefault(),
+    ),
   } as unknown as AgentService;
   return {
     controller: new ArtifactController(config, agentCtx, agents),

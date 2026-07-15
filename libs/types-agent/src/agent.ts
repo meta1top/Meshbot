@@ -39,7 +39,16 @@ export const AgentViewSchema = z.object({
   updatedAt: z.string(),
 });
 
+/**
+ * Agent 的 mcp.json 原始文本读写载体。前端编辑器直接读写整份 JSON 字符串，
+ * 落盘前经 `libs/agent` 的 `McpConfigSchema` 二次校验（这里只保证是个字符串）。
+ */
+export const McpRawSchema = z.object({
+  raw: z.string(),
+});
+
 export type AgentVisibility = z.infer<typeof AgentVisibilitySchema>;
 export type AgentCreateInput = z.infer<typeof AgentCreateSchema>;
 export type AgentUpdateInput = z.infer<typeof AgentUpdateSchema>;
 export type AgentView = z.infer<typeof AgentViewSchema>;
+export type McpRawInput = z.infer<typeof McpRawSchema>;

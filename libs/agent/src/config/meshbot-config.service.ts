@@ -93,6 +93,15 @@ export class MeshbotConfigService {
     return path.join(this.agentDir(), "skills");
   }
 
+  /**
+   * 指定 Agent 的数据根（显式传 id，不走 ALS）：<accountDir>/agents/<agentId>。
+   * 供「删除 Agent」这类需要操作**非当前** Agent 目录的场景使用——不像 `agentDir()`
+   * 那样从 `AgentContextService` 读当前 Agent，也不 mkdir（删除前不该凭空建目录）。
+   */
+  agentDirOf(agentId: string): string {
+    return path.join(this.accountDir(), "agents", agentId);
+  }
+
   /** MCP 配置：<accountDir>/agents/<agentId>/mcp.json（按 Agent 隔离）。 */
   getMcpConfigPath(): string {
     return path.join(this.agentDir(), "mcp.json");

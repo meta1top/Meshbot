@@ -132,13 +132,21 @@ describe("SessionController.create() —— agentId 解析与落库校验", () =
     const titleService = {
       schedule: jest.fn(),
     } as unknown as SessionTitleService;
+    const ensureDefault =
+      agentOverrides.ensureDefault ??
+      jest.fn().mockResolvedValue({ id: "default-agent" });
+    const findOrThrow =
+      agentOverrides.findOrThrow ??
+      jest.fn().mockResolvedValue({ id: "explicit-agent" });
     const agents = {
-      ensureDefault:
-        agentOverrides.ensureDefault ??
-        jest.fn().mockResolvedValue({ id: "default-agent" }),
-      findOrThrow:
-        agentOverrides.findOrThrow ??
-        jest.fn().mockResolvedValue({ id: "explicit-agent" }),
+      ensureDefault,
+      findOrThrow,
+      // 真实 AgentService.resolveOrDefault 就是这个实现（agentId 是 undefined/
+      // null/空串 → ensureDefault；非空 → findOrThrow）——这里用 fake 复刻同一
+      // 分支逻辑，让本文件既有的 ensureDefault/findOrThrow 断言继续生效。
+      resolveOrDefault: jest.fn((agentId?: string) =>
+        agentId ? findOrThrow(agentId) : ensureDefault(),
+      ),
     } as unknown as AgentService;
     const controller = new SessionController(
       sessions,
