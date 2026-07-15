@@ -122,6 +122,14 @@ export interface SessionTreeProps {
   onDeleteSession?: (node: NavNode) => Promise<void> | void;
   /** Agent 行编辑按钮点击（不传则该按钮不出现）。 */
   onEditAgent?: (node: NavNode) => void;
+  /**
+   * Agent 行本体点击（设为当前 Agent）。与 SidebarNav 内建的展开/收起 toggle
+   * 平行触发、不冲突——AgentRow 的 onClick 先转发 `defaults.onClick`（NavItem
+   * 的 toggle 分支，hasChildren 恒真时 `node.onClick` 永远不可达，只能靠这条
+   * 平行通道）再调用本回调，同一次点击「选中 + 展开/收起」都做。不传则
+   * 点击 Agent 行只保留原有的展开/收起。
+   */
+  onSelectAgent?: (node: NavNode) => void;
   labels: SessionTreeLabels;
 }
 
@@ -143,6 +151,7 @@ export function SessionTree({
   onRenameSession,
   onDeleteSession,
   onEditAgent,
+  onSelectAgent,
   labels,
 }: SessionTreeProps) {
   const renderRow = (node: NavNode, defaults: SidebarRowProps): ReactNode => {
@@ -189,6 +198,7 @@ export function SessionTree({
             defaults={defaults}
             info={info}
             onEditAgent={onEditAgent}
+            onSelectAgent={onSelectAgent}
             labels={labels}
           />
         );
@@ -279,12 +289,14 @@ function AgentRow({
   defaults,
   info,
   onEditAgent,
+  onSelectAgent,
   labels,
 }: {
   node: NavNode;
   defaults: SidebarRowProps;
   info: Extract<SessionTreeNodeInfo, { kind: "agent" }>;
   onEditAgent?: (node: NavNode) => void;
+  onSelectAgent?: (node: NavNode) => void;
   labels: SessionTreeLabels;
 }) {
   return (
@@ -312,7 +324,13 @@ function AgentRow({
         </span>
       }
       depth={defaults.depth}
-      onClick={defaults.onClick}
+      onClick={() => {
+        // defaults.onClick 是 NavItem 的 toggle 分支（hasChildren 恒真时
+        // node.onClick 永远不可达）；onSelectAgent 是并行触发的「设为当前
+        // Agent」通道，不 stopPropagation，一次点击两件事都做。
+        defaults.onClick?.();
+        onSelectAgent?.(node);
+      }}
       actions={
         onEditAgent ? (
           <button

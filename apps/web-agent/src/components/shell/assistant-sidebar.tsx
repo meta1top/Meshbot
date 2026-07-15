@@ -44,6 +44,7 @@ import { AgentEditorSheet } from "@/components/agent/agent-editor-sheet";
 import { parseAgentAvatar } from "@/lib/agent-avatar";
 import { groupSessionsByAgent } from "@/lib/group-sessions-by-agent";
 import { resolveCurrentAgentId } from "@/lib/resolve-current-agent";
+import { shouldShowSidebarSkeleton } from "@/lib/should-show-sidebar-skeleton";
 import { useAgents } from "@/rest/agents";
 import { fetchDeviceOnline } from "@/rest/devices";
 
@@ -76,7 +77,7 @@ export function AssistantSidebar() {
   const devices = useAtomValue(devicesAtom);
   const devicesStatus = useAtomValue(devicesStatusAtom);
   const online = useAtomValue(deviceOnlineAtom);
-  const { data: agents } = useAgents();
+  const { data: agents, isLoading: agentsLoading } = useAgents();
   const [currentAgentId, setCurrentAgentId] = useAtom(currentAgentIdAtom);
   // 本机全量会话（未按 agent 过滤）——分组本身按 agentId 切（groupSessionsByAgent），
   // 不能在这里前置过滤，否则其他 Agent 的会话永远看不到。
@@ -197,7 +198,12 @@ export function AssistantSidebar() {
       key: `${AGENT_PREFIX}${a.id}`,
       label: a.name,
       defaultOpen: a.id === currentAgentId || containsActiveSession,
-      onClick: () => setCurrentAgentId(a.id),
+      // 注意：这个 NavNode.onClick 在 SidebarNav 里永远不可达——Agent 节点
+      // 的 hasChildren 恒为真（loading/空态/会话三选一占位），NavItem 的
+      // onClick 分支会在 `if (hasChildren)` 里提前 return，走不到
+      // `node.onClick()`。「点 Agent 行 = 设为当前」改走下面 SessionTree 的
+      // `onSelectAgent`（AgentRow 行主体点击的平行通道，与展开/收起不冲突，
+      // 见 Critical 修复）。此处不设置 onClick，避免误导。
       children: sessionChildren,
     };
   });
@@ -298,6 +304,16 @@ export function AssistantSidebar() {
     setEditor({ open: true, agentId: node.key.slice(AGENT_PREFIX.length) });
   }, []);
 
+  // Agent 行本体点击：设为当前 Agent（Critical 修复）。与 SidebarNav 内建的
+  // 展开/收起 toggle 平行触发（SessionTree 的 AgentRow 先转发 toggle 再调用
+  // 这个回调，不 stopPropagation），点一次 Agent 行「选中 + 展开/收起」都做。
+  // 这样才能切到一个还没有任何会话的 Agent 去开新会话（`rest/session.ts`
+  // 里新建会话的 agentId 就来自 currentAgentIdAtom）。
+  const onSelectAgent = useCallback(
+    (node: NavNode) => setCurrentAgentId(node.key.slice(AGENT_PREFIX.length)),
+    [setCurrentAgentId],
+  );
+
   const labels: SessionTreeLabels = useMemo(
     () => ({
       offline: t("offline"),
@@ -334,13 +350,11 @@ export function AssistantSidebar() {
           </div>
         ) : (
           <SessionTree
-            loading={
-              devicesStatus === "idle" ||
-              devicesStatus === "loading" ||
-              sessionsStatus === "idle" ||
-              sessionsStatus === "loading" ||
-              !agents
-            }
+            loading={shouldShowSidebarSkeleton(
+              devicesStatus,
+              sessionsStatus,
+              agentsLoading,
+            )}
             groups={groups}
             activeSessionKey={activeSessionKey}
             nodeInfo={(node) => metaByKey.get(node.key)}
@@ -348,6 +362,7 @@ export function AssistantSidebar() {
             onRenameSession={onRenameSession}
             onDeleteSession={onDeleteSession}
             onEditAgent={onEditAgent}
+            onSelectAgent={onSelectAgent}
             labels={labels}
           />
         )}
