@@ -182,6 +182,24 @@ describe("AgentService", () => {
         expect(fakeSessions.removeWithMessages).not.toHaveBeenCalled();
       });
     });
+
+    it("并发删除两个不同 Agent（账号只有 2 个）不能都通过检查——必须至少留一个、且有一个请求被拒绝", async () => {
+      await account.run("acct-1", async () => {
+        const first = await service.ensureDefault();
+        const second = await service.create(fixture("第二个"));
+        expect(await service.list()).toHaveLength(2);
+
+        const results = await Promise.allSettled([
+          service.removeWithData(first.id),
+          service.removeWithData(second.id),
+        ]);
+
+        const remaining = await service.list();
+        expect(remaining.length).toBeGreaterThanOrEqual(1);
+        const rejected = results.filter((r) => r.status === "rejected");
+        expect(rejected.length).toBeGreaterThanOrEqual(1);
+      });
+    });
   });
 
   describe("duplicate", () => {

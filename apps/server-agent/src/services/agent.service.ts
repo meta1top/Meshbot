@@ -120,24 +120,34 @@ export class AgentService {
   /**
    * 删除 Agent —— 连同它的全部会话与磁盘目录一起清掉。
    *
-   * 跨表写入（agents + sessions + session_messages 等），故内部挂
-   * `@Transactional()`；磁盘删除放在事务**之后**（文件系统不参与事务，先删
-   * 文件后回滚会丢数据，只能在 DB 事务确认提交后再删盘）。
-   *
-   * 不允许删到零 Agent：`sessions.agent_id` 是 NOT NULL，零 Agent 会让建
-   * 会话直接失败，故至少保留一个。
+   * 「至少保留一个」的检查在 `removeInDb` 的事务内部完成（见其注释）——
+   * 磁盘删除放在事务**之后**（文件系统不参与事务，先删文件后回滚会丢数据，
+   * 只能在 DB 事务确认提交后再删盘）。
    */
   async removeWithData(id: string): Promise<void> {
-    const all = await this.list();
-    if (all.length <= 1) {
-      throw new BadRequestException("至少保留一个 Agent");
-    }
     await this.removeInDb(id);
     rmSync(this.config.agentDirOf(id), { recursive: true, force: true });
   }
 
   /**
    * 删 Agent 及其会话（含消息）。磁盘目录由调用方（`removeWithData`）在事务外清理。
+   *
+   * 「至少保留一个 Agent」的 check-then-act 竞态修复：原先这个检查在
+   * `removeWithData` 里、`@Transactional()` 事务**外面**——两个并发删不同
+   * Agent 的请求都能在事务外读到 `length=2`、都通过检查，各自事务再各删各的，
+   * 最终把账号删到 0 个 Agent（`sessions.agent_id` NOT NULL，零 Agent 会让
+   * 建会话直接失败）。
+   *
+   * 修法：把检查挪到这个方法最开头、`@Transactional()` 事务内部、删除动作
+   * 之前。本仓库 sqlite 系驱动的 root 事务由 `Transactional()` 装饰器按
+   * DataSource 通过 `runExclusive`（FIFO promise 链）强制串行——同一 DataSource
+   * 上任意时刻至多一个 root 事务在跑，第二个事务只会在第一个事务
+   * commit/rollback 之后才真正开始执行方法体。于是两个并发
+   * `removeInDb` 调用：先拿到执行权的那个读到 `length=2`、通过检查、
+   * 删除并提交；后拿到执行权的那个此时已经能读到提交后的最新状态
+   * （`length=1`），检查失败并抛错回滚。这个串行化由 `runExclusive` 在
+   * 应用层（JS Promise 链）保证，不依赖 SQLite 引擎本身的锁行为，
+   * `:memory:` 与文件库下都成立。
    *
    * tx-check: ignore (check:tx 的跨 service 写识别只认字段名以 `Service` 结尾；
    * 本类把 `SessionService` 注入成 `private readonly sessions`，脚本看不到
@@ -147,6 +157,10 @@ export class AgentService {
    */
   @Transactional()
   private async removeInDb(id: string): Promise<void> {
+    const all = await this.list();
+    if (all.length <= 1) {
+      throw new BadRequestException("至少保留一个 Agent");
+    }
     await this.findOrThrow(id);
     const sessions = await this.sessions.findByAgentId(id);
     for (const s of sessions) {
