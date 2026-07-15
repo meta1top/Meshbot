@@ -8,7 +8,6 @@ import {
 } from "@meshbot/web-common/session";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useTranslations } from "next-intl";
-import { currentAgentIdAtom } from "@/atoms/agent";
 import { previewArtifactAtom } from "@/atoms/assistant-panel";
 import { currentUserAtom } from "@/atoms/auth";
 import { conversationsAtom } from "@/atoms/im";
@@ -31,6 +30,14 @@ interface MessageListProps {
   messages: TimelineMessage[];
   /** 当前会话 id。供 UserMessageActions 调 regenerate 端点用。 */
   sessionId: string;
+  /**
+   * 本会话所属的 agentId（Task 12）：产物预览拼 URL 时用它，而非导航条
+   * 当前选中的 Agent——两者语义不同，混用会在切换导航条后把产物请求发到
+   * 错误的 workspace（404）。调用方必须显式传入「该会话真实归属的
+   * agentId」；确实拿不到（如随手问 dock 会话）时显式传 `undefined`，让
+   * 后端 `resolveOrDefault` 兜底到默认 Agent——不要传导航条选中态凑数。
+   */
+  agentId?: string;
   /** 会话是否有 inflight run。重试按钮按这个 disable。 */
   running: boolean;
   /**
@@ -91,17 +98,11 @@ export function MessageList({
   readOnly,
   onConfirm,
   onAnswer,
+  agentId,
 }: MessageListProps) {
   const t = useTranslations("session");
   const tArtifact = useTranslations("session.artifact");
   const user = useAtomValue(currentUserAtom);
-  // 本组件用于随手问 dock（quick 会话）与嵌套子 Agent 卡片：这两处的
-  // sessionId 都不在主侧栏 sessionsAtom 里（quick 会话不入侧栏，子会话是
-  // 临时子任务），拿不到「该会话自己的 agentId」，退化为用当前导航条选中的
-  // agentId（Task 12：这两个场景本就绑定在用户当前操作的 Agent 上，误差
-  // 可忽略；跟主会话 assistant-conversation-body.tsx 优先取会话自身 agentId
-  // 的更精确做法不同，见该文件注释）。
-  const currentAgentId = useAtomValue(currentAgentIdAtom);
   const userName = user?.displayName ?? user?.email ?? t("youName");
   const assistantName = t("assistantName");
   const conversations = useAtomValue(conversationsAtom);
@@ -147,7 +148,7 @@ export function MessageList({
       onPreviewArtifact={(target: ArtifactPreviewTarget) =>
         setArtifact({
           ...target,
-          agentId: target.remote ? undefined : (currentAgentId ?? undefined),
+          agentId: target.remote ? undefined : agentId,
         })
       }
       artifactRemote={
@@ -156,7 +157,9 @@ export function MessageList({
           : null
       }
       toolCallLabels={{ artifactPresentFailed: tArtifact("presentFailed") }}
-      renderSubagentCard={(subTool) => <SubagentCard tool={subTool} />}
+      renderSubagentCard={(subTool) => (
+        <SubagentCard tool={subTool} agentId={agentId} />
+      )}
       labels={{
         assistantName,
         runErrorPrefix: t("runErrorPrefix"),

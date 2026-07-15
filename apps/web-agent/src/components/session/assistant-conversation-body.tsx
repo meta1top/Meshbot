@@ -308,7 +308,9 @@ export function AssistantConversationBody({
         })
       }
       artifactRemote={artifactRemote}
-      renderSubagentCard={(subTool) => <SubagentCard tool={subTool} />}
+      renderSubagentCard={(subTool) => (
+        <SubagentCard tool={subTool} agentId={sessionAgentId} />
+      )}
       stickToBottom={stickToBottom}
       onScrollToBottom={scrollToBottom}
       onDeletePending={handleDeletePending}

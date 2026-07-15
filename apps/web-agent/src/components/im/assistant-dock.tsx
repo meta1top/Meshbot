@@ -189,6 +189,12 @@ export function AssistantDock({ chromeless }: { chromeless?: boolean } = {}) {
             onRegenerateOptimisticCut={() => {}}
             onConfirm={stream.confirm}
             onAnswer={stream.answer}
+            // 随手问 dock 恒为默认 Agent 的会话（createSession(text, "quick")
+            // 不传 agentId，后端兜底到默认 Agent），但这里手边没有「默认
+            // Agent 的 id」这个映射。显式传 undefined 让产物预览走后端
+            // resolveOrDefault 兜底到默认 Agent——比传 currentAgentIdAtom
+            // （导航条选中态，可能是别的 Agent）更接近真相（Task 12）。
+            agentId={undefined}
           />
         ) : (
           <div className="flex flex-1 items-center justify-center px-4 text-center text-[12.5px] text-muted-foreground">

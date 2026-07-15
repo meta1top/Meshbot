@@ -114,6 +114,7 @@ export function McpEditor({ agentId }: McpEditorProps) {
             onChange={(e) => {
               setRaw(e.target.value);
               setSaved(false);
+              setError(null);
             }}
             rows={12}
             className="min-h-48 resize-y font-mono text-[12.5px] leading-relaxed"
