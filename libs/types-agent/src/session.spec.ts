@@ -167,6 +167,7 @@ describe("session schemas — sidebar list", () => {
       pinnedAt: null,
       titleGenerated: false,
       modelConfigId: null,
+      agentId: "agent-1",
       createdAt: "2026-05-24T00:00:00.000Z",
       updatedAt: "2026-05-24T00:00:00.000Z",
     });
@@ -215,6 +216,7 @@ describe("session schemas — sidebar list", () => {
         pinnedAt: null,
         titleGenerated: false,
         modelConfigId: null,
+        agentId: "agent-1",
         createdAt: "2026-05-24T00:00:00.000Z",
         updatedAt: "2026-05-24T00:00:00.000Z",
       },
@@ -242,6 +244,7 @@ describe("session schemas — title generation", () => {
       pinnedAt: null,
       titleGenerated: true,
       modelConfigId: null,
+      agentId: "agent-1",
       createdAt: "2026-05-24T00:00:00.000Z",
       updatedAt: "2026-05-24T00:00:00.000Z",
     });
@@ -256,6 +259,38 @@ describe("session schemas — title generation", () => {
         status: "idle",
         pinned: false,
         pinnedAt: null,
+        createdAt: "2026-05-24T00:00:00.000Z",
+        updatedAt: "2026-05-24T00:00:00.000Z",
+      }),
+    ).toThrow();
+  });
+
+  it("SessionSummarySchema 含必填 agentId 字段（Task 12：前端按 agent 过滤会话列表用）", () => {
+    const ok = SessionSummarySchema.parse({
+      id: "s1",
+      title: "hi",
+      status: "idle",
+      pinned: false,
+      pinnedAt: null,
+      titleGenerated: true,
+      modelConfigId: null,
+      agentId: "agent-9",
+      createdAt: "2026-05-24T00:00:00.000Z",
+      updatedAt: "2026-05-24T00:00:00.000Z",
+    });
+    expect(ok.agentId).toBe("agent-9");
+  });
+
+  it("SessionSummarySchema 缺 agentId 直接 reject", () => {
+    expect(() =>
+      SessionSummarySchema.parse({
+        id: "s1",
+        title: "hi",
+        status: "idle",
+        pinned: false,
+        pinnedAt: null,
+        titleGenerated: true,
+        modelConfigId: null,
         createdAt: "2026-05-24T00:00:00.000Z",
         updatedAt: "2026-05-24T00:00:00.000Z",
       }),

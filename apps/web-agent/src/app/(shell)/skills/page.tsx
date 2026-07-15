@@ -1,8 +1,10 @@
 "use client";
 
 import type { InstalledSkill, MarketSkillSummary } from "@meshbot/types-agent";
+import { useAtomValue } from "jotai";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { currentAgentIdAtom } from "@/atoms/agent";
 import { ToolPage } from "@/components/layouts/tool-page";
 import { InstalledSkillCard } from "@/components/skills/installed-skill-card";
 import { MarketSkillCard } from "@/components/skills/market-skill-card";
@@ -16,6 +18,10 @@ import { fetchInstalled, fetchMarket } from "@/rest/skills";
 
 export default function SkillsPage() {
   const t = useTranslations("skills");
+  // 当前选中 Agent（Task 12）：已安装列表 / 安装 / 卸载 / 发布全部按此隔离，
+  // 切 Agent 后必须重新拉取，否则会看到上一个 Agent 的技能列表（同 usage
+  // atom 全局单例串台的坑）。
+  const currentAgentId = useAtomValue(currentAgentIdAtom);
   const [installed, setInstalled] = useState<InstalledSkill[]>([]);
   const [loadingInstalled, setLoadingInstalled] = useState(true);
   const [activeView, setActiveView] = useState<SkillsView>("installed");
@@ -39,13 +45,16 @@ export default function SkillsPage() {
   const reloadInstalled = useCallback(async () => {
     setLoadingInstalled(true);
     try {
-      const list = await fetchInstalled();
+      const list = await fetchInstalled(currentAgentId ?? undefined);
       setInstalled(list);
     } finally {
       setLoadingInstalled(false);
     }
-  }, []);
+  }, [currentAgentId]);
 
+  // currentAgentId 变化（切 Agent）时重新拉取——reloadInstalled 引用随之
+  // 变化，effect 自动重跑；loadingInstalled 立即置 true 掩盖旧列表，避免
+  // 切换瞬间闪出上一个 Agent 的技能。
   useEffect(() => {
     void reloadInstalled();
   }, [reloadInstalled]);
@@ -146,6 +155,7 @@ export default function SkillsPage() {
               <InstalledSkillCard
                 key={skill.name}
                 skill={skill}
+                agentId={currentAgentId ?? undefined}
                 onUninstalled={handleUninstalled}
                 onPublish={handlePublish}
               />
@@ -168,6 +178,7 @@ export default function SkillsPage() {
                 key={`${skill.source}:${skill.slug}`}
                 skill={skill}
                 source={activeView}
+                agentId={currentAgentId ?? undefined}
                 onInstalled={handleInstalled}
               />
             ))}
@@ -177,6 +188,7 @@ export default function SkillsPage() {
       {/* 上传到市场对话框 */}
       <PublishSkillDialog
         skill={publishTarget}
+        agentId={currentAgentId ?? undefined}
         open={publishOpen}
         onOpenChange={setPublishOpen}
         onPublished={() => void reloadInstalled()}

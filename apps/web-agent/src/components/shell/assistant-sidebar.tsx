@@ -17,6 +17,7 @@ import { SquarePen } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo } from "react";
+import { currentAgentIdAtom } from "@/atoms/agent";
 import {
   deviceOnlineAtom,
   devicesAtom,
@@ -39,6 +40,7 @@ import {
   sessionsStatusAtom,
 } from "@/atoms/sessions";
 import { loadSidebarAtom } from "@/atoms/sidebar";
+import { filterSessionsByAgent } from "@/lib/filter-sessions-by-agent";
 import { fetchDeviceOnline } from "@/rest/devices";
 
 /** 本地会话 key 前缀（`s:<sessionId>`）。 */
@@ -66,7 +68,14 @@ export function AssistantSidebar() {
   const devices = useAtomValue(devicesAtom);
   const devicesStatus = useAtomValue(devicesStatusAtom);
   const online = useAtomValue(deviceOnlineAtom);
-  const sessions = useAtomValue(sessionsAtom);
+  const currentAgentId = useAtomValue(currentAgentIdAtom);
+  // 侧栏只展示当前选中 Agent 的会话——sessionsAtom 是全账号会话（未按 agent
+  // 过滤），本机设备节点渲染前先过滤掉其他 Agent 的会话，避免多 Agent 场景下
+  // 会话列表混在一起（同 usage atom 全局单例串台的坑，见 Task 12 报告）。
+  const sessions = filterSessionsByAgent(
+    useAtomValue(sessionsAtom),
+    currentAgentId,
+  );
   const sessionsStatus = useAtomValue(sessionsStatusAtom);
   const remoteSessions = useAtomValue(remoteSessionsAtom);
   const scheduleActivity = useAtomValue(scheduleActivityAtom);

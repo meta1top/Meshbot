@@ -8,6 +8,8 @@ import { publishSkill } from "@/rest/skills";
 
 interface Props {
   skill: InstalledSkill | null;
+  /** 当前选中 Agent id（Task 12：决定从哪个 Agent 的本地 skills 目录读取待发布内容）。 */
+  agentId?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onPublished: () => void;
@@ -19,6 +21,7 @@ interface Props {
  */
 export function PublishSkillDialog({
   skill,
+  agentId,
   open,
   onOpenChange,
   onPublished,
@@ -69,6 +72,7 @@ export function PublishSkillDialog({
         displayName: displayName.trim(),
         version: version.trim(),
         changelog: changelog.trim() || undefined,
+        agentId,
       });
       setSuccess(true);
       setTimeout(() => {

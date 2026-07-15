@@ -20,6 +20,12 @@ export const SessionSummarySchema = z.object({
   titleGenerated: z.boolean(),
   /** 会话绑定的模型配置 id；null = 走账号默认（首个 enabled）。 */
   modelConfigId: z.string().nullable(),
+  /**
+   * 会话归属的 Agent id（Task 12 结转自 Task 10）。前端据此按当前选中 Agent
+   * 过滤侧栏会话列表、给产物预览 URL 附带正确的 agentId，避免多 Agent 场景下
+   * 会话/产物串到别的 Agent。
+   */
+  agentId: z.string(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });

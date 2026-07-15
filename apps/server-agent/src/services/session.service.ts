@@ -37,6 +37,7 @@ function toSummary(s: Session): SessionSummary {
     pinnedAt: s.pinnedAt ? s.pinnedAt.toISOString() : null,
     titleGenerated: s.titleGenerated,
     modelConfigId: s.modelConfigId ?? null,
+    agentId: s.agentId,
     createdAt: s.createdAt.toISOString(),
     updatedAt: s.updatedAt.toISOString(),
   };

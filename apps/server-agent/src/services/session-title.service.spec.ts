@@ -23,6 +23,7 @@ function fakeSessionService(initialTitleGenerated = false) {
     pinnedAt: null,
     titleGenerated: initialTitleGenerated,
     modelConfigId: null,
+    agentId: "agent-1",
     createdAt: "2026-05-24T00:00:00.000Z",
     updatedAt: "2026-05-24T00:00:00.000Z",
   };

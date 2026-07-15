@@ -21,16 +21,25 @@ interface AppendMessagePayload {
  * 创建会话。返回完整 session 对象，前端用其 unshift 进 sessionsAtom，
  * 避免再发一次 list。
  * - kind: 会话类型，默认 "user"；"quick" 表示随手问会话
+ * - agentId: 会话归属的 Agent id；缺省由后端兜底取账号默认 Agent（Task 12：
+ *   调用方应传 `currentAgentIdAtom` 的值，否则新会话会静默落到默认 Agent，
+ *   与用户在导航条上选中的 Agent 不一致）。
  */
 export async function createSession(
   content: string,
   kind?: "user" | "quick",
   /** 会话模型配置 id；缺省走账号默认（首个 enabled）。 */
   modelConfigId?: string,
+  agentId?: string,
 ): Promise<CreateSessionResponse> {
   const { data } = await apiClient.post<CreateSessionResponse>(
     "/api/sessions",
-    { content, kind, ...(modelConfigId ? { modelConfigId } : {}) },
+    {
+      content,
+      kind,
+      ...(modelConfigId ? { modelConfigId } : {}),
+      ...(agentId ? { agentId } : {}),
+    },
   );
   return data;
 }

@@ -55,6 +55,12 @@ export interface PreviewArtifact {
   /** 文件名（presigned 源用它判类型 + 下载名）。 */
   name?: string;
   title?: string;
+  /**
+   * 本机产物（`path` 源）所属会话的 agentId（Task 12）。构造时应取该产物
+   * 所属**会话**的 agentId，而非当前导航条选中的 agentId——用户可能正在
+   * 查看某会话历史但已把导航条切到别的 Agent。`remote`/`url` 源不需要。
+   */
+  agentId?: string;
 }
 export const previewArtifactAtom = atom<PreviewArtifact | null>(null);
 

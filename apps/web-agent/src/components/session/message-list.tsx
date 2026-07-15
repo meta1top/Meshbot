@@ -8,6 +8,7 @@ import {
 } from "@meshbot/web-common/session";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useTranslations } from "next-intl";
+import { currentAgentIdAtom } from "@/atoms/agent";
 import { previewArtifactAtom } from "@/atoms/assistant-panel";
 import { currentUserAtom } from "@/atoms/auth";
 import { conversationsAtom } from "@/atoms/im";
@@ -94,6 +95,13 @@ export function MessageList({
   const t = useTranslations("session");
   const tArtifact = useTranslations("session.artifact");
   const user = useAtomValue(currentUserAtom);
+  // 本组件用于随手问 dock（quick 会话）与嵌套子 Agent 卡片：这两处的
+  // sessionId 都不在主侧栏 sessionsAtom 里（quick 会话不入侧栏，子会话是
+  // 临时子任务），拿不到「该会话自己的 agentId」，退化为用当前导航条选中的
+  // agentId（Task 12：这两个场景本就绑定在用户当前操作的 Agent 上，误差
+  // 可忽略；跟主会话 assistant-conversation-body.tsx 优先取会话自身 agentId
+  // 的更精确做法不同，见该文件注释）。
+  const currentAgentId = useAtomValue(currentAgentIdAtom);
   const userName = user?.displayName ?? user?.email ?? t("youName");
   const assistantName = t("assistantName");
   const conversations = useAtomValue(conversationsAtom);
@@ -136,7 +144,12 @@ export function MessageList({
           target?.name ?? target?.peer?.displayName ?? conversationId ?? "会话"
         );
       }}
-      onPreviewArtifact={(target: ArtifactPreviewTarget) => setArtifact(target)}
+      onPreviewArtifact={(target: ArtifactPreviewTarget) =>
+        setArtifact({
+          ...target,
+          agentId: target.remote ? undefined : (currentAgentId ?? undefined),
+        })
+      }
       artifactRemote={
         remote
           ? { deviceId: remote.remoteDeviceId, sessionId: remote.sessionId }

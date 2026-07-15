@@ -5,6 +5,7 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { currentAgentIdAtom } from "@/atoms/agent";
 import { devicesAtom } from "@/atoms/devices";
 import { addSessionAtom } from "@/atoms/sessions";
 import { ComposerActions } from "@/components/common/composer-actions";
@@ -21,6 +22,7 @@ export function LauncherHome() {
   const router = useRouter();
   const addSession = useSetAtom(addSessionAtom);
   const devices = useAtomValue(devicesAtom);
+  const currentAgentId = useAtomValue(currentAgentIdAtom);
   const [draft, setDraft] = useState("");
   /** 起手台选中的模型配置 id；null = 默认（首个 enabled）。 */
   const [modelConfigId, setModelConfigId] = useState<string | null>(null);
@@ -68,6 +70,7 @@ export function LauncherHome() {
         text,
         undefined,
         modelConfigId ?? undefined,
+        currentAgentId ?? undefined,
       );
       addSession(res.session);
       router.push(`/assistant?id=${res.sessionId}`);

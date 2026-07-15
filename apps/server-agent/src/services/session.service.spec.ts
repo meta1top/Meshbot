@@ -609,6 +609,16 @@ describe("SessionService", () => {
       });
     });
 
+    it("createSession 返回的 SessionSummary 也带 agentId（Task 12：前端按 agent 过滤会话列表用）", async () => {
+      await ctx.run("acct-1", async () => {
+        const { session } = await rawService.createSession({
+          content: "新会话",
+          agentId: "agent-2",
+        });
+        expect(session.agentId).toBe("agent-2");
+      });
+    });
+
     it("subagent 子会话继承父会话的 agentId", async () => {
       await ctx.run("acct-1", async () => {
         const parent = await rawService.createSession({

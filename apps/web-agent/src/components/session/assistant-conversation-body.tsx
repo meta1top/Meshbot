@@ -8,6 +8,7 @@ import {
 import { useAtomValue, useSetAtom } from "jotai";
 import { useTranslations } from "next-intl";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { currentAgentIdAtom } from "@/atoms/agent";
 import { previewArtifactAtom } from "@/atoms/assistant-panel";
 import { currentUserAtom } from "@/atoms/auth";
 import { conversationsAtom } from "@/atoms/im";
@@ -119,6 +120,18 @@ export function AssistantConversationBody({
       ? (remoteSessions[remoteDeviceId]?.sessions.find((s) => s.id === id)
           ?.modelConfigId ?? null)
       : (allSessions.find((s) => s.id === id)?.modelConfigId ?? null));
+  // 本地会话产物预览用的 agentId（Task 12）：优先取该会话自己的 agentId
+  // （sessionsAtom 里查得到），查不到（如尚未加载完成的边缘时序）再兜底用
+  // 当前导航条选中的 agentId——不用「当前选中」优先，因为用户可能正在看
+  // 这个会话的历史但已把导航条切到别的 Agent，那样会拼错 workspace。
+  // 远程会话（remoteDeviceId 非空）不需要：产物走 transport.readArtifact，
+  // 不经 artifactRawUrl。
+  const currentAgentId = useAtomValue(currentAgentIdAtom);
+  const sessionAgentId = remoteDeviceId
+    ? undefined
+    : (allSessions.find((s) => s.id === id)?.agentId ??
+      currentAgentId ??
+      undefined);
   // 经 transport 统一路由：本地 PATCH /api/sessions/:id，远程走 device query 通道
   // （本地 PATCH 对远程会话 id 会 404）——分支判断已下沉到 session-transport.ts。
   const handleModelChange = async (mid: string) => {
@@ -160,7 +173,7 @@ export function AssistantConversationBody({
   );
 
   // agent 产出 present_file 后自动打开右侧预览（多个产物弹第一个，正在看预览时不打扰）。
-  useAutoOpenArtifact(timelineMessages, stream.running);
+  useAutoOpenArtifact(timelineMessages, stream.running, sessionAgentId);
 
   const { stickToBottom, scrollToBottom, topSentinelRef } = useChatScroll({
     scrollContainerRef: scrollRef,
@@ -288,7 +301,12 @@ export function AssistantConversationBody({
           target?.name ?? target?.peer?.displayName ?? conversationId ?? "会话"
         );
       }}
-      onPreviewArtifact={(target: ArtifactPreviewTarget) => setArtifact(target)}
+      onPreviewArtifact={(target: ArtifactPreviewTarget) =>
+        setArtifact({
+          ...target,
+          agentId: target.remote ? undefined : sessionAgentId,
+        })
+      }
       artifactRemote={artifactRemote}
       renderSubagentCard={(subTool) => <SubagentCard tool={subTool} />}
       stickToBottom={stickToBottom}

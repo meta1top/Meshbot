@@ -10,6 +10,7 @@ import {
 import { useSetAtom } from "jotai";
 import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
+import { useMemo } from "react";
 import { previewArtifactAtom } from "@/atoms/assistant-panel";
 import { artifactRawUrl } from "@/lib/artifact";
 import { getFileUrl } from "@/rest/drive";
@@ -26,14 +27,25 @@ const PdfView = dynamic(() => import("./pdf-view").then((m) => m.PdfView), {
 /**
  * 本机 path 源读取适配：经 apiClient 带 Authorization token，避免 iframe/img
  * 直连 401；`download` 时走 artifactRawUrl 的 download 查询参数（恒二进制）。
+ *
+ * `agentId`（Task 12）：产物按 `agents/<agentId>/` workspace 隔离，调用方须
+ * 传该产物所属会话的 agentId（见 `artifactRawUrl` 注释），否则多 Agent 下
+ * 非默认 Agent 的产物会 404。用 `createFetchLocalArtifact(agentId)` 按需
+ * 构造；`fetchLocalArtifact` 保留为无 agentId 的兜底（走后端默认 Agent）。
  */
-export const fetchLocalArtifact: FetchLocalArtifact = (path, opts) =>
-  apiClient
-    .get<string | Blob>(
-      artifactRawUrl(path, opts.download ? { download: true } : undefined),
-      { responseType: opts.isText ? "text" : "blob" },
-    )
-    .then((res) => res.data);
+export function createFetchLocalArtifact(agentId?: string): FetchLocalArtifact {
+  return (path, opts) =>
+    apiClient
+      .get<string | Blob>(
+        artifactRawUrl(path, { download: opts.download, agentId }),
+        { responseType: opts.isText ? "text" : "blob" },
+      )
+      .then((res) => res.data);
+}
+
+/** 无 agentId 的兜底实现（走后端默认 Agent 解析）。 */
+export const fetchLocalArtifact: FetchLocalArtifact =
+  createFetchLocalArtifact();
 
 /**
  * 远程产物读取/上传适配：包既有 `fetchRemoteArtifact`/`uploadRemoteArtifactToDrive`
@@ -86,6 +98,7 @@ export function ArtifactBody({
   name,
   remote,
   title,
+  agentId,
 }: {
   path?: string;
   url?: string;
@@ -93,12 +106,20 @@ export function ArtifactBody({
   /** 远程设备产物来源（path 为对端工作区相对路径）。 */
   remote?: { deviceId: string; sessionId: string };
   title?: string;
+  /** 本机产物所属会话的 agentId（Task 12，`remote` 未传时生效）。 */
+  agentId?: string;
 }) {
   const labels = useArtifactBodyLabels();
   const setPreviewArtifact = useSetAtom(previewArtifactAtom);
   const transport = remote
     ? createArtifactRemoteTransport(remote.deviceId)
     : undefined;
+  // 按 agentId 记忆化：`useArtifactContent`（web-common）把 fetchLocal 放进
+  // effect 依赖数组，每渲染都传新函数引用会导致产物重复拉取/闪烁。
+  const fetchLocal = useMemo(
+    () => createFetchLocalArtifact(agentId),
+    [agentId],
+  );
 
   return (
     <SharedArtifactBody
@@ -107,7 +128,7 @@ export function ArtifactBody({
       name={name}
       remote={remote}
       labels={labels}
-      fetchLocal={fetchLocalArtifact}
+      fetchLocal={fetchLocal}
       transport={transport}
       renderPdf={renderArtifactPdf}
       onUploadedToDrive={async (up) => {

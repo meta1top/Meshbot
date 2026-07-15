@@ -6,6 +6,7 @@ import { Hash, Sparkles, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
+import { currentAgentIdAtom } from "@/atoms/agent";
 import { currentUserAtom } from "@/atoms/auth";
 import { conversationsAtom, upsertConversationAtom } from "@/atoms/im";
 import { addSessionAtom } from "@/atoms/sessions";
@@ -27,6 +28,7 @@ export function NewMessageView() {
   const tChat = useTranslations("chatInput");
   const router = useRouter();
   const currentUser = useAtomValue(currentUserAtom);
+  const currentAgentId = useAtomValue(currentAgentIdAtom);
   const conversations = useAtomValue(conversationsAtom);
   const upsertConversation = useSetAtom(upsertConversationAtom);
   const addSession = useSetAtom(addSessionAtom);
@@ -54,7 +56,12 @@ export function NewMessageView() {
   const handleSend = async (body: string) => {
     if (!recipient) return;
     if (recipient.kind === "session") {
-      const res = await createSession(body);
+      const res = await createSession(
+        body,
+        undefined,
+        undefined,
+        currentAgentId ?? undefined,
+      );
       addSession(res.session);
       router.push(`/assistant?id=${res.sessionId}`);
       return;

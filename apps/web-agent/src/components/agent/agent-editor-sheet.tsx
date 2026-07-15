@@ -47,6 +47,7 @@ import { forwardRef, useEffect, useState } from "react";
 import type { ZodType } from "zod";
 import { currentAgentIdAtom } from "@/atoms/agent";
 import { AgentAvatarField } from "@/components/agent/agent-avatar-field";
+import { McpEditor } from "@/components/agent/mcp-editor";
 import { nextSelectedAgentId } from "@/lib/next-selected-agent-id";
 import {
   agentsQueryKey,
@@ -360,6 +361,16 @@ export function AgentEditorSheet({
               </Button>
             </SheetFooter>
           </Form>
+
+          {/* MCP 配置：独立于上面的 Agent 身份表单（各自保存），只在编辑既有
+              Agent 时展示——新建态尚无 agentId，MCP 端点挂在 /api/agents/:id/mcp
+              下，没有 id 无处可读写。 */}
+          {mode === "edit" && localAgentId && (
+            <>
+              <div className="h-px bg-border" />
+              <McpEditor agentId={localAgentId} />
+            </>
+          )}
         </div>
 
         <AlertDialog

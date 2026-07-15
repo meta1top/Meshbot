@@ -681,7 +681,16 @@
       "deleteDisabledHint": "至少保留一个 Agent，无法删除最后一个",
       "deleteConfirmTitle": "确认删除这个 Agent？",
       "deleteConfirmDescription": "会同时删除该 Agent 的全部会话、记忆与工作区文件，不可恢复。",
-      "deleteConfirm": "确认删除"
+      "deleteConfirm": "确认删除",
+      "mcpTitle": "MCP 服务器配置",
+      "mcpDescription": "编辑该 Agent 的 mcp.json，保存后下次对话生效。",
+      "mcpLoadFailed": "加载 MCP 配置失败，请重试",
+      "mcpPlaceholder": "粘贴 mcp.json 内容，如 Claude Desktop / Claude Code 的 mcpServers 配置",
+      "mcpJsonInvalid": "JSON 格式错误：{detail}",
+      "mcpSave": "保存 MCP 配置",
+      "mcpSaving": "保存中…",
+      "mcpSaveSuccess": "已保存",
+      "mcpSaveFailed": "保存失败，请重试"
     }
   }
 }

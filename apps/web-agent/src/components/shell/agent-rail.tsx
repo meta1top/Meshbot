@@ -84,8 +84,12 @@ function AgentAvatarButton({
  * 首屏若 currentAgentIdAtom 为 null 或指向已删除的 agent，自动选中列表第一个
  * （逻辑见 `resolveCurrentAgentId`，纯函数、有单测）。
  *
- * 「运行中」脉冲点本期未做：SessionSummary 目前不带 agentId，无法在前端按
- * agent 聚合会话 status 判断是否有会话在跑；接了后端字段后再补，见 Task 10 报告。
+ * 「运行中」脉冲点本期仍未做：Task 12 已经给 `SessionSummary` 补上了
+ * `agentId`（前端可以按 agent 聚合 `sessionsAtom` 里 status==="running" 的
+ * 会话），但 `sessionsAtom` 的 `status` 字段目前只在首次加载/创建时写入，
+ * 没有 WS 事件在 run 开始/结束时实时 patch 它——现在拼出来的脉冲点会在 run
+ * 结束后停留不消失，比没有更误导。需要先补一条 run 生命周期 → sessionsAtom
+ * status 的实时更新通道，再做这个点，留给后续任务。
  */
 export function AgentRail() {
   const t = useTranslations("agent");

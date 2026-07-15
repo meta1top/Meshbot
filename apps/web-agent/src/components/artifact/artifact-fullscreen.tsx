@@ -14,6 +14,7 @@ export function ArtifactFullscreen({
   name,
   remote,
   title,
+  agentId,
   onClose,
 }: {
   path?: string;
@@ -21,6 +22,8 @@ export function ArtifactFullscreen({
   name?: string;
   remote?: { deviceId: string; sessionId: string };
   title: string;
+  /** 本机产物所属会话的 agentId（Task 12，`remote` 未传时生效）。 */
+  agentId?: string;
   onClose: () => void;
 }) {
   const setFullscreen = useSetAtom(artifactFullscreenAtom);
@@ -61,6 +64,7 @@ export function ArtifactFullscreen({
           name={name}
           remote={remote}
           title={title}
+          agentId={agentId}
         />
       </div>
     </div>,
