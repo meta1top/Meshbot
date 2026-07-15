@@ -1,17 +1,18 @@
 "use client";
 
 import { SessionLauncher } from "@meshbot/web-common/session";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useSetAtom } from "jotai";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
-import { currentAgentIdAtom } from "@/atoms/agent";
-import { devicesAtom } from "@/atoms/devices";
 import { addSessionAtom } from "@/atoms/sessions";
 import { ComposerActions } from "@/components/common/composer-actions";
 import { ModelSelect } from "@/components/common/model-select";
 import { useSuggestions } from "@/components/common/suggestion-chips";
-import { ComposerTargetBar } from "@/components/home/composer-target-bar";
+import {
+  type ComposerTarget,
+  ComposerTargetBar,
+} from "@/components/home/composer-target-bar";
 import { fetchRemoteRun, startRemoteRun } from "@/rest/remote-devices";
 import { createSession } from "@/rest/session";
 
@@ -21,14 +22,13 @@ export function LauncherHome() {
   const tChat = useTranslations("chatInput");
   const router = useRouter();
   const addSession = useSetAtom(addSessionAtom);
-  const devices = useAtomValue(devicesAtom);
-  const currentAgentId = useAtomValue(currentAgentIdAtom);
   const [draft, setDraft] = useState("");
   /** 起手台选中的模型配置 id；null = 默认（首个 enabled）。 */
   const [modelConfigId, setModelConfigId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
-  const [targetDeviceId, setTargetDeviceId] = useState<string | null>(null);
-  const targetDevice = devices.find((d) => d.id === targetDeviceId) ?? null;
+  /** 起手台目标：本机 Agent 或远程设备，二选一；null = 未显式选择（本地
+   * 发送时不传 agentId，交给后端兜底默认 Agent）。 */
+  const [target, setTarget] = useState<ComposerTarget | null>(null);
 
   /**
    * L3：选中远程 agent（非本机）时发送 → 走远程 run 隧道（mode=create），
@@ -62,15 +62,16 @@ export function LauncherHome() {
     if (sending || !text.trim()) return;
     setSending(true);
     try {
-      if (targetDevice && !targetDevice.isCurrent) {
-        await sendToRemoteDevice(targetDevice.id, text);
+      if (target?.kind === "device") {
+        await sendToRemoteDevice(target.id, text);
         return;
       }
+      const selectedAgentId = target?.kind === "agent" ? target.id : undefined;
       const res = await createSession(
         text,
         undefined,
         modelConfigId ?? undefined,
-        currentAgentId ?? undefined,
+        selectedAgentId,
       );
       addSession(res.session);
       router.push(`/assistant?id=${res.sessionId}`);
@@ -94,12 +95,7 @@ export function LauncherHome() {
       trailingActions={
         <ModelSelect value={modelConfigId} onChange={setModelConfigId} />
       }
-      targetBar={
-        <ComposerTargetBar
-          selectedDeviceId={targetDeviceId}
-          onSelectDevice={setTargetDeviceId}
-        />
-      }
+      targetBar={<ComposerTargetBar value={target} onChange={setTarget} />}
       labels={{
         brand: "MeshBot",
         slogan: t("slogan"),

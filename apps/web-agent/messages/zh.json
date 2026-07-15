@@ -126,6 +126,7 @@
     "comingSoon": "即将上线",
     "agentLocal": "本地",
     "agentComingSoon": "其他设备即将支持",
+    "otherDevices": "其他设备",
     "workspaceDefault": "默认工作区",
     "modelSelect": "选择模型"
   },

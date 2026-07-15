@@ -127,7 +127,8 @@
     "agentLocal": "Local",
     "agentComingSoon": "Other devices coming soon",
     "workspaceDefault": "Default workspace",
-    "modelSelect": "Select model"
+    "modelSelect": "Select model",
+    "otherDevices": "Other devices"
   },
   "chatInput": {
     "placeholder": "Type here",
