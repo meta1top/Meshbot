@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { QUICK_ASSISTANT_NAME_MAX } from "./quick-assistant";
 
 /** 默认 Agent 的名字（账号下零 agent 时自动创建）。 */
 export const DEFAULT_AGENT_NAME = "M";
@@ -9,9 +10,16 @@ export const DEFAULT_AGENT_AVATAR = "🤖|#f97316";
 /** 远程可见性。本期恒 private，org 为云端注册（计划二）预留。 */
 export const AgentVisibilitySchema = z.enum(["private", "org"]);
 
-/** 创建 Agent 的入参。 */
+/**
+ * 创建 Agent 的入参。
+ *
+ * `name` 上限复用 `QUICK_ASSISTANT_NAME_MAX`（原为独立的 max(32)）——
+ * rename-agent 工具 / 随手问改名口都已对齐这个常量（见 bfb671d0），
+ * 通用 Agent 编辑器若各走一套上限，同一个 `agent.name` 字段会出现
+ * "编辑器存的了、工具改不了"的口径分裂。
+ */
 export const AgentCreateSchema = z.object({
-  name: z.string().min(1).max(32),
+  name: z.string().trim().min(1).max(QUICK_ASSISTANT_NAME_MAX),
   avatar: z.string().min(1).max(64),
   description: z.string().max(200).default(""),
   systemPrompt: z.string().max(20_000).default(""),

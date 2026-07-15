@@ -9,43 +9,68 @@ import {
 } from "@meshbot/design";
 import type { AgentView } from "@meshbot/types-agent";
 import { useAtom } from "jotai";
-import { Plus } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { currentAgentIdAtom } from "@/atoms/agent";
+import { AgentEditorSheet } from "@/components/agent/agent-editor-sheet";
 import { parseAgentAvatar } from "@/lib/agent-avatar";
 import { resolveCurrentAgentId } from "@/lib/resolve-current-agent";
 import { useAgents } from "@/rest/agents";
 
-/** 单个 Agent 的圆形头像按钮：emoji 前景 + 色值背景，选中态外环高亮。 */
+/**
+ * 单个 Agent 的圆形头像按钮：emoji 前景 + 色值背景，选中态外环高亮。
+ *
+ * 编辑入口：hover 时右下角浮出铅笔徽标（`opacity-0 group-hover:opacity-100`），
+ * 点击 `stopPropagation` 避免同时触发选中——与 `SessionListItem` 的「hover
+ * 显示三点菜单」是同一套「常态不占位、hover 才现身」的交互习惯，只是这里
+ * 40px 圆形头像放不下三点菜单，退化成一个最小的编辑徽标。选中态点击本身
+ * 仍走单击（不新增右键/双击手势，本仓库其它地方也没有这类手势的先例）。
+ */
 function AgentAvatarButton({
   agent,
   active,
   onClick,
+  onEdit,
 }: {
   agent: AgentView;
   active: boolean;
   onClick: () => void;
+  onEdit: () => void;
 }) {
+  const t = useTranslations("agent");
   const { emoji, color } = parseAgentAvatar(agent.avatar);
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button
-          type="button"
-          onClick={onClick}
-          aria-current={active ? "true" : undefined}
-          aria-label={agent.name}
-          className={cn(
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[18px] leading-none transition-all",
-            active
-              ? "ring-2 ring-(--shell-accent) ring-offset-2 ring-offset-(--shell-chrome)"
-              : "opacity-80 hover:opacity-100",
-          )}
-          style={{ backgroundColor: color }}
-        >
-          <span aria-hidden="true">{emoji}</span>
-        </button>
+        <div className="group/avatar relative shrink-0">
+          <button
+            type="button"
+            onClick={onClick}
+            aria-current={active ? "true" : undefined}
+            aria-label={agent.name}
+            className={cn(
+              "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[18px] leading-none transition-all",
+              active
+                ? "ring-2 ring-(--shell-accent) ring-offset-2 ring-offset-(--shell-chrome)"
+                : "opacity-80 hover:opacity-100",
+            )}
+            style={{ backgroundColor: color }}
+          >
+            <span aria-hidden="true">{emoji}</span>
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit();
+            }}
+            aria-label={t("editAgent", { name: agent.name })}
+            className="absolute -right-0.5 -bottom-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-foreground text-background opacity-0 shadow-sm transition-opacity group-hover/avatar:opacity-100 focus-visible:opacity-100"
+          >
+            <Pencil className="h-2.5 w-2.5" />
+          </button>
+        </div>
       </TooltipTrigger>
       <TooltipContent side="right">{agent.name}</TooltipContent>
     </Tooltip>
@@ -54,7 +79,7 @@ function AgentAvatarButton({
 
 /**
  * 最左侧 Agent 图标导航条（约 56px 宽）：每个 agent 一个圆形头像按钮，
- * 选中态高亮环，底部 `+` 新建入口。
+ * 选中态高亮环，底部 `+` 新建入口，hover 头像浮出编辑徽标（见 Task 11）。
  *
  * 首屏若 currentAgentIdAtom 为 null 或指向已删除的 agent，自动选中列表第一个
  * （逻辑见 `resolveCurrentAgentId`，纯函数、有单测）。
@@ -66,6 +91,10 @@ export function AgentRail() {
   const t = useTranslations("agent");
   const { data: agents, isLoading } = useAgents();
   const [currentAgentId, setCurrentAgentId] = useAtom(currentAgentIdAtom);
+  const [editor, setEditor] = useState<{
+    open: boolean;
+    agentId: string | null;
+  }>({ open: false, agentId: null });
 
   useEffect(() => {
     if (!agents) return;
@@ -73,10 +102,8 @@ export function AgentRail() {
     if (resolved !== currentAgentId) setCurrentAgentId(resolved);
   }, [agents, currentAgentId, setCurrentAgentId]);
 
-  // Task 11 的编辑抽屉接口点：本任务先接占位，抽屉落地后把这里换成
-  // `setCreateDrawerOpen(true)` 之类的状态开关。
   const handleCreateAgent = () => {
-    console.log("[agent-rail] TODO(Task 11): 打开新建 Agent 抽屉");
+    setEditor({ open: true, agentId: null });
   };
 
   return (
@@ -97,6 +124,7 @@ export function AgentRail() {
               agent={agent}
               active={agent.id === currentAgentId}
               onClick={() => setCurrentAgentId(agent.id)}
+              onEdit={() => setEditor({ open: true, agentId: agent.id })}
             />
           ))
         )}
@@ -114,6 +142,12 @@ export function AgentRail() {
         </TooltipTrigger>
         <TooltipContent side="right">{t("newAgent")}</TooltipContent>
       </Tooltip>
+
+      <AgentEditorSheet
+        agentId={editor.agentId}
+        open={editor.open}
+        onOpenChange={(open) => setEditor((s) => ({ ...s, open }))}
+      />
     </aside>
   );
 }

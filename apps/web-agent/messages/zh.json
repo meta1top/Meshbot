@@ -645,6 +645,42 @@
   },
   "agent": {
     "railLabel": "Agent 导航",
-    "newAgent": "新建 Agent"
+    "newAgent": "新建 Agent",
+    "editAgent": "编辑 {name}",
+    "editor": {
+      "createTitle": "新建 Agent",
+      "editTitle": "编辑 Agent",
+      "createDescription": "配置一个新的 Agent 人格：名字、头像、说明与系统提示词。",
+      "editDescription": "修改人格后，该 Agent 的既有会话下一轮回复即生效。",
+      "duplicateFromLabel": "从现有 Agent 复制",
+      "duplicateFromPlaceholder": "选择要复制配置的 Agent",
+      "duplicating": "复制中…",
+      "duplicateFailed": "复制失败，请重试",
+      "fieldName": "名字",
+      "fieldNamePlaceholder": "给这个 Agent 起个名字",
+      "fieldAvatar": "头像",
+      "avatarEmojiOption": "选择头像表情 {emoji}",
+      "avatarEmojiCustomPlaceholder": "自定义",
+      "avatarEmojiCustomLabel": "自定义头像表情",
+      "avatarColorOption": "选择头像背景色 {color}",
+      "fieldDescription": "描述",
+      "fieldDescriptionPlaceholder": "一句话说明这个 Agent 是做什么的（可选）",
+      "fieldSystemPrompt": "系统提示词",
+      "fieldSystemPromptPlaceholder": "定义这个 Agent 的人格、语气与行为准则……",
+      "fieldDefaultModel": "默认模型",
+      "fieldDefaultModelPlaceholder": "选择默认模型",
+      "fieldDefaultModelFollowAccount": "跟随账号默认",
+      "save": "保存",
+      "saving": "保存中…",
+      "saveFailed": "保存失败，请重试",
+      "cancel": "取消",
+      "delete": "删除",
+      "deleting": "删除中…",
+      "deleteFailed": "删除失败，请重试",
+      "deleteDisabledHint": "至少保留一个 Agent，无法删除最后一个",
+      "deleteConfirmTitle": "确认删除这个 Agent？",
+      "deleteConfirmDescription": "会同时删除该 Agent 的全部会话、记忆与工作区文件，不可恢复。",
+      "deleteConfirm": "确认删除"
+    }
   }
 }

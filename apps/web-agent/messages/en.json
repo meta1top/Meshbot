@@ -645,6 +645,42 @@
   },
   "agent": {
     "railLabel": "Agent navigation",
-    "newAgent": "New agent"
+    "newAgent": "New agent",
+    "editAgent": "Edit {name}",
+    "editor": {
+      "createTitle": "New agent",
+      "editTitle": "Edit agent",
+      "createDescription": "Set up a new agent persona: name, avatar, description and system prompt.",
+      "editDescription": "Persona changes apply to this agent's existing chats starting from the next reply.",
+      "duplicateFromLabel": "Duplicate from an existing agent",
+      "duplicateFromPlaceholder": "Pick an agent to copy",
+      "duplicating": "Duplicating…",
+      "duplicateFailed": "Duplicate failed, please retry",
+      "fieldName": "Name",
+      "fieldNamePlaceholder": "Give this agent a name",
+      "fieldAvatar": "Avatar",
+      "avatarEmojiOption": "Pick avatar emoji {emoji}",
+      "avatarEmojiCustomPlaceholder": "Custom",
+      "avatarEmojiCustomLabel": "Custom avatar emoji",
+      "avatarColorOption": "Pick avatar color {color}",
+      "fieldDescription": "Description",
+      "fieldDescriptionPlaceholder": "One line about what this agent does (optional)",
+      "fieldSystemPrompt": "System prompt",
+      "fieldSystemPromptPlaceholder": "Define this agent's persona, tone and behavior…",
+      "fieldDefaultModel": "Default model",
+      "fieldDefaultModelPlaceholder": "Choose a default model",
+      "fieldDefaultModelFollowAccount": "Follow account default",
+      "save": "Save",
+      "saving": "Saving…",
+      "saveFailed": "Save failed, please retry",
+      "cancel": "Cancel",
+      "delete": "Delete",
+      "deleting": "Deleting…",
+      "deleteFailed": "Delete failed, please retry",
+      "deleteDisabledHint": "Keep at least one agent — the last one can't be deleted",
+      "deleteConfirmTitle": "Delete this agent?",
+      "deleteConfirmDescription": "This also deletes all of this agent's chats, memory and workspace files. This cannot be undone.",
+      "deleteConfirm": "Delete"
+    }
   }
 }
