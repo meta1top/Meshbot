@@ -10,7 +10,6 @@ import {
 import { ArtifactSplitPane } from "@/components/artifact/artifact-split-pane";
 import { DragRegion } from "@/components/drag-region";
 import { QuickAssistantFab } from "@/components/im/quick-assistant-fab";
-import { AgentRail } from "@/components/shell/agent-rail";
 import { SidebarSlotContext } from "@/components/shell/sidebar-slot-context";
 import { WorkspaceSidebar } from "@/components/shell/workspace-sidebar";
 import { useGlobalEvents } from "@/hooks/use-global-events";
@@ -43,7 +42,6 @@ function ShellInner({ children }: { children: ReactNode }) {
     <main className="flex h-screen flex-col bg-(--shell-content) text-foreground">
       <DragRegion />
       <div className="flex min-h-0 flex-1">
-        <AgentRail />
         <WorkspaceSidebar sublistSlotRef={setSlotEl} />
         <div className="relative flex min-h-0 flex-1 overflow-hidden bg-(--shell-content)">
           <SidebarSlotContext.Provider value={slotEl}>
