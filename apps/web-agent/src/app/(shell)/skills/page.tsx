@@ -1,10 +1,8 @@
 "use client";
 
 import type { InstalledSkill, MarketSkillSummary } from "@meshbot/types-agent";
-import { useAtomValue } from "jotai";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { currentAgentIdAtom } from "@/atoms/agent";
 import { ToolPage } from "@/components/layouts/tool-page";
 import { InstalledSkillCard } from "@/components/skills/installed-skill-card";
 import { MarketSkillCard } from "@/components/skills/market-skill-card";
@@ -14,14 +12,29 @@ import {
   SkillsSidebar,
   type SkillsView,
 } from "@/components/skills/skills-sidebar";
+import { useAgents } from "@/rest/agents";
 import { fetchInstalled, fetchMarket } from "@/rest/skills";
 
 export default function SkillsPage() {
   const t = useTranslations("skills");
-  // 当前选中 Agent（Task 12）：已安装列表 / 安装 / 卸载 / 发布全部按此隔离，
-  // 切 Agent 后必须重新拉取，否则会看到上一个 Agent 的技能列表（同 usage
-  // atom 全局单例串台的坑）。
-  const currentAgentId = useAtomValue(currentAgentIdAtom);
+  const { data: agents } = useAgents();
+  // 主从视图（R1）：选中 Agent 是页面本地状态，不读全局「当前 Agent」atom——
+  // 「在看谁的技能」只对本页面有意义，不该影响起手台/侧栏等其他消费方的全局
+  // 当前态。已安装列表 / 安装 / 卸载 / 发布全部按此隔离，切换后必须重新拉取，
+  // 否则会看到上一个 Agent 的技能列表（同 usage atom 全局单例串台的坑）。
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+
+  // 首次拿到 Agent 列表时默认选中第一个；已手动选过的不覆盖。
+  useEffect(() => {
+    if (!selectedAgentId && agents && agents.length > 0) {
+      setSelectedAgentId(agents[0].id);
+    }
+  }, [agents, selectedAgentId]);
+
+  const selectedAgentName = agents?.find(
+    (agent) => agent.id === selectedAgentId,
+  )?.name;
+
   const [installed, setInstalled] = useState<InstalledSkill[]>([]);
   const [loadingInstalled, setLoadingInstalled] = useState(true);
   const [activeView, setActiveView] = useState<SkillsView>("installed");
@@ -45,14 +58,14 @@ export default function SkillsPage() {
   const reloadInstalled = useCallback(async () => {
     setLoadingInstalled(true);
     try {
-      const list = await fetchInstalled(currentAgentId ?? undefined);
+      const list = await fetchInstalled(selectedAgentId ?? undefined);
       setInstalled(list);
     } finally {
       setLoadingInstalled(false);
     }
-  }, [currentAgentId]);
+  }, [selectedAgentId]);
 
-  // currentAgentId 变化（切 Agent）时重新拉取——reloadInstalled 引用随之
+  // selectedAgentId 变化（切 Agent）时重新拉取——reloadInstalled 引用随之
   // 变化，effect 自动重跑；loadingInstalled 立即置 true 掩盖旧列表，避免
   // 切换瞬间闪出上一个 Agent 的技能。
   useEffect(() => {
@@ -117,10 +130,14 @@ export default function SkillsPage() {
 
   const isMarketView = activeView === "system" || activeView === "clawhub";
 
-  // 页头标题随当前视图（已安装 / MeshBot / ClawHub）。
+  // 页头标题随当前视图（已安装 / MeshBot / ClawHub）；已安装视图下带上选中
+  // Agent 的名字（「<name> 的技能」），让「在看谁的技能」可见——初版主从视图
+  // 的体验缺口，这里顺手补上。
   const pageTitle =
     activeView === "installed"
-      ? t("installedTitle")
+      ? selectedAgentName
+        ? t("installedTitleFor", { name: selectedAgentName })
+        : t("installedTitle")
       : activeView === "system"
         ? t("sourceOurMarket")
         : t("sourceClawhub");
@@ -129,7 +146,13 @@ export default function SkillsPage() {
     <ToolPage
       title={pageTitle}
       sidebar={
-        <SkillsSidebar activeView={activeView} onSelect={setActiveView} />
+        <SkillsSidebar
+          agents={agents ?? []}
+          selectedAgentId={selectedAgentId}
+          onSelectAgent={setSelectedAgentId}
+          activeView={activeView}
+          onSelectView={setActiveView}
+        />
       }
       tabs={
         isMarketView ? (
@@ -155,7 +178,7 @@ export default function SkillsPage() {
               <InstalledSkillCard
                 key={skill.name}
                 skill={skill}
-                agentId={currentAgentId ?? undefined}
+                agentId={selectedAgentId ?? undefined}
                 onUninstalled={handleUninstalled}
                 onPublish={handlePublish}
               />
@@ -178,7 +201,7 @@ export default function SkillsPage() {
                 key={`${skill.source}:${skill.slug}`}
                 skill={skill}
                 source={activeView}
-                agentId={currentAgentId ?? undefined}
+                agentId={selectedAgentId ?? undefined}
                 onInstalled={handleInstalled}
               />
             ))}
@@ -188,7 +211,7 @@ export default function SkillsPage() {
       {/* 上传到市场对话框 */}
       <PublishSkillDialog
         skill={publishTarget}
-        agentId={currentAgentId ?? undefined}
+        agentId={selectedAgentId ?? undefined}
         open={publishOpen}
         onOpenChange={setPublishOpen}
         onPublished={() => void reloadInstalled()}
