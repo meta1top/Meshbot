@@ -4,6 +4,7 @@ import { Module, forwardRef } from "@nestjs/common";
 import { AgentsModule } from "./agents.module";
 import { AgentCloudSyncService } from "./services/agent-cloud-sync.service";
 import { CheckpointerCleanupService } from "./services/checkpointer-cleanup.service";
+import { CloudModelConfigProxyService } from "./services/cloud-model-config-proxy.service";
 import { ContextCompactor } from "./services/context-compactor.service";
 import { SessionController } from "./controllers/session.controller";
 import { StatsController } from "./controllers/stats.controller";
@@ -70,6 +71,7 @@ import { SessionGateway } from "./ws/session.gateway";
     LlmCallService,
     SessionMessageService,
     SessionTitleService,
+    CloudModelConfigProxyService,
     ModelConfigService,
     ModelConfigSyncService,
     StatsService,
