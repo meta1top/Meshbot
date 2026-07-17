@@ -251,7 +251,8 @@
       "imageAlt": "产物"
     },
     "runErrorPrefix": "运行失败：",
-    "runErrorAgentNotRemotable": "该 Agent 未开启远程访问，本次消息未发送"
+    "runErrorAgentNotRemotable": "该 Agent 未开启远程访问，本次消息未发送",
+    "runErrorOffline": "目标设备已离线，本次消息未发送"
   },
   "newMessage": {
     "title": "新消息",

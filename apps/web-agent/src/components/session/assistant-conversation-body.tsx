@@ -370,6 +370,7 @@ export function AssistantConversationBody({
           reasoningProcess: t("reasoningProcess"),
           compactionRowTitle: (count) => tCompaction("rowTitle", { count }),
           runErrorAgentNotRemotable: t("runErrorAgentNotRemotable"),
+          runErrorOffline: t("runErrorOffline"),
         },
         toolCall: { artifactPresentFailed: tArtifact("presentFailed") },
         pendingList: {

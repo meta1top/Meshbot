@@ -599,6 +599,7 @@ function RemoteSessionViewReady({
               compactionRowTitle: (count) =>
                 t("compaction.rowTitle", { count }),
               runErrorAgentNotRemotable: t("runErrorAgentNotRemotable"),
+              runErrorOffline: t("runErrorOffline"),
             },
             toolCall: { artifactPresentFailed: t("artifact.presentFailed") },
             pendingList: {

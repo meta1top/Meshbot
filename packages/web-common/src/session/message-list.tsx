@@ -38,6 +38,18 @@ export interface MessageListLabels {
    * 未开启远程访问，本次消息未发送」）。
    */
   runErrorAgentNotRemotable: string;
+  /**
+   * 远程 run 预检拒绝——目标设备离线——的专属文案（原 bug #13 残留）：
+   * `m.errorReason === "offline"` 时展示这条，而不是 `errorText` 里
+   * `RemoteRunService.describePreflightRejection` 生成的硬编码中文兜底
+   * （「目标设备已离线，本次消息未发送」，对非中文用户不友好）。
+   *
+   * `errorReason` 目前只有两个稳定取值会走到这里——`"agent_not_remotable"`
+   * 与 `"offline"`——均来自 A 侧 `RemoteRunService` 对 L3 远程 run 预检拒绝
+   * 的结构化标注；其余情形（本地 run 失败、idle 超时等）不设 `reason`，
+   * 继续走 `errorText` 兜底展示原始文本。
+   */
+  runErrorOffline: string;
 }
 
 export interface MessageListProps {
@@ -239,7 +251,9 @@ export function MessageList({
                     {labels.runErrorPrefix}
                     {m.errorReason === "agent_not_remotable"
                       ? labels.runErrorAgentNotRemotable
-                      : m.errorText}
+                      : m.errorReason === "offline"
+                        ? labels.runErrorOffline
+                        : m.errorText}
                   </div>
                 )}
                 {m.role === "assistant" &&

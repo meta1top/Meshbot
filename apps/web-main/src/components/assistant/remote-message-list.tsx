@@ -94,6 +94,7 @@ export function RemoteMessageList({
         reasoningProcess: t("reasoningProcess"),
         compactionRowTitle: (count) => t("compaction.rowTitle", { count }),
         runErrorAgentNotRemotable: t("runErrorAgentNotRemotable"),
+        runErrorOffline: t("runErrorOffline"),
       }}
     />
   );

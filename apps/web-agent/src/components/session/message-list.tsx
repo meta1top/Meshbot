@@ -169,6 +169,7 @@ export function MessageList({
         reasoningProcess: t("reasoningProcess"),
         compactionRowTitle: (count) => t("compaction.rowTitle", { count }),
         runErrorAgentNotRemotable: t("runErrorAgentNotRemotable"),
+        runErrorOffline: t("runErrorOffline"),
       }}
     />
   );

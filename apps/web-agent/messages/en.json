@@ -251,7 +251,8 @@
       "imageAlt": "Artifact"
     },
     "runErrorPrefix": "Run failed: ",
-    "runErrorAgentNotRemotable": "This agent hasn't enabled remote access, so this message wasn't sent"
+    "runErrorAgentNotRemotable": "This agent hasn't enabled remote access, so this message wasn't sent",
+    "runErrorOffline": "The target device is offline, so this message wasn't sent"
   },
   "newMessage": {
     "title": "New message",

@@ -4,7 +4,7 @@ import { SessionLauncher } from "@meshbot/web-common/session";
 import { useSetAtom } from "jotai";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { addSessionAtom } from "@/atoms/sessions";
 import { ComposerActions } from "@/components/common/composer-actions";
 import { ModelSelect } from "@/components/common/model-select";
@@ -13,7 +13,7 @@ import {
   type ComposerTarget,
   ComposerTargetBar,
 } from "@/components/home/composer-target-bar";
-import { resolveModelConfigForTarget } from "@/lib/resolve-model-config-for-target";
+import { nextModelOnTargetChange } from "@/lib/resolve-model-config-for-target";
 import { useAgents } from "@/rest/agents";
 import { fetchRemoteRun, startRemoteRun } from "@/rest/remote-devices";
 import { createSession } from "@/rest/session";
@@ -32,16 +32,25 @@ export function LauncherHome() {
    * 发送时不传 agentId，交给后端兜底默认 Agent）。 */
   const [target, setTarget] = useState<ComposerTarget | null>(null);
   const { data: agents } = useAgents();
+  /** 上次已联动过模型选择器的 target key（`nextModelOnTargetChange` 语义），
+   * 供下面的 effect 判断「target 是否真的切换了」而非仅仅 agents 引用变化。 */
+  const lastLinkedTargetKeyRef = useRef<string | null>(null);
 
   // 切换起手台目标 Agent 时，模型选择器同步重置成该 Agent 的默认模型
   // （`defaultModelConfigId` 可能是 null = 跟随账号默认，原样写入即可——
   // `ModelSelect` 把 null 当账号默认渲染，不是「没选」）。只在 `target`
-  // 变化（真的切了 agent）时触发，不会覆盖用户在同一个 Agent 内的手动
-  // 选模型；resolveModelConfigForTarget 对「非 agent 目标」「agents 未
-  // 加载」「命中不到该 id」统一返回 undefined = 不改动，避免误清空。
+  // 身份真的变化（真的切了 agent）时触发，不会被 `agents` 内容变化（别处
+  // 增/删/改名，数组引用变但 target 没变）误触发覆盖用户在同一个 Agent
+  // 内的手动选模型——原 bug #8 残留：旧实现依赖数组引用而非身份，见
+  // `nextModelOnTargetChange` JSDoc。
   useEffect(() => {
-    const next = resolveModelConfigForTarget(target, agents);
-    if (next !== undefined) setModelConfigId(next);
+    const { nextKey, value } = nextModelOnTargetChange(
+      lastLinkedTargetKeyRef.current,
+      target,
+      agents,
+    );
+    lastLinkedTargetKeyRef.current = nextKey;
+    if (value !== undefined) setModelConfigId(value);
   }, [target, agents]);
 
   /**

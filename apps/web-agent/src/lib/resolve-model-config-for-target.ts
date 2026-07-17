@@ -34,3 +34,48 @@ export function resolveModelConfigForTarget(
   if (!agent) return undefined;
   return agent.defaultModelConfigId;
 }
+
+/** `target` 的身份 key（`kind:id`），null = 未选择目标。用于判断「target 是否
+ * 真的切换了」而非仅仅引用变化——`useAgents()` 的 react-query 数据在别处
+ * 增/删/改名后拿到新数组引用，但 target 本身没变时不能算「切换」。 */
+export function targetKey(target: ComposerTarget | null): string {
+  return target ? `${target.kind}:${target.id}` : "none";
+}
+
+/**
+ * 起手台「切 target 联动模型选择器」的一步纯函数（原 bug #8 残留：`useEffect`
+ * 依赖 `agents` 时，agents 内容真变化——非 target 切换——也会重跑并把用户刚
+ * 手选的模型覆盖回 Agent 默认值）。
+ *
+ * 语义：只有 `target` 的身份（`targetKey`）相对上次已联动的 key 发生变化，才
+ * 允许覆盖 `modelConfigId`；agents 数组变化但 target 未变时必须原样跳过。
+ *
+ * @param prevKey 上次已经完成联动（或已确认「本次 target 不需要联动」）的 key；
+ *   初始为 `null`。
+ * @returns `nextKey`——调用方应把它写回 ref，作为下次调用的 `prevKey`；
+ *   `value`——`undefined` 表示不要动 `modelConfigId`，否则原样 `setModelConfigId`。
+ *
+ * 三种分支：
+ * 1. `targetKey(target) === prevKey`：target 身份没变（agents 内容变化触发的
+ *    重跑）→ 不联动，`nextKey` 原样透传。
+ * 2. target 不是 agent（设备 / 未选择）：没有默认模型可联动，但仍要把新 key
+ *    记下来（`nextKey` 更新），这样以后切回同一个 agent 才会被当成「新的一次
+ *    切换」重新触发联动——否则会因为 key 停留在切走前的旧 agent 而被分支 1
+ *    误判成「没变」。
+ * 3. target 是 agent 且身份变了：尝试 `resolveModelConfigForTarget`。若暂时
+ *    解不出（agents 未加载 / 命中不到该 id，返回 `undefined`）→ `nextKey` 原样
+ *    透传（不算已联动，留给下次 agents 变化时重试）；解出确定值（含合法的
+ *    `null` = 账号默认）→ `nextKey` 更新为新 key 并把该值写回。
+ */
+export function nextModelOnTargetChange(
+  prevKey: string | null,
+  target: ComposerTarget | null,
+  agents: readonly AgentModelDefault[] | undefined,
+): { nextKey: string | null; value: string | null | undefined } {
+  const key = targetKey(target);
+  if (key === prevKey) return { nextKey: prevKey, value: undefined };
+  if (target?.kind !== "agent") return { nextKey: key, value: undefined };
+  const value = resolveModelConfigForTarget(target, agents);
+  if (value === undefined) return { nextKey: prevKey, value: undefined };
+  return { nextKey: key, value };
+}
