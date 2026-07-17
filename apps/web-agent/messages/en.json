@@ -126,9 +126,9 @@
     "comingSoon": "Coming soon",
     "agentLocal": "Local",
     "agentComingSoon": "Other devices coming soon",
+    "hostOffline": "{device} (offline)",
     "workspaceDefault": "Default workspace",
-    "modelSelect": "Select model",
-    "otherDevices": "Other devices"
+    "modelSelect": "Select model"
   },
   "chatInput": {
     "placeholder": "Type here",

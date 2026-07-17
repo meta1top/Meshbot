@@ -9,10 +9,8 @@ import { addSessionAtom } from "@/atoms/sessions";
 import { ComposerActions } from "@/components/common/composer-actions";
 import { ModelSelect } from "@/components/common/model-select";
 import { useSuggestions } from "@/components/common/suggestion-chips";
-import {
-  type ComposerTarget,
-  ComposerTargetBar,
-} from "@/components/home/composer-target-bar";
+import { ComposerTargetBar } from "@/components/home/composer-target-bar";
+import type { LauncherTarget } from "@/lib/launcher-target";
 import { nextModelOnTargetChange } from "@/lib/resolve-model-config-for-target";
 import { useAgents } from "@/rest/agents";
 import { fetchRemoteRun, startRemoteRun } from "@/rest/remote-agent-sessions";
@@ -28,9 +26,9 @@ export function LauncherHome() {
   /** 起手台选中的模型配置 id；null = 默认（首个 enabled）。 */
   const [modelConfigId, setModelConfigId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
-  /** 起手台目标：本机 Agent 或远程设备，二选一；null = 未显式选择（本地
+  /** 起手台目标：本机 Agent 或远程 Agent，二选一；null = 未显式选择（本地
    * 发送时不传 agentId，交给后端兜底默认 Agent）。 */
-  const [target, setTarget] = useState<ComposerTarget | null>(null);
+  const [target, setTarget] = useState<LauncherTarget | null>(null);
   const { data: agents } = useAgents();
   /** 上次已联动过模型选择器的 target key（`nextModelOnTargetChange` 语义），
    * 供下面的 effect 判断「target 是否真的切换了」而非仅仅 agents 引用变化。 */
@@ -54,22 +52,24 @@ export function LauncherHome() {
   }, [target, agents]);
 
   /**
-   * L3：选中远程 agent（非本机）时发送 → 走远程 run 隧道（mode=create），
+   * L3：选中远程 Agent（非本机）时发送 → 走远程 run 隧道（mode=create），
    * 而非本地 createSession。B 新建的会话 id 不再靠轮询 B 的会话列表兜底
    * 发现，而是轮询 A 本机的 `fetchRemoteRun`（B 首帧一到，A 端点即回填
    * sessionId，近乎即时）——同时把本次 run 的 streamId 一并带到 URL，供
    * 刚打开的远程会话视图在「尚未发送过第二条消息」前仍能中断这第一轮 run
-   * （该 streamId 是当前唯一能路由到 B 的凭证）。
+   * （该 streamId 是当前唯一能路由到 B 的凭证）。`cloudAgentId` 为云端
+   * `agent.id`（`RemoteAgentView.id`），不是 deviceId——L3 网关按云端 Agent
+   * 寻址。
    */
-  const sendToRemoteDevice = async (deviceId: string, text: string) => {
-    const { streamId } = await startRemoteRun(deviceId, {
+  const sendToRemoteAgent = async (cloudAgentId: string, text: string) => {
+    const { streamId } = await startRemoteRun(cloudAgentId, {
       mode: "create",
       content: text,
     });
     // 轮询 A 本机（近乎即时：B 首帧一到 onFrame 即回填 sessionId）
     let sessionId: string | null = null;
     for (let i = 0; i < 40 && !sessionId; i++) {
-      const run = await fetchRemoteRun(deviceId, { streamId });
+      const run = await fetchRemoteRun(cloudAgentId, { streamId });
       sessionId = run?.sessionId ?? null;
       if (!sessionId) await new Promise((r) => setTimeout(r, 250));
     }
@@ -77,7 +77,7 @@ export function LauncherHome() {
       throw new Error("远程会话未在预期时间内创建（目标设备可能已离线）");
     }
     router.push(
-      `/assistant?remoteDevice=${deviceId}&id=${sessionId}&streamId=${streamId}`,
+      `/assistant?remoteAgent=${cloudAgentId}&id=${sessionId}&streamId=${streamId}`,
     );
   };
 
@@ -85,11 +85,12 @@ export function LauncherHome() {
     if (sending || !text.trim()) return;
     setSending(true);
     try {
-      if (target?.kind === "device") {
-        await sendToRemoteDevice(target.id, text);
+      if (target?.scope === "remote") {
+        await sendToRemoteAgent(target.cloudAgentId, text);
         return;
       }
-      const selectedAgentId = target?.kind === "agent" ? target.id : undefined;
+      const selectedAgentId =
+        target?.scope === "local" ? target.agentId : undefined;
       const res = await createSession(
         text,
         undefined,
