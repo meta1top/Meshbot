@@ -60,12 +60,13 @@
     }
   },
   "assistantSidebar": {
-    "title": "Devices",
+    "title": "Agents",
     "newSession": "New session",
     "backToDevices": "Back to devices",
     "offlineSessionsHint": "Device is offline, sessions cannot be loaded",
     "remoteLoadFailed": "Failed to load sessions",
-    "remoteEmpty": "No sessions on this device yet"
+    "remoteEmpty": "No sessions for this Agent yet",
+    "empty": "No agents yet"
   },
   "loading": "",
   "validation": {

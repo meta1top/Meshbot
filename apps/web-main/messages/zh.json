@@ -60,12 +60,13 @@
     }
   },
   "assistantSidebar": {
-    "title": "设备",
+    "title": "Agent",
     "newSession": "新会话",
     "backToDevices": "返回设备列表",
     "offlineSessionsHint": "设备离线，无法加载会话列表",
     "remoteLoadFailed": "会话列表加载失败",
-    "remoteEmpty": "该设备暂无会话"
+    "remoteEmpty": "该 Agent 暂无会话",
+    "empty": "还没有可用的 Agent"
   },
   "session": {
     "assistantName": "助手",
