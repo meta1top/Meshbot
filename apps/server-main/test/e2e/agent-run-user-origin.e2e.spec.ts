@@ -43,6 +43,7 @@ import { emitUntilEvent, waitForEvent } from "../setup/ws-test-utils";
 import { JwtAuthGuard } from "../../src/auth/jwt-auth.guard";
 import { JwtMainStrategy } from "../../src/auth/jwt.strategy";
 import { type AppConfig, APP_CONFIG } from "../../src/config/app-config.schema";
+import { AgentRegistryController } from "../../src/rest/agent-registry.controller";
 import { AuthController } from "../../src/rest/auth.controller";
 import { DeviceAuthController } from "../../src/rest/device-auth.controller";
 import { DeviceController } from "../../src/rest/device.controller";
@@ -144,6 +145,7 @@ describe("server-main L3 用户发起方 e2e（真 WS 双角色）", () => {
         OrgController,
         DeviceAuthController,
         DeviceController,
+        AgentRegistryController,
       ],
       providers: [
         { provide: APP_CONFIG, useValue: TEST_APP_CONFIG },
@@ -245,7 +247,45 @@ describe("server-main L3 用户发起方 e2e（真 WS 双角色）", () => {
   }
 
   /**
-   * 注册用户 + 建组织（自动设为 activeOrgId）+ 为其注册一台设备，返回双端凭据。
+   * 用 device token 注册一个远程 Agent（`PUT /api/agent/agents` 对账），
+   * 再用 user token 读回列表（`GET /api/agents`）拿到该 Agent 的云端主键 id——
+   * T5 起网关按 `targetAgentId` 查云端 `agent` 表寻址（不再是 `targetDeviceId`），
+   * e2e 必须先造一行 CloudAgent 才能让 `findActiveById` 查到并解出 deviceId。
+   * 照抄 `agent-registry.e2e.spec.ts`（T2）的现成写法。
+   */
+  async function registerAgent(
+    userToken: string,
+    deviceToken: string,
+    localAgentId: string,
+  ): Promise<string> {
+    await request(app.getHttpServer())
+      .put("/api/agent/agents")
+      .set("Authorization", `Bearer ${deviceToken}`)
+      .send({
+        agents: [
+          {
+            localAgentId,
+            name: `Agent ${localAgentId}`,
+            avatar: "",
+            description: null,
+            visibility: "private",
+          },
+        ],
+      });
+
+    const listRes = await request(app.getHttpServer())
+      .get("/api/agents")
+      .set("Authorization", `Bearer ${userToken}`);
+    const row = (
+      listRes.body.data as Array<{ id: string; localAgentId: string }>
+    ).find((a) => a.localAgentId === localAgentId);
+    if (!row) throw new Error(`未找到 agent ${localAgentId}`);
+    return row.id;
+  }
+
+  /**
+   * 注册用户 + 建组织（自动设为 activeOrgId）+ 为其注册一台设备 + 为该设备
+   * 注册一个远程 Agent（云端 `agent` 行），返回双端凭据 + 云端 agentId。
    * A（浏览器用户连接）与 B（设备连接）属于同一账号——L3 自有设备路由场景。
    */
   async function setupUserWithDevice(
@@ -258,6 +298,7 @@ describe("server-main L3 用户发起方 e2e（真 WS 双角色）", () => {
     orgId: string;
     deviceToken: string;
     deviceId: string;
+    agentId: string;
   }> {
     const userToken = await registerAndToken(email);
     const userId = parseUserId(userToken);
@@ -269,8 +310,9 @@ describe("server-main L3 用户发起方 e2e（真 WS 双角色）", () => {
     const orgId = orgRes.body.data.id as string;
 
     const { deviceToken, deviceId } = await addDevice(userToken, deviceName);
+    const agentId = await registerAgent(userToken, deviceToken, "agent1");
 
-    return { userToken, userId, orgId, deviceToken, deviceId };
+    return { userToken, userId, orgId, deviceToken, deviceId, agentId };
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -279,7 +321,7 @@ describe("server-main L3 用户发起方 e2e（真 WS 双角色）", () => {
   it("A(user) emit agentRunStart → B 收到 start(requesterDeviceId 前缀 user:)；B frame/end → A 收到", async () => {
     if (maybeSkip()) return;
 
-    const { userToken, deviceToken, deviceId } = await setupUserWithDevice(
+    const { userToken, deviceToken, agentId } = await setupUserWithDevice(
       "l3-a1@test.io",
       "L3Org1",
       "L3Device1",
@@ -296,7 +338,7 @@ describe("server-main L3 用户发起方 e2e（真 WS 双角色）", () => {
       const streamId = `stream-${Date.now()}`;
       const startPayload: AgentRunStartInput = {
         streamId,
-        targetDeviceId: deviceId,
+        targetAgentId: agentId,
         mode: "create",
         content: "hello agent",
       };
@@ -361,7 +403,7 @@ describe("server-main L3 用户发起方 e2e（真 WS 双角色）", () => {
   it("A emit agentRunControl → B 收到；另一用户 C 用同 streamId 发 control → B 不收到（越权拒）", async () => {
     if (maybeSkip()) return;
 
-    const { userToken, deviceToken, deviceId } = await setupUserWithDevice(
+    const { userToken, deviceToken, agentId } = await setupUserWithDevice(
       "l3-a4@test.io",
       "L3Org4",
       "L3Device4",
@@ -387,7 +429,7 @@ describe("server-main L3 用户发起方 e2e（真 WS 双角色）", () => {
         IM_WS_EVENTS.agentRunStart,
         {
           streamId,
-          targetDeviceId: deviceId,
+          targetAgentId: agentId,
           mode: "create",
           content: "x",
         } satisfies AgentRunStartInput,
@@ -396,7 +438,7 @@ describe("server-main L3 用户发起方 e2e（真 WS 双角色）", () => {
 
       const controlPayload: AgentRunControlInput = {
         streamId,
-        targetDeviceId: deviceId,
+        targetAgentId: agentId,
         sessionId: "sess-ctl",
         kind: "interrupt",
       };
@@ -435,7 +477,7 @@ describe("server-main L3 用户发起方 e2e（真 WS 双角色）", () => {
   it("A 断开重连(新 socket)后 B 用旧 streamId 回流帧 → 无人收到且不报错（路由已清理）", async () => {
     if (maybeSkip()) return;
 
-    const { userToken, userId, deviceToken, deviceId } =
+    const { userToken, userId, deviceToken, agentId } =
       await setupUserWithDevice("l3-a5@test.io", "L3Org5", "L3Device5");
 
     const sockB = connectSocket(deviceToken);
@@ -452,7 +494,7 @@ describe("server-main L3 用户发起方 e2e（真 WS 双角色）", () => {
         IM_WS_EVENTS.agentRunStart,
         {
           streamId,
-          targetDeviceId: deviceId,
+          targetAgentId: agentId,
           mode: "create",
           content: "x",
         } satisfies AgentRunStartInput,
@@ -518,7 +560,7 @@ describe("server-main L3 用户发起方 e2e（真 WS 双角色）", () => {
   it("同一用户两个 socket(多标签) 各自 streamId 互不串", async () => {
     if (maybeSkip()) return;
 
-    const { userToken, deviceToken, deviceId } = await setupUserWithDevice(
+    const { userToken, deviceToken, agentId } = await setupUserWithDevice(
       "l3-a5b@test.io",
       "L3Org5b",
       "L3Device5b",
@@ -545,7 +587,7 @@ describe("server-main L3 用户发起方 e2e（真 WS 双角色）", () => {
         IM_WS_EVENTS.agentRunStart,
         {
           streamId: stream1,
-          targetDeviceId: deviceId,
+          targetAgentId: agentId,
           mode: "create",
           content: "tab1",
         } satisfies AgentRunStartInput,
@@ -560,7 +602,7 @@ describe("server-main L3 用户发起方 e2e（真 WS 双角色）", () => {
         IM_WS_EVENTS.agentRunStart,
         {
           streamId: stream2,
-          targetDeviceId: deviceId,
+          targetAgentId: agentId,
           mode: "create",
           content: "tab2",
         } satisfies AgentRunStartInput,
@@ -627,7 +669,7 @@ describe("server-main L3 用户发起方 e2e（真 WS 双角色）", () => {
   it("deviceQueryRequest/Response 全链 + 一次性路由语义（用后即删/发送方须=目标设备/伪造 correlationId 不送达）", async () => {
     if (maybeSkip()) return;
 
-    const { userToken, deviceToken, deviceId } = await setupUserWithDevice(
+    const { userToken, deviceToken, agentId } = await setupUserWithDevice(
       "l3-a6@test.io",
       "L3Org6",
       "L3Device6",
@@ -657,7 +699,7 @@ describe("server-main L3 用户发起方 e2e（真 WS 双角色）", () => {
         IM_WS_EVENTS.deviceQueryRequest,
         {
           correlationId,
-          targetDeviceId: deviceId,
+          targetAgentId: agentId,
           kind: "sessions",
           params: {},
         } satisfies DeviceQueryRequestInput,
@@ -705,7 +747,7 @@ describe("server-main L3 用户发起方 e2e（真 WS 双角色）", () => {
         IM_WS_EVENTS.deviceQueryRequest,
         {
           correlationId: correlationId2,
-          targetDeviceId: deviceId,
+          targetAgentId: agentId,
           kind: "sessions",
           params: {},
         } satisfies DeviceQueryRequestInput,
