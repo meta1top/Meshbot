@@ -81,3 +81,20 @@ export const modelConfigSchema = z.object({
 });
 
 export type ModelConfigInput = z.infer<typeof modelConfigSchema>;
+
+/** 本地模型配置更新 Schema（局部字段；不允许改 providerType）。 */
+export const modelConfigUpdateSchema = z.object({
+  name: z.string().min(1, "请输入名称").optional(),
+  model: z.string().min(1, "请输入或选择模型").optional(),
+  apiKey: z.string().min(1, "请输入 API Key").optional(),
+  baseUrl: z.string().optional(),
+  enabled: z.boolean().optional(),
+  contextWindow: z.number().int().positive().optional(),
+});
+export type ModelConfigUpdateInput = z.infer<typeof modelConfigUpdateSchema>;
+
+/** 启用/停用切换 Schema。 */
+export const modelConfigEnabledSchema = z.object({
+  enabled: z.boolean(),
+});
+export type ModelConfigEnabledInput = z.infer<typeof modelConfigEnabledSchema>;

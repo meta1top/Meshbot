@@ -1,9 +1,16 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
+import { AppError } from "@meshbot/common";
+import { resolveContextWindow } from "@meshbot/types-agent";
 import { Repository } from "typeorm";
 import { ScopedRepository } from "../account/scoped-repository";
 import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
+import type {
+  CreateModelConfigDto,
+  UpdateModelConfigDto,
+} from "../dto/model-config.dto";
 import { ModelConfig } from "../entities/model-config.entity";
+import { AgentErrorCode } from "../errors/agent.error-codes";
 import { CloudModelConfigProxyService } from "./cloud-model-config-proxy.service";
 
 /** ModelConfig 表的归属 Service —— 模型配置的数据层（按账号隔离）。 */
@@ -81,5 +88,63 @@ export class ModelConfigService {
   private mergeById(local: ModelConfig[], cloud: ModelConfig[]): ModelConfig[] {
     const seen = new Set(local.map((c) => c.id));
     return [...local, ...cloud.filter((c) => !seen.has(c.id))];
+  }
+
+  /** 新建本地模型配置（source='local'，enabled 默认 true）。单表写，无需 @Transactional。 */
+  async create(dto: CreateModelConfigDto): Promise<ModelConfig> {
+    return this.repo.save({
+      providerType: dto.providerType,
+      name: dto.name,
+      model: dto.model,
+      apiKey: dto.apiKey,
+      baseUrl: dto.baseUrl ?? "",
+      enabled: true,
+      contextWindow: resolveContextWindow(dto.model, dto.contextWindow),
+      source: "local",
+    } as ModelConfig);
+  }
+
+  /**
+   * 更新本地模型配置（只碰 source='local'）。contextWindow 策略：
+   * 显式给值 → 覆盖；未给但 model 变了 → 按新 model 重解析；否则保留原值。
+   * 目标是云端条目 → MODEL_CONFIG_READONLY；不存在 → NotFound。
+   */
+  async update(id: string, dto: UpdateModelConfigDto): Promise<ModelConfig> {
+    const entity = await this.findLocalOrReject(id);
+    const modelChanged = dto.model !== undefined && dto.model !== entity.model;
+    Object.assign(entity, dto);
+    if (dto.contextWindow !== undefined) {
+      entity.contextWindow = dto.contextWindow;
+    } else if (modelChanged) {
+      entity.contextWindow = resolveContextWindow(entity.model);
+    }
+    return this.repo.save(entity);
+  }
+
+  /** 切换本地模型配置启用态（只碰 source='local'）。 */
+  async setEnabled(id: string, enabled: boolean): Promise<ModelConfig> {
+    const entity = await this.findLocalOrReject(id);
+    entity.enabled = enabled;
+    return this.repo.save(entity);
+  }
+
+  /** 删除本地模型配置（只碰 source='local'）。 */
+  async delete(id: string): Promise<void> {
+    await this.findLocalOrReject(id);
+    await this.repo.delete({ id, source: "local" });
+  }
+
+  /**
+   * 定位可写的本地行：命中 source='local' 返回；否则查云端代理——
+   * 命中云端 → MODEL_CONFIG_READONLY（编辑去云端 org），都无 → NotFound。
+   */
+  private async findLocalOrReject(id: string): Promise<ModelConfig> {
+    const local = await this.repo.findOneBy({ id, source: "local" });
+    if (local) return local;
+    const cloud = await this.proxy.getCloudConfigs();
+    if (cloud.some((c) => c.id === id)) {
+      throw new AppError(AgentErrorCode.MODEL_CONFIG_READONLY);
+    }
+    throw new NotFoundException(`ModelConfig ${id} not found`);
   }
 }

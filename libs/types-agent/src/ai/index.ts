@@ -6,8 +6,12 @@ export {
   resolveContextWindow,
 } from "./model-specs";
 export {
+  type ModelConfigEnabledInput,
   type ModelConfigInput,
+  type ModelConfigUpdateInput,
+  modelConfigEnabledSchema,
   modelConfigSchema,
+  modelConfigUpdateSchema,
   PROVIDERS,
   type ProviderDef,
 } from "./providers";

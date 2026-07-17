@@ -255,6 +255,74 @@ describe("ModelConfigService", () => {
     await expect(rawService.findAll()).rejects.toThrow();
   });
 
+  it("create 写入 source='local'（enabled 默认 true）", async () => {
+    const created = await service.create({
+      providerType: "openai",
+      name: "My Local",
+      model: "gpt-4o",
+      apiKey: "sk-x",
+    } as never);
+    expect(created.source).toBe("local");
+    expect(created.enabled).toBe(true);
+    const rows = await ds.getRepository(ModelConfig).find();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].source).toBe("local");
+  });
+
+  it("update 改本地行字段", async () => {
+    const created = await service.create({
+      providerType: "openai",
+      name: "Old",
+      model: "gpt-4o",
+      apiKey: "sk-x",
+    } as never);
+    const updated = await service.update(created.id, { name: "New" } as never);
+    expect(updated.name).toBe("New");
+  });
+
+  it("setEnabled 切换本地行启用态", async () => {
+    const created = await service.create({
+      providerType: "openai",
+      name: "M",
+      model: "gpt-4o",
+      apiKey: "sk-x",
+    } as never);
+    const toggled = await service.setEnabled(created.id, false);
+    expect(toggled.enabled).toBe(false);
+  });
+
+  it("delete 删本地行", async () => {
+    const created = await service.create({
+      providerType: "openai",
+      name: "M",
+      model: "gpt-4o",
+      apiKey: "sk-x",
+    } as never);
+    await service.delete(created.id);
+    expect(await ds.getRepository(ModelConfig).find()).toHaveLength(0);
+  });
+
+  it("update 云端条目被拒（MODEL_CONFIG_READONLY，code 3018）", async () => {
+    proxyGet.mockResolvedValue([cloudRow({ id: "cloud-ro" })]);
+    await expect(
+      service.update("cloud-ro", { name: "X" } as never),
+    ).rejects.toMatchObject({ errorCode: { code: 3018 } });
+  });
+
+  it("delete 云端条目被拒（MODEL_CONFIG_READONLY）", async () => {
+    proxyGet.mockResolvedValue([cloudRow({ id: "cloud-ro" })]);
+    await expect(service.delete("cloud-ro")).rejects.toMatchObject({
+      errorCode: { code: 3018 },
+    });
+  });
+
+  it("update 完全不存在的 id → NotFound", async () => {
+    proxyGet.mockResolvedValue([]);
+    await expect(
+      service.update("ghost", { name: "X" } as never),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
   describe("账号隔离（ScopedRepository）", () => {
     it("账号 A 的配置对账号 B 不可见（findAll）", async () => {
       await seedModelConfig(ds, { cloudUserId: "u1", name: "A Config" });
