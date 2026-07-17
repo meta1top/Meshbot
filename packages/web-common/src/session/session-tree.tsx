@@ -273,9 +273,11 @@ function DeviceRow({
 
 /** Agent 行：chevron（SidebarNav 已在 defaults.icon 给出）+ 圆形头像（色底 emoji）
  *  + 名字 + running 脉冲点 + hover 编辑（复用 SidebarRow 的 actions 出现机制，
- *  不额外造 hover 逻辑，同 DeviceRow/SessionRow 的按钮）。行本体点击只做
- *  展开/收起（`defaults.onClick` 是 NavItem 的 toggle 分支）——不再有「设为
- *  当前 Agent」的并行通道，Agent 是并列关系，没有全局当前态可切。 */
+ *  不额外造 hover 逻辑）。编辑按钮盒子 h-5 w-5（同 SessionRow 三点菜单触发器），
+ *  比早前的 h-6 w-6 更贴合图标——原尺寸在短 Agent 名场景下和行右缘之间留白
+ *  明显偏大、视觉不平衡（Bug #2）。行本体点击只做展开/收起（`defaults.onClick`
+ *  是 NavItem 的 toggle 分支）——不再有「设为当前 Agent」的并行通道，Agent
+ *  是并列关系，没有全局当前态可切。 */
 function AgentRow({
   node,
   defaults,
@@ -325,7 +327,7 @@ function AgentRow({
               e.stopPropagation();
               onEditAgent(node);
             }}
-            className="flex h-6 w-6 items-center justify-center rounded text-(--shell-sidebar-fg)/60 transition-colors hover:bg-(--shell-sidebar-hover) hover:text-(--shell-sidebar-fg)"
+            className="flex h-5 w-5 items-center justify-center rounded text-(--shell-sidebar-fg)/60 transition-colors hover:bg-(--shell-sidebar-hover) hover:text-(--shell-sidebar-fg)"
           >
             <Pencil className="h-3.5 w-3.5" />
           </button>

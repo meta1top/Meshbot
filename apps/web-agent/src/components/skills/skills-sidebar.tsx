@@ -6,7 +6,7 @@ import {
   SidebarHeader,
   SidebarNav,
 } from "@meshbot/web-common/shell";
-import { BookOpen, Package, Store } from "lucide-react";
+import { BookOpen, Store } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { parseAgentAvatar } from "@/lib/agent-avatar";
 
@@ -16,7 +16,14 @@ import { parseAgentAvatar } from "@/lib/agent-avatar";
  * Agent 的 skill_install 工具仍支持 github 来源（后端 SkillInstallSource 不变）。
  */
 type MarketView = Exclude<SkillInstallSource, "github">;
-export type SkillsView = MarketView | "installed";
+export type SkillsView = MarketView;
+
+/**
+ * 左栏两种互斥模式：`"agent"` 看某个 Agent 已装技能（谁由 selectedAgentId
+ * 决定），`"market"` 看技能市场（哪个来源由 activeView 决定）。二者互斥——
+ * 不存在「Agent 与市场同时高亮」的中间态，去掉了旧版单独的「已安装」菜单项。
+ */
+export type SkillsMode = "agent" | "market";
 
 interface Props {
   /** 全部 Agent（含零技能的），列出供切换——不做任何过滤。 */
@@ -24,19 +31,24 @@ interface Props {
   /** 当前选中 Agent（页面本地状态，见 skills/page.tsx；不是全局当前态）。 */
   selectedAgentId: string | null;
   onSelectAgent: (agentId: string) => void;
+  /** 当前互斥模式：agent 态才高亮 Agent 列表，market 态才高亮市场来源。 */
+  mode: SkillsMode;
   activeView: SkillsView;
   onSelectView: (view: SkillsView) => void;
 }
 
 /**
  * 技能页侧栏：主从视图的「主」——上区列出全部 Agent（点击切换
- * `selectedAgentId`，决定右侧看谁的技能），下区沿用原「已安装 / 市场来源」
- * 视图切换。两组各自独立的 SidebarNav + activeKey，互不干扰。
+ * `selectedAgentId` 并进入 agent 态），下区是「技能市场」入口（点击任一
+ * 来源即进入 market 态）。两组各自独立的 SidebarNav，但 activeKey 按 `mode`
+ * 二选一点亮——同一时刻只有一组处于高亮状态，不会出现 Agent 与市场同时
+ * 选中的冗余态（Bug #3）。
  */
 export function SkillsSidebar({
   agents,
   selectedAgentId,
   onSelectAgent,
+  mode,
   activeView,
   onSelectView,
 }: Props) {
@@ -65,18 +77,7 @@ export function SkillsSidebar({
     },
   ];
 
-  const viewGroups: NavGroup[] = [
-    {
-      key: "installed",
-      items: [
-        {
-          key: "installed",
-          label: t("installed"),
-          icon: <Package />,
-          onClick: () => onSelectView("installed"),
-        },
-      ],
-    },
+  const marketGroups: NavGroup[] = [
     {
       key: "market",
       title: t("market"),
@@ -106,13 +107,15 @@ export function SkillsSidebar({
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-2">
         <SidebarNav
           groups={agentGroups}
-          activeKey={selectedAgentId ?? undefined}
+          activeKey={
+            mode === "agent" ? (selectedAgentId ?? undefined) : undefined
+          }
           onSelect={(n) => onSelectAgent(n.key)}
         />
         <div className="my-2 border-t border-border" />
         <SidebarNav
-          groups={viewGroups}
-          activeKey={activeView}
+          groups={marketGroups}
+          activeKey={mode === "market" ? activeView : undefined}
           onSelect={(n) => onSelectView(n.key as SkillsView)}
         />
       </div>
