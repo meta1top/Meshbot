@@ -31,6 +31,9 @@ function make() {
     appendMessage: jest
       .fn()
       .mockResolvedValue({ messageId: "m1", queued: true }),
+    findOrNull: jest
+      .fn()
+      .mockResolvedValue({ id: "remote-sess-1", agentId: "agent-remote" }),
   };
   const runner = { kick: jest.fn() };
   const relay = { emitAgentRunFrame: jest.fn(), emitAgentRunEnd: jest.fn() };
@@ -186,6 +189,90 @@ describe("RemoteRunInboundService", () => {
         streamId: "stream-1",
         requesterDeviceId: "dA",
         reason: "error",
+      });
+    });
+
+    it("【Critical 对抗用例】append 模式跳板攻击：localAgentId=X(remote_enabled=true) 但 sessionId 属于 Y(remote_enabled=false) → 必须拒绝，不 append、不 kick", async () => {
+      const { svc, sessions, runner, relay, agents } = make();
+      // X：请求方自选、云端映射得到的 localAgentId，remote_enabled=true（合法跳板）
+      agents.findOrNull.mockResolvedValueOnce({
+        id: "agent-x",
+        remoteEnabled: true,
+      });
+      // 被追加的会话真正归属 Y，Y 的远程开关是关闭的
+      sessions.findOrNull.mockResolvedValueOnce({
+        id: "sess-of-y",
+        agentId: "agent-y",
+      });
+
+      await svc.onAgentRunRequest(
+        fwd({
+          mode: "append",
+          localAgentId: "agent-x",
+          sessionId: "sess-of-y",
+          content: "偷跑 Y",
+        }) as never,
+      );
+
+      expect(sessions.appendMessage).not.toHaveBeenCalled();
+      expect(runner.kick).not.toHaveBeenCalled();
+      expect(relay.emitAgentRunEnd).toHaveBeenCalledWith("u1", {
+        streamId: "stream-1",
+        requesterDeviceId: "dA",
+        reason: "agent_not_remotable",
+      });
+    });
+
+    it("append 到自己：session.agentId === localAgentId 且 remoteEnabled=true → 正常放行", async () => {
+      const { svc, sessions, runner, agents } = make();
+      agents.findOrNull.mockResolvedValueOnce({
+        id: "agent-remote",
+        remoteEnabled: true,
+      });
+      sessions.findOrNull.mockResolvedValueOnce({
+        id: "remote-sess-1",
+        agentId: "agent-remote",
+      });
+
+      await svc.onAgentRunRequest(
+        fwd({
+          mode: "append",
+          localAgentId: "agent-remote",
+          sessionId: "remote-sess-1",
+          content: "continue",
+        }) as never,
+      );
+
+      expect(sessions.appendMessage).toHaveBeenCalledWith(
+        "remote-sess-1",
+        expect.objectContaining({ content: "continue" }),
+      );
+      expect(runner.kick).toHaveBeenCalledWith("remote-sess-1");
+    });
+
+    it("append 一个不存在的 sessionId → 拒绝不崩，回 agentRunEnd{reason:agent_not_remotable}", async () => {
+      const { svc, sessions, runner, relay, agents } = make();
+      agents.findOrNull.mockResolvedValueOnce({
+        id: "agent-remote",
+        remoteEnabled: true,
+      });
+      sessions.findOrNull.mockResolvedValueOnce(null);
+
+      await svc.onAgentRunRequest(
+        fwd({
+          mode: "append",
+          localAgentId: "agent-remote",
+          sessionId: "ghost-session",
+          content: "continue",
+        }) as never,
+      );
+
+      expect(sessions.appendMessage).not.toHaveBeenCalled();
+      expect(runner.kick).not.toHaveBeenCalled();
+      expect(relay.emitAgentRunEnd).toHaveBeenCalledWith("u1", {
+        streamId: "stream-1",
+        requesterDeviceId: "dA",
+        reason: "agent_not_remotable",
       });
     });
 

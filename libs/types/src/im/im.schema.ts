@@ -190,7 +190,11 @@ export interface AgentRunFrame {
  * L3:B→A 流终止。requesterDeviceId 同 AgentRunFrame，由 B 端原样回填。
  * agent_not_remotable：B 侧二次门控拒绝——`forwarded.localAgentId` 指向的本地
  * Agent 不存在，或 `remote_enabled` 非 true（B 侧不信云端下发的 targetAgentId /
- * 云端 Agent 行状态，本地 remote_enabled 才是唯一真相）。
+ * 云端 Agent 行状态，本地 remote_enabled 才是唯一真相）；append 模式下还包括
+ * `forwarded.sessionId` 查无，或该会话真正归属的 `session.agentId` 不等于
+ * `localAgentId`（真正执行 run 的是 session.agentId，不能只查 localAgentId 的
+ * remote_enabled 就放行——否则可拿任一 remote_enabled Agent 当跳板越权唤醒别的
+ * 会话归属、已被关闭远程开关的 Agent）。
  */
 export interface AgentRunEnd {
   streamId: string;

@@ -119,6 +119,22 @@ export class RemoteRunInboundService {
    * 做寻址或鉴权。本地 `agents` 表的 `remote_enabled` 才是唯一真相：查到的 Agent
    * 必须存在且 `remoteEnabled === true` 才允许落会话触发远程 run，否则一律拒绝
    * 并回 `agentRunEnd{reason:"agent_not_remotable"}`（不建会话、不 kick）。
+   *
+   * 【append 模式二次门控——真正执行的 agent 是 session.agentId，不是 localAgentId】
+   * create 模式新会话的 `agentId` 就是 `localAgentId`，查它的 `remoteEnabled`
+   * 天然对——但 append 模式追加进的是**已存在会话**，`RunnerService` 按
+   * `session.agentId` 解析执行身份（见 `runner.service.ts` `consumeRunStream`），
+   * 从不重查 `remoteEnabled`。若只校验 `localAgentId`，攻击者可拿账号里任意一个
+   * `remote_enabled=true` 的「跳板」Agent X 当 localAgentId，配合任意 sessionId
+   * 越权唤醒该会话真正归属、且已被用户关闭远程开关的 Agent Y——门禁形同虚设。
+   * 因此 append 分支必须额外查出该 sessionId 归属的会话，并要求
+   * `session.agentId === agent.id`（被追加会话必须归属被寻址的这个 Agent）：
+   * 由于 `agent` 已在上面校验过 `remoteEnabled === true`，相等即隐含「真正执行
+   * 的 agent 也是 remoteEnabled」，无需为 `session.agentId` 再查一次 Agent 表；
+   * 且比「只查 session.agentId 的 remoteEnabled、不比对身份」更严格——后者会
+   * 放行「用 remote_enabled 的 X 越权 append 进另一个同样 remote_enabled 的 Y
+   * 的会话」这种未寻址却被接受的串门，相等校验把这条路也堵死。会话查无（含
+   * append 一个不存在的 sessionId）同样归入拒绝路径，不放行也不崩。
    */
   @OnEvent(IM_RELAY_EVENTS.agentRunRequest)
   async onAgentRunRequest(evt: ImRelayAgentRunRequestEvent): Promise<void> {
@@ -135,6 +151,17 @@ export class RemoteRunInboundService {
             reason: "agent_not_remotable",
           });
           return;
+        }
+        if (mode === "append" && forwarded.sessionId) {
+          const owner = await this.sessions.findOrNull(forwarded.sessionId);
+          if (!owner || owner.agentId !== agent.id) {
+            this.relay.emitAgentRunEnd(cloudUserId, {
+              streamId,
+              requesterDeviceId,
+              reason: "agent_not_remotable",
+            });
+            return;
+          }
         }
         const sessionId =
           mode === "create"
