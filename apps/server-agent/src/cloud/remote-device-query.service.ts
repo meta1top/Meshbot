@@ -59,7 +59,9 @@ export class RemoteDeviceQueryService {
     try {
       this.relay.emitDeviceQuery(cloudUserId, {
         correlationId,
-        targetDeviceId,
+        // 协议字段名是 targetAgentId(T5 改名)；targetDeviceId 今天实际是设备 id
+        // （2c 前 web-agent 无按 Agent 寻址 UI，见 RemoteRunService 类注释）。
+        targetAgentId: targetDeviceId,
         kind,
         params,
       });

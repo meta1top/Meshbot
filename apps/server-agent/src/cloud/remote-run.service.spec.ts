@@ -41,7 +41,7 @@ describe("RemoteRunService", () => {
       expect(streamId.length).toBeGreaterThan(0);
       expect(relay.emitAgentRunStart).toHaveBeenCalledWith("u1", {
         streamId,
-        targetDeviceId: "dB",
+        targetAgentId: "dB",
         mode: "create",
         sessionId: undefined,
         content: "hello",
@@ -179,7 +179,7 @@ describe("RemoteRunService", () => {
       const { svc, relay } = make();
       const control = {
         streamId: "stream-1",
-        targetDeviceId: "dB",
+        targetAgentId: "dB",
         sessionId: "remote-sess-1",
         kind: "interrupt" as const,
       };

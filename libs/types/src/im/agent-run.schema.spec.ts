@@ -4,7 +4,7 @@ describe("AgentRunStartSchema", () => {
   it("create 模式可无 sessionId", () => {
     const r = AgentRunStartSchema.parse({
       streamId: "s1",
-      targetDeviceId: "dB",
+      targetAgentId: "dB",
       mode: "create",
       content: "hi",
     });
@@ -13,7 +13,7 @@ describe("AgentRunStartSchema", () => {
   it("append 模式带 sessionId", () => {
     const r = AgentRunStartSchema.parse({
       streamId: "s1",
-      targetDeviceId: "dB",
+      targetAgentId: "dB",
       mode: "append",
       sessionId: "sess1",
       content: "hi",
@@ -24,7 +24,7 @@ describe("AgentRunStartSchema", () => {
     expect(() =>
       AgentRunStartSchema.parse({
         streamId: "s1",
-        targetDeviceId: "dB",
+        targetAgentId: "dB",
         mode: "x",
         content: "hi",
       }),
@@ -35,7 +35,7 @@ describe("AgentRunControlSchema", () => {
   it("interrupt 控制帧", () => {
     const r = AgentRunControlSchema.parse({
       streamId: "s1",
-      targetDeviceId: "dB",
+      targetAgentId: "dB",
       sessionId: "sess1",
       kind: "interrupt",
     });
@@ -44,7 +44,7 @@ describe("AgentRunControlSchema", () => {
   it("confirm 带 toolCallId+decision", () => {
     const r = AgentRunControlSchema.parse({
       streamId: "s1",
-      targetDeviceId: "dB",
+      targetAgentId: "dB",
       sessionId: "sess1",
       kind: "confirm",
       toolCallId: "t1",

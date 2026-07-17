@@ -5,6 +5,7 @@ import {
   WsExceptionFilter,
 } from "@meshbot/common";
 import {
+  CloudAgentService,
   ConversationService,
   DEVICE_TOKEN_PREFIX,
   DevicePresenceService,
@@ -17,13 +18,16 @@ import {
   type OrgModelConfigChangedEvent,
 } from "@meshbot/main";
 import {
+  type AgentRunControlForwarded,
   type AgentRunControlInput,
   type AgentRunEnd,
   type AgentRunFrame,
+  type AgentRunStartForwarded,
   type AgentRunStartInput,
   IM_WS_EVENTS,
   IM_WS_NAMESPACE,
   type ConversationSummary,
+  type DeviceQueryForwarded,
   type DeviceQueryRequestInput,
   type DeviceQueryResponse,
   type ImConversationReadEvent,
@@ -85,28 +89,40 @@ export class ImGateway extends BaseWebSocketGateway {
 
   /**
    * L3 Phase A:agent.run.* 流的 streamId 路由表。
-   * agentRunStart 校验通过后登记 `{requester, targetDeviceId}`；
-   * agentRunControl 据此校验发起方身份(越权拒)并定向下发；agentRunEnd 清理。
+   * agentRunStart 校验通过后登记 `{requester, targetAgentId, targetDeviceId, localAgentId}`
+   * ——targetAgentId 是寻址目标(云端 Agent id)，targetDeviceId 是按 targetAgentId
+   * 查 CloudAgentService 解出的宿主设备 id(计划二 2b:寻址从设备细化到设备上的
+   * 某 Agent，但回流帧来自**设备**连接，只有 deviceId 可比对身份，故两者都存)；
+   * agentRunControl 据此校验发起方身份(越权拒)并定向下发(附 localAgentId 供
+   * B 侧确认帧路由)；agentRunEnd 清理。
    * 进程内 Map，server-main 多实例部署时需迁移到共享存储(当前 Phase A 范围外)。
    */
   private readonly agentRunRoutes = new Map<
     string,
-    { requester: RunRequester; targetDeviceId: string }
+    {
+      requester: RunRequester;
+      targetAgentId: string;
+      targetDeviceId: string;
+      localAgentId: string;
+    }
   >();
 
   /**
    * L2c device.query.* 的 correlationId 一次性路由表（安全修复）：
    * `handleDeviceQueryRequest` 转发成功（同账号 + 在线）才登记
-   * `{requester, targetDeviceId}`；`handleDeviceQueryResponse` 据此校验回流
-   * 发送方 = 登记的 targetDeviceId（否则任意已认证设备可伪造响应，
-   * 借 `"user:<socketId>"` 编码直发任意浏览器连接），通过后用**登记的**
-   * requester 路由（不再信任 body.requesterDeviceId）并删表项（一次性，
-   * 同 correlationId 第二次响应被丢弃）。与 agentRunRoutes 同源：进程内
-   * Map，server-main 多实例部署时需迁移到共享存储。
+   * `{requester, targetAgentId, targetDeviceId}`（targetDeviceId 是按
+   * targetAgentId 查 CloudAgentService 解出的宿主设备 id）；
+   * `handleDeviceQueryResponse` 据此校验回流发送方 = 登记的 targetDeviceId
+   * （回流帧来自**设备**连接，只有 deviceId 可比对身份，agentId 不是连接
+   * 层身份；否则任意已认证设备可伪造响应，借 `"user:<socketId>"` 编码直发
+   * 任意浏览器连接），通过后用**登记的** requester 路由（不再信任
+   * body.requesterDeviceId）并删表项（一次性，同 correlationId 第二次响应
+   * 被丢弃）。与 agentRunRoutes 同源：进程内 Map，server-main 多实例部署时
+   * 需迁移到共享存储。
    */
   private readonly queryRoutes = new Map<
     string,
-    { requester: RunRequester; targetDeviceId: string }
+    { requester: RunRequester; targetAgentId: string; targetDeviceId: string }
   >();
 
   constructor(
@@ -117,6 +133,7 @@ export class ImGateway extends BaseWebSocketGateway {
     private readonly userService: UserService,
     private readonly devices: DeviceService,
     private readonly devicePresence: DevicePresenceService,
+    private readonly agents: CloudAgentService,
   ) {
     super();
   }
@@ -180,13 +197,17 @@ export class ImGateway extends BaseWebSocketGateway {
   }
 
   /**
-   * 断连清理共用逻辑（`agentRunRoutes` / `queryRoutes` 同构）：
+   * 断连清理共用逻辑（`agentRunRoutes` / `queryRoutes` 同构，两表 value 形状不同
+   * ——agentRunRoutes 多 targetAgentId/localAgentId 字段——故用泛型约束到两表
+   * 共有的 `{requester, targetDeviceId}` 读取面）：
    * - device 分支：按 deviceId 键，双向清理（该连接作为发起方或目标涉及的路由项都删）。
    * - user 分支：浏览器用户连接无 deviceId，断线即毁，仅按 client.id(socket.id) 清理其
    *   作为发起方的路由（user 连接不会是 targetDeviceId，无需对称清理 target 侧）。
    */
-  private cleanupRoutes(
-    routes: Map<string, { requester: RunRequester; targetDeviceId: string }>,
+  private cleanupRoutes<
+    T extends { requester: RunRequester; targetDeviceId: string },
+  >(
+    routes: Map<string, T>,
     client: Socket,
     deviceId: string | undefined,
   ): void {
@@ -266,7 +287,7 @@ export class ImGateway extends BaseWebSocketGateway {
         client.join(`device:${deviceId}`);
         await this.devicePresence.setOnline(orgId, deviceId);
         this.server.to(`org:${orgId}`).emit(IM_WS_EVENTS.presence, {
-          userId: `agent:${deviceId}`,
+          userId: `device:${deviceId}`,
           online: true,
         } satisfies PresenceState);
       }
@@ -287,11 +308,11 @@ export class ImGateway extends BaseWebSocketGateway {
 
       // 向本连接下发当前在线【设备】快照：设备 presence 仅在连/断的瞬间广播边沿事件，
       // 后连接的设备会错过先在线设备的上线广播且拿不到快照 → 永远看不到对方在线。
-      // 补一次快照回放消除这个不对称（agent:<deviceId> 形态，与边沿事件一致）。
+      // 补一次快照回放消除这个不对称（device:<deviceId> 形态，与边沿事件一致）。
       const onlineDeviceIds = await this.devicePresence.listOnline(orgId);
       for (const onlineDeviceId of onlineDeviceIds) {
         client.emit(IM_WS_EVENTS.presence, {
-          userId: `agent:${onlineDeviceId}`,
+          userId: `device:${onlineDeviceId}`,
           online: true,
         } satisfies PresenceState);
       }
@@ -314,7 +335,7 @@ export class ImGateway extends BaseWebSocketGateway {
       if (deviceId && orgId) {
         await this.devicePresence.setOffline(orgId, deviceId);
         this.server.to(`org:${orgId}`).emit(IM_WS_EVENTS.presence, {
-          userId: `agent:${deviceId}`,
+          userId: `device:${deviceId}`,
           online: false,
         } satisfies PresenceState);
       }
@@ -427,39 +448,45 @@ export class ImGateway extends BaseWebSocketGateway {
         ok: false,
         reason,
       } satisfies DeviceQueryResponse);
-    const target = await this.devices.findById(body.targetDeviceId);
-    if (!target || target.userId !== requesterUserId) {
+    const agent = await this.agents.findActiveById(body.targetAgentId);
+    if (!agent || agent.userId !== requesterUserId) {
       reply("cross_account");
       return;
     }
     const online = await this.devicePresence.isOnline(
-      target.orgId ?? "",
-      target.id,
+      agent.orgId ?? "",
+      agent.deviceId,
     );
     if (!online) {
       reply("offline");
       return;
     }
     // 转发成功才登记一次性路由：handleDeviceQueryResponse 据此校验回流发送方
-    // 身份，不再信任 body 里可被任意已认证设备伪造的 requesterDeviceId。
+    // 身份（发送方是设备连接，只有 deviceId 可比对，故同时存 targetAgentId
+    // 寻址目标与它解出的 targetDeviceId），不再信任 body 里可被任意已认证
+    // 设备伪造的 requesterDeviceId。
     this.queryRoutes.set(body.correlationId, {
       requester,
-      targetDeviceId: target.id,
+      targetAgentId: agent.id,
+      targetDeviceId: agent.deviceId,
     });
     this.server
-      .to(`device:${target.id}`)
+      .to(`device:${agent.deviceId}`)
       .emit(IM_WS_EVENTS.deviceQueryRequest, {
         ...body,
         requesterDeviceId: this.encodeRequester(requester),
-      });
+        localAgentId: agent.localAgentId,
+      } satisfies DeviceQueryForwarded);
   }
 
   /**
    * L2c / L3 发起方泛化:目标设备回流 → 按 correlationId 查 `queryRoutes`
-   * 登记表，校验发送方确为登记的 targetDeviceId（安全修复：任意已认证设备
-   * 都能发 deviceQueryResponse，仅挂 WsAuthGuard 不够，必须比对发送方 =
-   * handleDeviceQueryRequest 转发时登记的目标设备，否则可伪造响应借
-   * `"user:<socketId>"` 编码直发任意浏览器连接）。
+   * 登记表，校验发送方确为登记的 targetDeviceId（登记时按 targetAgentId 查
+   * CloudAgentService 解出；回流帧来自**设备**连接，只有 deviceId 是连接层
+   * 身份，agentId 不是——故校验必须落到 deviceId，不能拿 targetAgentId 比对）。
+   * 安全修复：任意已认证设备都能发 deviceQueryResponse，仅挂 WsAuthGuard
+   * 不够，必须比对发送方 = handleDeviceQueryRequest 转发时登记的目标设备，
+   * 否则可伪造响应借 `"user:<socketId>"` 编码直发任意浏览器连接。
    * 无登记（未知/伪造 correlationId）或发送方非登记目标设备 → 静默丢弃。
    * 校验通过：删除路由项（一次性，同 correlationId 第二次响应被丢弃）后，
    * 用**登记的** requester 路由（不再信任 body.requesterDeviceId）。
@@ -498,11 +525,11 @@ export class ImGateway extends BaseWebSocketGateway {
   ): Promise<void> {
     const requesterUserId = (client.data.user as { userId?: string })?.userId;
     const requester = this.requesterOf(client);
-    const target = await this.devices.findById(body.targetDeviceId);
-    if (!target || target.userId !== requesterUserId) return; // 静默拒(A 侧超时兜底)
+    const agent = await this.agents.findActiveById(body.targetAgentId);
+    if (!agent || agent.userId !== requesterUserId) return; // 静默拒(A 侧超时兜底)
     const online = await this.devicePresence.isOnline(
-      target.orgId ?? "",
-      target.id,
+      agent.orgId ?? "",
+      agent.deviceId,
     );
     if (!online) {
       this.emitToRequester(requester, IM_WS_EVENTS.agentRunEnd, {
@@ -512,14 +539,22 @@ export class ImGateway extends BaseWebSocketGateway {
       } satisfies AgentRunEnd);
       return;
     }
+    // 登记同时存 targetAgentId(寻址目标)、targetDeviceId(解出的宿主设备,
+    // 回流帧校验/room 定向用) 与 localAgentId(附到 control 转发帧,免每次
+    // control 都重新查表)。
     this.agentRunRoutes.set(body.streamId, {
       requester,
-      targetDeviceId: target.id,
+      targetAgentId: agent.id,
+      targetDeviceId: agent.deviceId,
+      localAgentId: agent.localAgentId,
     });
-    this.server.to(`device:${target.id}`).emit(IM_WS_EVENTS.agentRunStart, {
-      ...body,
-      requesterDeviceId: this.encodeRequester(requester),
-    });
+    this.server
+      .to(`device:${agent.deviceId}`)
+      .emit(IM_WS_EVENTS.agentRunStart, {
+        ...body,
+        requesterDeviceId: this.encodeRequester(requester),
+        localAgentId: agent.localAgentId,
+      } satisfies AgentRunStartForwarded);
   }
 
   /**
@@ -563,7 +598,10 @@ export class ImGateway extends BaseWebSocketGateway {
   /**
    * L3 发起方泛化:A 侧运行中控制帧(confirm/answer/interrupt) → 按 streamId 查路由，
    * 发起方必须是登记该 streamId 的 requester(kind + id 全等)，否则视为越权/未知流静默拒绝；
-   * 通过后定向下发到登记的目标设备(附 requesterDeviceId)。
+   * 通过后定向下发到登记的目标设备(附 requesterDeviceId + localAgentId，
+   * localAgentId 取自 handleAgentRunStart 登记时解出的值，不必每条 control
+   * 帧都重新查 CloudAgentService——发起方身份已由 sameRequester 校验过，
+   * 复用登记值既省一次查表也不改变安全语义)。
    */
   @SubscribeMessage(IM_WS_EVENTS.agentRunControl)
   @UseGuards(WsAuthGuard)
@@ -579,7 +617,8 @@ export class ImGateway extends BaseWebSocketGateway {
       .emit(IM_WS_EVENTS.agentRunControl, {
         ...body,
         requesterDeviceId: this.encodeRequester(requester),
-      });
+        localAgentId: route.localAgentId,
+      } satisfies AgentRunControlForwarded);
   }
 
   /**

@@ -4,7 +4,7 @@ describe("AgentRunControlSchema", () => {
   it("answer kind 承载结构化 AnswerItem[](含 other)", () => {
     const parsed = AgentRunControlSchema.parse({
       streamId: "s1",
-      targetDeviceId: "d1",
+      targetAgentId: "d1",
       sessionId: "sess1",
       kind: "answer",
       toolCallId: "tc1",
@@ -20,7 +20,7 @@ describe("AgentRunControlSchema", () => {
     expect(() =>
       AgentRunControlSchema.parse({
         streamId: "s1",
-        targetDeviceId: "d1",
+        targetAgentId: "d1",
         sessionId: "sess1",
         kind: "answer",
         toolCallId: "tc1",

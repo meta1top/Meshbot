@@ -35,7 +35,7 @@ describe("RemoteDeviceController（confirm/answer/runs）", () => {
     } as never);
     expect(remoteRun.sendControl).toHaveBeenCalledWith("u1", {
       streamId: "st1",
-      targetDeviceId: "dB",
+      targetAgentId: "dB",
       sessionId: "sess1",
       kind: "confirm",
       toolCallId: "tc1",
@@ -55,7 +55,7 @@ describe("RemoteDeviceController（confirm/answer/runs）", () => {
     } as never);
     expect(remoteRun.sendControl).toHaveBeenCalledWith("u1", {
       streamId: "st1",
-      targetDeviceId: "dB",
+      targetAgentId: "dB",
       sessionId: "sess1",
       kind: "answer",
       toolCallId: "tc1",

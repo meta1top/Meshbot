@@ -79,7 +79,8 @@ export type DeviceQueryKind = z.infer<typeof DeviceQueryKindSchema>;
 /** A→云 的设备查询请求(上行,需服务端校验) */
 export const DeviceQueryRequestSchema = z.object({
   correlationId: z.string().min(1),
-  targetDeviceId: z.string().min(1),
+  /** 目标云端 Agent id(计划二 2b:寻址从设备细化到设备上的某 Agent)。 */
+  targetAgentId: z.string().min(1),
   kind: DeviceQueryKindSchema,
   params: z
     .object({
@@ -96,12 +97,15 @@ export const DeviceQueryRequestSchema = z.object({
 export type DeviceQueryRequestInput = z.infer<typeof DeviceQueryRequestSchema>;
 
 /**
- * 云网关转发给目标设备时附加发起方标识。
+ * 云网关转发给目标设备时附加发起方标识 + 目标设备上的本地 Agent id。
  * device 发起：deviceId 原值；浏览器 user 发起（L3 发起方泛化）：`"user:" + socketId`
  * （server-main 内部编码，B 端原样回填不解析）。
+ * localAgentId：网关按 targetAgentId 查云端 Agent 行解出的 `localAgentId`，
+ * B 侧据此定位本地哪个 Agent（不是 targetAgentId 本身——那是云端另发的 id）。
  */
 export interface DeviceQueryForwarded extends DeviceQueryRequestInput {
   requesterDeviceId: string;
+  localAgentId: string;
 }
 
 /**
@@ -119,7 +123,8 @@ export interface DeviceQueryResponse {
 /** L3:A→B 触发远程 run。create 由 B 新建会话并经首帧回报 sessionId;append 带 B 上会话 id。 */
 export const AgentRunStartSchema = z.object({
   streamId: z.string().min(1),
-  targetDeviceId: z.string().min(1),
+  /** 目标云端 Agent id(计划二 2b:寻址从设备细化到设备上的某 Agent)。 */
+  targetAgentId: z.string().min(1),
   mode: z.enum(["create", "append"]),
   sessionId: z.string().optional(),
   content: z.string(),
@@ -128,9 +133,12 @@ export type AgentRunStartInput = z.infer<typeof AgentRunStartSchema>;
 /**
  * requesterDeviceId：device 发起为 deviceId，浏览器 user 发起（L3 发起方泛化）
  * 为 `"user:" + socketId`（server-main 内部编码，B 端原样回填不解析）。
+ * localAgentId：网关按 targetAgentId 查云端 Agent 行解出的 `localAgentId`，
+ * B 侧据此建会话应归属哪个本地 Agent。
  */
 export interface AgentRunStartForwarded extends AgentRunStartInput {
   requesterDeviceId: string;
+  localAgentId: string;
 }
 
 /**
@@ -146,7 +154,8 @@ export type AgentRunAnswerItem = z.infer<typeof AgentRunAnswerItemSchema>;
 /** L3:A→B 运行中控制(confirm/answer/interrupt)。 */
 export const AgentRunControlSchema = z.object({
   streamId: z.string().min(1),
-  targetDeviceId: z.string().min(1),
+  /** 目标云端 Agent id(计划二 2b:寻址从设备细化到设备上的某 Agent)。 */
+  targetAgentId: z.string().min(1),
   sessionId: z.string().min(1),
   kind: z.enum(["confirm", "answer", "interrupt"]),
   toolCallId: z.string().optional(),
@@ -155,9 +164,13 @@ export const AgentRunControlSchema = z.object({
   answers: z.array(AgentRunAnswerItemSchema).optional(),
 });
 export type AgentRunControlInput = z.infer<typeof AgentRunControlSchema>;
-/** requesterDeviceId 同 AgentRunStartForwarded：device 为 deviceId，user 为 `"user:" + socketId`。 */
+/**
+ * requesterDeviceId 同 AgentRunStartForwarded：device 为 deviceId，user 为 `"user:" + socketId`。
+ * localAgentId 同 AgentRunStartForwarded：网关按 targetAgentId 解出的目标设备本地 Agent id。
+ */
 export interface AgentRunControlForwarded extends AgentRunControlInput {
   requesterDeviceId: string;
+  localAgentId: string;
 }
 
 /**

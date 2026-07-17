@@ -53,10 +53,19 @@ interface StreamEntry {
  * （`@OnEvent(REMOTE_SHADOW_FRAME_EVENT)`）解包后按 payload.sessionId 转发到
  * 对应 room——A 前端订阅该 sessionId 即像看本地 run 一样收到远程设备的流式输出。
  *
- * 并发守卫（Phase A 最简）：同一 (targetDeviceId, sessionId) 只允许一个活跃的
+ * 并发守卫（Phase A 最简）：同一 (targetAgentId, sessionId) 只允许一个活跃的
  * append 续写 run；重复发起直接拒绝（409），不做 B 侧按 streamId 的排队/挂起
  * （那是 Phase B 范围）。避免同 session 两套 B 侧监听器并行导致帧翻倍、
  * 第一条 run.done 提前退订两套监听器、第二条对 A 不可见。
+ *
+ * 命名说明（计划二 2b Task 5）：本文件的 `targetDeviceId` 形参/字段名保留不改
+ * ——它就地传给 `relay.emitAgentRunStart`/`emitAgentRunControl` 时按新协议
+ * 字段名回填 `targetAgentId`（见 `startRun` 内的对象字面量），但**调用方
+ * （`RemoteDeviceController`/`RemoteDeviceQueryService`）今天传进来的实际值
+ * 仍是设备 id**——web-agent 尚无「选择远程设备上的哪个 Agent」的 UI（2c 补），
+ * 只有整机级「选设备」。故这里如实保留 targetDeviceId 命名，不假装已经是
+ * agentId；只有并发守卫键 `sessionKey` 的形参名跟随协议改叫 targetAgentId
+ * （纯 Map key 用途，不影响语义）。
  */
 @Injectable()
 export class RemoteRunService implements OnModuleDestroy {
@@ -104,7 +113,9 @@ export class RemoteRunService implements OnModuleDestroy {
     try {
       this.relay.emitAgentRunStart(cloudUserId, {
         streamId,
-        targetDeviceId,
+        // 协议字段名是 targetAgentId(T5 改名)；调用方今天传入的实际值仍是
+        // deviceId(2c 前 web-agent 无按 Agent 寻址 UI)，见类注释。
+        targetAgentId: targetDeviceId,
         mode,
         sessionId: sessionId ?? undefined,
         content,
@@ -160,9 +171,9 @@ export class RemoteRunService implements OnModuleDestroy {
     }
   }
 
-  /** (targetDeviceId, sessionId) 并发守卫的 Map key。 */
-  private static sessionKey(targetDeviceId: string, sessionId: string): string {
-    return `${targetDeviceId}::${sessionId}`;
+  /** (targetAgentId, sessionId) 并发守卫的 Map key（协议改名对齐，见类注释）。 */
+  private static sessionKey(targetAgentId: string, sessionId: string): string {
+    return `${targetAgentId}::${sessionId}`;
   }
 
   /** 登记 streamId 长活订阅并启动 idle 超时定时器；append 模式立即占用并发守卫槽位。 */

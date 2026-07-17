@@ -138,7 +138,9 @@ export class RemoteDeviceController {
   ): Promise<{ ok: true }> {
     this.remoteRun.sendControl(this.account.getOrThrow(), {
       streamId: dto.streamId,
-      targetDeviceId: id,
+      // 协议字段名是 targetAgentId(T5 改名)；id 今天实际是设备 id
+      // （2c 前 web-agent 无按 Agent 寻址 UI，见 RemoteRunService 类注释）。
+      targetAgentId: id,
       sessionId: dto.sessionId,
       kind: "interrupt",
     });
@@ -154,7 +156,7 @@ export class RemoteDeviceController {
   ): { ok: true } {
     this.remoteRun.sendControl(this.account.getOrThrow(), {
       streamId: dto.streamId,
-      targetDeviceId: id,
+      targetAgentId: id,
       sessionId: dto.sessionId,
       kind: "confirm",
       toolCallId: dto.toolCallId,
@@ -170,7 +172,7 @@ export class RemoteDeviceController {
   answer(@Param("id") id: string, @Body() dto: RemoteAnswerDto): { ok: true } {
     this.remoteRun.sendControl(this.account.getOrThrow(), {
       streamId: dto.streamId,
-      targetDeviceId: id,
+      targetAgentId: id,
       sessionId: dto.sessionId,
       kind: "answer",
       toolCallId: dto.toolCallId,
