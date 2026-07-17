@@ -203,9 +203,13 @@ export function AssistantSidebar() {
     });
   };
 
-  // 远程 Agent（其他设备上已注册）：本机在前、远程在后（D2）。宿主离线的
-  // Agent 仍给占位子节点撑出 chevron，但 SessionTree 会把整行 pointer-events
-  // 关掉（online:false）——离线不可展开/不可发起（D3）。
+  // 远程 Agent（其他设备上已注册）：本机在前、远程在后（D2）。宿主离线时
+  // 不产出任何子节点（`children` 空数组 → `hasChildren` 假，NavItem 连 chevron
+  // 都不出）、且强制不展开——「禁止展开」从根上做到，不靠 URL 强开一个离线节点
+  // 再指望灰化把泄漏的占位子行盖住（Review Finding #1：URL 直达离线 Agent 时
+  // defaultOpen 曾经为真，占位子行渲染在 AgentRow 灰化包裹之外、未置灰可
+  // hover）。SessionTree 侧仍会把整行 pointer-events 关掉（online:false）+
+  // 显示「离线」徽标，用户能看到该 Agent 离线，只是展不开（D3）。
   const remoteAgentNodes: NavNode[] = (remoteAgents ?? []).map((ra) => {
     const { emoji, color } = parseAgentAvatar(ra.avatar);
     metaByKey.set(`${REMOTE_AGENT_PREFIX}${ra.id}`, {
@@ -218,14 +222,11 @@ export function AssistantSidebar() {
       deviceName: ra.deviceName,
       online: ra.deviceOnline,
     });
-    const children = ra.deviceOnline
-      ? buildRemoteChildren(ra.id)
-      : [{ key: `ph:${ra.id}:offline`, label: "" }];
     return {
       key: `${REMOTE_AGENT_PREFIX}${ra.id}`,
       label: ra.name,
-      defaultOpen: ra.id === urlRemoteAgent,
-      children,
+      defaultOpen: ra.deviceOnline && ra.id === urlRemoteAgent,
+      children: ra.deviceOnline ? buildRemoteChildren(ra.id) : [],
     };
   });
 

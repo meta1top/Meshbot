@@ -113,3 +113,149 @@ describe("SessionTree agent 节点", () => {
     expect(screen.getByText("会话A")).toBeInTheDocument();
   });
 });
+
+describe("SessionTree 远程 Agent 节点（review finding #2 补测）", () => {
+  it("远程 Agent 渲染宿主设备名副标题，且不出编辑铅笔（在线也不出）", () => {
+    const onEditAgent = jest.fn();
+    const groups = [
+      {
+        key: "agents",
+        items: [
+          {
+            key: "rag:1",
+            label: "远程助手",
+            children: [{ key: "r:1:s1", label: "会话A" }],
+          },
+        ],
+      },
+    ];
+    render(
+      <SessionTree
+        groups={groups}
+        nodeInfo={(node) =>
+          node.key === "rag:1"
+            ? {
+                kind: "agent",
+                emoji: "🤖",
+                color: "#f59e0b",
+                name: "远程助手",
+                running: false,
+                remote: true,
+                deviceName: "小明的电脑",
+                online: true,
+              }
+            : { kind: "session", title: "会话A" }
+        }
+        onEditAgent={onEditAgent}
+        labels={STUB_LABELS}
+      />,
+    );
+    expect(screen.getByText("小明的电脑")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: STUB_LABELS.editAgent }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("本机 Agent 对照：编辑铅笔正常出现（远程无、本机有）", () => {
+    const onEditAgent = jest.fn();
+    const groups = [
+      {
+        key: "agents",
+        items: [{ key: "ag:1", label: "本机助手", children: [] }],
+      },
+    ];
+    render(
+      <SessionTree
+        groups={groups}
+        nodeInfo={() => ({
+          kind: "agent",
+          emoji: "🛠",
+          color: "#3b82f6",
+          name: "本机助手",
+          running: false,
+        })}
+        onEditAgent={onEditAgent}
+        labels={STUB_LABELS}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: STUB_LABELS.editAgent }),
+    ).toBeInTheDocument();
+  });
+
+  it("宿主离线的远程 Agent 整行灰化 + 显示离线徽标，点击不展开子节点", async () => {
+    const groups = [
+      {
+        key: "agents",
+        items: [
+          {
+            key: "rag:2",
+            label: "离线远程助手",
+            // 即便节点带了子节点（防御性验证：灰化不依赖 children 是否为空），
+            // 离线整行也必须不可展开。
+            children: [{ key: "r:2:s1", label: "隐藏会话" }],
+          },
+        ],
+      },
+    ];
+    const { container } = render(
+      <SessionTree
+        groups={groups}
+        nodeInfo={(node) =>
+          node.key === "rag:2"
+            ? {
+                kind: "agent",
+                emoji: "🤖",
+                color: "#f59e0b",
+                name: "离线远程助手",
+                running: false,
+                remote: true,
+                deviceName: "小明的电脑",
+                online: false,
+              }
+            : { kind: "session", title: "隐藏会话" }
+        }
+        labels={STUB_LABELS}
+      />,
+    );
+    expect(screen.getByText("离线")).toBeInTheDocument();
+    const grayWrap = container.querySelector(".pointer-events-none.opacity-50");
+    expect(grayWrap).not.toBeNull();
+    expect(grayWrap).toHaveTextContent("离线远程助手");
+    await userEvent.click(screen.getByText("离线远程助手"));
+    expect(screen.queryByText("隐藏会话")).not.toBeInTheDocument();
+  });
+
+  it("在线远程 Agent 正常渲染，不灰化、无离线徽标", () => {
+    const groups = [
+      {
+        key: "agents",
+        items: [{ key: "rag:3", label: "在线远程助手", children: [] }],
+      },
+    ];
+    const { container } = render(
+      <SessionTree
+        groups={groups}
+        nodeInfo={(node) =>
+          node.key === "rag:3"
+            ? {
+                kind: "agent",
+                emoji: "🤖",
+                color: "#f59e0b",
+                name: "在线远程助手",
+                running: false,
+                remote: true,
+                deviceName: "小明的电脑",
+                online: true,
+              }
+            : undefined
+        }
+        labels={STUB_LABELS}
+      />,
+    );
+    expect(
+      container.querySelector(".pointer-events-none.opacity-50"),
+    ).toBeNull();
+    expect(screen.queryByText("离线")).not.toBeInTheDocument();
+  });
+});
