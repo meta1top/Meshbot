@@ -35,14 +35,14 @@ export class RemoteDeviceQueryService {
    * 发起对目标设备的只读查询；超时 / 离线 / 跨账号 → reject AppError。
    *
    * @param cloudUserId   发起账号
-   * @param targetDeviceId 目标设备 ID
+   * @param targetAgentId 目标云端 Agent ID
    * @param kind          查询种类：sessions（列会话）| history（取历史）
    * @param params        查询参数（按 kind 而定）
    * @param timeoutMs     超时毫秒数，默认 8000
    */
   async query(
     cloudUserId: string,
-    targetDeviceId: string,
+    targetAgentId: string,
     kind: DeviceQueryKind,
     params: DeviceQueryRequestInput["params"],
     timeoutMs = 8000,
@@ -59,9 +59,7 @@ export class RemoteDeviceQueryService {
     try {
       this.relay.emitDeviceQuery(cloudUserId, {
         correlationId,
-        // 协议字段名是 targetAgentId(T5 改名)；targetDeviceId 今天实际是设备 id
-        // （2c 前 web-agent 无按 Agent 寻址 UI，见 RemoteRunService 类注释）。
-        targetAgentId: targetDeviceId,
+        targetAgentId,
         kind,
         params,
       });

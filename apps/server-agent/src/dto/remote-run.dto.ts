@@ -2,13 +2,13 @@ import { createI18nZodDto } from "@meshbot/common";
 import { z } from "zod";
 
 /**
- * L3 远程 run HTTP DTO：本地定义（streamId/targetDeviceId 分别由服务端生成 /
+ * L3 远程 run HTTP DTO：本地定义（streamId/targetAgentId 分别由服务端生成 /
  * 路径参数提供，不在请求体里，无法直接复用 `@meshbot/types` 的
  * `AgentRunStartSchema`/`AgentRunControlSchema`——那两个是 relay 上行的完整
  * 线路层 schema）。
  */
 
-/** POST /remote-devices/:id/run 请求体：mode 决定目标设备新建 / 续写会话。 */
+/** POST /remote-agents/:agentId/run 请求体：mode 决定目标 Agent 新建 / 续写会话。 */
 export const RemoteRunSchema = z.object({
   mode: z.enum(["create", "append"]),
   sessionId: z.string().min(1).optional(),
@@ -20,7 +20,7 @@ export type RemoteRunInput = z.infer<typeof RemoteRunSchema>;
 export class RemoteRunDto extends createI18nZodDto(RemoteRunSchema) {}
 export interface RemoteRunDto extends RemoteRunInput {}
 
-/** POST /remote-devices/:id/run/interrupt 请求体：指定要中断的 streamId + B 侧会话 id。 */
+/** POST /remote-agents/:agentId/run/interrupt 请求体：指定要中断的 streamId + B 侧会话 id。 */
 export const RemoteInterruptSchema = z.object({
   streamId: z.string().min(1),
   sessionId: z.string().min(1),
@@ -33,7 +33,7 @@ export class RemoteInterruptDto extends createI18nZodDto(
 ) {}
 export interface RemoteInterruptDto extends RemoteInterruptInput {}
 
-/** POST /remote-devices/:id/run/confirm 请求体：提交工具确认（im_send / drive_share / drive_create_share）。 */
+/** POST /remote-agents/:agentId/run/confirm 请求体：提交工具确认（im_send / drive_share / drive_create_share）。 */
 export const RemoteConfirmSchema = z.object({
   streamId: z.string().min(1),
   sessionId: z.string().min(1),
@@ -57,7 +57,7 @@ export const RemoteAnswerItemSchema = z.object({
   other: z.string().optional(),
 });
 
-/** POST /remote-devices/:id/run/answer 请求体：提交 ask_question 回答。 */
+/** POST /remote-agents/:agentId/run/answer 请求体：提交 ask_question 回答。 */
 export const RemoteAnswerSchema = z.object({
   streamId: z.string().min(1),
   sessionId: z.string().min(1),
@@ -70,7 +70,7 @@ export type RemoteAnswerInput = z.infer<typeof RemoteAnswerSchema>;
 export class RemoteAnswerDto extends createI18nZodDto(RemoteAnswerSchema) {}
 export interface RemoteAnswerDto extends RemoteAnswerInput {}
 
-/** GET /remote-devices/:id/runs 查询参数：streamId 或 sessionId 至少其一。 */
+/** GET /remote-agents/:agentId/runs 查询参数：streamId 或 sessionId 至少其一。 */
 export const RemoteRunsQuerySchema = z
   .object({
     streamId: z.string().min(1).optional(),
@@ -87,7 +87,7 @@ export class RemoteRunsQueryDto extends createI18nZodDto(
 ) {}
 export interface RemoteRunsQueryDto extends RemoteRunsQueryInput {}
 
-/** PATCH /remote-devices/:id/sessions/:sessionId/model 请求体。 */
+/** PATCH /remote-agents/:agentId/sessions/:sessionId/model 请求体。 */
 export const RemotePatchSessionModelSchema = z.object({
   modelConfigId: z.string().min(1),
 });

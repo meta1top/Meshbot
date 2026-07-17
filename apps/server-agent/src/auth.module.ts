@@ -13,8 +13,8 @@ import { RemoteRunService } from "./cloud/remote-run.service";
 import { AuthController } from "./controllers/auth.controller";
 import { CloudOrgController } from "./controllers/cloud-org.controller";
 import { DriveController } from "./controllers/drive.controller";
+import { RemoteAgentSessionController } from "./controllers/remote-agent-session.controller";
 import { RemoteAgentsController } from "./controllers/remote-agents.controller";
-import { RemoteDeviceController } from "./controllers/remote-device.controller";
 import { CloudIdentity } from "./entities/cloud-identity.entity";
 import { CloudAuthService } from "./services/cloud-auth.service";
 import { CloudIdentityService } from "./services/cloud-identity.service";
@@ -39,8 +39,8 @@ import { JWT_SECRET, JwtStrategy } from "./strategies/jwt.strategy";
     AuthController,
     CloudOrgController,
     DriveController,
+    RemoteAgentSessionController,
     RemoteAgentsController,
-    RemoteDeviceController,
   ],
   providers: [
     CloudIdentityService,

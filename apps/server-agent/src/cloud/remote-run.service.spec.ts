@@ -77,7 +77,7 @@ describe("RemoteRunService", () => {
       expect(relay.emitAgentRunStart).not.toHaveBeenCalled();
     });
 
-    it("I3：不同 sessionId 或不同 targetDeviceId 不受占用影响，可正常发起", () => {
+    it("I3：不同 sessionId 或不同 targetAgentId 不受占用影响，可正常发起", () => {
       const { svc, relay } = make();
       svc.startRun("u1", "dB", "append", "remote-sess-1", "first");
       relay.emitAgentRunStart.mockClear();

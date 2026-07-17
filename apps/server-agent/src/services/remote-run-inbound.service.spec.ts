@@ -64,7 +64,7 @@ const fwd = (over: object) => ({
   cloudUserId: "u1",
   forwarded: {
     streamId: "stream-1",
-    targetDeviceId: "dB",
+    targetAgentId: "dB",
     requesterDeviceId: "dA",
     localAgentId: "agent-remote",
     mode: "create",

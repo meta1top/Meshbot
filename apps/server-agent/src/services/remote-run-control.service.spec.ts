@@ -21,7 +21,7 @@ const fwd = (over: object) => ({
   cloudUserId: "u1",
   forwarded: {
     streamId: "stream-1",
-    targetDeviceId: "dB",
+    targetAgentId: "dB",
     sessionId: "sess-1",
     requesterDeviceId: "dA",
     kind: "interrupt",
@@ -47,7 +47,7 @@ describe("RemoteRunControlService", () => {
         cloudUserId: "u1",
         forwarded: {
           streamId: "st1",
-          targetDeviceId: "d",
+          targetAgentId: "d",
           sessionId: "sess-1",
           requesterDeviceId: "dA",
           kind: "confirm",
@@ -71,7 +71,7 @@ describe("RemoteRunControlService", () => {
         cloudUserId: "u1",
         forwarded: {
           streamId: "st1",
-          targetDeviceId: "d",
+          targetAgentId: "d",
           sessionId: "sess-1",
           requesterDeviceId: "dA",
           kind: "answer",
@@ -94,7 +94,7 @@ describe("RemoteRunControlService", () => {
         cloudUserId: "u1",
         forwarded: {
           streamId: "st1",
-          targetDeviceId: "d",
+          targetAgentId: "d",
           sessionId: "sess-1",
           requesterDeviceId: "dA",
           kind: "confirm",
@@ -114,7 +114,7 @@ describe("RemoteRunControlService", () => {
           cloudUserId: "u1",
           forwarded: {
             streamId: "st1",
-            targetDeviceId: "d",
+            targetAgentId: "d",
             sessionId: "sess-1",
             requesterDeviceId: "dA",
             kind: "confirm",

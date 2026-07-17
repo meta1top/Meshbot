@@ -34,7 +34,7 @@ const fwd = (over: object) => ({
   forwarded: {
     correlationId: "c1",
     requesterDeviceId: "dA",
-    targetDeviceId: "dB",
+    targetAgentId: "dB",
     kind: "sessions",
     params: {},
     ...over,

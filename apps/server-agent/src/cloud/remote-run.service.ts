@@ -28,11 +28,11 @@ const IDLE_TIMEOUT_MS = 90_000;
 export type RemoteRunView = { streamId: string; sessionId: string | null };
 
 /**
- * 单条长活流订阅：目标设备 id（守卫 (device,session) 并发用）+ B 侧会话 id
+ * 单条长活流订阅：目标 agentId（守卫 (device,session) 并发用）+ B 侧会话 id
  * （create 模式首帧才知道）+ idle 超时定时器 + 是否收到过至少一帧运行帧。
  */
 interface StreamEntry {
-  targetDeviceId: string;
+  targetAgentId: string;
   sessionId: string | null;
   timer: NodeJS.Timeout;
   /**
@@ -86,19 +86,14 @@ function describePreflightRejection(reason: AgentRunEnd["reason"]): string {
  * （那是 Phase B 范围）。避免同 session 两套 B 侧监听器并行导致帧翻倍、
  * 第一条 run.done 提前退订两套监听器、第二条对 A 不可见。
  *
- * 命名说明（计划二 2b Task 5）：本文件的 `targetDeviceId` 形参/字段名保留不改
- * ——它就地传给 `relay.emitAgentRunStart`/`emitAgentRunControl` 时按新协议
- * 字段名回填 `targetAgentId`（见 `startRun` 内的对象字面量），但**调用方
- * （`RemoteDeviceController`/`RemoteDeviceQueryService`）今天传进来的实际值
- * 仍是设备 id**——web-agent 尚无「选择远程设备上的哪个 Agent」的 UI（2c 补），
- * 只有整机级「选设备」。故这里如实保留 targetDeviceId 命名，不假装已经是
- * agentId；只有并发守卫键 `sessionKey` 的形参名跟随协议改叫 targetAgentId
- * （纯 Map key 用途，不影响语义）。
+ * 命名（计划二 2c）：`targetAgentId` 形参/字段/守卫键的值即云端 agent.id，
+ * 就地传给 relay 的 `targetAgentId` 协议字段；调用方（RemoteAgentSessionController）
+ * 传入的路径参数 `:agentId` 已是云端 agentId，网关 `findActiveById` 据此寻址。
  */
 @Injectable()
 export class RemoteRunService implements OnModuleDestroy {
   private readonly streams = new Map<string, StreamEntry>();
-  /** (targetDeviceId, sessionId) → 占用该槽位的 streamId，append 并发守卫用。 */
+  /** (targetAgentId, sessionId) → 占用该槽位的 streamId，append 并发守卫用。 */
   private readonly activeSessionRuns = new Map<string, string>();
 
   constructor(
@@ -110,26 +105,26 @@ export class RemoteRunService implements OnModuleDestroy {
    * 发起对目标设备的远程 run：生成 streamId、登记长活订阅，经 relay 下发到
    * 目标设备（B）。
    *
-   * append 模式下若目标 (targetDeviceId, sessionId) 已有活跃 run（尚未收到
+   * append 模式下若目标 (targetAgentId, sessionId) 已有活跃 run（尚未收到
    * done/error/interrupted/offline 或 idle 超时）→ 抛 409，拒绝并发第二个远程
    * run；本地会话（不经本服务）不受影响。
    *
-   * @param cloudUserId    发起账号
-   * @param targetDeviceId 目标设备 ID
-   * @param mode           create：B 新建会话（sessionId 传 null，经首帧回报）；
-   *                       append：续写 B 上已存在的会话（sessionId 为该会话 id）
-   * @param sessionId      append 模式下 B 侧会话 id；create 模式传 null
-   * @param content        本轮用户输入
+   * @param cloudUserId   发起账号
+   * @param targetAgentId 目标云端 Agent ID
+   * @param mode          create：B 新建会话（sessionId 传 null，经首帧回报）；
+   *                      append：续写 B 上已存在的会话（sessionId 为该会话 id）
+   * @param sessionId     append 模式下 B 侧会话 id；create 模式传 null
+   * @param content       本轮用户输入
    */
   startRun(
     cloudUserId: string,
-    targetDeviceId: string,
+    targetAgentId: string,
     mode: "create" | "append",
     sessionId: string | null,
     content: string,
   ): { streamId: string } {
     if (mode === "append" && sessionId) {
-      const key = RemoteRunService.sessionKey(targetDeviceId, sessionId);
+      const key = RemoteRunService.sessionKey(targetAgentId, sessionId);
       if (this.activeSessionRuns.has(key)) {
         throw new ConflictException(
           `远程会话 ${sessionId} 已有进行中的 run，请等待完成后再发送`,
@@ -137,13 +132,11 @@ export class RemoteRunService implements OnModuleDestroy {
       }
     }
     const streamId = randomBytes(16).toString("hex");
-    this.register(streamId, targetDeviceId, sessionId);
+    this.register(streamId, targetAgentId, sessionId);
     try {
       this.relay.emitAgentRunStart(cloudUserId, {
         streamId,
-        // 协议字段名是 targetAgentId(T5 改名)；调用方今天传入的实际值仍是
-        // deviceId(2c 前 web-agent 无按 Agent 寻址 UI)，见类注释。
-        targetAgentId: targetDeviceId,
+        targetAgentId,
         mode,
         sessionId: sessionId ?? undefined,
         content,
@@ -173,7 +166,7 @@ export class RemoteRunService implements OnModuleDestroy {
       // create 模式：首帧起记住 B 的会话 id，并占用并发守卫槽位。
       entry.sessionId = frame.sessionId;
       this.activeSessionRuns.set(
-        RemoteRunService.sessionKey(entry.targetDeviceId, frame.sessionId),
+        RemoteRunService.sessionKey(entry.targetAgentId, frame.sessionId),
         frame.streamId,
       );
     }
@@ -235,18 +228,18 @@ export class RemoteRunService implements OnModuleDestroy {
   /** 登记 streamId 长活订阅并启动 idle 超时定时器；append 模式立即占用并发守卫槽位。 */
   private register(
     streamId: string,
-    targetDeviceId: string,
+    targetAgentId: string,
     sessionId: string | null,
   ): void {
     this.streams.set(streamId, {
-      targetDeviceId,
+      targetAgentId,
       sessionId,
       timer: this.scheduleIdleTimeout(streamId),
       frameReceived: false,
     });
     if (sessionId) {
       this.activeSessionRuns.set(
-        RemoteRunService.sessionKey(targetDeviceId, sessionId),
+        RemoteRunService.sessionKey(targetAgentId, sessionId),
         streamId,
       );
     }
@@ -302,7 +295,7 @@ export class RemoteRunService implements OnModuleDestroy {
     this.streams.delete(streamId);
     if (!entry?.sessionId) return;
     const key = RemoteRunService.sessionKey(
-      entry.targetDeviceId,
+      entry.targetAgentId,
       entry.sessionId,
     );
     if (this.activeSessionRuns.get(key) === streamId) {
@@ -320,16 +313,16 @@ export class RemoteRunService implements OnModuleDestroy {
   }
 
   /**
-   * 按 (targetDeviceId, sessionId) 反查活跃远程 run 的 streamId;未找到返 null。
+   * 按 (targetAgentId, sessionId) 反查活跃远程 run 的 streamId;未找到返 null。
    * 用于刷新/直接进入正在跑的远程会话时,前端补齐 streamId 以路由 confirm/interrupt。
    * @public-api Task 5 controller 消费此类型与下方 findRun* 查询方法。
    */
   findRunBySession(
-    targetDeviceId: string,
+    targetAgentId: string,
     sessionId: string,
   ): RemoteRunView | null {
     const streamId = this.activeSessionRuns.get(
-      RemoteRunService.sessionKey(targetDeviceId, sessionId),
+      RemoteRunService.sessionKey(targetAgentId, sessionId),
     );
     if (!streamId) return null;
     const entry = this.streams.get(streamId);
