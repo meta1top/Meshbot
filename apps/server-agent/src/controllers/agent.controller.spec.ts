@@ -9,6 +9,7 @@ import {
   type ThreadStateService,
 } from "@meshbot/lib-agent";
 import { NotFoundException } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { DataSource } from "typeorm";
 import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
 import { Agent } from "../entities/agent.entity";
@@ -51,6 +52,7 @@ describe("AgentController", () => {
   let agentService: AgentService;
   let sessionService: SessionService;
   let mcp: { teardownAgent: jest.Mock };
+  let emitter: { emit: jest.Mock };
   let controller: AgentController;
 
   beforeEach(async () => {
@@ -123,12 +125,14 @@ describe("AgentController", () => {
       sessionService,
     );
     mcp = { teardownAgent: jest.fn().mockResolvedValue(undefined) };
+    emitter = { emit: jest.fn() };
     controller = new AgentController(
       agentService,
       agentCtx,
       config,
       mcp as unknown as McpService,
       account,
+      emitter as unknown as EventEmitter2,
     );
   });
 
@@ -265,6 +269,52 @@ describe("AgentController", () => {
       await expect(controller.getMcp("ghost")).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe("AGENT_EVENTS.changed：CRUD 成功后触发本地事件（驱动云端推送对账）", () => {
+    it("create 成功后 emit agent.changed（携带当前账号）", async () => {
+      await run(async () => {
+        emitter.emit.mockClear();
+        await controller.create(fixture("新 Agent") as never);
+        expect(emitter.emit).toHaveBeenCalledWith("agent.changed", {
+          cloudUserId: DEFAULT_USER,
+        });
+      });
+    });
+
+    it("update 成功后 emit agent.changed", async () => {
+      await run(async () => {
+        const created = await controller.create(fixture("待改") as never);
+        emitter.emit.mockClear();
+        await controller.update(created.id, { name: "改名" } as never);
+        expect(emitter.emit).toHaveBeenCalledWith("agent.changed", {
+          cloudUserId: DEFAULT_USER,
+        });
+      });
+    });
+
+    it("remove 成功后 emit agent.changed", async () => {
+      await run(async () => {
+        await agentService.ensureDefault(); // 保证不是最后一个
+        const agent = await controller.create(fixture("待删") as never);
+        emitter.emit.mockClear();
+        await controller.remove(agent.id);
+        expect(emitter.emit).toHaveBeenCalledWith("agent.changed", {
+          cloudUserId: DEFAULT_USER,
+        });
+      });
+    });
+
+    it("duplicate 成功后 emit agent.changed", async () => {
+      await run(async () => {
+        const src = await controller.create(fixture("源") as never);
+        emitter.emit.mockClear();
+        await controller.duplicate(src.id);
+        expect(emitter.emit).toHaveBeenCalledWith("agent.changed", {
+          cloudUserId: DEFAULT_USER,
+        });
+      });
     });
   });
 });

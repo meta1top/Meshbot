@@ -1,4 +1,5 @@
 export * from "./agent";
+export * from "./agent.events";
 export * from "./ai";
 export * from "./ask-question";
 export {

@@ -2,6 +2,7 @@ import { AgentModule } from "@meshbot/lib-agent";
 import { TxTypeOrmModule } from "@meshbot/common";
 import { Module, forwardRef } from "@nestjs/common";
 import { AgentsModule } from "./agents.module";
+import { AgentCloudSyncService } from "./services/agent-cloud-sync.service";
 import { CheckpointerCleanupService } from "./services/checkpointer-cleanup.service";
 import { ContextCompactor } from "./services/context-compactor.service";
 import { SessionController } from "./controllers/session.controller";
@@ -40,6 +41,10 @@ import { SessionGateway } from "./ws/session.gateway";
  * `ImRelayClientService`；均不导出，仅作为 `@OnEvent` 监听器存在，无其他消费方。
  * `RemoteRunRegistryService`（B 侧 streamId→sessionId 进程内注册表，Phase B
  * M3 校验真源）与两者同列，仅供模块内注入，同样不导出。
+ * `AgentCloudSyncService`（计划二 2b · T3，`ModelConfigSyncService` 的反向：
+ * 本地 remote_enabled Agent 变更 → 全量推云端对账）需要本模块 import 的
+ * `AgentsModule`（`AgentService.list()`）与 `AuthModule`（`CloudClientService`/
+ * `CloudIdentityService`），与 `ModelConfigSyncService` 同列，同样不导出。
  */
 @Module({
   imports: [
@@ -56,6 +61,7 @@ import { SessionGateway } from "./ws/session.gateway";
   ],
   controllers: [SessionController, StatsController, SuggestionController],
   providers: [
+    AgentCloudSyncService,
     CheckpointerCleanupService,
     ContextCompactor,
     SessionService,

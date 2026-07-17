@@ -6,7 +6,7 @@ import {
   McpService,
   MeshbotConfigService,
 } from "@meshbot/lib-agent";
-import type { AgentView } from "@meshbot/types-agent";
+import { AGENT_EVENTS, type AgentView } from "@meshbot/types-agent";
 import {
   BadRequestException,
   Body,
@@ -19,6 +19,7 @@ import {
   Put,
 } from "@nestjs/common";
 import { ApiBody, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import {
   AgentCreateDto,
   AgentUpdateDto,
@@ -58,11 +59,19 @@ export class AgentController {
     private readonly config: MeshbotConfigService,
     private readonly mcp: McpService,
     private readonly account: AccountContextService,
+    private readonly emitter: EventEmitter2,
   ) {}
 
   /** 当前账号 —— REST 请求已由鉴权拦截器压过账号上下文，这里直接取即可。 */
   private currentAccount(): string {
     return this.account.getOrThrow();
+  }
+
+  /** Agent CRUD 成功后发本地事件，驱动 AgentCloudSyncService 全量推送云端对账。 */
+  private emitChanged(): void {
+    this.emitter.emit(AGENT_EVENTS.changed, {
+      cloudUserId: this.currentAccount(),
+    });
   }
 
   @Get()
@@ -82,7 +91,9 @@ export class AgentController {
   @ApiBody({ type: AgentCreateDto })
   @ApiOkResponse({ description: "创建成功", type: AgentViewDto })
   async create(@Body() body: AgentCreateDto): Promise<AgentView> {
-    return toAgentView(await this.agents.create(body));
+    const created = await this.agents.create(body);
+    this.emitChanged();
+    return toAgentView(created);
   }
 
   @Patch(":id")
@@ -93,7 +104,9 @@ export class AgentController {
     @Param("id") id: string,
     @Body() body: AgentUpdateDto,
   ): Promise<AgentView> {
-    return toAgentView(await this.agents.update(id, body));
+    const updated = await this.agents.update(id, body);
+    this.emitChanged();
+    return toAgentView(updated);
   }
 
   @Delete(":id")
@@ -104,6 +117,7 @@ export class AgentController {
   async remove(@Param("id") id: string): Promise<void> {
     await this.agents.removeWithData(id);
     await this.mcp.teardownAgent(this.currentAccount(), id);
+    this.emitChanged();
   }
 
   @Post(":id/duplicate")
@@ -112,7 +126,9 @@ export class AgentController {
   })
   @ApiOkResponse({ description: "复制成功，返回新 Agent", type: AgentViewDto })
   async duplicate(@Param("id") id: string): Promise<AgentView> {
-    return toAgentView(await this.agents.duplicate(id));
+    const copy = await this.agents.duplicate(id);
+    this.emitChanged();
+    return toAgentView(copy);
   }
 
   @Get(":id/mcp")
