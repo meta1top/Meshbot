@@ -45,6 +45,7 @@ import { CheckpointerCleanupService } from "../../src/services/checkpointer-clea
 import { ConfirmationService } from "../../src/services/confirmation.service";
 import { ContextCompactor } from "../../src/services/context-compactor.service";
 import { LlmCallService } from "../../src/services/llm-call.service";
+import { CloudModelConfigProxyService } from "../../src/services/cloud-model-config-proxy.service";
 import { ModelConfigService } from "../../src/services/model-config.service";
 import { RunnerService } from "../../src/services/runner.service";
 import { SessionMessageService } from "../../src/services/session-message.service";
@@ -203,6 +204,12 @@ describe("Session e2e", () => {
         ConfirmationService,
         ContextCompactor,
         ModelConfigService,
+        // 本 e2e 只测会话 CRUD，不测云端模型配置代理；桩返回空列表即可满足
+        // ModelConfigService 构造依赖（合并读退化为「只有本地」，D1 语义）。
+        {
+          provide: CloudModelConfigProxyService,
+          useValue: { getCloudConfigs: async () => [] },
+        },
         JwtStrategy,
         // 鉴权 + 账号上下文注入：对齐 main.ts 的全局守卫/拦截器装配
         { provide: APP_GUARD, useClass: JwtAuthGuard },

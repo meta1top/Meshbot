@@ -5,6 +5,7 @@ import { Repository } from "typeorm";
 import { ScopedRepository } from "../account/scoped-repository";
 import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
 import { ModelConfig } from "../entities/model-config.entity";
+import { CloudModelConfigProxyService } from "./cloud-model-config-proxy.service";
 
 /** ModelConfig.contextWindow 的兜底值（entity 列默认值），行映射未给出时使用。 */
 const DEFAULT_CONTEXT_WINDOW = 128_000;
@@ -51,14 +52,23 @@ export class ModelConfigService {
     @InjectRepository(ModelConfig)
     rawRepo: Repository<ModelConfig>,
     scopedFactory: ScopedRepositoryFactory,
+    private readonly proxy: CloudModelConfigProxyService,
   ) {
     this.repo = scopedFactory.create(rawRepo);
     this.txAnchorRepo = rawRepo;
   }
 
-  /** 列出当前账号所有已启用的 ModelConfig。 */
-  findAllEnabled(): Promise<ModelConfig[]> {
-    return this.repo.find({ where: { enabled: true } });
+  /** 列出当前账号所有 ModelConfig（本地 local 行 + 云端代理行，按 id 去重、本地优先）。 */
+  async findAll(): Promise<ModelConfig[]> {
+    const local = await this.repo.find({ where: { source: "local" } });
+    const cloud = await this.proxy.getCloudConfigs();
+    return this.mergeById(local, cloud);
+  }
+
+  /** 列出当前账号所有已启用的 ModelConfig（合并后按 enabled 过滤）。 */
+  async findAllEnabled(): Promise<ModelConfig[]> {
+    const all = await this.findAll();
+    return all.filter((c) => c.enabled);
   }
 
   /** 取第一条已启用的 ModelConfig；无则返 null。供 ContextCompactor 使用。 */
@@ -67,25 +77,22 @@ export class ModelConfigService {
     return rows[0] ?? null;
   }
 
-  /** 列出当前账号所有 ModelConfig。 */
-  findAll(): Promise<ModelConfig[]> {
-    return this.repo.find();
-  }
-
   /**
-   * 按 id 查单条；不存在或不属于当前账号则抛 NotFoundException。
-   * 作用域查询保证他账号的 id 对当前账号不可见。
+   * 按 id 查单条：本地 local 行优先，未命中查云端代理；都无则抛 NotFoundException。
+   * 云端不可达时代理返回空列表 → 相当于云端未命中。
    */
   async findOneOrFail(id: string): Promise<ModelConfig> {
-    const entity = await this.repo.findOneBy({ id });
-    if (!entity) throw new NotFoundException(`ModelConfig ${id} not found`);
-    return entity;
+    const local = await this.repo.findOneBy({ id, source: "local" });
+    if (local) return local;
+    const cloud = await this.proxy.getCloudConfigs();
+    const found = cloud.find((c) => c.id === id);
+    if (!found) throw new NotFoundException(`ModelConfig ${id} not found`);
+    return found;
   }
 
-  /** 判断当前账号是否有已启用的 ModelConfig。 */
+  /** 判断当前账号是否有已启用的 ModelConfig（本地或云端任一有 enabled）。 */
   async hasEnabledModels(): Promise<boolean> {
-    const count = await this.repo.count({ where: { enabled: true } });
-    return count > 0;
+    return (await this.findAllEnabled()).length > 0;
   }
 
   /**
@@ -121,10 +128,28 @@ export class ModelConfigService {
     }
   }
 
-  /** 按 id 优先、name 次之查模型配置（dispatch model 覆盖用；含未启用）。查不到返回 null。 */
+  /**
+   * 按 id 优先、name 次之查模型配置（dispatch model 覆盖 / runner 解析用；含未启用）。
+   * 本地 local 行优先（id→name），未命中查云端代理（id→name）；都无返回 null。
+   */
   async findByIdOrName(idOrName: string): Promise<ModelConfig | null> {
-    const byId = await this.repo.findOneBy({ id: idOrName });
-    if (byId) return byId;
-    return this.repo.findOneBy({ name: idOrName });
+    const localById = await this.repo.findOneBy({
+      id: idOrName,
+      source: "local",
+    });
+    if (localById) return localById;
+    const localByName = await this.repo.findOneBy({
+      name: idOrName,
+      source: "local",
+    });
+    if (localByName) return localByName;
+    const cloud = await this.proxy.getCloudConfigs();
+    return cloud.find((c) => c.id === idOrName || c.name === idOrName) ?? null;
+  }
+
+  /** 按 id 去重合并两组配置，本地行覆盖同 id 云端行（本地优先）。 */
+  private mergeById(local: ModelConfig[], cloud: ModelConfig[]): ModelConfig[] {
+    const seen = new Set(local.map((c) => c.id));
+    return [...local, ...cloud.filter((c) => !seen.has(c.id))];
   }
 }

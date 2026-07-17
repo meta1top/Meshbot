@@ -88,6 +88,8 @@ describe("ModelConfigService", () => {
   /** 自动包 DEFAULT_USER 账号上下文的 service 代理，供既有单测复用。 */
   let service: ModelConfigService;
 
+  let proxyGet: jest.Mock;
+
   beforeEach(async () => {
     ds = new DataSource({
       type: "better-sqlite3",
@@ -98,9 +100,11 @@ describe("ModelConfigService", () => {
     await ds.initialize();
     ctx = new AccountContextService();
     const scopedFactory = new ScopedRepositoryFactory(ctx);
+    proxyGet = jest.fn().mockResolvedValue([]);
     rawService = new ModelConfigService(
       ds.getRepository(ModelConfig),
       scopedFactory,
+      { getCloudConfigs: proxyGet } as never,
     );
     service = wrapInAccount(rawService, ctx, DEFAULT_USER);
   });
@@ -159,6 +163,112 @@ describe("ModelConfigService", () => {
   it("hasEnabledModels 无配置返 false，有启用配置返 true", async () => {
     expect(await service.hasEnabledModels()).toBe(false);
     await seedModelConfig(ds, { cloudUserId: DEFAULT_USER, name: "GPT-4o" });
+    expect(await service.hasEnabledModels()).toBe(true);
+  });
+
+  /** 造一条内存态云端坐标行（source='cloud'，proxy 返回形状）。 */
+  function cloudRow(overrides: Partial<ModelConfig> = {}): ModelConfig {
+    const id = overrides.id ?? "cloud-1";
+    return {
+      id,
+      cloudUserId: DEFAULT_USER,
+      providerType: "openai-compatible",
+      name: "Cloud GPT-4o",
+      model: id,
+      apiKey: "__cloud__",
+      baseUrl: "http://cloud.test/api/v1",
+      enabled: true,
+      contextWindow: 128_000,
+      source: "cloud",
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+      ...overrides,
+    } as ModelConfig;
+  }
+
+  it("findAll 合并本地 local 行 + 云端代理行", async () => {
+    await seedModelConfig(ds, { cloudUserId: DEFAULT_USER, name: "Local A" });
+    proxyGet.mockResolvedValue([cloudRow({ id: "cloud-1", name: "Cloud A" })]);
+
+    const all = await service.findAll();
+    expect(all).toHaveLength(2);
+    expect(all.map((c) => c.source).sort()).toEqual(["cloud", "local"]);
+  });
+
+  it("findAll 只取本地 source='local'（存量 cloud 行被排除，只由代理提供云端）", async () => {
+    await seedModelConfig(ds, {
+      cloudUserId: DEFAULT_USER,
+      name: "Stale Cloud",
+      source: "cloud",
+    });
+    proxyGet.mockResolvedValue([]);
+
+    const all = await service.findAll();
+    expect(all).toHaveLength(0);
+  });
+
+  it("findAll 按 id 去重、本地优先", async () => {
+    const local = await seedModelConfig(ds, {
+      cloudUserId: DEFAULT_USER,
+      name: "Local Wins",
+    });
+    proxyGet.mockResolvedValue([cloudRow({ id: local.id, name: "Cloud Dup" })]);
+
+    const all = await service.findAll();
+    expect(all).toHaveLength(1);
+    expect(all[0].name).toBe("Local Wins");
+    expect(all[0].source).toBe("local");
+  });
+
+  it("findAllEnabled 合并后按 enabled 过滤", async () => {
+    await seedModelConfig(ds, {
+      cloudUserId: DEFAULT_USER,
+      name: "Local Off",
+      enabled: false,
+    });
+    proxyGet.mockResolvedValue([
+      cloudRow({ id: "c1", name: "Cloud On", enabled: true }),
+      cloudRow({ id: "c2", name: "Cloud Off", enabled: false }),
+    ]);
+
+    const enabled = await service.findAllEnabled();
+    expect(enabled.map((c) => c.name)).toEqual(["Cloud On"]);
+  });
+
+  it("findByIdOrName 本地优先命中，不打云端", async () => {
+    const local = await seedModelConfig(ds, {
+      cloudUserId: DEFAULT_USER,
+      name: "Local X",
+    });
+    const found = await service.findByIdOrName(local.id);
+    expect(found?.id).toBe(local.id);
+    expect(proxyGet).not.toHaveBeenCalled();
+  });
+
+  it("findByIdOrName 本地未命中 → 云端代理兜底", async () => {
+    proxyGet.mockResolvedValue([cloudRow({ id: "cloud-9", name: "Cloud Y" })]);
+    const found = await service.findByIdOrName("cloud-9");
+    expect(found?.name).toBe("Cloud Y");
+    expect(found?.source).toBe("cloud");
+  });
+
+  it("findByIdOrName 本地与云端都未命中 → null（云端不可达即空列表，不抛）", async () => {
+    proxyGet.mockResolvedValue([]);
+    const found = await service.findByIdOrName("ghost");
+    expect(found).toBeNull();
+  });
+
+  it("findOneOrFail 云端 id 命中返回云端行；都无则抛 NotFound", async () => {
+    proxyGet.mockResolvedValue([cloudRow({ id: "cloud-7" })]);
+    const found = await service.findOneOrFail("cloud-7");
+    expect(found.source).toBe("cloud");
+    await expect(service.findOneOrFail("nope")).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
+  it("hasEnabledModels 仅云端有 enabled 时也放行", async () => {
+    proxyGet.mockResolvedValue([cloudRow({ id: "c1", enabled: true })]);
     expect(await service.hasEnabledModels()).toBe(true);
   });
 
@@ -227,6 +337,13 @@ describe("ModelConfigService", () => {
   });
 
   describe("replaceCloudConfigs（云端模型配置整体替换）", () => {
+    // 本任务起 findAll() 只读本地 source='local' 行（合并视图，见上方合并用例）；
+    // replaceCloudConfigs 写入的 source='cloud' 存量行不再经 findAll() 可见
+    // （T3 才会移除该写入路径）。这里直接查裸仓库验证写入本身，不借道 findAll()。
+    async function findAllRaw(cloudUserId: string): Promise<ModelConfig[]> {
+      return ds.getRepository(ModelConfig).find({ where: { cloudUserId } });
+    }
+
     it("存量 source='local' 行不受影响，新 cloud 行落库", async () => {
       await seedModelConfig(ds, {
         cloudUserId: "u1",
@@ -238,7 +355,7 @@ describe("ModelConfigService", () => {
         rawService.replaceCloudConfigs([cloudConfigRow({ name: "Cloud A" })]),
       );
 
-      const all = await ctx.run("u1", () => rawService.findAll());
+      const all = await findAllRaw("u1");
       expect(all).toHaveLength(2);
       const local = all.find((r) => r.source === "local");
       const cloud = all.find((r) => r.source === "cloud");
@@ -260,9 +377,9 @@ describe("ModelConfigService", () => {
         ]),
       );
 
-      const cloudRows = (
-        await ctx.run("u1", () => rawService.findAll())
-      ).filter((r) => r.source === "cloud");
+      const cloudRows = (await findAllRaw("u1")).filter(
+        (r) => r.source === "cloud",
+      );
       expect(cloudRows).toHaveLength(2);
       expect(cloudRows.map((r) => r.name).sort()).toEqual([
         "New Cloud 1",
@@ -282,7 +399,7 @@ describe("ModelConfigService", () => {
         rawService.replaceCloudConfigs([cloudConfigRow({ name: "U1 Cloud" })]),
       );
 
-      const u2All = await ctx.run("u2", () => rawService.findAll());
+      const u2All = await findAllRaw("u2");
       expect(u2All).toHaveLength(1);
       expect(u2All[0].name).toBe("U2 Cloud");
     });
@@ -298,7 +415,7 @@ describe("ModelConfigService", () => {
         ]),
       );
 
-      const [row] = await ctx.run("u1", () => rawService.findAll());
+      const [row] = await findAllRaw("u1");
       expect(row).toMatchObject({
         providerType: "openai-compatible",
         baseUrl: expect.stringMatching(/\/api\/v1$/),
@@ -315,7 +432,7 @@ describe("ModelConfigService", () => {
         ]),
       );
 
-      const [row] = await ctx.run("u1", () => rawService.findAll());
+      const [row] = await findAllRaw("u1");
       expect(row.contextWindow).toBe(128_000);
     });
   });
