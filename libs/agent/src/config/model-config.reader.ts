@@ -1,11 +1,11 @@
 import Database from "better-sqlite3";
 
 /**
- * 云端网关代理 apiKey 占位符——真实厂商 key 只在云端持有，本地 agent.db
- * 的 `source='cloud'` 行 `api_key` 列固定写这个值（见 server-agent 的
- * `ModelConfigSyncService`）；真实 device token 在请求时由
- * `llm.factory.ts` 的 `buildCloudFetch` 动态注入，不落地本地库。
- * 定义在 libs/agent（而非 server-agent）以便 write（同步服务）与
+ * 云端网关代理 apiKey 占位符——真实厂商 key 只在云端持有，云端模型配置的
+ * 内存态坐标行 `api_key` 字段固定写这个值（见 server-agent 的
+ * `CloudModelConfigProxyService`，读时实时代理、不落库）；真实 device token
+ * 在请求时由 `llm.factory.ts` 的 `buildCloudFetch` 动态注入，不落地本地库。
+ * 定义在 libs/agent（而非 server-agent）以便 write（代理服务）与
  * read（这里 + createChatModel 云模型判定）两侧共用同一常量，避免漂移。
  */
 export const CLOUD_GATEWAY_API_KEY_PLACEHOLDER = "__cloud__";

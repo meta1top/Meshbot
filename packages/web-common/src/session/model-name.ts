@@ -22,7 +22,7 @@ export interface ModelConfigLike {
  * usage.model / session.modelConfigId → 模型友好名。
  *
  * 云网关下发行的 `model` 列存的是云端配置 id（数字串，见 server-agent
- * ModelConfigSyncService.toGatewayRow），llm_calls/usage 事件记录的也是它——
+ * CloudModelConfigProxyService.toGatewayRow），llm_calls/usage 事件记录的也是它——
  * 直接显示是一串雪花数字。这里按两跳解析：
  * 1. usage.model 命中某配置行的 `model` 列（云网关行）→ 用该行 name；
  * 2. 命中某配置行的 `id`（本地 modelConfigId 引用）→ 用该行 name；

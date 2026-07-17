@@ -3,7 +3,6 @@ import { AccountContextService } from "@meshbot/lib-agent";
 import { DataSource } from "typeorm";
 import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
 import { ModelConfig } from "../entities/model-config.entity";
-import type { CloudModelConfigRow } from "./model-config.service";
 import { ModelConfigService } from "./model-config.service";
 
 /** 默认测试账号：作用域仓库要求每次调用都处于账号上下文内。 */
@@ -58,26 +57,6 @@ async function seedModelConfig(
     source: overrides.source ?? "local",
   });
   return repo.save(entity);
-}
-
-/** 造一条网关坐标行样例（sync service 已完成 AgentModelConfig → 网关行映射）。 */
-function cloudConfigRow(
-  overrides: Partial<CloudModelConfigRow> = {},
-): CloudModelConfigRow {
-  // id 与 model 同源（真实实现即本地行 id=云端配置 id），跟随 overrides.model
-  // 变化——否则多行 fixture 同 id 主键互覆，replaceCloudConfigs 断言只剩一行。
-  const model = overrides.model ?? "cloud-cfg-1";
-  return {
-    id: model,
-    providerType: "openai-compatible",
-    name: "Cloud GPT-4o",
-    model,
-    apiKey: "__cloud__",
-    baseUrl: "http://127.0.0.1:3200/api/v1",
-    contextWindow: 128_000,
-    enabled: true,
-    ...overrides,
-  };
 }
 
 describe("ModelConfigService", () => {
@@ -333,107 +312,6 @@ describe("ModelConfigService", () => {
 
       const u2All = await ctx.run("u2", () => rawService.findAll());
       expect(u2All.map((r) => r.name)).toEqual(["Seeded-B"]);
-    });
-  });
-
-  describe("replaceCloudConfigs（云端模型配置整体替换）", () => {
-    // 本任务起 findAll() 只读本地 source='local' 行（合并视图，见上方合并用例）；
-    // replaceCloudConfigs 写入的 source='cloud' 存量行不再经 findAll() 可见
-    // （T3 才会移除该写入路径）。这里直接查裸仓库验证写入本身，不借道 findAll()。
-    async function findAllRaw(cloudUserId: string): Promise<ModelConfig[]> {
-      return ds.getRepository(ModelConfig).find({ where: { cloudUserId } });
-    }
-
-    it("存量 source='local' 行不受影响，新 cloud 行落库", async () => {
-      await seedModelConfig(ds, {
-        cloudUserId: "u1",
-        name: "Local Kept",
-        source: "local",
-      });
-
-      await ctx.run("u1", () =>
-        rawService.replaceCloudConfigs([cloudConfigRow({ name: "Cloud A" })]),
-      );
-
-      const all = await findAllRaw("u1");
-      expect(all).toHaveLength(2);
-      const local = all.find((r) => r.source === "local");
-      const cloud = all.find((r) => r.source === "cloud");
-      expect(local?.name).toBe("Local Kept");
-      expect(cloud?.name).toBe("Cloud A");
-    });
-
-    it("旧 cloud 行被整体替换为新一批配置（不是增量合并）", async () => {
-      await seedModelConfig(ds, {
-        cloudUserId: "u1",
-        name: "Old Cloud",
-        source: "cloud",
-      });
-
-      await ctx.run("u1", () =>
-        rawService.replaceCloudConfigs([
-          cloudConfigRow({ model: "cfg-1", name: "New Cloud 1" }),
-          cloudConfigRow({ model: "cfg-2", name: "New Cloud 2" }),
-        ]),
-      );
-
-      const cloudRows = (await findAllRaw("u1")).filter(
-        (r) => r.source === "cloud",
-      );
-      expect(cloudRows).toHaveLength(2);
-      expect(cloudRows.map((r) => r.name).sort()).toEqual([
-        "New Cloud 1",
-        "New Cloud 2",
-      ]);
-      expect(cloudRows.some((r) => r.name === "Old Cloud")).toBe(false);
-    });
-
-    it("其他账号的行不受影响（作用域 delete 只删当前账号）", async () => {
-      await seedModelConfig(ds, {
-        cloudUserId: "u2",
-        name: "U2 Cloud",
-        source: "cloud",
-      });
-
-      await ctx.run("u1", () =>
-        rawService.replaceCloudConfigs([cloudConfigRow({ name: "U1 Cloud" })]),
-      );
-
-      const u2All = await findAllRaw("u2");
-      expect(u2All).toHaveLength(1);
-      expect(u2All[0].name).toBe("U2 Cloud");
-    });
-
-    it("云配置写成指向网关的 openai-compatible 行（不落厂商明文）", async () => {
-      await ctx.run("u1", () =>
-        rawService.replaceCloudConfigs([
-          cloudConfigRow({
-            model: "m1",
-            name: "GPT4o",
-            baseUrl: "http://127.0.0.1:3200/api/v1",
-          }),
-        ]),
-      );
-
-      const [row] = await findAllRaw("u1");
-      expect(row).toMatchObject({
-        providerType: "openai-compatible",
-        baseUrl: expect.stringMatching(/\/api\/v1$/),
-        model: "m1",
-        apiKey: "__cloud__",
-        source: "cloud",
-      });
-    });
-
-    it("contextWindow 为 null 时落库兜底为默认值（entity 列非空）", async () => {
-      await ctx.run("u1", () =>
-        rawService.replaceCloudConfigs([
-          cloudConfigRow({ contextWindow: null }),
-        ]),
-      );
-
-      const [row] = await findAllRaw("u1");
-      expect(row.contextWindow).toBe(128_000);
     });
   });
 });

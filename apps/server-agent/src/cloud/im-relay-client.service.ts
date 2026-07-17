@@ -145,7 +145,7 @@ export class ImRelayClientService implements OnModuleDestroy {
         });
       }
 
-      // org 模型配置变更（云端广播的失效信号）→ 桥给 ModelConfigSyncService。
+      // org 模型配置变更（云端广播的失效信号）→ 桥给 CloudModelConfigProxyService（清缓存）。
       socket.on(IM_WS_EVENTS.modelConfigChanged, () => {
         this.account.run(cloudUserId, () => {
           this.emitter.emit(IM_RELAY_EVENTS.modelConfigChanged, {

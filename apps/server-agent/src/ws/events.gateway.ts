@@ -192,10 +192,10 @@ export class EventsGateway extends BaseWebSocketGateway {
   }
 
   /**
-   * 云端模型配置同步完成 → 信封投递给所属账号浏览器，模型列表实时刷新。
+   * 云端模型配置变更（代理缓存已失效）→ 信封投递给所属账号浏览器，模型列表实时刷新。
    *
-   * ModelConfigSyncService.syncNow 成功后经 EventEmitter2 触发（事件驱动同步：
-   * 云端推送 / relay 重连 / 登录），前端收到后 invalidate model-configs 查询。
+   * CloudModelConfigProxyService 收到云端广播 modelConfigChanged 后清缓存并
+   * 经 EventEmitter2 触发，前端收到后 invalidate model-configs 查询。
    */
   @OnEvent(MODEL_CONFIG_EVENTS.updated)
   onModelConfigUpdated(payload: ModelConfigUpdatedEvent): void {

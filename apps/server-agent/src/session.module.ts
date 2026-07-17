@@ -16,7 +16,6 @@ import { Session } from "./entities/session.entity";
 import { SessionMessage } from "./entities/session-message.entity";
 import { LlmCallService } from "./services/llm-call.service";
 import { ModelConfigService } from "./services/model-config.service";
-import { ModelConfigSyncService } from "./services/model-config-sync.service";
 import { RemoteArtifactService } from "./services/remote-artifact.service";
 import { RemoteQueryInboundService } from "./services/remote-query-inbound.service";
 import { RemoteRunControlService } from "./services/remote-run-control.service";
@@ -42,10 +41,13 @@ import { SessionGateway } from "./ws/session.gateway";
  * `ImRelayClientService`；均不导出，仅作为 `@OnEvent` 监听器存在，无其他消费方。
  * `RemoteRunRegistryService`（B 侧 streamId→sessionId 进程内注册表，Phase B
  * M3 校验真源）与两者同列，仅供模块内注入，同样不导出。
- * `AgentCloudSyncService`（计划二 2b · T3，`ModelConfigSyncService` 的反向：
- * 本地 remote_enabled Agent 变更 → 全量推云端对账）需要本模块 import 的
- * `AgentsModule`（`AgentService.list()`）与 `AuthModule`（`CloudClientService`/
- * `CloudIdentityService`），与 `ModelConfigSyncService` 同列，同样不导出。
+ * `AgentCloudSyncService`（计划二 2b · T3，本地 remote_enabled Agent 变更 →
+ * 全量推云端对账）需要本模块 import 的 `AgentsModule`（`AgentService.list()`）
+ * 与 `AuthModule`（`CloudClientService`/`CloudIdentityService`），不导出。
+ * 云端模型配置读时合并（读时合并 C）：`CloudModelConfigProxyService` 实时代理
+ * 云端组织模型配置、不落库，无同步落库 provider，前端刷新走
+ * `MODEL_CONFIG_EVENTS.updated` 单次 emit（见该 service 的 modelConfigChanged
+ * 订阅）。
  */
 @Module({
   imports: [
@@ -73,7 +75,6 @@ import { SessionGateway } from "./ws/session.gateway";
     SessionTitleService,
     CloudModelConfigProxyService,
     ModelConfigService,
-    ModelConfigSyncService,
     StatsService,
     SuggestionService,
     ScheduleExecutor,

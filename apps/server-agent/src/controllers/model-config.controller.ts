@@ -3,7 +3,7 @@ import { ModelConfigService } from "../services/model-config.service";
 
 /**
  * 模型配置只读接口——本地写 REST（create/update/delete）已下线，
- * 写入唯一来源是 ModelConfigSyncService 从云端拉取组织模型配置整体替换。
+ * 云端组织模型配置由 CloudModelConfigProxyService 读时实时代理、不落库。
  */
 @Controller("api/model-configs")
 export class ModelConfigController {

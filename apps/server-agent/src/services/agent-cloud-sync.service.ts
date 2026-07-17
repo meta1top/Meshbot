@@ -19,8 +19,8 @@ import type { Agent } from "../entities/agent.entity";
 
 /**
  * 本地推送注册服务——事件驱动，无轮询：本机 remote_enabled 的 Agent 元数据
- * 全量推送云端 `PUT /api/agent/agents` 做对账（`ModelConfigSyncService` 的反向：
- * 那个是云端下发配置 → 本地拉；这个是本地 Agent 变更 → 推云端）。
+ * 全量推送云端 `PUT /api/agent/agents` 做对账（方向与云端模型配置相反：
+ * 那个是云端配置 → 本地读时代理拉取；这个是本地 Agent 变更 → 推云端）。
  *
  * 触发时机：
  * - 启动时对全部已登录账号逐个推送一次；
