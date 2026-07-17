@@ -1,26 +1,42 @@
 "use client";
 
-import { Button, Card, CardContent } from "@meshbot/design";
+import {
+  Button,
+  Card,
+  CardContent,
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@meshbot/design";
+import type { ModelConfigInput } from "@meshbot/types-agent";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { DragRegion } from "@/components/drag-region";
+import { ModelConfigForm } from "@/components/settings/model-config-form";
 import { WorkspaceSidebar } from "@/components/shell/workspace-sidebar";
 import { ACCENT_BTN } from "@/lib/ui";
 import { useCloudWebUrl } from "@/rest/auth";
+import { useModelConfigMutations } from "@/rest/model-config";
 
 /**
- * 已登录但组织无可用模型配置时的只读提示页：模型编辑已收敛到云端 web-main，
- * 本地仅展示提示卡（外链跳转云端配置 + 刷新重新拉取 model-configs）。
+ * 已登录但无可用模型配置时的引导页：本地或云端组织都能配模型，两者平级——
+ * 「新建本地模型」是首选主按钮（内嵌 `ModelConfigForm`，创建成功即用），
+ * 「在云端配置」降为次要外链入口，「刷新」保留兜底。
  * 不带频道侧栏与随手问 dock（AuthGuard 在 root 级条件渲染，拿不到 (shell)/layout，
- * 故自拼轻量壳）。刷新命中新配置后由 AuthGuard 的 model-configs 查询自动检测并切回
- * 正常内容，无需手动 redirect。
+ * 故自拼轻量壳）。本地建模成功后失效 `["model-configs"]`，AuthGuard 的合并列表
+ * 查询检测到有 enabled 项即自动切回正常内容，无需手动 redirect。
  */
 export function ModelSetupGate() {
   const t = useTranslations("modelSetupGate");
   const cloudWebUrl = useCloudWebUrl();
   const queryClient = useQueryClient();
   const [, setSlotEl] = useState<HTMLElement | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const { create } = useModelConfigMutations();
 
   const openCloudModelSettings = () => {
     if (!cloudWebUrl.data) return;
@@ -33,6 +49,16 @@ export function ModelSetupGate() {
 
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ["model-configs"] });
+  };
+
+  const handleCreate = async (payload: ModelConfigInput) => {
+    setFormError(null);
+    try {
+      await create.mutateAsync(payload);
+      setFormOpen(false);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : t("createFailed"));
+    }
   };
 
   return (
@@ -55,6 +81,16 @@ export function ModelSetupGate() {
                     <Button
                       type="button"
                       className={ACCENT_BTN}
+                      onClick={() => {
+                        setFormError(null);
+                        setFormOpen(true);
+                      }}
+                    >
+                      {t("configureLocal")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
                       disabled={!cloudWebUrl.data}
                       onClick={openCloudModelSettings}
                     >
@@ -74,6 +110,34 @@ export function ModelSetupGate() {
           </section>
         </div>
       </div>
+
+      <Sheet
+        open={formOpen}
+        onOpenChange={(open) => {
+          setFormOpen(open);
+          if (!open) setFormError(null);
+        }}
+      >
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col gap-0 overflow-hidden sm:max-w-md"
+        >
+          <SheetHeader>
+            <SheetTitle>{t("configureLocal")}</SheetTitle>
+            <SheetDescription>
+              {t("configureLocalDescription")}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+            <ModelConfigForm
+              submitting={create.isPending}
+              error={formError}
+              onSubmit={handleCreate}
+              onCancel={() => setFormOpen(false)}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
     </main>
   );
 }

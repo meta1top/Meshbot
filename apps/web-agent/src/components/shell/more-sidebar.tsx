@@ -5,12 +5,12 @@ import {
   SidebarHeader,
   SidebarNav,
 } from "@meshbot/web-common/shell";
-import { BarChart3, Clock, Workflow } from "lucide-react";
+import { BarChart3, Bot, Clock, Workflow } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 
 /**
- * 「更多」区左侧二级导航：流程 + 使用情况 + 定时任务。
+ * 「更多」区左侧二级导航：流程 + 使用情况 + 模型 + 定时任务。
  * 容器范式同 messages-sidebar；当前路由高亮。
  */
 export function MoreSidebar() {
@@ -23,9 +23,11 @@ export function MoreSidebar() {
     ? "flows"
     : pathname.startsWith("/schedule")
       ? "scheduled"
-      : pathname === "/more"
-        ? "usage"
-        : undefined;
+      : pathname.startsWith("/more/models")
+        ? "models"
+        : pathname === "/more"
+          ? "usage"
+          : undefined;
 
   const groups: NavGroup[] = [
     {
@@ -42,6 +44,12 @@ export function MoreSidebar() {
           label: t("usage"),
           icon: <BarChart3 />,
           onClick: () => router.push("/more"),
+        },
+        {
+          key: "models",
+          label: t("models"),
+          icon: <Bot />,
+          onClick: () => router.push("/more/models"),
         },
         {
           key: "scheduled",

@@ -40,10 +40,59 @@
     "reopen": "Didn't open? Reopen the authorization page"
   },
   "modelSetupGate": {
-    "title": "No model configured for your organization yet",
-    "description": "Ask an organization admin to configure a model in the cloud, then refresh here to continue.",
+    "title": "No model available yet",
+    "description": "Create a local model to get started, or configure one in your cloud organization.",
+    "configureLocal": "New local model",
+    "configureLocalDescription": "Enter a provider and API key — ready to use as soon as you save.",
     "configureInCloud": "Configure in cloud",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "createFailed": "Failed to create, please try again"
+  },
+  "modelForm": {
+    "provider": "Provider",
+    "selectProvider": "Select a provider",
+    "name": "Name",
+    "namePlaceholder": "Leave blank to auto-generate from provider and model",
+    "model": "Model",
+    "modelPlaceholder": "e.g. gpt-4o",
+    "apiKey": "API Key",
+    "apiKeyPlaceholder": "sk-...",
+    "apiKeyEditHint": "Leave blank to keep the current key",
+    "baseUrl": "API Base URL",
+    "baseUrlPlaceholder": "Leave blank to use the provider default",
+    "contextWindow": "Context window (optional)",
+    "contextWindowPlaceholder": "Leave blank to auto-resolve from the model",
+    "submit": "Save",
+    "saving": "Saving...",
+    "cancel": "Cancel"
+  },
+  "modelSettings": {
+    "title": "Models",
+    "newLocalModel": "New local model",
+    "editTitle": "Edit local model",
+    "formDescription": "Local models are only saved on this device and are not visible to your cloud organization.",
+    "badgeLocal": "Local",
+    "badgeCloud": "Cloud",
+    "edit": "Edit",
+    "delete": "Delete",
+    "enable": "Enabled",
+    "disable": "Disabled",
+    "cloudReadonlyHint": "Managed by your cloud organization, read-only — edit it in cloud org settings",
+    "empty": "No model configured yet — create a local model to get started",
+    "colName": "Name",
+    "colProvider": "Provider",
+    "colModel": "Model",
+    "colSource": "Source",
+    "colStatus": "Status",
+    "loading": "Loading...",
+    "loadFailed": "Failed to load model configs",
+    "saveFailed": "Failed to save, please try again",
+    "deleteFailed": "Failed to delete, please try again",
+    "toggleFailed": "Failed to toggle status, please try again",
+    "deleteConfirmTitle": "Delete this model config?",
+    "deleteConfirmDescription": "This cannot be undone. Any agent using this model will no longer be able to call it.",
+    "dismiss": "Dismiss",
+    "cancel": "Cancel"
   },
   "assistantDock": {
     "title": "Quick Ask",
@@ -284,6 +333,7 @@
   "settingsSidebar": {
     "title": "Settings",
     "usage": "Usage",
+    "models": "Models",
     "scheduled": "Scheduled tasks"
   },
   "assistantSidebar": {
