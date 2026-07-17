@@ -159,6 +159,20 @@ describe("CloudAgentService.syncForDevice", () => {
     expect(emitter.emit).not.toHaveBeenCalled();
   });
 
+  it("重复推送相同非空列表：内容一字未变则不 emit（只刷 lastSyncedAt）", async () => {
+    const rows: CloudAgent[] = [];
+    const emitter = { emit: jest.fn() };
+    const svc = new CloudAgentService(makeRepo(rows), emitter as never);
+    await svc.syncForDevice("dev1", "u1", "org1", [ita("la1", "A")]); // 首次：新增 → emit
+    emitter.emit.mockClear();
+    await svc.syncForDevice("dev1", "u1", "org1", [ita("la1", "A")]); // 重推同内容 → 不 emit
+    expect(
+      emitter.emit.mock.calls.filter(
+        ([evt]: [string]) => evt === "cloud-agent.changed",
+      ),
+    ).toHaveLength(0);
+  });
+
   it("批次内重复 localAgentId 只留最后一条，不撞唯一索引新建两行", async () => {
     const rows: CloudAgent[] = [];
     const svc = new CloudAgentService(makeRepo(rows));

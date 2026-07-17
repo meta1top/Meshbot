@@ -63,11 +63,26 @@ export class CloudAgentService {
     const byLocalId = new Map(existing.map((e) => [e.localAgentId, e]));
     const now = new Date();
     const rows: CloudAgent[] = [];
+    // 列表可见性（name/avatar/description/visibility/软删）是否真的变了。
+    // save 每次都跑（刷新 lastSyncedAt 记录设备活跃），但只有可见变更才广播，
+    // 避免设备重连/定时全量推送时空跑一次前端 invalidate。
+    let visiblyChanged = false;
 
     for (const i of dedupedByLocalId.values()) {
+      const prev = byLocalId.get(i.localAgentId);
       const row =
-        byLocalId.get(i.localAgentId) ??
+        prev ??
         this.agentRepo.create({ deviceId, localAgentId: i.localAgentId });
+      if (
+        prev === undefined ||
+        prev.deletedAt !== null ||
+        prev.name !== i.name ||
+        prev.avatar !== i.avatar ||
+        prev.description !== i.description ||
+        prev.visibility !== i.visibility
+      ) {
+        visiblyChanged = true;
+      }
       row.userId = userId;
       row.orgId = orgId;
       row.name = i.name;
@@ -85,12 +100,16 @@ export class CloudAgentService {
     for (const g of gone) {
       g.deletedAt = now;
       rows.push(g);
+      visiblyChanged = true;
     }
 
     if (rows.length > 0) {
       await this.agentRepo.save(rows);
-      // 只有实际发生写入（新增/改名/复活/软删）才广播，避免空跑一次全量推送
-      // 也触发前端刷新（web-main 实时性修复：关/开「允许远程」后列表免手动刷新）。
+    }
+    if (visiblyChanged) {
+      // 只有列表可见变更（新增/改名/改头像/改描述/改可见性/复活/软删）才广播，
+      // 触发 web-main 实时刷新（关/开「允许远程」后列表免手动刷新）；
+      // 内容一字未变的重复全量推送不发，避免无谓 invalidate。
       this.emitChanged(userId, orgId);
     }
   }
