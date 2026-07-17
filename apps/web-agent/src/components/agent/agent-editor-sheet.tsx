@@ -26,6 +26,7 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
+  Switch,
   Textarea,
   Tooltip,
   TooltipContent,
@@ -34,7 +35,6 @@ import {
 import { Form, FormItem } from "@meshbot/design/form";
 import { useSchema } from "@meshbot/design/hooks";
 import {
-  type AgentCreateInput,
   AgentCreateSchema,
   DEFAULT_AGENT_AVATAR,
   QUICK_ASSISTANT_NAME_MAX,
@@ -45,7 +45,7 @@ import { Loader2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { forwardRef, useEffect, useState } from "react";
-import type { ZodType } from "zod";
+import { type ZodType, z } from "zod";
 import { sessionsAtom } from "@/atoms/sessions";
 import { AgentAvatarField } from "@/components/agent/agent-avatar-field";
 import { McpEditor } from "@/components/agent/mcp-editor";
@@ -98,7 +98,24 @@ const DefaultModelField = forwardRef<
 });
 DefaultModelField.displayName = "DefaultModelField";
 
-type AgentFormValues = AgentCreateInput;
+const RemoteEnabledField = forwardRef<
+  HTMLButtonElement,
+  { value?: boolean; onChange?: (value: boolean) => void }
+>(({ value, onChange }, ref) => (
+  <Switch ref={ref} checked={value ?? false} onCheckedChange={onChange} />
+));
+RemoteEnabledField.displayName = "RemoteEnabledField";
+
+/**
+ * 编辑抽屉表单 Schema：在 `AgentCreateSchema` 基础上加 `remoteEnabled`
+ * 开关（计划二 2b）。只在编辑态渲染/提交这个字段（新建 Agent 尚无 id，
+ * 「允许远程」在创建当下没有意义），但为了让 `<Form>` 单一 schema 覆盖
+ * 新建/编辑两态，字段本身始终存在、给个 `false` 默认值。
+ */
+const AgentEditorFormSchema = AgentCreateSchema.extend({
+  remoteEnabled: z.boolean().default(false),
+});
+type AgentFormValues = z.infer<typeof AgentEditorFormSchema>;
 
 interface AgentEditorSheetProps {
   /** 编辑目标 Agent id；null = 新建模式。 */
@@ -158,15 +175,16 @@ export function AgentEditorSheet({
   const canDelete = (agents?.length ?? 0) > 1;
   const duplicateCandidates = agents ?? [];
 
-  // AgentCreateSchema 的 description/systemPrompt/defaultModelConfigId 带
-  // `.default()`：zod 的 Input 类型（可省略）与 Output 类型（`AgentFormValues`，
-  // 已套默认值、必填）天然不同，而 `<Form>` 的泛型要求 `ZodType<T>`（Input===
-  // Output===T）。这里始终传完整 defaultValues（没有字段会真的走 undefined），
-  // 运行时行为不受影响，只是结构类型对不上——按 zod + react-hook-form 生态的
-  // 通用处理方式做一次类型断言，而不是为了迁就类型系统另开一份表单专用
-  // schema（那样就不是「直接复用 AgentCreateSchema」了）。
+  // AgentEditorFormSchema 的 description/systemPrompt/defaultModelConfigId/
+  // remoteEnabled 带 `.default()`：zod 的 Input 类型（可省略）与 Output 类型
+  // （`AgentFormValues`，已套默认值、必填）天然不同，而 `<Form>` 的泛型要求
+  // `ZodType<T>`（Input===Output===T）。这里始终传完整 defaultValues（没有
+  // 字段会真的走 undefined），运行时行为不受影响，只是结构类型对不上——按
+  // zod + react-hook-form 生态的通用处理方式做一次类型断言，而不是为了迁就
+  // 类型系统另开一份表单专用 schema（那样就不是「直接复用 AgentCreateSchema」
+  // 了）。
   const schema = useSchema(
-    AgentCreateSchema,
+    AgentEditorFormSchema,
   ) as unknown as ZodType<AgentFormValues>;
 
   async function invalidateAgents() {
@@ -181,7 +199,11 @@ export function AgentEditorSheet({
         await updateAgent(localAgentId, values);
         await invalidateAgents();
       } else {
-        await createAgent(values);
+        // 创建接口（AgentCreateSchema）不认识 remoteEnabled——新建 Agent
+        // 尚无 id，「允许远程」要等有 id 之后才有意义，这里剔除掉，只走
+        // 编辑态提交。
+        const { remoteEnabled: _remoteEnabled, ...createValues } = values;
+        await createAgent(createValues);
         await invalidateAgents();
       }
       onOpenChange(false);
@@ -290,6 +312,7 @@ export function AgentEditorSheet({
               description: current?.description ?? "",
               systemPrompt: current?.systemPrompt ?? "",
               defaultModelConfigId: current?.defaultModelConfigId ?? null,
+              remoteEnabled: current?.remoteEnabled ?? false,
             }}
             onSubmit={handleSubmit}
             className="flex flex-col gap-4"
@@ -323,6 +346,16 @@ export function AgentEditorSheet({
             >
               <DefaultModelField configs={modelConfigs ?? []} />
             </FormItem>
+
+            {mode === "edit" && (
+              <FormItem
+                name="remoteEnabled"
+                label={t("fieldRemoteEnabled")}
+                description={t("fieldRemoteEnabledHint")}
+              >
+                <RemoteEnabledField />
+              </FormItem>
+            )}
 
             {error && (
               <Alert variant="destructive">

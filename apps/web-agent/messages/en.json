@@ -676,6 +676,8 @@
       "fieldDefaultModel": "Default model",
       "fieldDefaultModelPlaceholder": "Choose a default model",
       "fieldDefaultModelFollowAccount": "Follow account default",
+      "fieldRemoteEnabled": "Allow remote",
+      "fieldRemoteEnabledHint": "When on, you can dispatch this agent remotely from other devices or the web",
       "save": "Save",
       "saving": "Saving…",
       "saveFailed": "Save failed, please retry",

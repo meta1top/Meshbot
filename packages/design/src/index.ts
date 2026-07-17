@@ -80,6 +80,7 @@ export {
   SheetTrigger,
 } from "./components/ui/sheet";
 export { Skeleton } from "./components/ui/skeleton";
+export { Switch } from "./components/ui/switch";
 export {
   Table,
   TableBody,

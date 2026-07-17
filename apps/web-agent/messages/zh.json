@@ -676,6 +676,8 @@
       "fieldDefaultModel": "默认模型",
       "fieldDefaultModelPlaceholder": "选择默认模型",
       "fieldDefaultModelFollowAccount": "跟随账号默认",
+      "fieldRemoteEnabled": "允许远程",
+      "fieldRemoteEnabledHint": "打开后，你在其他设备或网页上可以远程调度这个 Agent",
       "save": "保存",
       "saving": "保存中…",
       "saveFailed": "保存失败，请重试",
