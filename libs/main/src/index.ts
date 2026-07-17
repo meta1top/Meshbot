@@ -23,7 +23,11 @@ export {
   type AppConfigInvitation,
   INVITATION_CONFIG,
 } from "./services/invitation.config";
-export { CloudAgentService } from "./services/cloud-agent.service";
+export {
+  CLOUD_AGENT_EVENTS,
+  type CloudAgentChangedEvent,
+  CloudAgentService,
+} from "./services/cloud-agent.service";
 export { ConversationService } from "./services/conversation.service";
 export { DeviceAuthService } from "./services/device-auth.service";
 export {

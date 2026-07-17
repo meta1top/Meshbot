@@ -25,7 +25,7 @@ import {
   fetchDeviceOnline,
   useDevicePresenceSync,
 } from "@/rest/agent-devices";
-import { useAgents } from "@/rest/agents";
+import { useAgentRegistrySync, useAgents } from "@/rest/agents";
 import { useDevices } from "@/rest/devices";
 
 /** 会话叶子 key 前缀（`session:<sessionId>`）。 */
@@ -78,6 +78,10 @@ export function AssistantSidebar() {
   const { data: allDevices, isPending, error } = useDevices();
   const { data: agents } = useAgents();
   useDevicePresenceSync();
+  // 侧栏是助手段持久 layout 里始终挂载的组件（导航切会话不 remount），是
+  // agent 列表实时订阅的自然挂载点——覆盖 /assistant 起手台（Launcher 同一份
+  // AGENTS_QUERY_KEY 缓存）与 /assistant/[agentId] 详情页，单处订阅即可全覆盖。
+  useAgentRegistrySync();
 
   const devices = useMemo(
     () => (allDevices ?? []).filter((d) => !d.revokedAt),

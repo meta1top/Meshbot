@@ -1,8 +1,18 @@
 import type { AgentSyncInput } from "@meshbot/types-main";
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
 import { IsNull, type Repository } from "typeorm";
 import { CloudAgent } from "../entities/cloud-agent.entity";
+
+/** 云端 Agent 注册表变更事件（对账产生实际写入）：im.gateway 监听后向该用户广播。 */
+export const CLOUD_AGENT_EVENTS = {
+  changed: "cloud-agent.changed",
+} as const;
+export interface CloudAgentChangedEvent {
+  userId: string;
+  orgId: string | null;
+}
 
 /**
  * CloudAgent 的唯一归属 Service（check:repo）。
@@ -13,7 +23,17 @@ export class CloudAgentService {
   constructor(
     @InjectRepository(CloudAgent)
     private readonly agentRepo: Repository<CloudAgent>,
+    // @Optional：生产由全局 EventEmitterModule 注入；单测单参构造仍可用。
+    @Optional() private readonly emitter?: EventEmitter2,
   ) {}
+
+  /** 对账产生实际写入后发进程内事件（im.gateway 监听 → 定向广播给该用户）。 */
+  private emitChanged(userId: string, orgId: string | null): void {
+    this.emitter?.emit(CLOUD_AGENT_EVENTS.changed, {
+      userId,
+      orgId,
+    } satisfies CloudAgentChangedEvent);
+  }
 
   /**
    * 设备侧全量推送 remote_enabled agent 列表，按 (deviceId, localAgentId) 对账：
@@ -67,7 +87,12 @@ export class CloudAgentService {
       rows.push(g);
     }
 
-    if (rows.length > 0) await this.agentRepo.save(rows);
+    if (rows.length > 0) {
+      await this.agentRepo.save(rows);
+      // 只有实际发生写入（新增/改名/复活/软删）才广播，避免空跑一次全量推送
+      // 也触发前端刷新（web-main 实时性修复：关/开「允许远程」后列表免手动刷新）。
+      this.emitChanged(userId, orgId);
+    }
   }
 
   /** web-main 列当前用户的已注册（未软删）远程 Agent。 */

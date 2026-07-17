@@ -162,6 +162,31 @@ describe("ImGateway.handleRead 广播 im.conversation_read", () => {
   });
 });
 
+describe("ImGateway.onCloudAgentChanged（Bug #12：云端 Agent 注册表变更实时推送）", () => {
+  it("按 org 房间取连接后只向该用户广播 agentRegistryChanged", async () => {
+    const mine = { data: { user: { userId: "u1" } }, emit: jest.fn() };
+    const other = { data: { user: { userId: "u2" } }, emit: jest.fn() };
+    const { gw } = makeGateway({ sockets: [mine, other] });
+
+    await gw.onCloudAgentChanged({ userId: "u1", orgId: "org1" });
+
+    expect(mine.emit).toHaveBeenCalledWith(
+      IM_WS_EVENTS.agentRegistryChanged,
+      {},
+    );
+    expect(other.emit).not.toHaveBeenCalled();
+  });
+
+  it("orgId 为 null（无组织边缘情况）→ 不查房间、不广播", async () => {
+    const sock = { data: { user: { userId: "u1" } }, emit: jest.fn() };
+    const { gw } = makeGateway({ sockets: [sock] });
+
+    await gw.onCloudAgentChanged({ userId: "u1", orgId: null });
+
+    expect(sock.emit).not.toHaveBeenCalled();
+  });
+});
+
 describe("ImGateway.handlePresenceSet（浏览器在线态上报）", () => {
   it("{online:true} → presence.setOnline + 广播 im.presence online:true", async () => {
     const { gw, presence, toSpy, roomEmitSpy } = makeGateway({});

@@ -15,6 +15,9 @@ export const IM_WS_EVENTS = {
   conversationRead: "im.conversation_read",
   /** org 模型配置变更（创建/编辑/启用禁用/删除）——失效信号，端侧收到即全量重同步 */
   modelConfigChanged: "im.model_config_changed",
+  /** 云端 Agent 注册表变更（设备侧开关「允许远程」触发的对账新增/软删）——失效信号，
+   * 端侧收到即 invalidate agent 列表 query 重新拉取（Bug #12：web-main 实时性修复）。 */
+  agentRegistryChanged: "im.agent_registry_changed",
   // client → server（上行）
   send: "im.send",
   read: "im.read",

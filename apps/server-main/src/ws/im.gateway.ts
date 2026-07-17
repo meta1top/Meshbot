@@ -5,7 +5,9 @@ import {
   WsExceptionFilter,
 } from "@meshbot/common";
 import {
+  CLOUD_AGENT_EVENTS,
   CloudAgentService,
+  type CloudAgentChangedEvent,
   ConversationService,
   DEVICE_TOKEN_PREFIX,
   DevicePresenceService,
@@ -708,6 +710,34 @@ export class ImGateway extends BaseWebSocketGateway {
         .emit(IM_WS_EVENTS.modelConfigChanged, {});
     } catch (err) {
       this.logger.error("im onOrgModelConfigChanged failed", err as Error);
+    }
+  }
+
+  /**
+   * 云端 Agent 注册表变更（Bug #12 修复）：设备侧开关「允许远程」触发全量对账，
+   * `CloudAgentService.syncForDevice` 产生实际写入（新增/改名/复活/软删）后
+   * emit 本事件 → 定向广播给该用户（`userId`）的全部在线连接，web-main
+   * 收到即 `invalidateQueries` 重新拉取 `GET /api/agents`，免手动刷新页面。
+   *
+   * 按 org 房间取连接后按 userId 过滤（同 `handleRead` 的写法）——CloudAgent
+   * 无独立房间，复用已有的 org room 广播 + 客户端过滤模式，不新起基础设施。
+   * `orgId` 为 null（设备/用户尚未归属组织的边缘情况）时无房间可投，跳过实时
+   * 推送，退化为下次用户操作触发的被动重拉（不阻塞主链路）。
+   */
+  @OnEvent(CLOUD_AGENT_EVENTS.changed)
+  async onCloudAgentChanged(payload: CloudAgentChangedEvent): Promise<void> {
+    try {
+      if (!payload.orgId) return;
+      const sockets = await this.server
+        .in(`org:${payload.orgId}`)
+        .fetchSockets();
+      for (const s of sockets) {
+        if (s.data.user?.userId === payload.userId) {
+          s.emit(IM_WS_EVENTS.agentRegistryChanged, {});
+        }
+      }
+    } catch (err) {
+      this.logger.error("im onCloudAgentChanged failed", err as Error);
     }
   }
 

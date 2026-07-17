@@ -132,6 +132,33 @@ describe("CloudAgentService.syncForDevice", () => {
     expect(rows).toHaveLength(1); // 未新建重复行
   });
 
+  it("Bug #12：实际写入（新增/软删）后 emit cloud-agent.changed，携带 userId+orgId", async () => {
+    const rows: CloudAgent[] = [];
+    const emitter = { emit: jest.fn() };
+    const svc = new CloudAgentService(makeRepo(rows), emitter as never);
+    await svc.syncForDevice("dev1", "u1", "org1", [
+      ita("la1", "A"),
+      ita("la2", "B"),
+    ]);
+    await svc.syncForDevice("dev1", "u1", "org1", [ita("la1", "A")]); // la2 软删
+    const calls = emitter.emit.mock.calls.filter(
+      ([evt]: [string]) => evt === "cloud-agent.changed",
+    );
+    expect(calls).toHaveLength(2); // 两次同步各产生一次实际写入
+    for (const [, payload] of calls) {
+      expect(payload).toEqual({ userId: "u1", orgId: "org1" });
+    }
+  });
+
+  it("空跑同步（无变化）不 emit，避免空推送", async () => {
+    const rows: CloudAgent[] = [];
+    const emitter = { emit: jest.fn() };
+    const svc = new CloudAgentService(makeRepo(rows), emitter as never);
+    // 空列表同步空设备：既无 upsert 也无 gone（existing 为空），rows.length === 0。
+    await svc.syncForDevice("dev1", "u1", "org1", []);
+    expect(emitter.emit).not.toHaveBeenCalled();
+  });
+
   it("批次内重复 localAgentId 只留最后一条，不撞唯一索引新建两行", async () => {
     const rows: CloudAgent[] = [];
     const svc = new CloudAgentService(makeRepo(rows));
