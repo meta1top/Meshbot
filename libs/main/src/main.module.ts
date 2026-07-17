@@ -1,6 +1,7 @@
 import { TxTypeOrmModule } from "@meshbot/common";
 import { type DynamicModule, Module } from "@nestjs/common";
 
+import { Agent } from "./entities/agent.entity";
 import { AppUser } from "./entities/app-user.entity";
 import { Conversation } from "./entities/conversation.entity";
 import { ConversationMember } from "./entities/conversation-member.entity";
@@ -21,6 +22,7 @@ import {
   type AppConfigInvitation,
   INVITATION_CONFIG,
 } from "./services/invitation.config";
+import { AgentService } from "./services/agent.service";
 import { ConversationService } from "./services/conversation.service";
 import { DeviceAuthService } from "./services/device-auth.service";
 import { DeviceService } from "./services/device.service";
@@ -52,7 +54,7 @@ import { SECURITY_CONFIG } from "./tokens";
  * Conversation+ConversationMember→ConversationService / Message→MessageService /
  * SkillPackage+SkillVersion→SkillPackageService（SkillMarketService 编排）/
  * CloudNode→CloudNodeService / CloudNodeGrant→CloudNodeGrantService /
- * CloudShareLink→CloudShareLinkService。
+ * CloudShareLink→CloudShareLinkService / Agent→AgentService。
  *
  * `forRoot(invitation, security)` 注入邀请配置切片（过期天数）与加密配置切片
  * （对称密钥，供 `SecretCryptoService` 使用），分别由 server-main 的
@@ -97,6 +99,7 @@ export class MainModule {
           DeviceAuthRequest,
           EmailVerification,
           OrgModelConfig,
+          Agent,
         ]),
       ],
       providers: [
@@ -119,6 +122,7 @@ export class MainModule {
         CloudDriveService,
         CloudShareLinkService,
         SecretCryptoService,
+        AgentService,
         { provide: INVITATION_CONFIG, useValue: invitation },
         { provide: SECURITY_CONFIG, useValue: security },
       ],
@@ -142,6 +146,7 @@ export class MainModule {
         CloudDriveService,
         CloudShareLinkService,
         SecretCryptoService,
+        AgentService,
       ],
     };
   }

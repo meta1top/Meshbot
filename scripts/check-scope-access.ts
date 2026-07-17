@@ -201,6 +201,10 @@ function shouldSkipFile(filePath: string): boolean {
     return true;
   if (rel.startsWith("apps/server-main") || rel.includes("/apps/server-main/"))
     return true;
+  // libs/main 是云端轨（server-main）的域 lib：Postgres + org/user 多租户，
+  // 不跑账号隔离 SQLite 模型；同名 Entity（如 Agent）在此纯属云端/本地两个
+  // 无关领域的巧合撞名，不该套用 cloud_user_id 作用域规则。
+  if (rel.startsWith("libs/main") || rel.includes("/libs/main/")) return true;
   if (rel.endsWith(".d.ts")) return true;
   return false;
 }

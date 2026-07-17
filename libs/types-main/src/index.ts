@@ -1,3 +1,4 @@
+export * from "./agent/agent-sync.schema";
 export * from "./auth/login.schema";
 export * from "./auth/register-user.schema";
 export * from "./auth/verify-email.schema";
