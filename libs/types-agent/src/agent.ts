@@ -60,3 +60,20 @@ export type AgentCreateInput = z.infer<typeof AgentCreateSchema>;
 export type AgentUpdateInput = z.infer<typeof AgentUpdateSchema>;
 export type AgentView = z.infer<typeof AgentViewSchema>;
 export type McpRawInput = z.infer<typeof McpRawSchema>;
+
+/**
+ * 其他设备上已注册(remote_enabled)的远程 Agent 对外视图（server-agent 代理云端
+ * `GET /api/agents` 后拼宿主设备名/在线态）。`id` 为云端 agent.id——L3 网关
+ * `findActiveById` 寻址用的主键，前端发起/浏览远程会话时作为 targetAgentId 传出。
+ */
+export const RemoteAgentViewSchema = z.object({
+  id: z.string(),
+  deviceId: z.string(),
+  localAgentId: z.string(),
+  name: z.string(),
+  avatar: z.string(),
+  description: z.string().nullable(),
+  deviceName: z.string(),
+  deviceOnline: z.boolean(),
+});
+export type RemoteAgentView = z.infer<typeof RemoteAgentViewSchema>;
