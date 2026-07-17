@@ -17,6 +17,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { computeAgentNodeExpansion } from "@/components/assistant/agent-node-expansion";
 import { useSidebarSlot } from "@/components/shell/sidebar-slot-context";
 import { remoteSessionsQueryKey } from "@/hooks/use-remote-sessions";
 import { parseAgentAvatar } from "@/lib/agent-avatar";
@@ -84,12 +85,24 @@ export function AssistantSidebar() {
   const routeParams = useParams<{ agentId?: string }>();
   const routeAgentId = routeParams?.agentId;
 
-  const { data: agents, isPending: agentsPending } = useAgents();
-  const { data: allDevices, isPending: devicesPending, error } = useDevices();
+  const {
+    data: agents,
+    isPending: agentsPending,
+    error: agentsError,
+  } = useAgents();
+  const {
+    data: allDevices,
+    isPending: devicesPending,
+    error: devicesError,
+  } = useDevices();
   // 两个查询都要落定才能判「真的空」——只等设备列表会在 agents 仍在途时把
   // 尚未到位的空数组误判成空态，闪一下「暂无 Agent」（devices 通常比 agents
   // 先返回：Launcher 与本侧栏各自触发 GET，无共享预取）。
   const isPending = devicesPending || agentsPending;
+  // agentList（useAgents）是侧栏一级列表唯一主数据源，devices 只用来查宿主
+  // 设备名副标题——任一失败都要显「加载失败」，不能只看 devices 的 error
+  // 而让 agents 单独失败时被空态盖掉，误导成「账号下没有 Agent」。
+  const error = agentsError ?? devicesError;
   useDevicePresenceSync();
   // 侧栏是助手段持久 layout 里始终挂载的组件（导航切会话不 remount），是
   // agent 列表实时订阅的自然挂载点——覆盖 /assistant 起手台（Launcher 同一份
@@ -213,16 +226,18 @@ export function AssistantSidebar() {
       deviceName: deviceNameById.get(a.deviceId) ?? a.deviceId,
       online,
     });
+    // 展开态/子节点开关抽成纯函数 computeAgentNodeExpansion（同目录），离线
+    // 强制不展开、不产出子节点——见该函数顶部注释（Task 6 review Finding
+    // #1，与 web-agent T5 `4ea1244e` 同构修法保持两端一致）。
+    const { defaultOpen, hasChildren } = computeAgentNodeExpansion(
+      online,
+      expanded.has(a.id) || a.id === routeAgentId,
+    );
     return {
       key: `${AGENT_PREFIX}${a.id}`,
       label: a.name,
-      defaultOpen: expanded.has(a.id) || a.id === routeAgentId,
-      // 恒给非空 children 撑出 chevron；离线 Agent 的占位内容永远不会被打开
-      // 渲染（SessionTree 的 AgentRow 在 online===false 时整行 pointer-events
-      // 关掉）。
-      children: online
-        ? sessionChildren(a.id)
-        : [{ key: `ph:${a.id}:offline`, label: "" }],
+      defaultOpen,
+      children: hasChildren ? sessionChildren(a.id) : [],
     };
   });
 
