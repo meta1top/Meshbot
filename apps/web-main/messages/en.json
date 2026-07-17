@@ -52,7 +52,9 @@
         "daily": "Daily work",
         "code": "Coding",
         "design": "Design"
-      }
+      },
+      "hostOffline": "{device} (offline)",
+      "agentOffline": "The selected agent's host device is now offline. Please pick another one."
     },
     "input": {
       "attachment": "Add attachment",

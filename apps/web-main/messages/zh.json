@@ -52,7 +52,9 @@
         "daily": "日常办公",
         "code": "代码开发",
         "design": "设计创意"
-      }
+      },
+      "hostOffline": "{device}（离线）",
+      "agentOffline": "所选 Agent 的宿主设备已离线，请重新选择"
     },
     "input": {
       "attachment": "添加附件",

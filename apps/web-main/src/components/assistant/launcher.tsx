@@ -2,11 +2,21 @@
 
 import { cn } from "@meshbot/design";
 import { SessionLauncher } from "@meshbot/web-common/session";
+import { useQueries } from "@tanstack/react-query";
 import { ChevronRight, MonitorSmartphone } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  buildLauncherAgentRows,
+  pickDefaultAgentId,
+} from "@/lib/launcher-agent-rows";
 import { stashLauncherDraft } from "@/lib/launcher-draft";
+import {
+  deviceOnlineQueryKey,
+  fetchDeviceOnline,
+  useDevicePresenceSync,
+} from "@/rest/agent-devices";
 import { useAgents } from "@/rest/agents";
 import { useProfile } from "@/rest/auth";
 import { useDevices } from "@/rest/devices";
@@ -22,8 +32,14 @@ import { RemoteModelSelect } from "./remote-model-select";
  *
  * 计划二 2b · T7：寻址主键从设备细化到 Agent（`targetAgentId`），下拉数据源
  * 从「设备列表」换成「Agent 列表」，选项显示 Agent 名 + 宿主设备名（配合
- * `useDevices()` 按 `agent.deviceId` 反查）。在线态从宿主设备派生的打磨
- * （灰掉离线 Agent）留 2c，本期下拉不做在线过滤——功能可用即可。
+ * `useDevices()` 按 `agent.deviceId` 反查）。
+ *
+ * 计划二 2c · F1：在线态从宿主设备派生（`deviceOnlineQueryKey` +
+ * `fetchDeviceOnline`，和 `assistant-sidebar.tsx` 同一份 presence 数据源）——
+ * 离线 Agent 灰化 + 下拉项 `disabled` 不可选、默认选中不预选一个离线目标、
+ * 发送前二次拦截（选中后宿主转离线的边界）。三重防线对齐 D1/D3：不能让用户
+ * 选中并发到一个无监听 device room 的目标，那样只会在会话页 idle-timeout
+ * 失败，而不是像侧栏一样在源头拦住。
  *
  * 发送不在本页建会话：web-main 是 L3 的 A（浏览器），没有 web-agent 那种
  * 「轮询本机 server-agent 的 fetchRemoteRun 回填 sessionId」的能力。改为把草稿
@@ -38,30 +54,68 @@ export function Launcher() {
 
   const { data: agents } = useAgents();
   const { data: devices } = useDevices();
-  const deviceNameById = new Map((devices ?? []).map((d) => [d.id, d.name]));
-  const agentRows = (agents ?? []).map((a) => ({
-    id: a.id,
-    name: a.name,
-    deviceName: deviceNameById.get(a.deviceId) ?? a.deviceId,
-  }));
+  const deviceNameById = useMemo(
+    () => new Map((devices ?? []).map((d) => [d.id, d.name])),
+    [devices],
+  );
+
+  // 每个 Agent 宿主设备的在线态——与 assistant-sidebar.tsx 同一份 presence
+  // 数据源（deviceOnlineQueryKey + fetchDeviceOnline，实时更新靠下面的
+  // useDevicePresenceSync 订阅），离线宿主的 Agent 灰化 + 禁选（F1）：不做的话
+  // 用户能选中一个无监听 device room 的目标，跳会话页后远程 run 只会
+  // idle-timeout 失败，而不是像侧栏那样在源头拦住。
+  useDevicePresenceSync();
+  const agentList = useMemo(() => agents ?? [], [agents]);
+  const distinctDeviceIds = useMemo(
+    () => [...new Set(agentList.map((a) => a.deviceId))],
+    [agentList],
+  );
+  const onlineQueries = useQueries({
+    queries: distinctDeviceIds.map((deviceId) => ({
+      queryKey: deviceOnlineQueryKey(deviceId),
+      queryFn: () => fetchDeviceOnline(deviceId),
+      staleTime: 30_000,
+    })),
+  });
+  const onlineByDevice = new Map(
+    distinctDeviceIds.map((id, i) => [
+      id,
+      onlineQueries[i]?.data?.online ?? false,
+    ]),
+  );
+  const agentRows = buildLauncherAgentRows(
+    agentList,
+    deviceNameById,
+    onlineByDevice,
+  );
 
   const [draft, setDraft] = useState("");
   const [agentId, setAgentId] = useState<string | null>(null);
   const [modelConfigId, setModelConfigId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // 只有一个已注册 Agent 时默认选中（多个不预选，避免误发到错误 Agent）。
+  // 只有一个已注册 Agent、且宿主在线时才默认选中（多个不预选，避免误发到
+  // 错误 Agent；唯一那个若离线，也不能默认选中一个发不出去的目标）。
   const autoPicked = useRef(false);
   useEffect(() => {
-    if (autoPicked.current || agentId || agentRows.length !== 1) return;
+    if (autoPicked.current || agentId) return;
+    const defaultId = pickDefaultAgentId(agentRows);
+    if (!defaultId) return;
     autoPicked.current = true;
-    setAgentId(agentRows[0].id);
+    setAgentId(defaultId);
   }, [agentRows, agentId]);
 
   const handleSend = (text: string) => {
     if (!text.trim()) return;
     if (!agentId) {
       setError(t("launcher.pickAgentFirst"));
+      return;
+    }
+    const current = agentRows.find((a) => a.id === agentId);
+    if (!current?.online) {
+      // 保险：选中后宿主设备转离线（presence 实时推送），发送前兜底拦住，
+      // 别让离线 Agent 被发起——和 disabled 下拉项双重保障。
+      setError(t("launcher.agentOffline"));
       return;
     }
     setError(null);
@@ -123,8 +177,8 @@ export function Launcher() {
 /**
  * composer 面板内、输入框下方的目标选择条（对位 web-agent 的 ComposerTargetBar
  * 「本地 › 默认工作区」）：web-main 这里选的是「哪个远程 Agent 执行」，选项
- * 副标题显示宿主设备名。在线态派生（灰掉离线宿主设备上的 Agent）留 2c，
- * 本期恒可选——功能可用即可。
+ * 副标题显示宿主设备名。计划二 2c · F1：`disabled` 离线项灰化 + 点击不触发
+ * `onChange`（真拦选中，不只是视觉），副标题换成「设备名（离线）」提示。
  */
 function AgentTargetBar({
   agents,
@@ -133,12 +187,19 @@ function AgentTargetBar({
   placeholder,
   error,
 }: {
-  agents: Array<{ id: string; name: string; deviceName: string }>;
+  agents: Array<{
+    id: string;
+    name: string;
+    deviceName: string;
+    online: boolean;
+    disabled: boolean;
+  }>;
   value: string | null;
   onChange: (id: string) => void;
   placeholder: string;
   error: string | null;
 }) {
+  const t = useTranslations("assistant");
   const [open, setOpen] = useState(false);
   const current = agents.find((a) => a.id === value) ?? null;
 
@@ -176,15 +237,25 @@ function AgentTargetBar({
               <button
                 key={a.id}
                 type="button"
+                disabled={a.disabled}
+                aria-disabled={a.disabled}
                 onClick={() => {
+                  if (a.disabled) return;
                   onChange(a.id);
                   setOpen(false);
                 }}
-                className="flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left text-xs text-foreground transition-colors hover:bg-muted"
+                className={cn(
+                  "flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+                  a.disabled
+                    ? "cursor-not-allowed text-muted-foreground/50"
+                    : "text-foreground hover:bg-muted",
+                )}
               >
                 <span className="min-w-0 w-full truncate">{a.name}</span>
                 <span className="min-w-0 w-full truncate text-[10px] text-muted-foreground">
-                  {a.deviceName}
+                  {a.online
+                    ? a.deviceName
+                    : t("launcher.hostOffline", { device: a.deviceName })}
                 </span>
               </button>
             ))}
