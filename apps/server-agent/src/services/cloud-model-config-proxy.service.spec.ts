@@ -117,4 +117,57 @@ describe("CloudModelConfigProxyService", () => {
     expect(rows).toEqual([]);
     expect(cloud.get).not.toHaveBeenCalled();
   });
+
+  it("账号隔离：u1/u2 各自缓存独立，读不到对方的云端模型", async () => {
+    const { account, cloud, identity, service } = build();
+    identity.get.mockImplementation(async (cloudUserId: string) => ({
+      deviceToken: `token-${cloudUserId}`,
+    }));
+    cloud.get.mockImplementation(async (_path: string, token: string) =>
+      token === "token-u1"
+        ? [
+            {
+              id: "cfg-u1",
+              name: "U1 Model",
+              contextWindow: 32_000,
+              enabled: true,
+            },
+          ]
+        : [
+            {
+              id: "cfg-u2",
+              name: "U2 Model",
+              contextWindow: 16_000,
+              enabled: false,
+            },
+          ],
+    );
+
+    const rowsU1 = await account.run("u1", () => service.getCloudConfigs());
+    const rowsU2 = await account.run("u2", () => service.getCloudConfigs());
+
+    expect(rowsU1).toHaveLength(1);
+    expect(rowsU1[0]).toMatchObject({
+      id: "cfg-u1",
+      name: "U1 Model",
+      cloudUserId: "u1",
+    });
+    expect(rowsU2).toHaveLength(1);
+    expect(rowsU2[0]).toMatchObject({
+      id: "cfg-u2",
+      name: "U2 Model",
+      cloudUserId: "u2",
+    });
+
+    // 再各自读一次，命中各自缓存、互不影响，且不会拿到对方数据
+    const rowsU1Again = await account.run("u1", () =>
+      service.getCloudConfigs(),
+    );
+    const rowsU2Again = await account.run("u2", () =>
+      service.getCloudConfigs(),
+    );
+    expect(rowsU1Again).toEqual(rowsU1);
+    expect(rowsU2Again).toEqual(rowsU2);
+    expect(cloud.get).toHaveBeenCalledTimes(2);
+  });
 });

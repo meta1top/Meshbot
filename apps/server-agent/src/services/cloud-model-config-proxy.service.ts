@@ -59,18 +59,20 @@ export class CloudModelConfigProxyService {
   async getCloudConfigs(): Promise<ModelConfig[]> {
     const cloudUserId = this.account.getOrThrow();
     const cached = this.cache.get(cloudUserId);
-    if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.rows;
+    if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
+      return cached.rows.map((r) => ({ ...r }) as ModelConfig);
+    }
 
-    const id = await this.identity.get(cloudUserId);
-    if (!id?.deviceToken) return [];
     try {
+      const id = await this.identity.get(cloudUserId);
+      if (!id?.deviceToken) return [];
       const configs = await this.cloud.get<AgentModelConfig[]>(
         "/api/agent/model-configs",
         id.deviceToken,
       );
       const rows = configs.map((c) => this.toGatewayRow(c, cloudUserId));
       this.cache.set(cloudUserId, { at: Date.now(), rows });
-      return rows;
+      return rows.map((r) => ({ ...r }) as ModelConfig);
     } catch (err) {
       this.logger.warn(
         `云端模型配置代理失败（账号 ${cloudUserId}）: ${String(err)}`,
