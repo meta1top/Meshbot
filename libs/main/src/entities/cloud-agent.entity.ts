@@ -15,7 +15,7 @@ import {
   unique: true,
   where: '"deleted_at" IS NULL',
 })
-export class Agent extends SnowflakeBaseEntity {
+export class CloudAgent extends SnowflakeBaseEntity {
   @Column({ type: "varchar", length: 20 }) deviceId!: string;
   @Column({ type: "varchar", length: 20 }) userId!: string;
   @Column({ type: "varchar", length: 20, nullable: true }) orgId!:

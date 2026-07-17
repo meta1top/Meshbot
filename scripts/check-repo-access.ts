@@ -317,29 +317,15 @@ function collectEntityDefs(sourceFile: SourceFile, defs: EntityDef[]) {
   }
 }
 
-/**
- * 提取 apps/<pkg> 或 libs/<pkg> 顶层归属域，仅供 DUP_OWNER 分组消歧使用。
- * 不同域下同名 Entity（如 apps/server-agent 本地 Agent 与 libs/main 云端
- * Agent）是两个业务无关的类型，不该因裸类名相同被误判为同一归属冲突——
- * "唯一归属" 规则本就是域内约束（check:repo 文档："跨 libs/<domain>/
- * 边界禁止注入其他模块的 Entity Repository"），不是跨域全局约束。
- */
-function ownershipDomain(filePath: string): string {
-  const rel = getRelPath(filePath);
-  const m = rel.match(/^(apps|libs)\/([^/]+)\//);
-  return m ? `${m[1]}/${m[2]}` : "";
-}
-
 function buildOwnershipMap(
   sites: InjectionSite[],
 ): Map<string, InjectionSite[]> {
   const map = new Map<string, InjectionSite[]>();
   for (const s of sites) {
     if (s.classKind !== "service") continue; // ownership 仅由 Service 注入定义
-    const key = `${ownershipDomain(s.file)}::${s.entity}`;
-    const arr = map.get(key) ?? [];
+    const arr = map.get(s.entity) ?? [];
     arr.push(s);
-    map.set(key, arr);
+    map.set(s.entity, arr);
   }
   return map;
 }
@@ -381,9 +367,8 @@ function detectIssues(
     }
   }
 
-  for (const owners of ownershipMap.values()) {
+  for (const [entity, owners] of ownershipMap) {
     if (owners.length <= 1) continue;
-    const entity = owners[0].entity;
     for (const o of owners) {
       issues.push({
         type: "DUP_OWNER",
@@ -415,8 +400,7 @@ function printOwnershipMap(
   console.log("─".repeat(80));
   console.log("Entity".padEnd(40), "归属 Service".padEnd(30), "lib");
   console.log("─".repeat(80));
-  for (const [, owners] of sorted) {
-    const entity = owners[0].entity;
+  for (const [entity, owners] of sorted) {
     const def = entityDefs.get(entity);
     const libDisplay = def?.lib ?? "<unknown>";
     if (owners.length === 1) {
@@ -733,9 +717,8 @@ function main() {
 
   if (opts.mapOnly) {
     if (opts.json) {
-      const out = Array.from(ownershipMap.values()).map((owners) => {
-        const entity = owners[0].entity;
-        return {
+      const out = Array.from(ownershipMap.entries()).map(
+        ([entity, owners]) => ({
           entity,
           lib: entityDefMap.get(entity)?.lib ?? null,
           owners: owners.map((o) => ({
@@ -743,8 +726,8 @@ function main() {
             file: getRelPath(o.file),
             line: o.line,
           })),
-        };
-      });
+        }),
+      );
       process.stdout.write(`${JSON.stringify(out, null, 2)}\n`);
     } else {
       printOwnershipMap(ownershipMap, entityDefMap);

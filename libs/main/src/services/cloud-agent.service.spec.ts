@@ -1,7 +1,7 @@
 import { Repository } from "typeorm";
 import type { AgentSyncInput } from "@meshbot/types-main";
-import { Agent } from "../entities/agent.entity";
-import { AgentService } from "./agent.service";
+import { CloudAgent } from "../entities/cloud-agent.entity";
+import { CloudAgentService } from "./cloud-agent.service";
 
 // ─────────────────────────── helpers ───────────────────────────────────────
 
@@ -22,22 +22,8 @@ function ita(localAgentId: string, name: string): AgentSyncInput {
   };
 }
 
-// ─── fake DataSource（供 @Transactional() root 路径使用）──────────────────
-
-function makeFakeDataSource() {
-  return {
-    createQueryRunner: () => ({
-      connect: jest.fn().mockResolvedValue(undefined),
-      startTransaction: jest.fn().mockResolvedValue(undefined),
-      commitTransaction: jest.fn().mockResolvedValue(undefined),
-      rollbackTransaction: jest.fn().mockResolvedValue(undefined),
-      release: jest.fn().mockResolvedValue(undefined),
-    }),
-  };
-}
-
 /** 内存 rows 数组 + 最小 Repository 实现（instanceof Repository 需成立）。 */
-function makeRepo(rows: Agent[]): Repository<Agent> {
+function makeRepo(rows: CloudAgent[]): Repository<CloudAgent> {
   return Object.assign(Object.create(Repository.prototype), {
     find: jest.fn(async ({ where }: { where: Record<string, unknown> }) => {
       if (where.deviceId !== undefined) {
@@ -49,7 +35,7 @@ function makeRepo(rows: Agent[]): Repository<Agent> {
         .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
     }),
     create: jest.fn(
-      (v: Partial<Agent>) =>
+      (v: Partial<CloudAgent>) =>
         ({
           avatar: "",
           description: null,
@@ -60,9 +46,9 @@ function makeRepo(rows: Agent[]): Repository<Agent> {
           createdAt: new Date(),
           updatedAt: new Date(),
           ...v,
-        }) as Agent,
+        }) as CloudAgent,
     ),
-    save: jest.fn(async (v: Agent | Agent[]) => {
+    save: jest.fn(async (v: CloudAgent | CloudAgent[]) => {
       const list = Array.isArray(v) ? v : [v];
       for (const row of list) {
         if (!row.id) row.id = nextId();
@@ -78,19 +64,18 @@ function makeRepo(rows: Agent[]): Repository<Agent> {
           ),
         ) ?? null,
     ),
-    manager: { connection: makeFakeDataSource() },
-  }) as unknown as Repository<Agent>;
+  }) as unknown as Repository<CloudAgent>;
 }
 
-describe("AgentService.syncForDeviceInTx", () => {
+describe("CloudAgentService.syncForDevice", () => {
   beforeEach(() => {
     _idCounter = 1;
   });
 
   it("首次同步：全量 insert，云端另发 id（不等于 localAgentId）", async () => {
-    const rows: Agent[] = [];
-    const svc = new AgentService(makeRepo(rows));
-    await svc.syncForDeviceInTx("dev1", "u1", null, [
+    const rows: CloudAgent[] = [];
+    const svc = new CloudAgentService(makeRepo(rows));
+    await svc.syncForDevice("dev1", "u1", null, [
       {
         localAgentId: "la1",
         name: "研发",
@@ -106,24 +91,24 @@ describe("AgentService.syncForDeviceInTx", () => {
   });
 
   it("再次同步：改名 upsert（id 不变，稳定寻址）", async () => {
-    const rows: Agent[] = [];
-    const svc = new AgentService(makeRepo(rows));
-    await svc.syncForDeviceInTx("dev1", "u1", null, [ita("la1", "旧名")]);
+    const rows: CloudAgent[] = [];
+    const svc = new CloudAgentService(makeRepo(rows));
+    await svc.syncForDevice("dev1", "u1", null, [ita("la1", "旧名")]);
     const before = (await svc.listForUser("u1"))[0];
-    await svc.syncForDeviceInTx("dev1", "u1", null, [ita("la1", "新名")]);
+    await svc.syncForDevice("dev1", "u1", null, [ita("la1", "新名")]);
     const after = (await svc.listForUser("u1"))[0];
     expect(after.id).toBe(before.id); // id 稳定
     expect(after.name).toBe("新名");
   });
 
   it("列表里消失的一律软删（deleted_at）", async () => {
-    const rows: Agent[] = [];
-    const svc = new AgentService(makeRepo(rows));
-    await svc.syncForDeviceInTx("dev1", "u1", null, [
+    const rows: CloudAgent[] = [];
+    const svc = new CloudAgentService(makeRepo(rows));
+    await svc.syncForDevice("dev1", "u1", null, [
       ita("la1", "A"),
       ita("la2", "B"),
     ]);
-    await svc.syncForDeviceInTx("dev1", "u1", null, [ita("la1", "A")]); // la2 消失
+    await svc.syncForDevice("dev1", "u1", null, [ita("la1", "A")]); // la2 消失
     const listed = await svc.listForUser("u1");
     expect(listed.map((r) => r.localAgentId)).toEqual(["la1"]); // listForUser 只返未软删
     // 底层行仍在（软删而非硬删），id 未漂移
@@ -134,16 +119,29 @@ describe("AgentService.syncForDeviceInTx", () => {
   });
 
   it("软删后又出现：复活（同一 localAgentId 不新建重复行）", async () => {
-    const rows: Agent[] = [];
-    const svc = new AgentService(makeRepo(rows));
-    await svc.syncForDeviceInTx("dev1", "u1", null, [ita("la1", "A")]);
+    const rows: CloudAgent[] = [];
+    const svc = new CloudAgentService(makeRepo(rows));
+    await svc.syncForDevice("dev1", "u1", null, [ita("la1", "A")]);
     const original = (await svc.listForUser("u1"))[0];
-    await svc.syncForDeviceInTx("dev1", "u1", null, []); // 软删 la1
-    await svc.syncForDeviceInTx("dev1", "u1", null, [ita("la1", "A2")]); // 回来
+    await svc.syncForDevice("dev1", "u1", null, []); // 软删 la1
+    await svc.syncForDevice("dev1", "u1", null, [ita("la1", "A2")]); // 回来
     const listed = await svc.listForUser("u1");
     expect(listed).toHaveLength(1);
     expect(listed[0].deletedAt).toBeNull();
     expect(listed[0].id).toBe(original.id); // 复活复用同一行，id 不漂移
     expect(rows).toHaveLength(1); // 未新建重复行
+  });
+
+  it("批次内重复 localAgentId 只留最后一条，不撞唯一索引新建两行", async () => {
+    const rows: CloudAgent[] = [];
+    const svc = new CloudAgentService(makeRepo(rows));
+    await svc.syncForDevice("dev1", "u1", null, [
+      ita("la1", "第一次出现"),
+      ita("la1", "第二次出现（同批重复）"),
+    ]);
+    const listed = await svc.listForUser("u1");
+    expect(listed).toHaveLength(1); // 未各自建行
+    expect(listed[0].name).toBe("第二次出现（同批重复）"); // 后者覆盖前者
+    expect(rows).toHaveLength(1);
   });
 });

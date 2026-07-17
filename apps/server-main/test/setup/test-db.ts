@@ -17,6 +17,7 @@ import { DataSource, type DataSourceOptions } from "typeorm";
 import { SnakeNamingStrategy } from "typeorm-naming-strategies";
 
 import { AppUser } from "../../../../libs/main/src/entities/app-user.entity";
+import { CloudAgent } from "../../../../libs/main/src/entities/cloud-agent.entity";
 import { Conversation } from "../../../../libs/main/src/entities/conversation.entity";
 import { ConversationMember } from "../../../../libs/main/src/entities/conversation-member.entity";
 import { Device } from "../../../../libs/main/src/entities/device.entity";
@@ -128,6 +129,7 @@ export async function createTestDb(): Promise<TestDbContext> {
       DeviceAuthRequest,
       EmailVerification,
       OrgModelConfig,
+      CloudAgent,
     ],
     namingStrategy: new SnakeNamingStrategy(),
     synchronize: false,

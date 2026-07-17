@@ -1,18 +1,18 @@
-import { Transactional } from "@meshbot/common";
 import type { AgentSyncInput } from "@meshbot/types-main";
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { IsNull, type Repository } from "typeorm";
-import { Agent } from "../entities/agent.entity";
+import { CloudAgent } from "../entities/cloud-agent.entity";
 
 /**
- * Agent 的唯一归属 Service（check:repo）。
+ * CloudAgent 的唯一归属 Service（check:repo）。
  * 负责云端 Agent 注册表的全量对账（设备侧 remote_enabled Agent 元数据镜像）。
  */
 @Injectable()
-export class AgentService {
+export class CloudAgentService {
   constructor(
-    @InjectRepository(Agent) private readonly agentRepo: Repository<Agent>,
+    @InjectRepository(CloudAgent)
+    private readonly agentRepo: Repository<CloudAgent>,
   ) {}
 
   /**
@@ -23,26 +23,28 @@ export class AgentService {
    * 云端 agent.id 是 T5 网关寻址的主键，**不能**先删后插（那样 id 会漂移，
    * 已寻址的 agent 会失效）。故用 upsert + 软删，绝不硬删已存在的行。
    *
-   * tx-check: ignore —— 静态围栏按调用点数计数，只看到末尾一处
-   * `this.agentRepo.save(rows)`；但 rows 是本次对账批量攒出的多行（upsert
-   * 存量/新增 + 软删消失项），一次 save(array) 底层是多条 INSERT/UPDATE，
-   * 必须原子提交（否则半途失败会留下部分行已改、部分未改的脏对账状态），
-   * 事务并非多余。
+   * 无需 @Transactional：从头到尾只写 `agent` 一张表，末尾单次
+   * `this.agentRepo.save(rows)`——`save(array)` 本身即在单个事务内原子提交，
+   * 不需要再额外包一层事务（CLAUDE.md：单表 upsert/update 不需要 @Transactional）。
+   *
+   * 防御：入参 items 若同一 localAgentId 出现多次（调用方 bug/竞态），只保留
+   * 批次内最后一条，避免各自建行时并发写入同一行导致撞
+   * `uq_agent_device_local` 唯一索引裸抛 Postgres 异常。
    */
-  @Transactional()
-  async syncForDeviceInTx(
+  async syncForDevice(
     deviceId: string,
     userId: string,
     orgId: string | null,
     items: AgentSyncInput[],
   ): Promise<void> {
+    const dedupedByLocalId = new Map(items.map((i) => [i.localAgentId, i]));
+
     const existing = await this.agentRepo.find({ where: { deviceId } });
     const byLocalId = new Map(existing.map((e) => [e.localAgentId, e]));
-    const incoming = new Set(items.map((i) => i.localAgentId));
     const now = new Date();
-    const rows: Agent[] = [];
+    const rows: CloudAgent[] = [];
 
-    for (const i of items) {
+    for (const i of dedupedByLocalId.values()) {
       const row =
         byLocalId.get(i.localAgentId) ??
         this.agentRepo.create({ deviceId, localAgentId: i.localAgentId });
@@ -58,7 +60,7 @@ export class AgentService {
     }
 
     const gone = existing.filter(
-      (e) => !incoming.has(e.localAgentId) && e.deletedAt === null,
+      (e) => !dedupedByLocalId.has(e.localAgentId) && e.deletedAt === null,
     );
     for (const g of gone) {
       g.deletedAt = now;
@@ -69,7 +71,7 @@ export class AgentService {
   }
 
   /** web-main 列当前用户的已注册（未软删）远程 Agent。 */
-  listForUser(userId: string): Promise<Agent[]> {
+  listForUser(userId: string): Promise<CloudAgent[]> {
     return this.agentRepo.find({
       where: { userId, deletedAt: IsNull() },
       order: { createdAt: "ASC" },
@@ -77,7 +79,7 @@ export class AgentService {
   }
 
   /** 网关寻址：按云端 agent id 查未软删的行（T5 用）。 */
-  findActiveById(id: string): Promise<Agent | null> {
+  findActiveById(id: string): Promise<CloudAgent | null> {
     return this.agentRepo.findOne({ where: { id, deletedAt: IsNull() } });
   }
 }

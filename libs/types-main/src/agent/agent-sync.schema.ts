@@ -2,7 +2,7 @@ import { z } from "zod";
 
 /**
  * 设备侧全量推送 remote_enabled Agent 元数据(单条)。
- * 供 AgentService.syncForDeviceInTx 对账入参与 T2 注册 REST DTO 复用。
+ * 供 CloudAgentService.syncForDevice 对账入参与 T2 注册 REST DTO 复用。
  */
 export const AgentSyncItemSchema = z.object({
   localAgentId: z
