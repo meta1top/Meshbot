@@ -62,6 +62,7 @@
     "baseUrlPlaceholder": "留空使用供应商默认地址",
     "contextWindow": "上下文窗口（可选）",
     "contextWindowPlaceholder": "留空按模型自动解析",
+    "contextWindowPositive": "上下文窗口必须是正整数",
     "submit": "保存",
     "saving": "保存中...",
     "cancel": "取消"

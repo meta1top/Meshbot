@@ -62,6 +62,7 @@
     "baseUrlPlaceholder": "Leave blank to use the provider default",
     "contextWindow": "Context window (optional)",
     "contextWindowPlaceholder": "Leave blank to auto-resolve from the model",
+    "contextWindowPositive": "Context window must be a positive integer",
     "submit": "Save",
     "saving": "Saving...",
     "cancel": "Cancel"

@@ -72,20 +72,21 @@ ProviderSelect.displayName = "ProviderSelect";
 
 /**
  * 表单层 Schema：在共享 `modelConfigSchema`（`libs/types-agent`）基础上局部
- * extend——`contextWindow` 原为 `z.number()`，表单以字符串收集（DOM input
- * 天然是字符串），这里包一层字符串校验，提交时经 `buildModelConfigPayload`
- * 转回数字；编辑态 `apiKey` 放开必填（留空 = 不更改当前密钥，对齐后端
- * `modelConfigUpdateSchema` 的可选语义）。
+ * extend——`name` 放开必填（留空 = 按供应商+模型自动生成，交
+ * `buildModelConfigPayload` 兜底，对齐占位符文案）；`contextWindow` 原为
+ * `z.number()`，表单以字符串收集（DOM input 天然是字符串），这里包一层字符串
+ * 校验，提交时经 `buildModelConfigPayload` 转回数字；编辑态 `apiKey` 放开必填
+ * （留空 = 不更改当前密钥，对齐后端 `modelConfigUpdateSchema` 的可选语义）。
  */
 function buildFormSchema(mode: "create" | "edit") {
   const base = modelConfigSchema.extend({
+    name: z.string().optional(),
     contextWindow: z
       .string()
       .optional()
-      .refine(
-        (v) => !v || (/^\d+$/.test(v) && Number(v) > 0),
-        "上下文窗口必须是正整数",
-      ),
+      .refine((v) => !v || (/^\d+$/.test(v) && Number(v) > 0), {
+        message: "modelForm.contextWindowPositive",
+      }),
   });
   return mode === "edit"
     ? base.extend({ apiKey: z.string().optional() })

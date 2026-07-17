@@ -1,4 +1,8 @@
-import { buildModelConfigPayload, isLocalConfig } from "./model-config-form";
+import {
+  buildModelConfigPayload,
+  buildUpdatePatch,
+  isLocalConfig,
+} from "./model-config-form";
 
 describe("model-config-form pure helpers", () => {
   it("buildModelConfigPayload 空 name 用 provider+model 兜底、空串归 undefined", () => {
@@ -41,5 +45,35 @@ describe("model-config-form pure helpers", () => {
   it("isLocalConfig 按 source 判定可编辑", () => {
     expect(isLocalConfig({ source: "local" } as never)).toBe(true);
     expect(isLocalConfig({ source: "cloud" } as never)).toBe(false);
+  });
+
+  it("buildUpdatePatch apiKey 留空时 patch 不含 apiKey（保持原值）", () => {
+    const patch = buildUpdatePatch({
+      providerType: "openai",
+      name: "X",
+      model: "gpt-4o",
+      apiKey: "",
+      baseUrl: "http://h",
+      contextWindow: 8000,
+    });
+    expect(patch).toEqual({
+      name: "X",
+      model: "gpt-4o",
+      baseUrl: "http://h",
+      contextWindow: 8000,
+    });
+    expect(Object.hasOwn(patch, "apiKey")).toBe(false);
+  });
+
+  it("buildUpdatePatch apiKey 有值时 patch 携带新值", () => {
+    const patch = buildUpdatePatch({
+      providerType: "openai",
+      name: "X",
+      model: "gpt-4o",
+      apiKey: "sk-new",
+      baseUrl: "http://h",
+      contextWindow: 8000,
+    });
+    expect(patch.apiKey).toBe("sk-new");
   });
 });

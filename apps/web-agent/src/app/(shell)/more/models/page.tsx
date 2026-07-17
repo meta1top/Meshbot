@@ -24,8 +24,8 @@ import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { ToolPage } from "@/components/layouts/tool-page";
 import { ModelConfigForm } from "@/components/settings/model-config-form";
 import { MoreSidebar } from "@/components/shell/more-sidebar";
-import { isLocalConfig } from "@/lib/model-config-form";
-import type { ModelConfig, ModelConfigUpdate } from "@/rest/model-config";
+import { buildUpdatePatch, isLocalConfig } from "@/lib/model-config-form";
+import type { ModelConfig } from "@/rest/model-config";
 import { useModelConfigMutations, useModelConfigs } from "@/rest/model-config";
 
 /** 供应商 type → 展示名；未命中预设时原样回退。 */
@@ -60,15 +60,11 @@ export default function ModelsPage() {
       if (panel === "create") {
         await create.mutateAsync(payload);
       } else if (panel) {
-        // providerType 创建后不可改；apiKey 留空表示不更改当前密钥。
-        const patch: ModelConfigUpdate = {
-          name: payload.name,
-          model: payload.model,
-          baseUrl: payload.baseUrl,
-          contextWindow: payload.contextWindow,
-        };
-        if (payload.apiKey) patch.apiKey = payload.apiKey;
-        await update.mutateAsync({ id: panel.id, patch });
+        // providerType 创建后不可改；apiKey 留空表示不更改当前密钥（见 buildUpdatePatch）。
+        await update.mutateAsync({
+          id: panel.id,
+          patch: buildUpdatePatch(payload),
+        });
       }
       closePanel();
     } catch (err) {

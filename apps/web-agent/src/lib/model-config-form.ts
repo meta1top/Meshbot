@@ -1,5 +1,5 @@
 import type { ModelConfigInput } from "@meshbot/types-agent";
-import type { ModelConfig } from "@/rest/model-config";
+import type { ModelConfig, ModelConfigUpdate } from "@/rest/model-config";
 
 /** 表单收集值（contextWindow 以字符串收，提交时转 number）。 */
 export interface ModelConfigFormValues {
@@ -36,4 +36,19 @@ export function buildModelConfigPayload(
 /** 是否为本地可编辑配置（云端条目只读）。 */
 export function isLocalConfig(config: Pick<ModelConfig, "source">): boolean {
   return config.source === "local";
+}
+
+/**
+ * 编辑态表单 payload → PATCH body：`apiKey` 留空表示不更改当前密钥，需从
+ * patch 里剔除（否则会把已存密钥误清空）；其余字段直传。
+ */
+export function buildUpdatePatch(payload: ModelConfigInput): ModelConfigUpdate {
+  const patch: ModelConfigUpdate = {
+    name: payload.name,
+    model: payload.model,
+    baseUrl: payload.baseUrl,
+    contextWindow: payload.contextWindow,
+  };
+  if (payload.apiKey) patch.apiKey = payload.apiKey;
+  return patch;
 }
