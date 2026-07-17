@@ -366,6 +366,14 @@ export const RunErrorEventSchema = z.object({
   /** 出错批次的用户 PendingMessage id —— 流前出错（messageId 为 null）时供前端定位失败气泡。 */
   pendingIds: z.array(z.string()),
   error: z.string(),
+  /**
+   * 结构化拒绝原因（可选）：目前仅 L3 远程 run 二次门控等「预检拒绝」场景
+   * 由 A 侧 `RemoteRunService` 补发的影子 run.error 帧携带（如
+   * `"agent_not_remotable"`，透传自 `AgentRunEnd.reason`），供前端走专属
+   * 文案分支而非展示 `error` 原始文本；本地 run 的 run.error 不设该字段，
+   * 前端应把「未设置」当作既有行为（展示 `error`）的兜底。
+   */
+  reason: z.string().optional(),
 });
 export type RunErrorEvent = z.infer<typeof RunErrorEventSchema>;
 

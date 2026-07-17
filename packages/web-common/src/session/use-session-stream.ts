@@ -254,6 +254,126 @@ export interface SessionStream {
 }
 
 /**
+ * 把所有未终态（streaming/running）的工具块置为 error 终态。
+ * 中断/失败后 tool_call_end 永远不会到达，不收尾这些块会永久转圈。
+ *
+ * 模块级纯函数（原内嵌在 hook 的订阅 effect 闭包里）：提到外面既能被
+ * `settleInterruptedTimeline` 复用，也能脱离 React 直接单测。
+ */
+function settleUnfinishedToolCalls(list: TimelineMessage[]): TimelineMessage[] {
+  return list.map((m) =>
+    m.toolCalls?.some((t) => t.status === "streaming" || t.status === "running")
+      ? {
+          ...m,
+          toolCalls: m.toolCalls.map((t) =>
+            t.status === "streaming" || t.status === "running"
+              ? { ...t, status: "error" as const, argsText: undefined }
+              : t,
+          ),
+        }
+      : m,
+  );
+}
+
+/**
+ * 结算「被中断/被拒绝」的时间线快照（Bug #4 命门）：清 streaming 标记、
+ * 锁定尚未结束的 reasoning 计时（`reasoningDurationMs = now - reasoningStartedAt`）、
+ * 把未终态工具块收尾为 error。
+ *
+ * 点「打断」与后端 `run.interrupted` 事件共用同一份结算逻辑，天然幂等——
+ * 字段已经锁定的消息不会被二次覆盖，所以：
+ * - 乐观本地打断（`interrupt()` 点击当帧调用，不传 `targetMessageId`）：
+ *   立即让「思考中 Xs」计时器停摆、打断按钮消失，不等 WS 往返。
+ * - 后端确认到达（`onInterrupted`，传 `e.messageId`）：按原语义只清该条消息的
+ *   `streaming`，但这次补充锁 reasoning 计时——这正是原 bug 所在：`onInterrupted`
+ *   只清了 `streaming`，从未锁过 `reasoningDurationMs`，导致 `ReasoningBlock`
+ *   的 `isThinking`（`durationMs === undefined && startedAt !== undefined`）
+ *   哪怕 run 已经结束仍判 true，计时器永远不停。
+ *
+ * `targetMessageId` 省略时对任意仍在 streaming 的消息生效（单会话同时只有
+ * 一条消息在跑，乐观路径不知道具体 messageId 也能正确结算）。
+ */
+export function settleInterruptedTimeline(
+  messages: TimelineMessage[],
+  targetMessageId?: string,
+): TimelineMessage[] {
+  const now = Date.now();
+  const settled = messages.map((m) => {
+    const clearStreaming =
+      m.streaming === true &&
+      (targetMessageId === undefined || m.id === targetMessageId);
+    const lockDuration =
+      m.reasoningStartedAt !== undefined && m.reasoningDurationMs === undefined;
+    if (!clearStreaming && !lockDuration) return m;
+    return {
+      ...m,
+      ...(clearStreaming ? { streaming: false } : {}),
+      ...(lockDuration
+        ? { reasoningDurationMs: now - (m.reasoningStartedAt as number) }
+        : {}),
+    };
+  });
+  return settleUnfinishedToolCalls(settled);
+}
+
+/**
+ * `run.error` 事件的时间线结算（Bug #13 核心，抽成纯函数脱离 socket/ref 单测）。
+ *
+ * 常规部分与原实现等价：按 `pendingIds`/`messageId` 标记失败气泡 + 清对应
+ * loading 占位 + 收尾未终态工具块；新增 `event.reason` 透传到 `errorReason`，
+ * 供渲染层区分「远程二次门控拒绝」等结构化原因走专属文案（见 message-list.tsx）。
+ *
+ * `strandedSend` 非空时（远程续写的用户输入在 `run.human` 落地前就被拒绝，
+ * 从未在 timeline 出现过——`use-session-stream.ts` 的 `remotePendingSendRef`
+ * 判定）追加一条本地失败气泡，`id` 由调用方生成好传入（保持本函数纯粹，
+ * 不内部调用 `clientSnowflakeId`），不让用户输入凭空消失。
+ */
+export function settleErrorTimeline(
+  messages: TimelineMessage[],
+  event: {
+    messageId: string | null;
+    pendingIds: readonly string[];
+    error: string;
+    reason?: string;
+  },
+  strandedSend: { id: string; content: string } | null,
+): TimelineMessage[] {
+  const failedIds = new Set<string>(event.pendingIds);
+  if (event.messageId) failedIds.add(event.messageId);
+  const loadingIdsToDrop = new Set<string>();
+  for (const id of failedIds) loadingIdsToDrop.add(`loading-${id}`);
+  const errorText = event.error.slice(0, 200);
+  const next = messages
+    .filter((m) => !loadingIdsToDrop.has(m.id))
+    .map((m) =>
+      failedIds.has(m.id)
+        ? {
+            ...m,
+            failed: true,
+            pending: false,
+            streaming: false,
+            errorText,
+            ...(event.reason ? { errorReason: event.reason } : {}),
+          }
+        : m,
+    );
+  const withStranded = strandedSend
+    ? [
+        ...next,
+        {
+          id: strandedSend.id,
+          role: "user" as const,
+          content: strandedSend.content,
+          failed: true,
+          errorText,
+          ...(event.reason ? { errorReason: event.reason } : {}),
+        },
+      ]
+    : next;
+  return settleUnfinishedToolCalls(withStranded);
+}
+
+/**
  * 会话流式状态 hook：拉历史 + 订阅 SESSION_WS 事件 → 维护 TimelineMessage 列表、
  * running、compaction、历史分页，并暴露 send/interrupt/loadMoreHistory 与 apply。
  * sessionId 为 null 时惰性 inert（不请求不订阅），可安全挂载。
@@ -303,6 +423,16 @@ export function useSessionStream(
   const [historyError, setHistoryError] = useState(false);
   /** remote 分支当前有效的 streamId（供 interrupt 路由用），见上方 hook 注释。 */
   const remoteStreamIdRef = useRef<string | null>(null);
+  /**
+   * remote 续写「刚发出去、还没等到 run.human 落地」的暂存内容（Bug #13）。
+   * `send()` 的 remote 分支不做本地乐观占位（见该函数注释），真实 user 气泡
+   * 完全交给 `onHuman`；但 B 侧二次门控等预检拒绝发生在 run.human 之前，
+   * 前端对这条消息一无所知——这个 ref 就是唯一留存，供 `onError` 在判定
+   * 「这条消息终究没有落地」时补一条本地失败气泡。`onHuman`/`onInterrupted`
+   * 触发时清空（要么真落地了，要么本轮已经结束不再需要）。同一时刻至多一条
+   * 未落地的远程续写（`send()` 内已有 `running` 守卫防并发），单值足够。
+   */
+  const remotePendingSendRef = useRef<{ content: string } | null>(null);
   /** 压缩进行中标记。null = 未压缩；string = 压缩原因（用于 banner 文案）。 */
   const [compacting, setCompacting] = useState<
     null | "threshold" | "ctx-exceeded"
@@ -411,6 +541,8 @@ export function useSessionStream(
     remoteStreamIdRef.current = remoteDeviceId
       ? (remoteInitialStreamId ?? null)
       : null;
+    // 切会话：上一个会话的「未落地远程续写」暂存不该带进新会话。
+    remotePendingSendRef.current = null;
     callbacksRef.current.onUsageReset?.(sessionId);
     let cancelled = false;
     setHistoryLoading(true);
@@ -595,6 +727,9 @@ export function useSessionStream(
 
     const onHuman = (e: RunHumanEvent) => {
       if (e.sessionId !== sessionId) return;
+      // 消息真正落地了：remote 续写暂存的「未落地」标记不再需要（Bug #13，
+      // 见 remotePendingSendRef 声明处注释）。
+      remotePendingSendRef.current = null;
       migrateHumanToTimeline(e.messageId, e.content);
     };
     const onReasoning = (e: RunReasoningChunkEvent) => {
@@ -748,70 +883,30 @@ export function useSessionStream(
         ),
       );
     };
-    /**
-     * 把所有未终态（streaming/running）的工具块置为 error 终态。
-     * 中断/失败后 tool_call_end 永远不会到达，不收尾这些块会永久转圈。
-     */
-    const settleUnfinishedToolCalls = (
-      list: TimelineMessage[],
-    ): TimelineMessage[] =>
-      list.map((m) =>
-        m.toolCalls?.some(
-          (t) => t.status === "streaming" || t.status === "running",
-        )
-          ? {
-              ...m,
-              toolCalls: m.toolCalls.map((t) =>
-                t.status === "streaming" || t.status === "running"
-                  ? { ...t, status: "error" as const, argsText: undefined }
-                  : t,
-              ),
-            }
-          : m,
-      );
-
     const onInterrupted = (e: RunInterruptedEvent) => {
       if (e.sessionId !== sessionId) return;
       setRunning(false);
-      apply((prev) =>
-        settleUnfinishedToolCalls(
-          prev.map((m) =>
-            m.id === e.messageId ? { ...m, streaming: false } : m,
-          ),
-        ),
-      );
+      // 该会话本轮如果真正跑起来过，run.human 早已落地，remote 续写的
+      // 乐观占位没有留存的必要——清掉，避免和下一次 send() 的暂存串台。
+      remotePendingSendRef.current = null;
+      apply((prev) => settleInterruptedTimeline(prev, e.messageId));
     };
     const onError = (e: RunErrorEvent) => {
       if (e.sessionId !== sessionId) return;
       setRunning(false);
-      // 不再追加错误气泡：把对应气泡标记 failed，由其上挂载重试按钮
-      // pendingIds 覆盖「流前出错」场景（messageId 为 null 时仍能标记用户气泡）
-      const failedIds = new Set<string>(e.pendingIds);
-      if (e.messageId) {
-        failedIds.add(e.messageId);
-      }
-      // 清掉失败那条 user 对应的 loading 占位（id 形如 loading-<messageId>）；
-      // 其它 run 的 loading 不动。
-      const loadingIdsToDrop = new Set<string>();
-      for (const id of failedIds) loadingIdsToDrop.add(`loading-${id}`);
-      apply((prev) =>
-        settleUnfinishedToolCalls(
-          prev
-            .filter((m) => !loadingIdsToDrop.has(m.id))
-            .map((m) =>
-              failedIds.has(m.id)
-                ? {
-                    ...m,
-                    failed: true,
-                    pending: false,
-                    streaming: false,
-                    // 错误原因随气泡展示；截断防止超长堆栈撑爆消息流
-                    errorText: e.error.slice(0, 200),
-                  }
-                : m,
-            ),
-        ),
-      );
+      // 【Bug #13】远程二次门控等预检拒绝（reason="agent_not_remotable"）发生在
+      // B 侧建会话/回 run.human 之前——这条 user 消息从未在 timeline 里出现过。
+      // remotePendingSendRef 是 send() 时暂存的「刚发出去、还没等到 run.human
+      // 落地」的内容：仍非空说明这条消息至今没有真正落地，交给
+      // settleErrorTimeline 补一条本地失败气泡，不让用户输入凭空消失。
+      const strandedSend = remotePendingSendRef.current
+        ? {
+            id: clientSnowflakeId(),
+            content: remotePendingSendRef.current.content,
+          }
+        : null;
+      remotePendingSendRef.current = null;
+      apply((prev) => settleErrorTimeline(prev, e, strandedSend));
     };
     const onUsage = (e: RunUsageEvent) => {
       if (e.sessionId !== sessionId) return;
@@ -1094,6 +1189,11 @@ export function useSessionStream(
           });
           remoteStreamIdRef.current = streamId;
           setRunning(true);
+          // 暂存本轮内容（Bug #13）：streamId 已经拿到、A 本地已接受，但 B
+          // 侧是否真的接受（二次门控）要等异步的 run.human/agentRunEnd 才知道。
+          // 在此之前，这是这条用户输入唯一的留存——onHuman 落地后清空，
+          // onError/onInterrupted 收尾时若仍非空，据此补一条失败气泡。
+          remotePendingSendRef.current = { content: msg };
         } catch (err) {
           console.error("远程续写失败", err);
           // ChatInput onSend 后同步清空编辑器（不看成败），relay 抖动/超时时
@@ -1139,9 +1239,21 @@ export function useSessionStream(
    * （`transport.interrupt`），路由靠 `remoteStreamIdRef` 当前记的 streamId
    * ——若为 null（本页尚未发起过 run，如直接刷新进入一个仍在跑的远程会话）
    * 则无法路由到 B，no-op（Phase A 已知限制）。
+   *
+   * 【Bug #4】点击当帧先乐观本地结算（`setRunning(false)` +
+   * `settleInterruptedTimeline`），不等 `transport.interrupt` 的网络往返、
+   * 更不等后端 `run.interrupted` 事件——否则「思考中 Xs」计时器与打断按钮
+   * 会在用户点完之后继续转好一截（甚至在 `onInterrupted` 从未补锁
+   * `reasoningDurationMs` 的旧实现里永远转下去，即原 bug）。后端确认到达时
+   * `onInterrupted`/`onError` 仍会再跑一次同一份结算逻辑对齐最终态——两次
+   * 结算天然幂等，不会有视觉跳变；万一实际并未真正打断（如 B 侧仍在继续跑），
+   * 下一帧 onChunk/onReasoning/onSnapshot 会把 running 重新拨回 true，不会
+   * 永久卡在错误的「已停」态。
    */
   const interrupt = useCallback(() => {
     if (!sessionId) return;
+    setRunning(false);
+    apply((prev) => settleInterruptedTimeline(prev));
     if (remoteDeviceId) {
       // streamId 为 null 时的 warn + no-op 已下沉到 transport.interrupt 内部
       // （与本函数原有文案逐字一致，见 lib/session-transport.ts），此处不再重复判断。
@@ -1153,7 +1265,7 @@ export function useSessionStream(
       return;
     }
     void transport.interrupt(null, sessionId);
-  }, [sessionId, remoteDeviceId, transport]);
+  }, [sessionId, remoteDeviceId, transport, apply]);
 
   /**
    * 滚动到顶部触发：拉早于当前最旧消息的下一批 history。

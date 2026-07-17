@@ -45,6 +45,12 @@ export interface TimelineMessage {
   failed?: boolean;
   /** run 失败的错误原因（仅实时 run.error 事件携带；历史恢复的 failed 行无此值）。 */
   errorText?: string;
+  /**
+   * 结构化错误原因（透传自 `RunErrorEvent.reason`）。目前仅 L3 远程二次门控
+   * 拒绝场景设置为 `"agent_not_remotable"`：渲染层据此走专属 next-intl 文案，
+   * 而不是展示 `errorText` 的原始兜底文本。未设置时按既有行为展示 `errorText`。
+   */
+  errorReason?: string;
   /** 推理模型的思考过程（仅 assistant）：流式累积，渲染在气泡上方可展开折叠区。 */
   reasoning?: string;
   /**

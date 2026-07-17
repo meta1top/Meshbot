@@ -598,6 +598,7 @@ function RemoteSessionViewReady({
               reasoningProcess: t("reasoningProcess"),
               compactionRowTitle: (count) =>
                 t("compaction.rowTitle", { count }),
+              runErrorAgentNotRemotable: t("runErrorAgentNotRemotable"),
             },
             toolCall: { artifactPresentFailed: t("artifact.presentFailed") },
             pendingList: {

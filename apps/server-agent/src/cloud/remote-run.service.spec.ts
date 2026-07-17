@@ -172,6 +172,78 @@ describe("RemoteRunService", () => {
       };
       expect(() => svc.onEnd(end)).not.toThrow();
     });
+
+    it("【Bug #13】append 模式二次门控拒绝（从未收到过帧）→ 补发影子 run.error 带 reason，前端才不会 running 卡死 + 消息凭空消失", () => {
+      const { svc, emitter } = make();
+      // append 模式一开始就带已知 sessionId（register 时写入 entry.sessionId），
+      // 但 onFrame 从未被调用过——模拟 B 侧二次门控在建会话/转发任何帧之前
+      // 直接拒绝的场景。
+      const { streamId } = svc.startRun(
+        "u1",
+        "dB",
+        "append",
+        "remote-sess-1",
+        "hello",
+      );
+
+      svc.onEnd({
+        streamId,
+        requesterDeviceId: "dA",
+        reason: "agent_not_remotable",
+      });
+
+      expect(emitter.emit).toHaveBeenCalledWith(REMOTE_SHADOW_FRAME_EVENT, {
+        event: SESSION_WS_EVENTS.runError,
+        payload: expect.objectContaining({
+          sessionId: "remote-sess-1",
+          messageId: null,
+          pendingIds: [],
+          reason: "agent_not_remotable",
+        }),
+      });
+    });
+
+    it("已收到过至少一帧（正常终止 done/error/interrupted）→ 不重复补发，B 侧转发的真实终止帧已经够了", () => {
+      const { svc, emitter } = make();
+      const { streamId } = svc.startRun(
+        "u1",
+        "dB",
+        "append",
+        "remote-sess-1",
+        "hello",
+      );
+      svc.onFrame(
+        makeFrame({
+          streamId,
+          sessionId: "remote-sess-1",
+          event: SESSION_WS_EVENTS.runDone,
+          payload: {
+            sessionId: "remote-sess-1",
+            messageId: "m1",
+            content: "hi",
+          },
+        }),
+      );
+      emitter.emit.mockClear();
+
+      svc.onEnd({ streamId, requesterDeviceId: "dA", reason: "done" });
+
+      expect(emitter.emit).not.toHaveBeenCalled();
+    });
+
+    it("create 模式二次门控拒绝、sessionId 未知（首帧从未到达）→ 无房间可发，静默清理不 emit", () => {
+      const { svc, emitter } = make();
+      const { streamId } = svc.startRun("u1", "dB", "create", null, "hello");
+      emitter.emit.mockClear();
+
+      svc.onEnd({
+        streamId,
+        requesterDeviceId: "dA",
+        reason: "agent_not_remotable",
+      });
+
+      expect(emitter.emit).not.toHaveBeenCalled();
+    });
   });
 
   describe("sendControl", () => {

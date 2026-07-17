@@ -29,12 +29,40 @@ export type RemoteRunView = { streamId: string; sessionId: string | null };
 
 /**
  * 单条长活流订阅：目标设备 id（守卫 (device,session) 并发用）+ B 侧会话 id
- * （create 模式首帧才知道）+ idle 超时定时器。
+ * （create 模式首帧才知道）+ idle 超时定时器 + 是否收到过至少一帧运行帧。
  */
 interface StreamEntry {
   targetDeviceId: string;
   sessionId: string | null;
   timer: NodeJS.Timeout;
+  /**
+   * 是否已通过 `onFrame` 收到过至少一帧真实运行帧（Bug #13 命门）。
+   * B 侧二次门控等「预检拒绝」（`agent_not_remotable`/未建会话即失联的
+   * `offline`）发生在任何 `SESSION_WS_EVENTS.*` 帧产生之前——`onEnd`
+   * 据此判断是否需要主动补发一条影子 `run.error` 收尾，否则前端永远等
+   * 不到 done/interrupted/error，`running` 卡死、用户消息也没有落地机会。
+   * 正常终止（done/error/interrupted）在 `agentRunEnd` 之前，B 侧
+   * `subscribeAndForward` 已经把真实的终止帧转发过一次，此时该值必为
+   * true，`onEnd` 不需要也不应该再补发。
+   */
+  frameReceived: boolean;
+}
+
+/**
+ * 把「预检拒绝」的 `AgentRunEnd.reason` 映射成默认展示文案（未接入 next-intl
+ * 的消费方——如 web-main 独立实现——的兜底；web-agent 前端优先用
+ * `RunErrorEvent.reason` 走专属 next-intl 文案，见
+ * `packages/web-common/src/session/use-session-stream.ts` 的 onError）。
+ */
+function describePreflightRejection(reason: AgentRunEnd["reason"]): string {
+  switch (reason) {
+    case "agent_not_remotable":
+      return "目标 Agent 未开启远程访问，本次消息未发送";
+    case "offline":
+      return "目标设备已离线，本次消息未发送";
+    default:
+      return `远程 run 未能开始（${reason}）`;
+  }
 }
 
 /**
@@ -150,6 +178,7 @@ export class RemoteRunService implements OnModuleDestroy {
       );
     }
     this.bumpIdle(frame.streamId);
+    entry.frameReceived = true;
     // 影子渲染：frame.payload 已是完整 SESSION_WS_EVENTS.* payload，包进专属
     // 桥事件重发，A 的 SessionGateway 解包后转发到 room=payload.sessionId。
     this.emitter.emit(REMOTE_SHADOW_FRAME_EVENT, {
@@ -158,9 +187,36 @@ export class RemoteRunService implements OnModuleDestroy {
     } satisfies RemoteShadowFramePayload);
   }
 
-  /** relay 收到 B 侧流终止通知（done/error/interrupted/offline）→ 清理该 streamId 订阅。 */
+  /**
+   * relay 收到 B 侧流终止通知（done/error/interrupted/offline/agent_not_remotable）
+   * → 清理该 streamId 订阅。
+   *
+   * 【Bug #13 命门】正常终止（done/error/interrupted）之前，B 侧
+   * `subscribeAndForward` 已经把真实的 `SESSION_WS_EVENTS.*` 终止帧转发过一次
+   * （`onFrame` 收到、`entry.frameReceived` 已置 true），前端早已据此清过
+   * `running`。但二次门控等「预检拒绝」（`agent_not_remotable`）发生在 B 侧
+   * 建会话 / 转发任何帧之前——本 streamId 从未走过 `onFrame`，前端对这次
+   * 远程 run 一无所知：`running` 永远卡 true（打断按钮不消失）、也永远等
+   * 不到 `run.human`（用户发的消息从未在 timeline 出现过）。这里补一条影子
+   * `run.error`（带 `reason`，供前端走专属文案 + 补一条失败气泡），是这条
+   * streamId 唯一能触达前端的机会——`entry.sessionId` 为 null（create 模式
+   * 首帧都没到达）时没有房间可发，只能静默清理（与 idle 超时兜底同一取舍）。
+   */
   @OnEvent(IM_RELAY_EVENTS.agentRunEnd)
   onEnd(end: AgentRunEnd): void {
+    const entry = this.streams.get(end.streamId);
+    if (entry && !entry.frameReceived && entry.sessionId) {
+      this.emitter.emit(REMOTE_SHADOW_FRAME_EVENT, {
+        event: SESSION_WS_EVENTS.runError,
+        payload: {
+          sessionId: entry.sessionId,
+          messageId: null,
+          pendingIds: [],
+          error: describePreflightRejection(end.reason),
+          reason: end.reason,
+        } satisfies RunErrorEvent,
+      } satisfies RemoteShadowFramePayload);
+    }
     this.clear(end.streamId);
   }
 
@@ -186,6 +242,7 @@ export class RemoteRunService implements OnModuleDestroy {
       targetDeviceId,
       sessionId,
       timer: this.scheduleIdleTimeout(streamId),
+      frameReceived: false,
     });
     if (sessionId) {
       this.activeSessionRuns.set(

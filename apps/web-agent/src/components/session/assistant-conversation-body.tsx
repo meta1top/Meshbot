@@ -369,6 +369,7 @@ export function AssistantConversationBody({
           reasoningThought: (seconds) => t("reasoningThought", { seconds }),
           reasoningProcess: t("reasoningProcess"),
           compactionRowTitle: (count) => tCompaction("rowTitle", { count }),
+          runErrorAgentNotRemotable: t("runErrorAgentNotRemotable"),
         },
         toolCall: { artifactPresentFailed: tArtifact("presentFailed") },
         pendingList: {

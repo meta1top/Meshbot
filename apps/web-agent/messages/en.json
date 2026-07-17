@@ -250,7 +250,8 @@
       "previewTitle": "Artifact preview",
       "imageAlt": "Artifact"
     },
-    "runErrorPrefix": "Run failed: "
+    "runErrorPrefix": "Run failed: ",
+    "runErrorAgentNotRemotable": "This agent hasn't enabled remote access, so this message wasn't sent"
   },
   "newMessage": {
     "title": "New message",

@@ -32,6 +32,12 @@ export interface MessageListLabels {
   reasoningProcess: string;
   /** 压缩占位行标题，转发给 CompactionRow。 */
   compactionRowTitle: (count: number) => string;
+  /**
+   * 远程二次门控拒绝的专属文案（Bug #13）：`m.errorReason === "agent_not_remotable"`
+   * 时展示这条，而不是展示 `errorText` 里未经翻译的原始兜底文本（如「目标 Agent
+   * 未开启远程访问，本次消息未发送」）。
+   */
+  runErrorAgentNotRemotable: string;
 }
 
 export interface MessageListProps {
@@ -228,10 +234,12 @@ export function MessageList({
                     )}
                   </div>
                 )}
-                {m.failed && m.errorText && (
+                {m.failed && (m.errorText || m.errorReason) && (
                   <div className="text-xs text-destructive/80">
                     {labels.runErrorPrefix}
-                    {m.errorText}
+                    {m.errorReason === "agent_not_remotable"
+                      ? labels.runErrorAgentNotRemotable
+                      : m.errorText}
                   </div>
                 )}
                 {m.role === "assistant" &&

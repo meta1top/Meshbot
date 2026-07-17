@@ -78,6 +78,7 @@
     "reasoningThinking": "思考中 {seconds}s",
     "reasoningThought": "已思考 {seconds}s",
     "runErrorPrefix": "运行失败：",
+    "runErrorAgentNotRemotable": "该 Agent 未开启远程访问，本次消息未发送",
     "remoteLoadFailed": "会话历史加载失败",
     "actionFailed": "操作失败，请重试",
     "createFailed": "会话创建失败，设备可能已离线，请重试",

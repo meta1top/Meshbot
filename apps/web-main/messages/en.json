@@ -535,6 +535,7 @@
     "reasoningThinking": "Thinking {seconds}s",
     "reasoningThought": "Thought for {seconds}s",
     "runErrorPrefix": "Run failed: ",
+    "runErrorAgentNotRemotable": "This agent hasn't enabled remote access, so this message wasn't sent",
     "remoteLoadFailed": "Failed to load session history",
     "actionFailed": "Action failed, please retry",
     "createFailed": "Failed to create session — the device may be offline. Please retry",
