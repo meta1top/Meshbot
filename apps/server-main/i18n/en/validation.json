@@ -7,5 +7,6 @@
   "invalidUrl": "Invalid URL format",
   "invalidSlug": "Invalid slug (lowercase letters / digits / hyphens only, 3-63 chars)",
   "passwordTooShort": "Password must be at least 8 characters",
-  "invalidFormat": "Invalid format"
+  "invalidFormat": "Invalid format",
+  "duplicate": "Duplicate entry"
 }

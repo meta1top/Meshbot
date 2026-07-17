@@ -112,4 +112,9 @@ export const MainErrorCode = defineErrorCode({
     message: "device.notFound",
     httpStatus: 404,
   },
+  AGENT_REGISTRY_REQUIRES_DEVICE_TOKEN: {
+    code: 2029,
+    message: "agent.registryRequiresDeviceToken",
+    httpStatus: 401,
+  },
 });

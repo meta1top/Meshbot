@@ -7,5 +7,6 @@
   "invalidUrl": "URL 格式不正确",
   "invalidSlug": "slug 格式不正确（仅小写字母 / 数字 / 连字符，3-63 字符）",
   "passwordTooShort": "密码至少 8 位",
-  "invalidFormat": "格式不正确"
+  "invalidFormat": "格式不正确",
+  "duplicate": "存在重复项"
 }

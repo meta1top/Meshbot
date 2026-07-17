@@ -27,3 +27,40 @@ export const AgentSyncRequestSchema = z.object({
   items: z.array(AgentSyncItemSchema),
 });
 export type AgentSyncRequest = z.infer<typeof AgentSyncRequestSchema>;
+
+/**
+ * T2 注册 REST 的批量 body（`PUT /api/agent/agents`）。
+ *
+ * `superRefine` 双保险：批次内 localAgentId 必须唯一。CloudAgentService.syncForDevice
+ * 虽然会按 localAgentId 去重（保留最后一条），但重复本身多半是调用方 bug，
+ * 且唯一索引 `uq_agent_device_local` 也在兜底——在入口用 Zod 拒掉，让错误就近暴露
+ * 而非被静默吞掉或延后到写库时裸抛 Postgres 异常。
+ */
+export const AgentSyncBatchSchema = z.object({
+  agents: z.array(AgentSyncItemSchema).superRefine((agents, ctx) => {
+    const seen = new Set<string>();
+    for (let i = 0; i < agents.length; i++) {
+      const id = agents[i].localAgentId;
+      if (seen.has(id)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "validation.duplicate",
+          path: [i, "localAgentId"],
+        });
+      }
+      seen.add(id);
+    }
+  }),
+});
+export type AgentSyncBatch = z.infer<typeof AgentSyncBatchSchema>;
+
+/** web-main 列表视图：云端 agent 对外呈现（含云端主键 id 供网关寻址）。 */
+export const AgentViewSchema = z.object({
+  id: z.string(),
+  deviceId: z.string(),
+  localAgentId: z.string(),
+  name: z.string(),
+  avatar: z.string(),
+  description: z.string().nullable(),
+});
+export type AgentView = z.infer<typeof AgentViewSchema>;

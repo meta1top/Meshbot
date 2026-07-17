@@ -13,6 +13,7 @@ export * from "./entities/organization.entity";
 export * from "./entities/org-model-config.entity";
 export * from "./entities/skill-package.entity";
 export * from "./entities/skill-version.entity";
+export * from "./entities/cloud-agent.entity";
 export * from "./entities/cloud-node.entity";
 export * from "./entities/cloud-node-grant.entity";
 export * from "./entities/cloud-share-link.entity";
@@ -22,6 +23,7 @@ export {
   type AppConfigInvitation,
   INVITATION_CONFIG,
 } from "./services/invitation.config";
+export { CloudAgentService } from "./services/cloud-agent.service";
 export { ConversationService } from "./services/conversation.service";
 export { DeviceAuthService } from "./services/device-auth.service";
 export {

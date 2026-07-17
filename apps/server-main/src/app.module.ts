@@ -46,6 +46,7 @@ import { EmailModule } from "./email/email.module";
 import { EventEmitterModule } from "@nestjs/event-emitter";
 import { HealthController } from "./health.controller";
 import { AgentConfigController } from "./rest/agent-config.controller";
+import { AgentRegistryController } from "./rest/agent-registry.controller";
 import { AuthController } from "./rest/auth.controller";
 import { DeviceAuthController } from "./rest/device-auth.controller";
 import { DeviceController } from "./rest/device.controller";
@@ -217,6 +218,7 @@ export class AppModule {
         OrgController,
         OrgModelConfigController,
         AgentConfigController,
+        AgentRegistryController,
         ImController,
         SkillController,
         PublicShareController,
