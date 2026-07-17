@@ -662,6 +662,8 @@
       "duplicateFromPlaceholder": "选择要复制配置的 Agent",
       "duplicating": "复制中…",
       "duplicateFailed": "复制失败，请重试",
+      "loadingAgent": "正在加载 Agent 信息…",
+      "agentNotFound": "该 Agent 已被删除或不存在",
       "fieldName": "名字",
       "fieldNamePlaceholder": "给这个 Agent 起个名字",
       "fieldAvatar": "头像",

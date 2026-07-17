@@ -662,6 +662,8 @@
       "duplicateFromPlaceholder": "Pick an agent to copy",
       "duplicating": "Duplicating…",
       "duplicateFailed": "Duplicate failed, please retry",
+      "loadingAgent": "Loading agent…",
+      "agentNotFound": "This agent has been deleted or no longer exists",
       "fieldName": "Name",
       "fieldNamePlaceholder": "Give this agent a name",
       "fieldAvatar": "Avatar",

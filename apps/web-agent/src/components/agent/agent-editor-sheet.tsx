@@ -171,9 +171,25 @@ export function AgentEditorSheet({
   }, [open]);
 
   const mode: "create" | "edit" = localAgentId ? "edit" : "create";
-  const current = agents?.find((a) => a.id === localAgentId) ?? null;
+  // react-hook-form 的 `defaultValues` 只在 `<Form>` 挂载那一刻生效，之后
+  // `current` 变化不会让表单重新取值（RHF 已知行为，非 bug）。编辑态下若在
+  // agents 列表尚未加载完成时就挂载 `<Form>`，defaultValues 会被冻结成空
+  // 字符串——用户什么都没删，保存时却把这份「看起来是用户清空」的空值原样
+  // 提交，后端 `AgentService.update()` 走的是 `Object.assign` 部分覆盖语义，
+  // 无法分辨「真清空」与「表单没读到值」，于是把已保存的 systemPrompt 覆盖
+  // 成空串——这正是「系统提示词保存后失效 / 重新打开看不到」的根因。
+  // 用「数据就绪前不挂载 `<Form>`」根治：确保挂载时 defaultValues 一定来自
+  // 已加载好的真实 Agent 数据。
+  const agentsReady = agents !== undefined;
+  const current = agentsReady
+    ? (agents.find((a) => a.id === localAgentId) ?? null)
+    : null;
   const canDelete = (agents?.length ?? 0) > 1;
   const duplicateCandidates = agents ?? [];
+  // 新建态不依赖 agents 加载（没有既有数据要等）；编辑态必须等 agents 就绪
+  // 且能找到目标 Agent，才允许 `<Form>` 挂载。
+  const formReady = mode === "create" || (agentsReady && current !== null);
+  const agentMissing = mode === "edit" && agentsReady && current === null;
 
   // AgentEditorFormSchema 的 description/systemPrompt/defaultModelConfigId/
   // remoteEnabled 带 `.default()`：zod 的 Input 类型（可省略）与 Output 类型
@@ -303,111 +319,129 @@ export function AgentEditorSheet({
             </div>
           )}
 
-          <Form
-            key={localAgentId ?? "create"}
-            schema={schema}
-            defaultValues={{
-              name: current?.name ?? "",
-              avatar: current?.avatar ?? DEFAULT_AGENT_AVATAR,
-              description: current?.description ?? "",
-              systemPrompt: current?.systemPrompt ?? "",
-              defaultModelConfigId: current?.defaultModelConfigId ?? null,
-              remoteEnabled: current?.remoteEnabled ?? false,
-            }}
-            onSubmit={handleSubmit}
-            className="flex flex-col gap-4"
-          >
-            <FormItem name="name" label={t("fieldName")}>
-              <Input
-                maxLength={QUICK_ASSISTANT_NAME_MAX}
-                placeholder={t("fieldNamePlaceholder")}
-              />
-            </FormItem>
+          {!formReady && !agentMissing && (
+            <div className="flex flex-1 items-center justify-center gap-2 py-10 text-[13px] text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {t("loadingAgent")}
+            </div>
+          )}
 
-            <FormItem name="avatar" label={t("fieldAvatar")}>
-              <AgentAvatarField />
-            </FormItem>
+          {agentMissing && (
+            <div className="flex flex-1 items-center justify-center py-10 text-[13px] text-muted-foreground">
+              {t("agentNotFound")}
+            </div>
+          )}
 
-            <FormItem name="description" label={t("fieldDescription")}>
-              <Input placeholder={t("fieldDescriptionPlaceholder")} />
-            </FormItem>
-
-            <FormItem name="systemPrompt" label={t("fieldSystemPrompt")}>
-              <Textarea
-                rows={10}
-                className="min-h-40 resize-y font-mono text-[12.5px] leading-relaxed"
-                placeholder={t("fieldSystemPromptPlaceholder")}
-              />
-            </FormItem>
-
-            <FormItem
-              name="defaultModelConfigId"
-              label={t("fieldDefaultModel")}
+          {formReady && (
+            <Form
+              key={localAgentId ?? "create"}
+              schema={schema}
+              defaultValues={{
+                name: current?.name ?? "",
+                avatar: current?.avatar ?? DEFAULT_AGENT_AVATAR,
+                description: current?.description ?? "",
+                systemPrompt: current?.systemPrompt ?? "",
+                defaultModelConfigId: current?.defaultModelConfigId ?? null,
+                remoteEnabled: current?.remoteEnabled ?? false,
+              }}
+              onSubmit={handleSubmit}
+              className="flex flex-col gap-4"
             >
-              <DefaultModelField configs={modelConfigs ?? []} />
-            </FormItem>
-
-            {mode === "edit" && (
-              <FormItem
-                name="remoteEnabled"
-                label={t("fieldRemoteEnabled")}
-                description={t("fieldRemoteEnabledHint")}
-              >
-                <RemoteEnabledField />
+              <FormItem name="name" label={t("fieldName")}>
+                <Input
+                  maxLength={QUICK_ASSISTANT_NAME_MAX}
+                  placeholder={t("fieldNamePlaceholder")}
+                />
               </FormItem>
-            )}
 
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
+              <FormItem name="avatar" label={t("fieldAvatar")}>
+                <AgentAvatarField />
+              </FormItem>
 
-            <SheetFooter className="border-t-0 px-0 pt-0">
-              {mode === "edit" && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    {/* disabled 按钮包一层 span：Radix Tooltip 需要可聚焦/可 hover
-                        的触发元素，disabled button 不派发 mouseenter。 */}
-                    <span className={cn(!canDelete && "cursor-not-allowed")}>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        disabled={!canDelete}
-                        className={cn(!canDelete && "pointer-events-none")}
-                        onClick={() => setDeleteConfirmOpen(true)}
-                      >
-                        {t("delete")}
-                      </Button>
-                    </span>
-                  </TooltipTrigger>
-                  {!canDelete && (
-                    <TooltipContent side="top">
-                      {t("deleteDisabledHint")}
-                    </TooltipContent>
-                  )}
-                </Tooltip>
-              )}
-              <div className="flex-1" />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-                disabled={submitting}
+              <FormItem name="description" label={t("fieldDescription")}>
+                <Input placeholder={t("fieldDescriptionPlaceholder")} />
+              </FormItem>
+
+              <FormItem name="systemPrompt" label={t("fieldSystemPrompt")}>
+                <Textarea
+                  rows={10}
+                  className="min-h-40 resize-y font-mono text-[12.5px] leading-relaxed"
+                  placeholder={t("fieldSystemPromptPlaceholder")}
+                />
+              </FormItem>
+
+              <FormItem
+                name="defaultModelConfigId"
+                label={t("fieldDefaultModel")}
               >
-                {t("cancel")}
-              </Button>
-              <Button type="submit" disabled={submitting}>
-                {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                {submitting ? t("saving") : t("save")}
-              </Button>
-            </SheetFooter>
-          </Form>
+                <DefaultModelField configs={modelConfigs ?? []} />
+              </FormItem>
+
+              {mode === "edit" && (
+                <FormItem
+                  name="remoteEnabled"
+                  label={t("fieldRemoteEnabled")}
+                  description={t("fieldRemoteEnabledHint")}
+                >
+                  <RemoteEnabledField />
+                </FormItem>
+              )}
+
+              {error && (
+                <Alert variant="destructive">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+
+              <SheetFooter className="border-t-0 px-0 pt-0">
+                {mode === "edit" && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      {/* disabled 按钮包一层 span：Radix Tooltip 需要可聚焦/可 hover
+                          的触发元素，disabled button 不派发 mouseenter。 */}
+                      <span className={cn(!canDelete && "cursor-not-allowed")}>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          disabled={!canDelete}
+                          className={cn(!canDelete && "pointer-events-none")}
+                          onClick={() => setDeleteConfirmOpen(true)}
+                        >
+                          {t("delete")}
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    {!canDelete && (
+                      <TooltipContent side="top">
+                        {t("deleteDisabledHint")}
+                      </TooltipContent>
+                    )}
+                  </Tooltip>
+                )}
+                <div className="flex-1" />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => onOpenChange(false)}
+                  disabled={submitting}
+                >
+                  {t("cancel")}
+                </Button>
+                <Button type="submit" disabled={submitting}>
+                  {submitting && (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  )}
+                  {submitting ? t("saving") : t("save")}
+                </Button>
+              </SheetFooter>
+            </Form>
+          )}
 
           {/* MCP 配置：独立于上面的 Agent 身份表单（各自保存），只在编辑既有
               Agent 时展示——新建态尚无 agentId，MCP 端点挂在 /api/agents/:id/mcp
-              下，没有 id 无处可读写。 */}
-          {mode === "edit" && localAgentId && (
+              下，没有 id 无处可读写；同时要求 formReady，避免和上面的加载态
+              同屏出现半截 UI。 */}
+          {mode === "edit" && localAgentId && formReady && (
             <>
               <div className="h-px bg-border" />
               <McpEditor agentId={localAgentId} />

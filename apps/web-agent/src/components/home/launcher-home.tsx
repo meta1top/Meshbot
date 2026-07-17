@@ -4,7 +4,7 @@ import { SessionLauncher } from "@meshbot/web-common/session";
 import { useSetAtom } from "jotai";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { addSessionAtom } from "@/atoms/sessions";
 import { ComposerActions } from "@/components/common/composer-actions";
 import { ModelSelect } from "@/components/common/model-select";
@@ -13,6 +13,8 @@ import {
   type ComposerTarget,
   ComposerTargetBar,
 } from "@/components/home/composer-target-bar";
+import { resolveModelConfigForTarget } from "@/lib/resolve-model-config-for-target";
+import { useAgents } from "@/rest/agents";
 import { fetchRemoteRun, startRemoteRun } from "@/rest/remote-devices";
 import { createSession } from "@/rest/session";
 
@@ -29,6 +31,18 @@ export function LauncherHome() {
   /** 起手台目标：本机 Agent 或远程设备，二选一；null = 未显式选择（本地
    * 发送时不传 agentId，交给后端兜底默认 Agent）。 */
   const [target, setTarget] = useState<ComposerTarget | null>(null);
+  const { data: agents } = useAgents();
+
+  // 切换起手台目标 Agent 时，模型选择器同步重置成该 Agent 的默认模型
+  // （`defaultModelConfigId` 可能是 null = 跟随账号默认，原样写入即可——
+  // `ModelSelect` 把 null 当账号默认渲染，不是「没选」）。只在 `target`
+  // 变化（真的切了 agent）时触发，不会覆盖用户在同一个 Agent 内的手动
+  // 选模型；resolveModelConfigForTarget 对「非 agent 目标」「agents 未
+  // 加载」「命中不到该 id」统一返回 undefined = 不改动，避免误清空。
+  useEffect(() => {
+    const next = resolveModelConfigForTarget(target, agents);
+    if (next !== undefined) setModelConfigId(next);
+  }, [target, agents]);
 
   /**
    * L3：选中远程 agent（非本机）时发送 → 走远程 run 隧道（mode=create），
