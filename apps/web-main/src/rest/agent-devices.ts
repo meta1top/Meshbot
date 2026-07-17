@@ -44,7 +44,8 @@ export function useDeviceOnline(
 
 /**
  * 订阅 `ws/im` 的 presence 事件，实时刷新设备 Agent 在线态缓存。
- * 只认 `agent:` 前缀的 userId（设备 presence），提取 deviceId 后直接写入对应
+ * 只认 `device:` 前缀的 userId（设备 presence，计划二 2b Task 5 已从 `agent:`
+ * 改名——presence 仍是设备级在线态，不是按 Agent 粒度），提取 deviceId 后直接写入对应
  * `useDeviceOnline` 缓存（不触发重新拉取）；人类 presence（无前缀）忽略。
  * 挂载即订阅、卸载即清理，供侧栏与设备管理页共用。
  */

@@ -100,6 +100,13 @@ function startNewRemoteSession(
 }
 
 interface RemoteSessionViewProps {
+  /** 目标云端 Agent id（计划二 2b · T7：寻址主键，用于 transport 创建 /
+   * 远程会话列表查询 / 会话创建后失效缓存——不是设备 id）。 */
+  agentId: string;
+  /** Agent 的宿主设备 id：本组件不用它寻址，仅原样透传给
+   * `artifactRemote`/`RemoteSubagentCard`/`RemoteMessageList` 等纯展示/
+   * 流归属标记用途（`useSessionStream` 的 `remoteDeviceId` 形参只当
+   * 「是否 remote 分支」的布尔标记，不参与寻址，详见该 hook 类文档）。 */
   deviceId: string;
   /** 当前查看的会话 id；null = 尚未选中/新建（展示创建态输入框）。 */
   sessionId: string | null;
@@ -139,19 +146,19 @@ interface RemoteSessionViewProps {
  * `SessionConversationView` 历史加载态的同一块骨架），不渲染会话区。
  */
 export function RemoteSessionView(props: RemoteSessionViewProps) {
-  const { deviceId } = props;
+  const { agentId } = props;
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const [transport, setTransport] = useState<SessionTransport | null>(null);
   useEffect(() => {
-    const created = createRemoteSessionTransport(deviceId);
+    const created = createRemoteSessionTransport(agentId);
     setTransport(created);
-    // 三个监听器挂在 module 级单例 socket 上，deviceId 切换/组件卸载都要
+    // 三个监听器挂在 module 级单例 socket 上，agentId 切换/组件卸载都要
     // 显式 dispose，否则无界累积（同 transport.dispose() 既有惯例）。
     return () => {
       created.dispose?.();
     };
-  }, [deviceId]);
+  }, [agentId]);
 
   if (!transport) {
     return (
@@ -176,6 +183,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
  * 自身不做导航，只暴露状态转移。
  */
 function RemoteSessionViewReady({
+  agentId,
   deviceId,
   sessionId,
   streamId,
@@ -211,15 +219,15 @@ function RemoteSessionViewReady({
       // （新建会话时列表里先是空标题，标题一到就补上）。
       onTitleUpdated: () => {
         void queryClient.invalidateQueries({
-          queryKey: remoteSessionsQueryKey(deviceId),
+          queryKey: remoteSessionsQueryKey(agentId),
         });
       },
     },
-    deviceId,
+    agentId,
     streamId,
   );
 
-  const { data: sessions } = useRemoteSessions(deviceId, true);
+  const { data: sessions } = useRemoteSessions(agentId, true);
   const currentSession = sessions?.find((s) => s.id === sessionId);
   const [modelOverride, setModelOverride] = useState<string | null>(null);
   const sessionModelId = modelOverride ?? currentSession?.modelConfigId ?? null;

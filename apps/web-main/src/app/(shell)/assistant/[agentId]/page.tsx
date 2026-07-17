@@ -10,32 +10,40 @@ import { Suspense, useEffect } from "react";
 import { RemoteSessionView } from "@/components/assistant/remote-session-view";
 import { remoteSessionsQueryKey } from "@/hooks/use-remote-sessions";
 import { useDeviceOnline, useDevicePresenceSync } from "@/rest/agent-devices";
+import { useAgents } from "@/rest/agents";
 import { useProfile } from "@/rest/auth";
 import { useDevices } from "@/rest/devices";
 
 /**
- * 设备详情页：在线 → 完整远程会话界面（会话子栏 + `RemoteSessionView`）；
- * 离线 → 设备详情卡（在线态字段已显示离线）+ 禁止输入的提示；设备不存在
- * （未找到/已吊销/加载失败）→ 空态。`?session=` 决定当前查看的会话；既无
- * `?session=` 也无 `?draft=`（起手台交接的建会话草稿）时重定向回 `/assistant`
- * 起手台——「新建会话页」态已下线。`?streamId=` 只在本页自己刚发起
- * create 后由 `RemoteSessionView.onSessionCreated` 写入，用于把首轮
+ * Agent 会话页（计划二 2b · T7：URL 主键从 `[deviceId]` 改 `[agentId]`，
+ * 寻址按云端 Agent id）：在线（宿主设备在线，2c 才会做 Agent 粒度在线态派生）
+ * → 完整远程会话界面（会话子栏 + `RemoteSessionView`）；离线 → 设备详情卡
+ * （在线态字段已显示离线）+ 禁止输入的提示；Agent 不存在（未注册/已软删/
+ * 宿主设备不存在或已吊销/加载失败）→ 空态。`?session=` 决定当前查看的会话；
+ * 既无 `?session=` 也无 `?draft=`（起手台交接的建会话草稿）时重定向回
+ * `/assistant` 起手台——「新建会话页」态已下线。`?streamId=` 只在本页自己刚
+ * 发起 create 后由 `RemoteSessionView.onSessionCreated` 写入，用于把首轮
  * running/interrupt 路由带过去——直接导航进一个已有会话（点会话列表 /
  * 刷新页面）时天然没有这个参数，重连活跃流不在 V1 范围（见任务报告）。
+ *
+ * `useDevices`/`useDeviceOnline` 仍按 Agent 的宿主设备（`agent.deviceId`）
+ * 查询——设备在线态/详情字段（platform/lastSeenAt 等）本期仍来自 Device 行，
+ * 按宿主设备派生 Agent 粒度在线态的打磨留 2c，这里是最小改：只把 URL 主键
+ * 与 transport 寻址换成 agentId，设备详情展示逻辑原样保留。
  */
-export default function AssistantDevicePage() {
+export default function AssistantAgentPage() {
   return (
     <Suspense fallback={null}>
-      <AssistantDeviceView />
+      <AssistantAgentView />
     </Suspense>
   );
 }
 
-function AssistantDeviceView() {
+function AssistantAgentView() {
   const t = useTranslations("assistant");
   const tDevices = useTranslations("devices");
-  const params = useParams<{ deviceId: string }>();
-  const deviceId = params.deviceId;
+  const params = useParams<{ agentId: string }>();
+  const agentId = params.agentId;
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("session");
   const streamId = searchParams.get("streamId");
@@ -43,18 +51,36 @@ function AssistantDeviceView() {
   const draftToken = searchParams.get("draft");
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { data: devices, isPending, error } = useDevices();
+  const {
+    data: agents,
+    isPending: agentsPending,
+    error: agentsError,
+  } = useAgents();
+  const agent = agents?.find((a) => a.id === agentId);
+  const deviceId = agent?.deviceId ?? "";
+  const {
+    data: devices,
+    isPending: devicesPending,
+    error: devicesError,
+  } = useDevices();
   const { data: onlineData } = useDeviceOnline(deviceId);
   useDevicePresenceSync();
   const profile = useProfile();
   const orgId = profile.data?.activeOrg?.id ?? null;
 
   const device = devices?.find((d) => d.id === deviceId);
-  const notFound = !isPending && (error || !device || device.revokedAt != null);
+  const isPending = agentsPending || devicesPending;
+  const notFound =
+    !isPending &&
+    (agentsError ||
+      devicesError ||
+      !agent ||
+      !device ||
+      device.revokedAt != null);
   const online = onlineData?.online ?? false;
 
   // 「新建会话页」态（无 session 也无草稿）已下线：新会话统一从起手台发起
-  // （选设备 + 写第一句），设备行不再有「新建」入口。直接输 URL / 旧书签落到
+  // （选 Agent + 写第一句），设备行不再有「新建」入口。直接输 URL / 旧书签落到
   // 这里的，送回起手台。带 ?draft= 的是起手台自己交接进来的建会话流程，放行。
   useEffect(() => {
     if (sessionId || draftToken) return;
@@ -92,7 +118,7 @@ function AssistantDeviceView() {
                     <Monitor className="h-7 w-7" />
                   </span>
                   <div className="text-[15px] font-semibold text-foreground">
-                    {device.name}
+                    {agent?.name ?? device.name}
                   </div>
                   <dl className="w-full space-y-2 text-left text-[13px]">
                     <div className="flex items-center justify-between gap-3">
@@ -137,7 +163,8 @@ function AssistantDeviceView() {
         </PageShellView>
       ) : (
         <RemoteSessionView
-          key={deviceId}
+          key={agentId}
+          agentId={agentId}
           deviceId={deviceId}
           sessionId={sessionId}
           streamId={streamId}
@@ -147,10 +174,10 @@ function AssistantDeviceView() {
             // 侧栏会话列表是 React Query 缓存——新建的远程会话不失效就不会出现，
             // 用户也就无法在树里定位/切回它。失效后重拉，activeKey 随即高亮。
             void queryClient.invalidateQueries({
-              queryKey: remoteSessionsQueryKey(deviceId),
+              queryKey: remoteSessionsQueryKey(agentId),
             });
             router.replace(
-              `/assistant/${deviceId}?session=${newSessionId}&streamId=${newStreamId}`,
+              `/assistant/${agentId}?session=${newSessionId}&streamId=${newStreamId}`,
             );
           }}
         />

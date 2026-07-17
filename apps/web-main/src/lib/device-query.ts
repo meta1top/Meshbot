@@ -36,16 +36,18 @@ function ensure(): {
   return { socket, c: client };
 }
 
-/** 发起一次远程设备查询（correlationId 往返，默认 10s 超时）。 */
+/** 发起一次远程设备查询（correlationId 往返，默认 10s 超时）。
+ * `agentId`：目标云端 Agent id（计划二 2b：寻址从设备细化到设备上的某 Agent，
+ * 不是设备 id——见 `libs/types/src/im/im.schema.ts` 的 `targetAgentId`）。 */
 export function remoteQuery(
-  deviceId: string,
+  agentId: string,
   kind: DeviceQueryKind,
   params: DeviceQueryRequestInput["params"],
 ): Promise<unknown> {
   const { socket, c } = ensure();
   return c.query(
     (req) => socket.emit(IM_WS_EVENTS.deviceQueryRequest, req),
-    deviceId,
+    agentId,
     kind,
     params,
   );

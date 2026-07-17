@@ -2,17 +2,12 @@
 
 import { cn } from "@meshbot/design";
 import { SessionLauncher } from "@meshbot/web-common/session";
-import { useQueries } from "@tanstack/react-query";
 import { ChevronRight, MonitorSmartphone } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { stashLauncherDraft } from "@/lib/launcher-draft";
-import {
-  deviceOnlineQueryKey,
-  fetchDeviceOnline,
-  useDevicePresenceSync,
-} from "@/rest/agent-devices";
+import { useAgents } from "@/rest/agents";
 import { useProfile } from "@/rest/auth";
 import { useDevices } from "@/rest/devices";
 import { ComposerActions } from "./composer-actions";
@@ -21,62 +16,58 @@ import { RemoteModelSelect } from "./remote-model-select";
 /**
  * `/assistant` 起手台：渲染与 web-agent 同一个共享 `SessionLauncher`
  * （品牌大标题 + 场景分段 + 建议 chips + 暖色 composer 面板），只把
- * 「本地/工作区」目标条换成「设备选择」——web-main 无本机 agent，任务必须
- * 交给一台已授权在线设备。技能/连应用/权限（本地专属）远程模式不注入即隐藏。
+ * 「本地/工作区」目标条换成「Agent 选择」——web-main 无本机 agent，任务必须
+ * 交给一个已注册的远程 Agent（`GET /api/agents`，T2）。技能/连应用/权限
+ * （本地专属）远程模式不注入即隐藏。
+ *
+ * 计划二 2b · T7：寻址主键从设备细化到 Agent（`targetAgentId`），下拉数据源
+ * 从「设备列表」换成「Agent 列表」，选项显示 Agent 名 + 宿主设备名（配合
+ * `useDevices()` 按 `agent.deviceId` 反查）。在线态从宿主设备派生的打磨
+ * （灰掉离线 Agent）留 2c，本期下拉不做在线过滤——功能可用即可。
  *
  * 发送不在本页建会话：web-main 是 L3 的 A（浏览器），没有 web-agent 那种
  * 「轮询本机 server-agent 的 fetchRemoteRun 回填 sessionId」的能力。改为把草稿
- * stash 进 sessionStorage（一次性 token，读即删）+ 跳设备页，由
+ * stash 进 sessionStorage（一次性 token，读即删）+ 跳 Agent 会话页，由
  * `RemoteSessionView` 已能工作的 create 流程接手发送，复用既有链路。
  */
 export function Launcher() {
   const t = useTranslations("assistant");
-  const tDevices = useTranslations("devices");
   const router = useRouter();
   const profile = useProfile();
   const orgId = profile.data?.activeOrg?.id ?? null;
 
-  const { data: allDevices } = useDevices();
-  useDevicePresenceSync();
-  const devices = (allDevices ?? []).filter((d) => !d.revokedAt);
-
-  const onlineQueries = useQueries({
-    queries: devices.map((d) => ({
-      queryKey: deviceOnlineQueryKey(d.id),
-      queryFn: () => fetchDeviceOnline(d.id),
-      staleTime: 30_000,
-    })),
-  });
-  const deviceRows = devices.map((d, i) => ({
-    id: d.id,
-    name: d.name,
-    online: onlineQueries[i]?.data?.online ?? false,
+  const { data: agents } = useAgents();
+  const { data: devices } = useDevices();
+  const deviceNameById = new Map((devices ?? []).map((d) => [d.id, d.name]));
+  const agentRows = (agents ?? []).map((a) => ({
+    id: a.id,
+    name: a.name,
+    deviceName: deviceNameById.get(a.deviceId) ?? a.deviceId,
   }));
-  const onlineRows = deviceRows.filter((d) => d.online);
 
   const [draft, setDraft] = useState("");
-  const [deviceId, setDeviceId] = useState<string | null>(null);
+  const [agentId, setAgentId] = useState<string | null>(null);
   const [modelConfigId, setModelConfigId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // 只有一台在线设备时默认选中（多台不预选，避免误发到错误设备）。
+  // 只有一个已注册 Agent 时默认选中（多个不预选，避免误发到错误 Agent）。
   const autoPicked = useRef(false);
   useEffect(() => {
-    if (autoPicked.current || deviceId || onlineRows.length !== 1) return;
+    if (autoPicked.current || agentId || agentRows.length !== 1) return;
     autoPicked.current = true;
-    setDeviceId(onlineRows[0].id);
-  }, [onlineRows, deviceId]);
+    setAgentId(agentRows[0].id);
+  }, [agentRows, agentId]);
 
   const handleSend = (text: string) => {
     if (!text.trim()) return;
-    if (!deviceId) {
-      setError(t("launcher.pickDeviceFirst"));
+    if (!agentId) {
+      setError(t("launcher.pickAgentFirst"));
       return;
     }
     setError(null);
     const token = stashLauncherDraft(text);
     setDraft("");
-    router.push(`/assistant/${deviceId}?draft=${token}`);
+    router.push(`/assistant/${agentId}?draft=${token}`);
   };
 
   return (
@@ -99,15 +90,14 @@ export function Launcher() {
           ) : undefined
         }
         targetBar={
-          <DeviceTargetBar
-            devices={deviceRows}
-            value={deviceId}
+          <AgentTargetBar
+            agents={agentRows}
+            value={agentId}
             onChange={(id) => {
-              setDeviceId(id);
+              setAgentId(id);
               setError(null);
             }}
-            placeholder={t("launcher.pickDevice")}
-            offlineLabel={tDevices("offline")}
+            placeholder={t("launcher.pickAgent")}
             error={error}
           />
         }
@@ -132,25 +122,25 @@ export function Launcher() {
 
 /**
  * composer 面板内、输入框下方的目标选择条（对位 web-agent 的 ComposerTargetBar
- * 「本地 › 默认工作区」）：web-main 这里选的是「哪台设备的 Agent 执行」。
+ * 「本地 › 默认工作区」）：web-main 这里选的是「哪个远程 Agent 执行」，选项
+ * 副标题显示宿主设备名。在线态派生（灰掉离线宿主设备上的 Agent）留 2c，
+ * 本期恒可选——功能可用即可。
  */
-function DeviceTargetBar({
-  devices,
+function AgentTargetBar({
+  agents,
   value,
   onChange,
   placeholder,
-  offlineLabel,
   error,
 }: {
-  devices: Array<{ id: string; name: string; online: boolean }>;
+  agents: Array<{ id: string; name: string; deviceName: string }>;
   value: string | null;
   onChange: (id: string) => void;
   placeholder: string;
-  offlineLabel: string;
   error: string | null;
 }) {
   const [open, setOpen] = useState(false);
-  const current = devices.find((d) => d.id === value) ?? null;
+  const current = agents.find((a) => a.id === value) ?? null;
 
   return (
     <div className="relative flex items-center gap-1 px-2 pt-1.5">
@@ -182,32 +172,20 @@ function DeviceTargetBar({
             onClick={() => setOpen(false)}
           />
           <div className="absolute bottom-full left-2 z-50 mb-1 max-h-64 w-64 overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-md">
-            {devices.map((d) => (
+            {agents.map((a) => (
               <button
-                key={d.id}
+                key={a.id}
                 type="button"
-                disabled={!d.online}
                 onClick={() => {
-                  onChange(d.id);
+                  onChange(a.id);
                   setOpen(false);
                 }}
-                className={cn(
-                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
-                  d.online
-                    ? "text-foreground hover:bg-muted"
-                    : "cursor-not-allowed text-muted-foreground/50",
-                )}
+                className="flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left text-xs text-foreground transition-colors hover:bg-muted"
               >
-                <span
-                  className={cn(
-                    "h-2 w-2 shrink-0 rounded-full",
-                    d.online ? "bg-[#16a34a]" : "bg-muted-foreground/30",
-                  )}
-                />
-                <span className="min-w-0 flex-1 truncate">{d.name}</span>
-                {!d.online && (
-                  <span className="shrink-0 text-[10px]">{offlineLabel}</span>
-                )}
+                <span className="min-w-0 w-full truncate">{a.name}</span>
+                <span className="min-w-0 w-full truncate text-[10px] text-muted-foreground">
+                  {a.deviceName}
+                </span>
               </button>
             ))}
           </div>

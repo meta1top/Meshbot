@@ -47,13 +47,16 @@ import { getImSocket } from "./im-socket";
  * 帧（T11 报告 finding 1）。各订阅者内部（`useSessionStream` 的
  * `e.sessionId !== sessionId` 过滤）自行区分哪些广播事件属于自己的会话。
  *
- * 调用方应对同一 deviceId 用 `useMemo` 稳定一份 transport 实例（同 web-agent
+ * 调用方应对同一 agentId 用 `useMemo` 稳定一份 transport 实例（同 web-agent
  * 惯例），嵌套子代理卡复用父组件传入的同一实例（不再各自新建），并在 unmount
  * 时调用 {@link dispose} 释放三个 socket 监听器（子卡不自行 dispose，归父组件
  * 统一管理生命周期）。
+ *
+ * `agentId`：目标云端 Agent id（计划二 2b · T7：寻址从设备细化到设备上的某
+ * Agent，协议字段改名 `targetAgentId`，不再是设备 id）。
  */
 export function createRemoteSessionTransport(
-  deviceId: string,
+  agentId: string,
 ): SessionTransport {
   const socket = getImSocket();
   const runs = new RemoteRunTracker();
@@ -76,7 +79,7 @@ export function createRemoteSessionTransport(
   const query = (
     kind: DeviceQueryKind,
     params: DeviceQueryRequestInput["params"],
-  ) => remoteQuery(deviceId, kind, params);
+  ) => remoteQuery(agentId, kind, params);
 
   const control = (body: AgentRunControlInput) =>
     socket.emit(IM_WS_EVENTS.agentRunControl, body);
@@ -103,7 +106,7 @@ export function createRemoteSessionTransport(
       runs.register(streamId, input.sessionId ?? null);
       socket.emit(IM_WS_EVENTS.agentRunStart, {
         streamId,
-        targetDeviceId: deviceId,
+        targetAgentId: agentId,
         mode: input.mode,
         sessionId: input.sessionId,
         content: input.content,
@@ -120,7 +123,7 @@ export function createRemoteSessionTransport(
       }
       control({
         streamId,
-        targetDeviceId: deviceId,
+        targetAgentId: agentId,
         sessionId,
         kind: "interrupt",
       });
@@ -132,7 +135,7 @@ export function createRemoteSessionTransport(
       }
       control({
         streamId,
-        targetDeviceId: deviceId,
+        targetAgentId: agentId,
         sessionId,
         kind: "confirm",
         toolCallId,
@@ -147,7 +150,7 @@ export function createRemoteSessionTransport(
       }
       control({
         streamId,
-        targetDeviceId: deviceId,
+        targetAgentId: agentId,
         sessionId,
         kind: "answer",
         toolCallId,

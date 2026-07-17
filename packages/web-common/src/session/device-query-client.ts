@@ -54,7 +54,7 @@ export class DeviceQueryClient {
    */
   async query(
     emit: (req: DeviceQueryRequestInput) => void,
-    targetDeviceId: string,
+    targetAgentId: string,
     kind: DeviceQueryKind,
     params: DeviceQueryRequestInput["params"] = {},
   ): Promise<unknown> {
@@ -67,7 +67,7 @@ export class DeviceQueryClient {
       this.pending.set(correlationId, { resolve, reject, timer });
     });
     try {
-      emit({ correlationId, targetDeviceId, kind, params });
+      emit({ correlationId, targetAgentId, kind, params });
     } catch (e) {
       this.clear(correlationId);
       throw e;

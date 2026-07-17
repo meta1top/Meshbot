@@ -44,8 +44,8 @@
       "title": "开始一个任务",
       "subtitle": "选择一台已授权设备，把任务交给它的 Agent",
       "placeholder": "输入你的任务或问题",
-      "pickDevice": "选择设备",
-      "pickDeviceFirst": "请先选择要执行任务的设备",
+      "pickAgent": "选择 Agent",
+      "pickAgentFirst": "请先选择要执行任务的 Agent",
       "willRunOn": "将在 {device} 上执行",
       "slogan": "你的工作副驾",
       "scenes": {

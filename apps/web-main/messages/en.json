@@ -44,8 +44,8 @@
       "title": "Start a task",
       "subtitle": "Pick an authorized device and hand the task to its Agent",
       "placeholder": "Enter your task or question",
-      "pickDevice": "Select device",
-      "pickDeviceFirst": "Please select a device to run the task",
+      "pickAgent": "Select agent",
+      "pickAgentFirst": "Please select an agent to run this task first",
       "willRunOn": "Will run on {device}",
       "slogan": "Your work copilot",
       "scenes": {
