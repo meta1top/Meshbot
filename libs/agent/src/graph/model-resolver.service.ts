@@ -2,15 +2,16 @@ import type { BaseChatModel } from "@langchain/core/language_models/chat_models"
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { Inject, Injectable, Optional } from "@nestjs/common";
 import { AccountContextService } from "../account/account-context.service";
-import { MeshbotConfigService } from "../config/meshbot-config.service";
 import {
   type ActiveModelConfig,
   CLOUD_GATEWAY_API_KEY_PLACEHOLDER,
-  readActiveModelConfig,
-  readModelConfigById,
 } from "../config/model-config.reader";
 import { CLOUD_TOKEN_PORT, type CloudTokenPort } from "./cloud-token.port";
 import { createChatModel } from "./llm.factory";
+import {
+  MODEL_CONFIG_READ_PORT,
+  type ModelConfigReadPort,
+} from "./model-config-read.port";
 import { ModelRunContext } from "./model-run-context";
 import type { ModelProvider } from "./nodes/supervisor.node";
 
@@ -37,9 +38,10 @@ export class ModelResolver {
   private readonly cloudTokenByAccount = new Map<string, string>();
 
   constructor(
-    private readonly config: MeshbotConfigService,
     private readonly account: AccountContextService,
     private readonly runCtx: ModelRunContext,
+    @Inject(MODEL_CONFIG_READ_PORT)
+    private readonly modelConfigPort: ModelConfigReadPort,
     @Optional() overrideProvider?: ModelProvider,
     @Optional()
     overrideMeta?: { providerType: string; model: string; modelName?: string },
@@ -94,25 +96,27 @@ export class ModelResolver {
   }
 
   /**
-   * 按当前 agent.db 的启用 ModelConfig（或 run 上下文指定的覆盖 ModelConfig）
-   * 构造 chat model。
+   * 按当前账号合并视图（本地 model_configs local 行 + 云端读时代理 cloud 行）
+   * 的启用 ModelConfig（或 run 上下文指定的覆盖 ModelConfig）构造 chat model。
+   *
+   * 经 MODEL_CONFIG_READ_PORT 解析——不直读 sqlite，云端模型（`source='cloud'`，
+   * 内存构造不落库）才能被正确解析出（Critical C-1）。
    *
    * 命中缓存直接返回；key 把可能影响行为的字段都拼上，配置变化自动 miss。
    */
   async resolveModel(): Promise<BaseChatModel> {
-    const dbPath = this.config.getDatabasePath();
     const acct = this.account.getOrThrow();
     const overrideId = this.runCtx.getOverrideId();
     let cfg = overrideId
-      ? readModelConfigById(dbPath, acct, overrideId)
-      : readActiveModelConfig(dbPath, acct);
+      ? await this.modelConfigPort.resolveById(overrideId)
+      : await this.modelConfigPort.resolveActive();
     if (!cfg && overrideId) {
       // 会话绑定的模型可能已被云端删除（同步后行消失）。回退账号默认模型
       // 继续跑而不是抛死——否则该会话永久卡在「runOnce 失败停止消费循环」。
       console.warn(
         `[ModelResolver] 会话指定的模型配置不存在：${overrideId}（可能已被云端删除），回退默认模型`,
       );
-      cfg = readActiveModelConfig(dbPath, acct);
+      cfg = await this.modelConfigPort.resolveActive();
     }
     if (!cfg) {
       throw new Error("当前账号没有启用的模型配置，请先在设置中配置模型");
@@ -146,7 +150,7 @@ export class ModelResolver {
    */
   async getTitleModel(): Promise<BaseChatModel> {
     const acct = this.account.getOrThrow();
-    const cfg = readActiveModelConfig(this.config.getDatabasePath(), acct);
+    const cfg = await this.modelConfigPort.resolveActive();
     if (!cfg) {
       throw new Error("当前账号没有启用的模型配置，请先在设置中配置模型");
     }

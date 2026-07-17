@@ -1,6 +1,7 @@
 import {
   AGENT_RENAME_PORT,
   CLOUD_TOKEN_PORT,
+  MODEL_CONFIG_READ_PORT,
   RUNTIME_CONTEXT_PORT,
   AccountContextService,
   AgentContextService,
@@ -18,7 +19,10 @@ import { AuthModule } from "./auth.module";
 import { Setting } from "./entities/setting.entity";
 import { AgentService } from "./services/agent.service";
 import { CloudIdentityService } from "./services/cloud-identity.service";
+import { createModelConfigReadPort } from "./services/model-config-read.adapter";
+import { ModelConfigService } from "./services/model-config.service";
 import { SettingService } from "./services/setting.service";
+import { SessionModule } from "./session.module";
 import type {
   AgentRenamePort,
   CloudTokenPort,
@@ -54,13 +58,17 @@ export function createAgentRenamePort(
 
 /**
  * @Global RuntimeContextModule：为 AgentModule 提供 RUNTIME_CONTEXT_PORT / CLOUD_TOKEN_PORT /
- * AGENT_RENAME_PORT 绑定。
+ * MODEL_CONFIG_READ_PORT / AGENT_RENAME_PORT 绑定。
  *
- * 两个端口的 resolve() 都在账号上下文内被调（GraphService.run / ModelResolver.resolveModel 内），
+ * 各端口的 resolve()/resolveActive()/resolveById() 都在账号上下文内被调
+ * （GraphService.run / ModelResolver.resolveModel()·getTitleModel() 内），
  * AccountContextService.getOrThrow() 安全。全 best-effort：displayName 无身份返 null、
  * language/timezone 无设置返 null、device token 未登录/查无身份返 null（云模型请求带空 Bearer，
  * 由网关侧鉴权拒绝）；当前 agentId 缺失或已删除时 agentName 兜底默认名、agentSystemPrompt 返 null
  * （buildPersonaMessage 据此省略人格正文段）。
+ * MODEL_CONFIG_READ_PORT 委托 ModelConfigService 合并视图（本地 local 行 + 云端读时
+ * 代理 cloud 行）——修复 Critical C-1：旧实现直读 sqlite model_configs 表，云端模型行
+ * （不落库）运行时永远解析不出。
  */
 @Global()
 @Module({
@@ -71,6 +79,8 @@ export function createAgentRenamePort(
     AuthModule,
     // AgentService 由 AgentsModule export（当前 Agent 的 name / systemPrompt）
     AgentsModule,
+    // ModelConfigService 由 SessionModule export（模型配置合并视图）
+    SessionModule,
   ],
   providers: [
     SettingService,
@@ -130,7 +140,17 @@ export function createAgentRenamePort(
       useFactory: createAgentRenamePort,
       inject: [AgentService, EventEmitter2],
     },
+    {
+      provide: MODEL_CONFIG_READ_PORT,
+      useFactory: createModelConfigReadPort,
+      inject: [ModelConfigService],
+    },
   ],
-  exports: [RUNTIME_CONTEXT_PORT, CLOUD_TOKEN_PORT, AGENT_RENAME_PORT],
+  exports: [
+    RUNTIME_CONTEXT_PORT,
+    CLOUD_TOKEN_PORT,
+    AGENT_RENAME_PORT,
+    MODEL_CONFIG_READ_PORT,
+  ],
 })
 export class RuntimeContextModule {}

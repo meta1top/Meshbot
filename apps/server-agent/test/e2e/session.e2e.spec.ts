@@ -14,6 +14,8 @@ import {
   type ImContextPort,
   IM_SEND_PORT,
   type ImSendPort,
+  MODEL_CONFIG_READ_PORT,
+  type ModelConfigReadPort,
   SCHEDULE_TOOLS_PORT,
   type ScheduleToolsPort,
   SKILL_TOOLS_PORT,
@@ -107,6 +109,11 @@ const STUB_SCHEDULE_TOOLS_PORT: ScheduleToolsPort = {
   findOwnedBy: async () => null,
   delete: async () => {},
 };
+/** 桩：本 e2e 不测模型解析（不触发真实 run），resolveActive/resolveById 恒返回 null 即可。 */
+const STUB_MODEL_CONFIG_READ_PORT: ModelConfigReadPort = {
+  resolveActive: async () => null,
+  resolveById: async () => null,
+};
 
 @Global()
 @Module({
@@ -117,6 +124,7 @@ const STUB_SCHEDULE_TOOLS_PORT: ScheduleToolsPort = {
     { provide: ASK_QUESTION_PORT, useValue: STUB_ASK_QUESTION_PORT },
     { provide: DRIVE_PORT, useValue: STUB_DRIVE_PORT },
     { provide: SCHEDULE_TOOLS_PORT, useValue: STUB_SCHEDULE_TOOLS_PORT },
+    { provide: MODEL_CONFIG_READ_PORT, useValue: STUB_MODEL_CONFIG_READ_PORT },
   ],
   exports: [
     AGENT_RENAME_PORT,
@@ -125,6 +133,7 @@ const STUB_SCHEDULE_TOOLS_PORT: ScheduleToolsPort = {
     ASK_QUESTION_PORT,
     DRIVE_PORT,
     SCHEDULE_TOOLS_PORT,
+    MODEL_CONFIG_READ_PORT,
   ],
 })
 class StubAgentToolPortsModule {}

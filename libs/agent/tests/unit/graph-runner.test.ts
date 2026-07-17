@@ -57,9 +57,11 @@ function makeServices(opts: {
     );
   const eventEmitter = opts.eventEmitter ?? new EventEmitter2();
   const modelResolver = new ModelResolver(
-    opts.configService,
     opts.account,
     new ModelRunContext(),
+    // 测试全程走 overrideProvider（下方），resolveModel() 不会被调用，
+    // 这里给个不会命中的占位端口即可。
+    { resolveActive: async () => null, resolveById: async () => null },
     () => Promise.resolve(opts.fakeModel as never),
     { providerType: "fake", model: "fake-model" },
   );

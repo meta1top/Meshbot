@@ -9,7 +9,7 @@ import type { ActiveModelConfig } from "../config/model-config.reader";
 /**
  * 本地轨 providerType → initChatModel 期望的 modelProvider 名。
  *
- * 本地轨只经云网关取模型：`model-config-sync.service.ts` 的 `toGatewayRow` 把云端
+ * 本地轨只经云网关取模型：`CloudModelConfigProxyService` 的 `toGatewayRow` 把云端
  * 下发行的 providerType 固定写成 `openai-compatible`，真实厂商（anthropic /
  * google-genai / ollama / deepseek）的调用发生在 server-main 的 model-gateway。
  * 因此这里只需支持 OpenAI 兼容协议一种。
