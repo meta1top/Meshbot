@@ -15,7 +15,7 @@ import {
 } from "@/components/home/composer-target-bar";
 import { nextModelOnTargetChange } from "@/lib/resolve-model-config-for-target";
 import { useAgents } from "@/rest/agents";
-import { fetchRemoteRun, startRemoteRun } from "@/rest/remote-devices";
+import { fetchRemoteRun, startRemoteRun } from "@/rest/remote-agent-sessions";
 import { createSession } from "@/rest/session";
 
 /** 起手台中区：品牌大标题 + 场景分段 + 建议 chips + 重 composer；发送即建会话跳转。 */

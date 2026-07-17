@@ -17,7 +17,7 @@ import { getFileUrl } from "@/rest/drive";
 import {
   fetchRemoteArtifact,
   uploadRemoteArtifactToDrive,
-} from "@/rest/remote-devices";
+} from "@/rest/remote-agent-sessions";
 
 /** PDF 用 react-pdf(client-only，避开 static export 的 SSR/prerender 与 pdf.js worker)。 */
 const PdfView = dynamic(() => import("./pdf-view").then((m) => m.PdfView), {
@@ -49,18 +49,19 @@ export const fetchLocalArtifact: FetchLocalArtifact =
 
 /**
  * 远程产物读取/上传适配：包既有 `fetchRemoteArtifact`/`uploadRemoteArtifactToDrive`
- * REST（经本机 server-agent relay 到设备），匹配共享 `ArtifactRemoteTransport`
- * 形状。不用 `createRemoteSessionTransport`（session-transport.ts）整套——那套
- * 额外带 run 帧 socket 订阅，产物预览只需这两个方法，实例化整套白白多订阅。
+ * REST（经本机 server-agent relay 到远程 Agent 的宿主设备），匹配共享
+ * `ArtifactRemoteTransport` 形状。不用 `createRemoteSessionTransport`
+ * （session-transport.ts）整套——那套额外带 run 帧 socket 订阅，产物预览只需
+ * 这两个方法，实例化整套白白多订阅。
  */
 export function createArtifactRemoteTransport(
-  deviceId: string,
+  agentId: string,
 ): ArtifactRemoteTransport {
   return {
     readArtifact: (sessionId, path) =>
-      fetchRemoteArtifact(deviceId, sessionId, path),
+      fetchRemoteArtifact(agentId, sessionId, path),
     uploadArtifactToDrive: (sessionId, path) =>
-      uploadRemoteArtifactToDrive(deviceId, sessionId, path),
+      uploadRemoteArtifactToDrive(agentId, sessionId, path),
   };
 }
 

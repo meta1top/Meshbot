@@ -33,7 +33,7 @@ export type { SessionStream, TimelineMessage };
  * `getSessionSocket`（app 专属 socket 单例）。
  *
  * 公开签名与迁移前逐位一致（`sessionId, scrollContainerRef, transport,
- * remoteDeviceId?, remoteInitialStreamId?`），3 个消费方
+ * remoteAgentId?, remoteInitialStreamId?`），3 个消费方
  * （assistant-conversation-body.tsx / assistant-dock.tsx / subagent-card.tsx）
  * 零改动。
  */
@@ -41,7 +41,7 @@ export function useSessionStream(
   sessionId: string | null,
   scrollContainerRef: React.RefObject<HTMLDivElement | null>,
   transport: SessionTransport,
-  remoteDeviceId?: string | null,
+  remoteAgentId?: string | null,
   remoteInitialStreamId?: string | null,
 ): SessionStream {
   const setInitialUsage = useSetAtom(setInitialUsageAtom);
@@ -86,7 +86,7 @@ export function useSessionStream(
       onUsageBatch,
       onTitleUpdated,
     },
-    remoteDeviceId,
+    remoteAgentId,
     remoteInitialStreamId,
   );
 }

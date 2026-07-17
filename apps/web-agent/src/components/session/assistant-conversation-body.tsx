@@ -50,12 +50,12 @@ interface AssistantConversationBodyProps {
   /** 共享滚动容器 ref，由 PageShell/page 传入。 */
   scrollRef: RefObject<HTMLDivElement | null>;
   /**
-   * L3：非空表示这是远程设备（B）上的会话——`useSessionStream` 走远程分支
-   * （历史/send/interrupt 隧道到 B），MessageList 传 `readOnly` 隐藏反馈/重试/
-   * 编辑等写操作（这些走本地端点，对远程会话的 id 无意义，且 L3 未覆盖）；
-   * 输入框本身保持可用，走 `startRemoteRun`。
+   * L3：非空表示这是远程 Agent（其宿主设备 B）上的会话——`useSessionStream`
+   * 走远程分支（历史/send/interrupt 隧道到 B），MessageList 传 `readOnly`
+   * 隐藏反馈/重试/编辑等写操作（这些走本地端点，对远程会话的 id 无意义，且
+   * L3 未覆盖）；输入框本身保持可用，走 `startRemoteRun`。
    */
-  remoteDeviceId?: string | null;
+  remoteAgentId?: string | null;
   /** 远程会话首轮由起手台 create 发起时的初始 streamId，见 useSessionStream 注释。 */
   remoteInitialStreamId?: string | null;
 }
@@ -67,14 +67,14 @@ interface AssistantConversationBodyProps {
  * `RemoteSessionProvider` 保留在本容器（不进 `SessionConversationView`）：
  * 远程会话时包一层 Provider，`SessionConversationView` 内部的
  * `renderSubagentCard` 注入的 `SubagentCard` 仍能通过 `useRemoteSession()`
- * 拿到 remoteDeviceId/sessionId（Provider 包的是整棵渲染树，不只消息列表，
+ * 拿到 remoteAgentId/sessionId（Provider 包的是整棵渲染树，不只消息列表，
  * 与原实现行为等价——`ChatInput`/`PendingList` 等兄弟节点本就不消费该
  * context）。
  */
 export function AssistantConversationBody({
   id,
   scrollRef,
-  remoteDeviceId = null,
+  remoteAgentId = null,
   remoteInitialStreamId = null,
 }: AssistantConversationBodyProps) {
   const t = useTranslations("session");
@@ -111,20 +111,20 @@ export function AssistantConversationBody({
   // 进入远程会话时强制刷新对端会话列表：modelConfigId 可能已在对端被改
   // （侧栏懒加载的缓存不会自己失效），选择器初值需要新鲜快照。
   useEffect(() => {
-    if (remoteDeviceId) void loadRemoteSessions(remoteDeviceId, true);
-  }, [remoteDeviceId, loadRemoteSessions]);
+    if (remoteAgentId) void loadRemoteSessions(remoteAgentId, true);
+  }, [remoteAgentId, loadRemoteSessions]);
   const sessionModelId =
     modelOverride ??
-    (remoteDeviceId
-      ? (remoteSessions[remoteDeviceId]?.sessions.find((s) => s.id === id)
+    (remoteAgentId
+      ? (remoteSessions[remoteAgentId]?.sessions.find((s) => s.id === id)
           ?.modelConfigId ?? null)
       : (allSessions.find((s) => s.id === id)?.modelConfigId ?? null));
   // 本地会话产物预览用的 agentId（Task 12）：只用该会话自己的 agentId
   // （sessionsAtom 里查得到）——不再有「当前选中的 Agent」可兜底（Agent 并列，
   // 无全局当前态），查不到就是 undefined，让产物预览按后续时序自然补齐。
-  // 远程会话（remoteDeviceId 非空）不需要：产物走 transport.readArtifact，
+  // 远程会话（remoteAgentId 非空）不需要：产物走 transport.readArtifact，
   // 不经 artifactRawUrl。
-  const sessionAgentId = remoteDeviceId
+  const sessionAgentId = remoteAgentId
     ? undefined
     : (allSessions.find((s) => s.id === id)?.agentId ?? undefined);
   // 经 transport 统一路由：本地 PATCH /api/sessions/:id，远程走 device query 通道
@@ -141,20 +141,20 @@ export function AssistantConversationBody({
   const contextWindow = enabledModel?.contextWindow ?? 128_000;
 
   const prefix = useLlmusePrefix();
-  // transport 按 remoteDeviceId 二选一：无状态工厂，deviceId 不变时引用稳定，
+  // transport 按 remoteAgentId 二选一：无状态工厂，agentId 不变时引用稳定，
   // 避免每次渲染重建导致 useSessionStream 内部 effect/callback 误判依赖变化。
   const transport = useMemo(
     () =>
-      remoteDeviceId
-        ? createRemoteSessionTransport(remoteDeviceId)
+      remoteAgentId
+        ? createRemoteSessionTransport(remoteAgentId)
         : createLocalSessionTransport(),
-    [remoteDeviceId],
+    [remoteAgentId],
   );
   const stream = useSessionStream(
     id,
     scrollRef,
     transport,
-    remoteDeviceId,
+    remoteAgentId,
     remoteInitialStreamId,
   );
 
@@ -249,11 +249,20 @@ export function AssistantConversationBody({
   const setArtifact = useSetAtom(previewArtifactAtom);
   const tArtifact = useTranslations("session.artifact");
   const tCompaction = useTranslations("session.compaction");
-  // artifactRemote 直接用本组件已有的 remoteDeviceId/id，不经
+  // artifactRemote 直接用本组件已有的 remoteAgentId/id，不经
   // useRemoteSession() context——本容器渲染在 RemoteSessionProvider 之外
   // （见下方 JSX），此处取 context 值会拿到 null。
-  const artifactRemote = remoteDeviceId
-    ? { deviceId: remoteDeviceId, sessionId: id }
+  //
+  // 注意：字段名沿用 web-common 共享 prop 类型的 `deviceId`（未随本任务改
+  // 名）——该字段在 web-common/artifact-body.tsx 内部从未被真正读取用于寻址
+  // （只有 sessionId 驱动 transport.readArtifact/uploadArtifactToDrive），
+  // 但类型定义与 apps/web-main 的远程会话视图共享（那里 deviceId 是真实的
+  // 宿主设备 id，非本次 agentId 迁移范畴）。改名需要同步改 web-common 的
+  // 3 处类型声明 + web-main 2 处调用点，超出本任务（A2·web-agent）范围，故
+  // 只改传入的值（现取 remoteAgentId），键名保持 deviceId——已在报告里记为
+  // concern，供后续统一任务处理。
+  const artifactRemote = remoteAgentId
+    ? { deviceId: remoteAgentId, sessionId: id }
     : null;
 
   const view = (
@@ -267,7 +276,7 @@ export function AssistantConversationBody({
       queuedMessages={queuedMessages}
       sessionId={id}
       running={stream.running}
-      readOnly={!!remoteDeviceId}
+      readOnly={!!remoteAgentId}
       onRegenerateOptimisticCut={(messageId) => {
         // 截断到该消息（含），并清掉它的 failed 标记：
         // 重生成就是「这条 user 即将重跑」，旧的 failed 已陈旧；
@@ -394,8 +403,8 @@ export function AssistantConversationBody({
     />
   );
 
-  return remoteDeviceId ? (
-    <RemoteSessionProvider remoteDeviceId={remoteDeviceId} sessionId={id}>
+  return remoteAgentId ? (
+    <RemoteSessionProvider remoteAgentId={remoteAgentId} sessionId={id}>
       {view}
     </RemoteSessionProvider>
   ) : (

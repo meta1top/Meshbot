@@ -109,16 +109,16 @@ export function SubagentCard({
   const transport = useMemo(
     () =>
       remote
-        ? createRemoteSessionTransport(remote.remoteDeviceId)
+        ? createRemoteSessionTransport(remote.remoteAgentId)
         : createLocalSessionTransport(),
     [remote],
   );
-  // remoteDeviceId 驱动 hook 的 remote 语义分支（历史走设备查询/不调本机 fetchPending）
+  // remoteAgentId 驱动 hook 的 remote 语义分支（历史走设备查询/不调本机 fetchPending）
   const sub = useSessionStream(
     subSessionId,
     scrollRef,
     transport,
-    remote?.remoteDeviceId ?? null,
+    remote?.remoteAgentId ?? null,
   );
   const [collapse, setCollapse] = useState<SubagentCollapse>({
     mode: "manual",

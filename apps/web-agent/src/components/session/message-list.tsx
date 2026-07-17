@@ -152,8 +152,13 @@ export function MessageList({
         })
       }
       artifactRemote={
+        // 字段名沿用 web-common 共享 prop 类型的 `deviceId`（该类型与
+        // apps/web-main 的远程会话视图共享，那里 deviceId 是真实宿主设备
+        // id）——本任务只改传入的值来源（remote.remoteAgentId），键名改名
+        // 需同步改 web-common 类型 + web-main 调用点，超出本任务范围，见
+        // assistant-conversation-body.tsx 同名注释与任务报告 concern。
         remote
-          ? { deviceId: remote.remoteDeviceId, sessionId: remote.sessionId }
+          ? { deviceId: remote.remoteAgentId, sessionId: remote.sessionId }
           : null
       }
       toolCallLabels={{ artifactPresentFailed: tArtifact("presentFailed") }}

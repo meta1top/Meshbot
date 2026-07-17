@@ -19,7 +19,7 @@ import {
   patchRemoteSessionModel,
   startRemoteRun,
   uploadRemoteArtifactToDrive,
-} from "@/rest/remote-devices";
+} from "@/rest/remote-agent-sessions";
 import {
   appendMessage,
   confirmAnswers,
@@ -194,7 +194,7 @@ export function createLocalSessionTransport(): SessionTransport {
 
     async uploadArtifactToDrive(_sessionId, _path) {
       // 本地会话没有「按产物路径上传网盘」的既有端点（server-agent 只有
-      // remote-devices 的 upload-drive 查询通道给跨设备场景用；本地预览走
+      // remote-agents 的 upload-drive 查询通道给跨设备场景用；本地预览走
       // previewArtifactAtom 直连，从未调用过这个方法）。补齐后端端点前如实
       // 抛错，不伪造一个假实现掩盖能力缺口。
       throw new Error("本地会话暂无产物上传网盘端点（仅远程会话支持）");
@@ -207,26 +207,26 @@ export function createLocalSessionTransport(): SessionTransport {
 }
 
 /**
- * A 端远程会话 SessionTransport：包 `rest/remote-devices.ts` 十个函数 +
+ * A 端远程会话 SessionTransport：包 `rest/remote-agent-sessions.ts` 十个函数 +
  * 复用同一条本机 `ws/session` socket 做事件桥（B 的运行帧经服务端影子重发
  * 落在这条 socket 上，前端无需另开连接）。
  */
 export function createRemoteSessionTransport(
-  deviceId: string,
+  agentId: string,
 ): SessionTransport {
   return {
     capabilities: { localRun: false },
 
     async listSessions() {
-      return fetchRemoteSessions(deviceId);
+      return fetchRemoteSessions(agentId);
     },
 
     async fetchHistory(sessionId, opts) {
-      return fetchRemoteHistory(deviceId, sessionId, opts);
+      return fetchRemoteHistory(agentId, sessionId, opts);
     },
 
     async startRun(input) {
-      const { streamId } = await startRemoteRun(deviceId, input);
+      const { streamId } = await startRemoteRun(agentId, input);
       return { streamId };
     },
 
@@ -237,14 +237,14 @@ export function createRemoteSessionTransport(
         );
         return;
       }
-      await interruptRemoteRun(deviceId, { streamId, sessionId });
+      await interruptRemoteRun(agentId, { streamId, sessionId });
     },
 
     async confirm(streamId, sessionId, toolCallId, decision, content) {
       if (!streamId) {
         throw new Error("远程会话 streamId 未就绪，请稍候重试");
       }
-      await confirmRemote(deviceId, {
+      await confirmRemote(agentId, {
         streamId,
         sessionId,
         toolCallId,
@@ -257,7 +257,7 @@ export function createRemoteSessionTransport(
       if (!streamId) {
         throw new Error("远程会话 streamId 未就绪，请稍候重试");
       }
-      await answerRemote(deviceId, {
+      await answerRemote(agentId, {
         streamId,
         sessionId,
         toolCallId,
@@ -266,7 +266,7 @@ export function createRemoteSessionTransport(
     },
 
     async patchSessionModel(sessionId, modelConfigId) {
-      await patchRemoteSessionModel(deviceId, sessionId, modelConfigId);
+      await patchRemoteSessionModel(agentId, sessionId, modelConfigId);
     },
 
     async fetchPending(_sessionId) {
@@ -279,15 +279,15 @@ export function createRemoteSessionTransport(
     },
 
     async fetchActiveRun(sessionId) {
-      return fetchRemoteRun(deviceId, { sessionId });
+      return fetchRemoteRun(agentId, { sessionId });
     },
 
     async readArtifact(sessionId, path) {
-      return fetchRemoteArtifact(deviceId, sessionId, path);
+      return fetchRemoteArtifact(agentId, sessionId, path);
     },
 
     async uploadArtifactToDrive(sessionId, path) {
-      return uploadRemoteArtifactToDrive(deviceId, sessionId, path);
+      return uploadRemoteArtifactToDrive(agentId, sessionId, path);
     },
 
     subscribe(events) {

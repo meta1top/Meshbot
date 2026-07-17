@@ -31,7 +31,7 @@ function AssistantView() {
   const t = useTranslations("assistantSidebar");
   const searchParams = useSearchParams();
   const id = searchParams.get("id");
-  const remoteDevice = searchParams.get("remoteDevice");
+  const remoteAgent = searchParams.get("remoteAgent");
   // 远程会话首轮由起手台 create 发起时带入的 streamId：该会话页尚未自己发过
   // 追加消息前，中断只能靠这个 streamId 路由到 B（见 useSessionStream 注释）。
   const streamId = searchParams.get("streamId");
@@ -42,18 +42,18 @@ function AssistantView() {
       sidebar={<AssistantSidebar />}
       scrollContainerRef={scrollRef}
       header={
-        remoteDevice && id ? (
+        remoteAgent && id ? (
           <RemoteSessionHeader />
         ) : id ? (
           <SessionHeader sessionId={id} />
         ) : undefined
       }
     >
-      {remoteDevice && id ? (
+      {remoteAgent && id ? (
         <AssistantConversationBody
           id={id}
           scrollRef={scrollRef}
-          remoteDeviceId={remoteDevice}
+          remoteAgentId={remoteAgent}
           remoteInitialStreamId={streamId}
         />
       ) : id ? (
