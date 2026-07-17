@@ -41,6 +41,9 @@ function make() {
   const registry = new RemoteRunRegistryService();
   const agents = {
     ensureDefault: jest.fn().mockResolvedValue({ id: "agent-default" }),
+    findOrNull: jest
+      .fn()
+      .mockResolvedValue({ id: "agent-remote", remoteEnabled: true }),
   };
   const svc = new RemoteRunInboundService(
     sessions as never,
@@ -60,6 +63,7 @@ const fwd = (over: object) => ({
     streamId: "stream-1",
     targetDeviceId: "dB",
     requesterDeviceId: "dA",
+    localAgentId: "agent-remote",
     mode: "create",
     content: "hello",
     ...over,
@@ -69,15 +73,86 @@ const fwd = (over: object) => ({
 describe("RemoteRunInboundService", () => {
   describe("onAgentRunRequest", () => {
     it("mode=create → account.run 内 sessions.createSession + runner.kick(新 sessionId)", async () => {
-      const { svc, sessions, runner, account } = make();
+      const { svc, sessions, runner, account, agents } = make();
       await svc.onAgentRunRequest(fwd({}) as never);
 
       expect(account.run).toHaveBeenCalledWith("u1", expect.any(Function));
+      expect(agents.findOrNull).toHaveBeenCalledWith("agent-remote");
       expect(sessions.createSession).toHaveBeenCalledWith({
         content: "hello",
-        agentId: "agent-default",
+        agentId: "agent-remote",
       });
       expect(runner.kick).toHaveBeenCalledWith("s-new");
+    });
+
+    it("remote_enabled=true → 建会话且 session.agentId 归 forwarded.localAgentId（不是 ensureDefault）", async () => {
+      const { svc, sessions, agents } = make();
+      await svc.onAgentRunRequest(
+        fwd({ localAgentId: "agent-remote" }) as never,
+      );
+
+      expect(agents.ensureDefault).not.toHaveBeenCalled();
+      expect(sessions.createSession).toHaveBeenCalledWith(
+        expect.objectContaining({ agentId: "agent-remote" }),
+      );
+    });
+
+    it("forwarded.localAgentId 指向 remote_enabled=false 的 agent → 不建会话，回 agentRunEnd{reason:agent_not_remotable}", async () => {
+      const { svc, sessions, runner, relay, agents } = make();
+      agents.findOrNull.mockResolvedValueOnce({
+        id: "agent-off",
+        remoteEnabled: false,
+      });
+
+      await svc.onAgentRunRequest(fwd({ localAgentId: "agent-off" }) as never);
+
+      expect(sessions.createSession).not.toHaveBeenCalled();
+      expect(runner.kick).not.toHaveBeenCalled();
+      expect(relay.emitAgentRunEnd).toHaveBeenCalledWith("u1", {
+        streamId: "stream-1",
+        requesterDeviceId: "dA",
+        reason: "agent_not_remotable",
+      });
+    });
+
+    it("forwarded.localAgentId 指向本地查无的 agent → 同样拒绝，回 agentRunEnd{reason:agent_not_remotable}", async () => {
+      const { svc, sessions, runner, relay, agents } = make();
+      agents.findOrNull.mockResolvedValueOnce(null);
+
+      await svc.onAgentRunRequest(
+        fwd({ localAgentId: "agent-ghost" }) as never,
+      );
+
+      expect(sessions.createSession).not.toHaveBeenCalled();
+      expect(runner.kick).not.toHaveBeenCalled();
+      expect(relay.emitAgentRunEnd).toHaveBeenCalledWith("u1", {
+        streamId: "stream-1",
+        requesterDeviceId: "dA",
+        reason: "agent_not_remotable",
+      });
+    });
+
+    it("对抗用例：转发帧里 targetAgentId 是别的值，localAgentId 才是真的 → 只信 localAgentId 建会话", async () => {
+      const { svc, sessions, agents } = make();
+      agents.findOrNull.mockResolvedValueOnce({
+        id: "agent-real",
+        remoteEnabled: true,
+      });
+
+      await svc.onAgentRunRequest(
+        fwd({
+          targetAgentId: "cloud-agent-attacker-controlled",
+          localAgentId: "agent-real",
+        }) as never,
+      );
+
+      expect(agents.findOrNull).toHaveBeenCalledWith("agent-real");
+      expect(agents.findOrNull).not.toHaveBeenCalledWith(
+        "cloud-agent-attacker-controlled",
+      );
+      expect(sessions.createSession).toHaveBeenCalledWith(
+        expect.objectContaining({ agentId: "agent-real" }),
+      );
     });
 
     it("mode=append → account.run 内 sessions.appendMessage(sessionId) + runner.kick(同 sessionId)", async () => {

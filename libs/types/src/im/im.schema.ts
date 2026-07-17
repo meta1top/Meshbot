@@ -186,9 +186,14 @@ export interface AgentRunFrame {
   event: string;
   payload: unknown;
 }
-/** L3:B→A 流终止。requesterDeviceId 同 AgentRunFrame，由 B 端原样回填。 */
+/**
+ * L3:B→A 流终止。requesterDeviceId 同 AgentRunFrame，由 B 端原样回填。
+ * agent_not_remotable：B 侧二次门控拒绝——`forwarded.localAgentId` 指向的本地
+ * Agent 不存在，或 `remote_enabled` 非 true（B 侧不信云端下发的 targetAgentId /
+ * 云端 Agent 行状态，本地 remote_enabled 才是唯一真相）。
+ */
 export interface AgentRunEnd {
   streamId: string;
   requesterDeviceId: string;
-  reason: "done" | "error" | "interrupted" | "offline";
+  reason: "done" | "error" | "interrupted" | "offline" | "agent_not_remotable";
 }

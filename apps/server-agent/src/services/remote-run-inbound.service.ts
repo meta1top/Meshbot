@@ -110,28 +110,38 @@ export class RemoteRunInboundService {
   /**
    * relay 收到云端转发的 agent.run.start（B 侧入站）时触发。
    *
-   * 【本期限制，非最终设计】`forwarded` payload（云端转发的 `agent.run.start` 载荷）
-   * 目前不携带 agentId——IM 侧协议尚未加入「选择哪个 Agent」的交互，云端也无从知道
-   * 目标设备上有几个 Agent 可选。故本期恒定走 `AgentService.ensureDefault()` 兜底取
-   * 当前账号默认 Agent，暂不支持「按 agentId 精确寻址到某个 Agent」。
-   *
-   * 下一期计划：`forwarded` 增加可选 `agentId` 字段（配合 IM 侧「选择 Agent」交互，
-   * 云端转发时带上），此处改为——有 `agentId` 就 `AgentService.findOrThrow(agentId)`
-   * 校验归属当前账号后使用（不存在/越权则失败，不落库未经校验的 id），否则仍回退
-   * `ensureDefault()`；与 `SessionController.create()` 的 agentId 解析逻辑对齐。
+   * 【B 侧二次门控——安全命门】`forwarded.localAgentId` 是网关按可信的 CloudAgent
+   * 表把云端 `targetAgentId` 解出的目标设备本地 Agent id；但**绝不信云端**——
+   * 云端登记的 Agent「是否允许远程调度」状态可能过期（例如设备离线期间用户在本地
+   * 关闭了某 Agent 的远程开关，云端尚未来得及对账），且转发帧里另有一份客户端
+   * 提交、未经校验的 `targetAgentId`（T5 审查已确认可被同 streamId 的合法
+   * requester 篡改），本方法**只使用 `localAgentId`**、绝不读取 `targetAgentId`
+   * 做寻址或鉴权。本地 `agents` 表的 `remote_enabled` 才是唯一真相：查到的 Agent
+   * 必须存在且 `remoteEnabled === true` 才允许落会话触发远程 run，否则一律拒绝
+   * 并回 `agentRunEnd{reason:"agent_not_remotable"}`（不建会话、不 kick）。
    */
   @OnEvent(IM_RELAY_EVENTS.agentRunRequest)
   async onAgentRunRequest(evt: ImRelayAgentRunRequestEvent): Promise<void> {
     const { cloudUserId, forwarded } = evt;
-    const { streamId, requesterDeviceId, mode, content } = forwarded;
+    const { streamId, requesterDeviceId, mode, content, localAgentId } =
+      forwarded;
     try {
       await this.account.run(cloudUserId, async () => {
+        const agent = await this.agents.findOrNull(localAgentId);
+        if (!agent?.remoteEnabled) {
+          this.relay.emitAgentRunEnd(cloudUserId, {
+            streamId,
+            requesterDeviceId,
+            reason: "agent_not_remotable",
+          });
+          return;
+        }
         const sessionId =
           mode === "create"
             ? (
                 await this.sessions.createSession({
                   content,
-                  agentId: (await this.agents.ensureDefault()).id,
+                  agentId: agent.id,
                 })
               ).sessionId
             : await this.appendToExisting(forwarded.sessionId, content);

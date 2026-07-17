@@ -16,6 +16,7 @@ const END_REASON_TEXT: Record<AgentRunEnd["reason"], string> = {
   error: "远程运行未能建立",
   interrupted: "远程运行已中断",
   done: "远程运行已结束",
+  agent_not_remotable: "目标设备未开启该 Agent 的远程调度",
 };
 
 /**
