@@ -100,6 +100,15 @@ export type SessionTreeNodeInfo =
       name: string;
       /** 该 Agent 名下有会话在跑 → 显示脉冲点。 */
       running: boolean;
+      /**
+       * 是否为远程 Agent（其他设备上注册、经云端寻址）。本机 Agent 不传即本机
+       * 语义——不出副标题、不灰化、保留 hover 编辑铅笔。
+       */
+      remote?: boolean;
+      /** 远程 Agent 的宿主设备名副标题（本机不传）。 */
+      deviceName?: string;
+      /** 远程宿主在线态；`false` → 整行灰化，不可展开/点击（本机不传）。 */
+      online?: boolean;
     };
 
 export interface SessionTreeProps {
@@ -277,7 +286,12 @@ function DeviceRow({
  *  比早前的 h-6 w-6 更贴合图标——原尺寸在短 Agent 名场景下和行右缘之间留白
  *  明显偏大、视觉不平衡（Bug #2）。行本体点击只做展开/收起（`defaults.onClick`
  *  是 NavItem 的 toggle 分支）——不再有「设为当前 Agent」的并行通道，Agent
- *  是并列关系，没有全局当前态可切。 */
+ *  是并列关系，没有全局当前态可切。
+ *
+ *  远程 Agent（`info.remote`）额外带宿主设备名副标题（名字下一行、小号弱化）；
+ *  无编辑铅笔（远程 Agent 只读，不可从这里改名/改人设）；宿主离线
+ *  （`info.online === false`）时整行 `pointer-events-none` 灰化——不可展开/
+ *  不可点击，右侧换成「离线」徽标（同设备行的离线呈现）。 */
 function AgentRow({
   node,
   defaults,
@@ -291,7 +305,9 @@ function AgentRow({
   onEditAgent?: (node: NavNode) => void;
   labels: SessionTreeLabels;
 }) {
-  return (
+  const offline = info.remote === true && info.online === false;
+  const showPencil = !!onEditAgent && !info.remote;
+  const row = (
     <SidebarRow
       icon={
         <>
@@ -305,27 +321,41 @@ function AgentRow({
         </>
       }
       label={
-        <span className="flex items-center gap-1.5 font-semibold text-(--shell-sidebar-fg)">
-          {info.name}
-          {info.running ? (
-            <span
-              className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[#16a34a]"
-              aria-hidden
-            />
+        <span className="flex min-w-0 flex-col">
+          <span className="flex items-center gap-1.5 font-semibold text-(--shell-sidebar-fg)">
+            <span className="truncate">{info.name}</span>
+            {info.running ? (
+              <span
+                className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[#16a34a]"
+                aria-hidden
+              />
+            ) : null}
+          </span>
+          {info.remote && info.deviceName ? (
+            <span className="truncate text-[11px] font-normal text-(--shell-sidebar-fg)/50">
+              {info.deviceName}
+            </span>
           ) : null}
         </span>
       }
       depth={defaults.depth}
-      onClick={defaults.onClick}
+      onClick={offline ? undefined : defaults.onClick}
+      trailing={
+        offline ? (
+          <span className="shrink-0 text-[11px] text-(--shell-sidebar-fg)/50">
+            {labels.offline}
+          </span>
+        ) : undefined
+      }
       actions={
-        onEditAgent ? (
+        showPencil ? (
           <button
             type="button"
             title={labels.editAgent}
             aria-label={labels.editAgent}
             onClick={(e) => {
               e.stopPropagation();
-              onEditAgent(node);
+              onEditAgent?.(node);
             }}
             className="flex h-5 w-5 items-center justify-center rounded text-(--shell-sidebar-fg)/60 transition-colors hover:bg-(--shell-sidebar-hover) hover:text-(--shell-sidebar-fg)"
           >
@@ -334,6 +364,11 @@ function AgentRow({
         ) : undefined
       }
     />
+  );
+  return offline ? (
+    <div className="pointer-events-none opacity-50">{row}</div>
+  ) : (
+    row
   );
 }
 
