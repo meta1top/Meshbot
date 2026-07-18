@@ -419,6 +419,23 @@ export class ImGateway extends BaseWebSocketGateway implements OnModuleDestroy {
   }
 
   /**
+   * 通知**观察者**它的 watch 已失效（宿主设备断线时用）。
+   *
+   * 方向与 `notifyWatchStop` 相反：那条是告诉设备「别转发了」，这条是告诉
+   * 观察者「你看的那台设备没了」。观察者自己的连接完好，不会自然感知到宿主
+   * 掉线——不发这条它只会静默地不再收帧，界面停在半截且毫无提示。
+   * 复用 `agentWatchAccepted{ok:false, reason:"offline"}`：观察者端本就要处理
+   * `ok:false` 分支，无需新增协议。
+   */
+  private notifyWatcherOffline(watchId: string, route: WatchRoute): void {
+    this.emitToRequester(route.requester, IM_WS_EVENTS.agentWatchAccepted, {
+      watchId,
+      ok: false,
+      reason: "offline",
+    } satisfies AgentWatchAccepted);
+  }
+
+  /**
    * 三表一致地注销一条 watch 路由，并（可选）通知设备 stop。
    * 门面方法：删主表 + 调 `removeWatchIndex` + （可选）`notifyWatchStop`。
    * **全部注销路径最终都落到 `removeWatchIndex`（唯一清索引出口）**，杜绝
@@ -598,8 +615,9 @@ export class ImGateway extends BaseWebSocketGateway implements OnModuleDestroy {
       // 终点，断线不清就永久泄漏。两条路径语义不同：
       // - 观察者断线（user 分支，deviceId 为 undefined）→ 必须通知设备 stop，
       //   否则设备侧的 SessionWatchService 要等满 5 分钟 idle 才拆。
-      // - 设备断线（device 分支）→ 不通知（设备已不在，往空房间发帧无意义），
-      //   观察者侧靠 relay 断开自行退化为「不实时」并在重连时重 watch。
+      // - 设备断线（device 分支）→ 不通知设备（它已不在，往空房间发帧无意义），
+      //   但**必须通知观察者**：观察者自己的连接是好的，不会自然感知到宿主
+      //   掉线，不发信号它只会静默停更、界面卡在半截（spec §错误处理要求）。
       // 主表由 cleanupRoutes 删除，两张反向索引由 onRemoved 回调同步清理——
       // 走 removeWatchIndex 单一出口，杜绝「主表删了索引没删」的半清理泄漏。
       this.cleanupRoutes(
@@ -608,7 +626,11 @@ export class ImGateway extends BaseWebSocketGateway implements OnModuleDestroy {
         deviceId,
         (watchId, route) => {
           this.removeWatchIndex(watchId, route);
-          if (!deviceId) this.notifyWatchStop(watchId, route);
+          if (deviceId) {
+            this.notifyWatcherOffline(watchId, route);
+          } else {
+            this.notifyWatchStop(watchId, route);
+          }
         },
       );
 

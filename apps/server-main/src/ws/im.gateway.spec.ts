@@ -2106,10 +2106,20 @@ describe("Agent 级观察通道：四路清理（泄漏防护）", () => {
 
     expect(gateway.watchRouteCount()).toBe(0);
     expect(gateway.sessionWatcherIds("dev-b", "s1")).toEqual([]);
+    // 不给设备发 stop——它已经不在了，往空房间发帧没意义。
     const stops = (server.emit as jest.Mock).mock.calls.filter(
       ([e, p]) => e === IM_WS_EVENTS.agentWatchForwarded && p.action === "stop",
     );
     expect(stops).toHaveLength(0);
+    // 但**必须通知观察者**：它自己的连接是好的，不会自然感知到宿主掉线，
+    // 不发信号就只会静默停更、界面卡在半截（spec §错误处理）。
+    const offlines = (server.emit as jest.Mock).mock.calls.filter(
+      ([e, p]) =>
+        e === IM_WS_EVENTS.agentWatchAccepted &&
+        (p as { reason?: string })?.reason === "offline",
+    );
+    expect(offlines).toHaveLength(1);
+    expect(offlines[0][1]).toMatchObject({ watchId: "w1", ok: false });
   });
 
   it("路径③显式 unwatch（T8 已覆盖，此处断言三表一致）", async () => {
@@ -2143,6 +2153,9 @@ describe("Agent 级观察通道：四路清理（泄漏防护）", () => {
     jest.advanceTimersByTime(WATCH_IDLE_MS + 1000);
     gateway.sweepIdleWatches();
     expect(gateway.watchRouteCount()).toBe(0);
+    // 索引也必须清——只查主表会漏掉「主表删了索引没删」这类半清理泄漏，
+    // 而那正是本设计最需要防的点（常驻转发器没有天然终点）。
+    expect(gateway.sessionWatcherIds("dev-b", "s1")).toEqual([]);
     jest.useRealTimers();
   });
 
