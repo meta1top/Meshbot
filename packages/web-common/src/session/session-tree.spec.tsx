@@ -154,6 +154,36 @@ describe("SessionTree 远程 Agent 节点（review finding #2 补测）", () => 
     expect(
       screen.queryByRole("button", { name: STUB_LABELS.editAgent }),
     ).not.toBeInTheDocument();
+    // 带设备名 = 两行结构 → 必须把 twoLine 透给 SidebarRow 放开死高 h-7，
+    // 否则名字+设备名（约 32px）在 28px 盒里溢出，hover/选中背景块包不住文字。
+    const row = screen.getByText("远程助手").closest("button")?.parentElement;
+    expect(row).toHaveClass("min-h-9");
+    expect(row).not.toHaveClass("h-7");
+  });
+
+  it("单行 Agent 行（无设备名）保持原有 h-7 节奏不变", () => {
+    const groups = [
+      {
+        key: "agents",
+        items: [{ key: "ag:1", label: "本机助手", children: [] }],
+      },
+    ];
+    render(
+      <SessionTree
+        groups={groups}
+        nodeInfo={() => ({
+          kind: "agent",
+          emoji: "🛠",
+          color: "#3b82f6",
+          name: "本机助手",
+          running: false,
+        })}
+        labels={STUB_LABELS}
+      />,
+    );
+    const row = screen.getByText("本机助手").closest("button")?.parentElement;
+    expect(row).toHaveClass("h-7");
+    expect(row).not.toHaveClass("min-h-9");
   });
 
   it("本机 Agent 对照：编辑铅笔正常出现（远程无、本机有）", () => {

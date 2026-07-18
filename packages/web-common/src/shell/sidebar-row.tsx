@@ -17,6 +17,13 @@ export interface SidebarRowProps {
   onClick?: () => void;
   /** 提供则渲染为链接语义（仍走 onClick 由容器接路由，这里仅占位以备将来）。 */
   href?: string;
+  /**
+   * label 是否为两行结构（主标题 + 副标题，如远程 Agent 行的「名字 + 设备名」）。
+   * 默认 false = 单行死高 h-7；为 true 时改用 `min-h-9 py-1`，让 hover/选中的
+   * 圆角背景块跟着内容长高——否则两行内容（约 32px）在 28px 的盒子里上下溢出，
+   * 表现为「文字比色块高、色块包不住」并挤压相邻行间距。
+   */
+  twoLine?: boolean;
 }
 
 /**
@@ -32,11 +39,13 @@ export function SidebarRow({
   trailing,
   actions,
   onClick,
+  twoLine = false,
 }: SidebarRowProps) {
   return (
     <div
       className={cn(
-        "group/row flex h-7 w-full items-center gap-2 rounded-md pr-2 text-left text-[13px] transition-colors [&_svg]:h-3.5 [&_svg]:w-3.5 [&_svg]:shrink-0",
+        "group/row flex w-full items-center gap-2 rounded-md pr-2 text-left text-[13px] transition-colors [&_svg]:h-3.5 [&_svg]:w-3.5 [&_svg]:shrink-0",
+        twoLine ? "min-h-9 py-1" : "h-7",
         active
           ? "bg-(--shell-content) text-(--shell-sidebar-fg) shadow-sm"
           : "text-(--shell-sidebar-fg)/80 hover:bg-(--shell-sidebar-hover)",
@@ -49,7 +58,17 @@ export function SidebarRow({
         className="flex min-w-0 flex-1 items-center gap-2 text-left"
       >
         {icon}
-        <span className="min-w-0 flex-1 truncate">{label}</span>
+        {/* 单行仍用 truncate（长名字省略号）；两行必须换成纯 overflow-hidden——
+            truncate 自带的 whitespace-nowrap 会把第二行下沿裁掉，且两行结构的
+            内层 span 已各自 truncate，外层不需要再管省略号。 */}
+        <span
+          className={cn(
+            "min-w-0 flex-1",
+            twoLine ? "overflow-hidden" : "truncate",
+          )}
+        >
+          {label}
+        </span>
         {trailing}
       </button>
       {actions && (

@@ -307,6 +307,9 @@ function AgentRow({
 }) {
   const offline = info.remote === true && info.online === false;
   const showPencil = !!onEditAgent && !info.remote;
+  // 远程 Agent 行会在名字下面多渲染一行设备名——告诉 SidebarRow 放开死高 h-7，
+  // 否则两行内容在 28px 盒里溢出（背景块包不住文字、还挤压相邻行）。
+  const twoLine = !!(info.remote && info.deviceName);
   const row = (
     <SidebarRow
       icon={
@@ -332,12 +335,13 @@ function AgentRow({
             ) : null}
           </span>
           {info.remote && info.deviceName ? (
-            <span className="truncate text-[11px] font-normal text-(--shell-sidebar-fg)/50">
+            <span className="truncate text-[11px] leading-tight font-normal text-(--shell-sidebar-fg)/50">
               {info.deviceName}
             </span>
           ) : null}
         </span>
       }
+      twoLine={twoLine}
       depth={defaults.depth}
       onClick={offline ? undefined : defaults.onClick}
       trailing={
