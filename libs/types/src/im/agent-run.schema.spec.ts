@@ -1,4 +1,8 @@
-import { AgentRunControlSchema, AgentRunStartSchema } from "./im.schema";
+import {
+  AgentRunControlSchema,
+  AgentRunFrameSchema,
+  AgentRunStartSchema,
+} from "./im.schema";
 
 describe("AgentRunStartSchema", () => {
   it("create 模式可无 sessionId", () => {
@@ -51,5 +55,37 @@ describe("AgentRunControlSchema", () => {
       decision: "send",
     });
     expect(r.decision).toBe("send");
+  });
+});
+describe("AgentRunFrame 双寻址", () => {
+  const base = {
+    requesterDeviceId: "dev-a",
+    seq: 1,
+    sessionId: "s1",
+    event: "run.chunk",
+    payload: {},
+  };
+
+  it("只带 streamId 通过（自己发起的流）", () => {
+    expect(
+      AgentRunFrameSchema.safeParse({ ...base, streamId: "st1" }).success,
+    ).toBe(true);
+  });
+
+  it("只带 watchId 通过（观察的流）", () => {
+    expect(
+      AgentRunFrameSchema.safeParse({ ...base, watchId: "w1" }).success,
+    ).toBe(true);
+  });
+
+  it("两个都不带被拒", () => {
+    expect(AgentRunFrameSchema.safeParse(base).success).toBe(false);
+  });
+
+  it("两个都带被拒（寻址歧义）", () => {
+    expect(
+      AgentRunFrameSchema.safeParse({ ...base, streamId: "st1", watchId: "w1" })
+        .success,
+    ).toBe(false);
   });
 });

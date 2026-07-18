@@ -70,6 +70,9 @@ export class RemoteRunTracker {
   handleFrame(
     frame: AgentRunFrame,
   ): Array<{ event: string; payload: unknown }> {
+    // watchId 寻址的帧（Agent 级观察通道）不归本 tracker 管——本类只跟踪
+    // 「本 transport 实例发起」的 streamId 流，watchId 帧没有 streamId。
+    if (!frame.streamId) return [];
     const entry = this.streams.get(frame.streamId);
     if (!entry) return [];
     entry.receivedFrame = true;

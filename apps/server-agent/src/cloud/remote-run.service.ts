@@ -166,6 +166,9 @@ export class RemoteRunService implements OnModuleDestroy {
    */
   @OnEvent(IM_RELAY_EVENTS.agentRunFrame)
   onFrame(frame: AgentRunFrame): void {
+    // 本服务只跟踪自己发起的 streamId 订阅（Agent 级观察通道的 watchId 寻址
+    // 帧留给后续 Task 消费，此处尚未登记任何 watchId，直接忽略）。
+    if (!frame.streamId) return;
     const entry = this.streams.get(frame.streamId);
     if (!entry) return;
     if (!entry.sessionId && frame.sessionId) {

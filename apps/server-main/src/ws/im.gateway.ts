@@ -571,6 +571,9 @@ export class ImGateway extends BaseWebSocketGateway {
     @MessageBody() body: AgentRunFrame,
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
+    // 本通道（L3 Phase A streamId 单播）尚未消费 watchId 寻址（Agent 级观察通道
+    // fan-out 留给后续 Task），缺 streamId 的帧在此路由表下必是非法/未知流。
+    if (!body.streamId) return;
     const route = this.agentRunRoutes.get(body.streamId);
     const senderDeviceId = (client.data.user as { deviceId?: string })
       ?.deviceId;

@@ -175,17 +175,33 @@ export interface AgentRunControlForwarded extends AgentRunControlInput {
 
 /**
  * L3:B→A 运行帧(透传 SESSION_WS_EVENTS.* payload;event 用其常量字符串)。
- * requesterDeviceId 由 B 端原样回填 agentRunStart 收到的值，不解析（device 为 deviceId，
- * 浏览器 user 发起时为 `"user:" + socketId`）。
+ *
+ * **双寻址（Agent 级观察通道）**：`streamId` 与 `watchId` **二选一必填**：
+ * - `streamId`：接收方自己发起的远程 run 流（既有语义，不变）；
+ * - `watchId`：接收方**观察**的流——云端按 `sessionWatchers` fan-out 时填入，
+ *   设备侧上行的 `AgentWatchFrame` 本身不带 watchId（设备只发一份）。
+ *
+ * 两个都带 = 寻址歧义（前端 tracker 无法判定该走 streamId 还是 watchId 通道），
+ * 两个都不带 = 无法路由，均判非法。
+ *
+ * requesterDeviceId 由 B 端原样回填 agentRunStart 收到的值，不解析（device 为
+ * deviceId，浏览器 user 发起时为 `"user:" + socketId`）；watchId 寻址时由云端
+ * fan-out 时填入登记的 requester 编码。
  */
-export interface AgentRunFrame {
-  streamId: string;
-  requesterDeviceId: string;
-  seq: number;
-  sessionId: string;
-  event: string;
-  payload: unknown;
-}
+export const AgentRunFrameSchema = z
+  .object({
+    streamId: z.string().min(1).optional(),
+    watchId: z.string().min(1).optional(),
+    requesterDeviceId: z.string(),
+    seq: z.number().int().nonnegative(),
+    sessionId: z.string(),
+    event: z.string(),
+    payload: z.unknown(),
+  })
+  .refine((v) => !!v.streamId !== !!v.watchId, {
+    message: "streamId 与 watchId 二选一必填（不可同时缺省或同时提供）",
+  });
+export type AgentRunFrame = z.infer<typeof AgentRunFrameSchema>;
 /**
  * L3:B→A 流终止。requesterDeviceId 同 AgentRunFrame，由 B 端原样回填。
  * B 侧二次门控的两条拒绝理由**必须分开**——它们对用户是完全不同的事实，合成

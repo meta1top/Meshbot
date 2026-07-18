@@ -29,6 +29,16 @@ export const IM_WS_EVENTS = {
   agentRunFrame: "agent.run.frame",
   agentRunControl: "agent.run.control",
   agentRunEnd: "agent.run.end",
+  /** Agent 级观察通道：观察者 → 云端，发起 watch（scope=agent 订生命周期 / scope=session 订推理帧）。 */
+  agentWatchStart: "agent.watch.start",
+  /** 观察者 → 云端，显式 unwatch（离开 Agent / 关闭会话）。 */
+  agentWatchStop: "agent.watch.stop",
+  /** 云端 → 设备，转发 watch 登记/注销（action: start | stop）。 */
+  agentWatchForwarded: "agent.watch.forwarded",
+  /** 设备 → 云端 → 观察者，watch 受理回包（session scope 携带 inflight 快照）。 */
+  agentWatchAccepted: "agent.watch.accepted",
+  /** 设备 → 云端，镜像帧（每 agent/session 只发一份，云端按 watchers 表 fan-out）。 */
+  agentWatchFrame: "agent.watch.frame",
 } as const;
 
 // 下行事件 payload
