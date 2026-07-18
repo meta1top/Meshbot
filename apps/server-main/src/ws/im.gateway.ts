@@ -28,6 +28,7 @@ import {
   type AgentRunStartInput,
   type AgentWatchAccepted,
   type AgentWatchForwarded,
+  type AgentWatchFrame,
   type AgentWatchStartInput,
   type AgentWatchStopInput,
   IM_WS_EVENTS,
@@ -849,6 +850,84 @@ export class ImGateway extends BaseWebSocketGateway {
     if (!route) return;
     if (!this.sameRequester(route.requester, this.requesterOf(client))) return;
     this.unregisterWatch(body.watchId, true);
+  }
+
+  /**
+   * Agent 级观察通道：被观察设备上行镜像帧 → 按反向索引 fan-out 给全部观察者。
+   *
+   * 设备**只上行一份**（不带 watchId，它不知道有几个观察者），本网关按
+   * `${senderDeviceId}:${localAgentId}`（agent scope）或
+   * `${senderDeviceId}:${sessionId}`（session scope）查索引，扇出成 N 份
+   * **带 watchId、不带 streamId** 的 `AgentRunFrame`——前端 tracker 据此走
+   * 「观察」通道而非「自己发起的流」通道。
+   *
+   * 索引键用**发送方连接的 deviceId**（`client.data.user.deviceId`）而非帧里
+   * 任何字段：与 `handleAgentRunFrame` 的安全语义一致——任何已认证连接都能
+   * 伪造帧体，只有连接层身份可信。伪造方查不到自己名下的索引键，帧被静默丢弃。
+   *
+   * 索引 Set 反查主表 miss（悬挂项，理论上不应发生——`registerWatch` 已保证
+   * 幂等一致）时防御性 `continue` 跳过该条，不影响其余观察者收帧，不抛异常。
+   */
+  @SubscribeMessage(IM_WS_EVENTS.agentWatchFrame)
+  @UseGuards(WsAuthGuard)
+  handleAgentWatchFrame(
+    @MessageBody() body: AgentWatchFrame,
+    @ConnectedSocket() client: Socket,
+  ): void {
+    const senderDeviceId = (client.data.user as { deviceId?: string })
+      ?.deviceId;
+    if (!senderDeviceId) return; // 非设备连接不得上行镜像帧
+    const key =
+      body.scope === "agent"
+        ? ImGateway.agentWatchKey(senderDeviceId, body.localAgentId)
+        : ImGateway.sessionWatchKey(senderDeviceId, body.sessionId ?? "");
+    const index =
+      body.scope === "agent" ? this.agentWatchers : this.sessionWatchers;
+    const watchIds = index.get(key);
+    if (!watchIds || watchIds.size === 0) return; // 无观察者，丢弃
+    for (const watchId of watchIds) {
+      const route = this.watchRoutes.get(watchId);
+      if (!route) continue; // 防御性：悬挂索引项，跳过不影响其余观察者
+      this.emitToRequester(route.requester, IM_WS_EVENTS.agentRunFrame, {
+        watchId,
+        requesterDeviceId: this.encodeRequester(route.requester),
+        seq: body.seq,
+        sessionId: body.sessionId ?? "",
+        event: body.event,
+        payload: body.payload,
+      } satisfies AgentRunFrame);
+    }
+  }
+
+  /**
+   * Agent 级观察通道：被观察设备回发受理包 → 按登记的 requester 定向回单个
+   * 观察者（**不广播**：inflight 快照是该 watchId 独有的续上数据）。
+   *
+   * 发送方必须是登记的 targetDeviceId（同 `handleAgentRunFrame` 的防伪造语义）。
+   * `ok:false` 时转发之后**立即注销该 watch**——设备已经明确拒绝（Agent 不可
+   * 远程 / 会话不归它 / 内部错误），留着路由只会让后续帧扇给一个不存在的观察
+   * 关系，属于泄漏。
+   */
+  @SubscribeMessage(IM_WS_EVENTS.agentWatchAccepted)
+  @UseGuards(WsAuthGuard)
+  handleAgentWatchAccepted(
+    @MessageBody() body: AgentWatchAccepted,
+    @ConnectedSocket() client: Socket,
+  ): void {
+    const route = this.watchRoutes.get(body.watchId);
+    const senderDeviceId = (client.data.user as { deviceId?: string })
+      ?.deviceId;
+    if (!route || senderDeviceId !== route.targetDeviceId) return;
+    this.emitToRequester(
+      route.requester,
+      IM_WS_EVENTS.agentWatchAccepted,
+      body,
+    );
+    if (!body.ok) {
+      // 设备拒了：转发后立即注销，不留悬挂路由（notifyDevice=false——设备
+      // 自己就是拒绝方，再回一条 stop 是噪音）。
+      this.unregisterWatch(body.watchId, false);
+    }
   }
 
   /**

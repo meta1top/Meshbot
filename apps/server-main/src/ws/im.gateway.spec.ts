@@ -1855,3 +1855,167 @@ describe("Agent 级观察通道：watch 登记", () => {
     ).not.toThrow();
   });
 });
+
+describe("Agent 级观察通道：fan-out", () => {
+  const deviceClient = () =>
+    ({
+      id: "sock-dev",
+      data: { user: { userId: "u1", deviceId: "dev-b" }, orgId: "org-1" },
+    }) as never;
+  const browserClient = (id: string) =>
+    ({ id, data: { user: { userId: "u1" }, orgId: "org-1" } }) as never;
+
+  const seed = async (gateway: never, scope: "agent" | "session") => {
+    for (const [wid, sid] of [
+      ["w1", "sock-1"],
+      ["w2", "sock-2"],
+    ] as const) {
+      await (
+        gateway as never as { handleAgentWatchStart: Function }
+      ).handleAgentWatchStart(
+        {
+          watchId: wid,
+          targetAgentId: "cloud-a1",
+          scope,
+          sessionId: scope === "session" ? "s1" : undefined,
+        },
+        browserClient(sid),
+      );
+    }
+  };
+
+  const mk = () =>
+    makeGateway({
+      agents: {
+        findActiveById: jest.fn().mockResolvedValue({
+          id: "cloud-a1",
+          userId: "u1",
+          orgId: "org-1",
+          deviceId: "dev-b",
+          localAgentId: "local-a1",
+        }),
+      },
+    });
+
+  it("session scope：一份上行帧扇出给全部观察者，各带自己的 watchId", async () => {
+    const { gateway, emitted } = mk();
+    await seed(gateway as never, "session");
+    gateway.handleAgentWatchFrame(
+      {
+        localAgentId: "local-a1",
+        scope: "session",
+        sessionId: "s1",
+        seq: 7,
+        event: "run.chunk",
+        payload: { sessionId: "s1", delta: "x" },
+      },
+      deviceClient(),
+    );
+    const frames = emitted.filter(([e]) => e === IM_WS_EVENTS.agentRunFrame);
+    expect(frames).toHaveLength(2);
+    expect(
+      frames.map(([, p]) => (p as { watchId: string }).watchId).sort(),
+    ).toEqual(["w1", "w2"]);
+    expect(frames[0][1]).toMatchObject({
+      seq: 7,
+      sessionId: "s1",
+      event: "run.chunk",
+    });
+    expect(frames[0][1]).not.toHaveProperty("streamId");
+  });
+
+  it("agent scope：生命周期帧按 agentWatchers 扇出", async () => {
+    const { gateway, emitted } = mk();
+    await seed(gateway as never, "agent");
+    gateway.handleAgentWatchFrame(
+      {
+        localAgentId: "local-a1",
+        scope: "agent",
+        seq: 1,
+        event: "session.created",
+        payload: { agentId: "local-a1", session: { id: "s9" } },
+      },
+      deviceClient(),
+    );
+    expect(
+      emitted.filter(([e]) => e === IM_WS_EVENTS.agentRunFrame),
+    ).toHaveLength(2);
+  });
+
+  it("非登记目标设备发帧 → 全部丢弃（防伪造注入）", async () => {
+    const { gateway, emitted } = mk();
+    await seed(gateway as never, "session");
+    gateway.handleAgentWatchFrame(
+      {
+        localAgentId: "local-a1",
+        scope: "session",
+        sessionId: "s1",
+        seq: 1,
+        event: "run.chunk",
+        payload: {},
+      },
+      {
+        id: "sock-x",
+        data: { user: { userId: "u1", deviceId: "别的设备" } },
+      } as never,
+    );
+    expect(
+      emitted.filter(([e]) => e === IM_WS_EVENTS.agentRunFrame),
+    ).toHaveLength(0);
+  });
+
+  it("无观察者时静默丢弃（不抛、不广播）", () => {
+    const { gateway, emitted } = mk();
+    expect(() =>
+      gateway.handleAgentWatchFrame(
+        {
+          localAgentId: "local-a1",
+          scope: "session",
+          sessionId: "s1",
+          seq: 1,
+          event: "run.chunk",
+          payload: {},
+        },
+        deviceClient(),
+      ),
+    ).not.toThrow();
+    expect(emitted).toHaveLength(0);
+  });
+
+  it("受理回包按 watchId 定向回单个观察者（不是广播）", async () => {
+    const { gateway, emitted } = mk();
+    await seed(gateway as never, "session");
+    gateway.handleAgentWatchAccepted(
+      { watchId: "w1", ok: true, inflight: { content: "半截" } },
+      deviceClient(),
+    );
+    const accepts = emitted.filter(
+      ([e]) => e === IM_WS_EVENTS.agentWatchAccepted,
+    );
+    expect(accepts).toHaveLength(1);
+    expect(accepts[0][1]).toMatchObject({ watchId: "w1", ok: true });
+  });
+
+  it("受理回包 ok:false → 转发观察者后立即注销该 watch（设备拒了就别留路由）", async () => {
+    const { gateway } = mk();
+    await seed(gateway as never, "session");
+    gateway.handleAgentWatchAccepted(
+      { watchId: "w1", ok: false, reason: "not_found" },
+      deviceClient(),
+    );
+    expect(gateway.sessionWatcherIds("dev-b", "s1")).toEqual(["w2"]);
+    expect(gateway.watchRouteCount()).toBe(1);
+  });
+
+  it("非登记目标设备发受理包 → 丢弃", async () => {
+    const { gateway, emitted } = mk();
+    await seed(gateway as never, "session");
+    gateway.handleAgentWatchAccepted({ watchId: "w1", ok: true }, {
+      id: "sock-x",
+      data: { user: { userId: "u1", deviceId: "别的设备" } },
+    } as never);
+    expect(
+      emitted.filter(([e]) => e === IM_WS_EVENTS.agentWatchAccepted),
+    ).toHaveLength(0);
+  });
+});
