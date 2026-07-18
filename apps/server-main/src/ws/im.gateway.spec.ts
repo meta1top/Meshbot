@@ -1994,10 +1994,14 @@ describe("Agent 级观察通道：fan-out", () => {
     );
     expect(accepts).toHaveLength(1);
     expect(accepts[0][1]).toMatchObject({ watchId: "w1", ok: true });
+    // ok:true 绝不能顺手拆路由——若 `if (!body.ok)` 守卫被误删，每次成功受理
+    // 都会把刚建好的观察路由立即注销，整个特性静默报废。锁死它。
+    expect(gateway.sessionWatcherIds("dev-b", "s1")).toEqual(["w1", "w2"]);
+    expect(gateway.watchRouteCount()).toBe(2);
   });
 
   it("受理回包 ok:false → 转发观察者后立即注销该 watch（设备拒了就别留路由）", async () => {
-    const { gateway } = mk();
+    const { gateway, emitted } = mk();
     await seed(gateway as never, "session");
     gateway.handleAgentWatchAccepted(
       { watchId: "w1", ok: false, reason: "not_found" },
@@ -2005,6 +2009,14 @@ describe("Agent 级观察通道：fan-out", () => {
     );
     expect(gateway.sessionWatcherIds("dev-b", "s1")).toEqual(["w2"]);
     expect(gateway.watchRouteCount()).toBe(1);
+    // notifyDevice=false：设备自己就是拒绝方，再回一条 stop 是噪音。
+    // 若被误改成 true，这条会红。
+    const stops = emitted.filter(
+      ([e, p]) =>
+        e === IM_WS_EVENTS.agentWatchForwarded &&
+        (p as { action?: string })?.action === "stop",
+    );
+    expect(stops).toHaveLength(0);
   });
 
   it("非登记目标设备发受理包 → 丢弃", async () => {

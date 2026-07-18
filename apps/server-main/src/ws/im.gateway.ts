@@ -331,8 +331,9 @@ export class ImGateway extends BaseWebSocketGateway {
 
   /**
    * 三表一致地注销一条 watch 路由，并（可选）通知设备 stop。
-   * **四条清理路径全部走这一个出口**（显式 unwatch / 观察者断线 / 设备断线 /
-   * idle），杜绝「主表删了索引没删」的半清理泄漏。
+   * **全部注销路径都走这一个出口**，杜绝「主表删了索引没删」的半清理泄漏：
+   * 显式 unwatch / 观察者断线 / 设备断线 / idle（前四条是泄漏防线），
+   * 外加设备回 `watch_accepted{ok:false}` 时的即时注销（T9）。
    * @param notifyDevice 设备自身断线时为 false（设备已不在，通知无意义且会
    *                     往一个空房间发帧）。
    */
@@ -887,7 +888,17 @@ export class ImGateway extends BaseWebSocketGateway {
     if (!watchIds || watchIds.size === 0) return; // 无观察者，丢弃
     for (const watchId of watchIds) {
       const route = this.watchRoutes.get(watchId);
-      if (!route) continue; // 防御性：悬挂索引项，跳过不影响其余观察者
+      if (!route) {
+        // 当前不变量下不可达：三表唯一写入口是 registerWatch/unregisterWatch，
+        // 二者同步无 await，不存在「索引已加、主表未加」的中间态。
+        // 留 warn 作哨兵——本类的 Map 是**进程内**的，将来 server-main 多实例
+        // 部署若没把这三张表迁到共享存储，这条会从「不可达」变成「真实发生但
+        // 完全无信号的静默丢帧」，正是最难查的那类症状。
+        this.logger.warn(
+          `watch 索引存在但主表缺失（watchId=${watchId}），跳过该观察者`,
+        );
+        continue;
+      }
       this.emitToRequester(route.requester, IM_WS_EVENTS.agentRunFrame, {
         watchId,
         requesterDeviceId: this.encodeRequester(route.requester),
