@@ -149,3 +149,103 @@ describe("RemoteRunTracker", () => {
     ]);
   });
 });
+
+describe("RemoteRunTracker：watchId 通道", () => {
+  const frame = (over: Record<string, unknown>) =>
+    ({
+      requesterDeviceId: "d",
+      seq: 1,
+      sessionId: "s1",
+      event: SESSION_WS_EVENTS.runChunk,
+      payload: { sessionId: "s1", delta: "x" },
+      ...over,
+    }) as never;
+
+  it("未登记的 watchId 帧被忽略（不是本实例观察的）", () => {
+    const t = new RemoteRunTracker();
+    expect(t.handleFrame(frame({ watchId: "未登记" }))).toEqual([]);
+  });
+
+  it("已登记的 watchId 帧被吐出（中途接入，seq 非 1 也能吐）", () => {
+    const t = new RemoteRunTracker();
+    t.registerWatch("w1", "s1");
+    expect(t.handleFrame(frame({ watchId: "w1", seq: 47 }))).toEqual([
+      {
+        event: SESSION_WS_EVENTS.runChunk,
+        payload: { sessionId: "s1", delta: "x" },
+      },
+    ]);
+  });
+
+  it("watch 通道跨多轮存活（run.done 后不自动注销）", () => {
+    const t = new RemoteRunTracker();
+    t.registerWatch("w1", "s1");
+    t.handleFrame(
+      frame({ watchId: "w1", seq: 1, event: SESSION_WS_EVENTS.runDone }),
+    );
+    expect(t.ownsWatch("w1")).toBe(true);
+    expect(t.handleFrame(frame({ watchId: "w1", seq: 2 }))).toHaveLength(1);
+  });
+
+  it("releaseWatch 后不再吐帧", () => {
+    const t = new RemoteRunTracker();
+    t.registerWatch("w1", "s1");
+    t.releaseWatch("w1");
+    expect(t.ownsWatch("w1")).toBe(false);
+    expect(t.handleFrame(frame({ watchId: "w1" }))).toEqual([]);
+  });
+
+  it("D6 抑制：同一客户端已持有该 session 的 stream 时，watch 帧被丢弃（不收双份）", () => {
+    const t = new RemoteRunTracker();
+    t.register("st1", "s1"); // 自己发起的 run
+    t.registerWatch("w1", "s1"); // 同时也在观察同一会话
+    expect(t.handleFrame(frame({ watchId: "w1" }))).toEqual([]);
+    expect(t.handleFrame(frame({ streamId: "st1" }))).toHaveLength(1);
+  });
+
+  it("D6 抑制解除：自己的 stream 结束后 watch 帧恢复吐出", () => {
+    const t = new RemoteRunTracker();
+    t.register("st1", "s1");
+    t.registerWatch("w1", "s1");
+    t.handleEnd({
+      streamId: "st1",
+      requesterDeviceId: "d",
+      reason: "done",
+    } as never);
+    expect(t.handleFrame(frame({ watchId: "w1", seq: 5 }))).toHaveLength(1);
+  });
+
+  it("抑制只针对同一 sessionId，别的会话的 watch 帧不受影响", () => {
+    const t = new RemoteRunTracker();
+    t.register("st1", "s1");
+    t.registerWatch("w2", "s2");
+    expect(
+      t.handleFrame(
+        frame({ watchId: "w2", sessionId: "s2", payload: { sessionId: "s2" } }),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("reset 清空 stream 与 watch 两类登记", () => {
+    const t = new RemoteRunTracker();
+    t.register("st1", "s1");
+    t.registerWatch("w1", "s2");
+    t.reset();
+    expect(t.owns("st1")).toBe(false);
+    expect(t.ownsWatch("w1")).toBe(false);
+  });
+
+  it("既有 streamId 行为零变化（回归）", () => {
+    const t = new RemoteRunTracker();
+    t.register("st1", null);
+    expect(t.handleFrame(frame({ streamId: "st1" }))).toHaveLength(1);
+    expect(
+      t.handleEnd({
+        streamId: "st1",
+        requesterDeviceId: "d",
+        reason: "done",
+      } as never),
+    ).toBeNull();
+    expect(t.owns("st1")).toBe(false);
+  });
+});

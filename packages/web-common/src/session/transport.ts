@@ -127,9 +127,28 @@ export class MulticastRunEvents {
 export class FrameSequencer {
   private nextExpectedSeq = 1;
   private buffer = new Map<number, { event: string; payload: unknown }>();
+  /** 当前是否已定基准（`primed=false` 时下一次 `push` 会用其 seq 作为起点）。 */
+  private primed: boolean;
+  /** 构造时记住的初值，供 `reset()` 恢复（`primeOnFirst` 模式下重置后允许重新定基准）。 */
+  private readonly primedDefault: boolean;
+
+  /**
+   * @param opts.primeOnFirst 首帧的 seq 作为起始基准（**观察者通道必须开**）。
+   *
+   * 自己发起的 run 流总是从 seq 1 开始收，默认 false 即可。但**观察者是中途
+   * 接入**——设备侧常驻转发器的 seq 从它建立那一刻起累加，观察者收到的第一
+   * 帧可能是 seq 47。若仍按 1 起算，这帧会被塞进重排缓冲等一个永远不会到来的
+   * seq 1，观察者一帧都吐不出来（静默失效，UI 表现为「watch 成功了但什么都
+   * 不动」）。开启后首帧即定基准，之后正常按连续性重排。
+   */
+  constructor(opts?: { primeOnFirst?: boolean }) {
+    this.primed = !opts?.primeOnFirst;
+    this.primedDefault = this.primed;
+  }
 
   /**
    * 推送一帧，返回可以立即吐出的帧序列（按 seq 连续）。
+   * - 若尚未定基准（`primeOnFirst` 模式下的首帧），以本帧 seq 为起点。
    * - 若帧 seq 等于 nextExpectedSeq，立即吐出，并检查缓冲区是否可连续吐出。
    * - 若帧 seq > nextExpectedSeq，缓冲待后续填补。
    * - 若帧 seq < nextExpectedSeq，说明是重复（已吐过），丢弃。
@@ -140,6 +159,11 @@ export class FrameSequencer {
     payload: unknown;
   }): Array<{ event: string; payload: unknown }> {
     const { seq, event, payload } = frame;
+
+    if (!this.primed) {
+      this.primed = true;
+      this.nextExpectedSeq = seq;
+    }
 
     // 丢弃重复 seq
     if (seq < this.nextExpectedSeq) {
@@ -169,9 +193,10 @@ export class FrameSequencer {
     return result;
   }
 
-  /** 重置序列器状态（清空缓冲和计数器）。 */
+  /** 重置序列器状态（清空缓冲和计数器；`primeOnFirst` 模式下允许重新定基准）。 */
   reset(): void {
     this.nextExpectedSeq = 1;
     this.buffer.clear();
+    this.primed = this.primedDefault;
   }
 }

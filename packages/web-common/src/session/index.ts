@@ -140,3 +140,4 @@ export {
   UserMessageActions,
   type UserMessageActionsProps,
 } from "./user-message-actions";
+export { inflightToSnapshotEvent } from "./watch-inflight";
