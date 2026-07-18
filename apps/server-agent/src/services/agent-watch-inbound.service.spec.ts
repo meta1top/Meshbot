@@ -44,11 +44,16 @@ describe("AgentWatchInboundService", () => {
     });
   });
 
-  it("Agent 查无 → 拒绝", async () => {
-    const { svc, agents, watches } = mk();
+  it("Agent 查无 → 拒绝（身份维度同样回 not_found）", async () => {
+    const { svc, agents, watches, relay } = mk();
     agents.findOrNull.mockResolvedValue(null);
     await svc.onAgentWatch(startEvt() as never);
     expect(watches.addWatcher).not.toHaveBeenCalled();
+    expect(relay.emitAgentWatchAccepted).toHaveBeenCalledWith("u1", {
+      watchId: "w1",
+      ok: false,
+      reason: "not_found",
+    });
   });
 
   it("session scope：被观察会话不归该 Agent → 拒绝（防跳板越权观察）", async () => {
@@ -57,10 +62,28 @@ describe("AgentWatchInboundService", () => {
     sessions.findOrNull.mockResolvedValue({ id: "s1", agentId: "别的Agent" });
     await svc.onAgentWatch(startEvt() as never);
     expect(watches.addWatcher).not.toHaveBeenCalled();
+    // 会话归属维度与身份维度必须回不同 reason——合成一条会让排查分不清
+    // 「Agent 不可观察」与「问错了会话」。
     expect(relay.emitAgentWatchAccepted).toHaveBeenCalledWith("u1", {
       watchId: "w1",
       ok: false,
-      reason: "not_found",
+      reason: "session_agent_mismatch",
+    });
+  });
+
+  it("session scope 缺 sessionId → 回 session_agent_mismatch（会话维度）", async () => {
+    const { svc, agents, watches, relay } = mk();
+    agents.findOrNull.mockResolvedValue({ id: "a1", remoteEnabled: true });
+    const evt = startEvt() as never as {
+      forwarded: { sessionId?: string | null };
+    };
+    evt.forwarded.sessionId = null;
+    await svc.onAgentWatch(evt as never);
+    expect(watches.addWatcher).not.toHaveBeenCalled();
+    expect(relay.emitAgentWatchAccepted).toHaveBeenCalledWith("u1", {
+      watchId: "w1",
+      ok: false,
+      reason: "session_agent_mismatch",
     });
   });
 

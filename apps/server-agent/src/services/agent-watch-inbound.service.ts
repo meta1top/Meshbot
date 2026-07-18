@@ -36,6 +36,11 @@ import { SessionWatchService } from "./session-watch.service";
  * unwatch、云端观察者断线清理、云端设备断线清理。后两条是**泄漏防线**，此时
  * Agent 可能已被删除 / 已关远程开关——若 stop 也走鉴权，恰恰在最需要清理的
  * 场景下清不掉，常驻转发器就永久泄漏了。stop 只按 watchId 注销，永不拒绝。
+ *
+ * 这不是没有鉴权，而是**信任边界放在云端**：watchId 的权威登记方是云端网关的
+ * `watchRoutes`（Task 8），它按登记时的 `userId` 校验 requester，越权 unwatch
+ * 在网关层就被拒、根本不会转发到设备。所以设备只会收到两类 stop——已鉴权的
+ * 合法 unwatch，以及云端自身的断线清理。设备侧重复鉴权只有坏处。
  */
 @Injectable()
 export class AgentWatchInboundService {
@@ -88,12 +93,15 @@ export class AgentWatchInboundService {
           return;
         }
         if (!sessionId) {
-          reject("not_found");
+          reject("session_agent_mismatch");
           return;
         }
         const session = await this.sessions.findOrNull(sessionId);
         if (!session || session.agentId !== agent.id) {
-          reject("not_found");
+          // 会话归属维度：与上面的「身份维度」(not_found) 是完全不同的事实，
+          // 必须分开回报——合成一条会让排查分不清「Agent 不可观察」与
+          // 「问错了会话」，本仓 agent_not_remotable 已因此害过一轮排查。
+          reject("session_agent_mismatch");
           return;
         }
         this.watches.addWatcher(cloudUserId, agent.id, sessionId, watchId);

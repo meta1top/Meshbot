@@ -66,7 +66,26 @@ export type AgentWatchForwarded = z.infer<typeof AgentWatchForwardedSchema>;
 export const AgentWatchAcceptedSchema = z.object({
   watchId: z.string().min(1),
   ok: z.boolean(),
-  reason: z.enum(["offline", "cross_account", "not_found", "error"]).optional(),
+  /**
+   * 拒绝原因。**「身份维度」与「会话归属维度」必须分开**——它们对用户是完全
+   * 不同的事实，合成一条会把排查与前端文案带偏（本仓 `AgentRunEnd.reason` 曾
+   * 因 `agent_not_remotable` 一值承载三种事实，害过一整轮真机排查）。
+   * - `offline` / `cross_account`：云端网关（`im.gateway` 的 watchRoutes）语义，转发前即拒。
+   * - `not_found`：设备侧身份维度——目标 Agent 查无 **或** 未开远程（与
+   *   `AgentRunEnd.agent_not_remotable` 同粒度，不再细拆）。
+   * - `session_agent_mismatch`：设备侧会话归属维度——缺 sessionId / 会话查无 /
+   *   会话不归属该 Agent。字面量刻意与 `AgentRunEnd.reason` 同名，跨协议一致。
+   * - `error`：设备侧处理异常。
+   */
+  reason: z
+    .enum([
+      "offline",
+      "cross_account",
+      "not_found",
+      "session_agent_mismatch",
+      "error",
+    ])
+    .optional(),
   inflight: z.unknown().optional(),
 });
 export type AgentWatchAccepted = z.infer<typeof AgentWatchAcceptedSchema>;
