@@ -1,0 +1,142 @@
+import { AgentWatchInboundService } from "./agent-watch-inbound.service";
+
+describe("AgentWatchInboundService", () => {
+  const mk = () => {
+    const watches = { addWatcher: jest.fn(), removeWatcher: jest.fn() };
+    const runner = { getInflight: jest.fn().mockReturnValue(null) };
+    const agents = { findOrNull: jest.fn() };
+    const sessions = { findOrNull: jest.fn() };
+    const relay = { emitAgentWatchAccepted: jest.fn() };
+    const account = { run: jest.fn((_: string, fn: () => unknown) => fn()) };
+    const svc = new AgentWatchInboundService(
+      watches as never,
+      runner as never,
+      agents as never,
+      sessions as never,
+      relay as never,
+      account as never,
+    );
+    return { svc, watches, runner, agents, sessions, relay };
+  };
+
+  const startEvt = (over: Record<string, unknown> = {}) => ({
+    cloudUserId: "u1",
+    forwarded: {
+      watchId: "w1",
+      localAgentId: "a1",
+      scope: "session" as const,
+      sessionId: "s1",
+      action: "start" as const,
+      requesterDeviceId: "user:sock-1",
+      ...over,
+    },
+  });
+
+  it("Agent 未开远程 → 拒绝并回 ok:false", async () => {
+    const { svc, agents, watches, relay } = mk();
+    agents.findOrNull.mockResolvedValue({ id: "a1", remoteEnabled: false });
+    await svc.onAgentWatch(startEvt() as never);
+    expect(watches.addWatcher).not.toHaveBeenCalled();
+    expect(relay.emitAgentWatchAccepted).toHaveBeenCalledWith("u1", {
+      watchId: "w1",
+      ok: false,
+      reason: "not_found",
+    });
+  });
+
+  it("Agent 查无 → 拒绝", async () => {
+    const { svc, agents, watches } = mk();
+    agents.findOrNull.mockResolvedValue(null);
+    await svc.onAgentWatch(startEvt() as never);
+    expect(watches.addWatcher).not.toHaveBeenCalled();
+  });
+
+  it("session scope：被观察会话不归该 Agent → 拒绝（防跳板越权观察）", async () => {
+    const { svc, agents, sessions, watches, relay } = mk();
+    agents.findOrNull.mockResolvedValue({ id: "a1", remoteEnabled: true });
+    sessions.findOrNull.mockResolvedValue({ id: "s1", agentId: "别的Agent" });
+    await svc.onAgentWatch(startEvt() as never);
+    expect(watches.addWatcher).not.toHaveBeenCalled();
+    expect(relay.emitAgentWatchAccepted).toHaveBeenCalledWith("u1", {
+      watchId: "w1",
+      ok: false,
+      reason: "not_found",
+    });
+  });
+
+  it("session scope 合法 → 登记观察者并回 inflight 快照（D7 中途续上）", async () => {
+    const { svc, agents, sessions, runner, watches, relay } = mk();
+    agents.findOrNull.mockResolvedValue({ id: "a1", remoteEnabled: true });
+    sessions.findOrNull.mockResolvedValue({ id: "s1", agentId: "a1" });
+    const inflight = {
+      messageId: "m1",
+      content: "半截",
+      reasoning: "",
+      reasoningStartedAt: null,
+      toolCalls: [],
+      status: "streaming",
+    };
+    runner.getInflight.mockReturnValue(inflight);
+    await svc.onAgentWatch(startEvt() as never);
+    expect(watches.addWatcher).toHaveBeenCalledWith("u1", "a1", "s1", "w1");
+    expect(relay.emitAgentWatchAccepted).toHaveBeenCalledWith("u1", {
+      watchId: "w1",
+      ok: true,
+      inflight,
+    });
+  });
+
+  it("session scope 无活跃 run → inflight 为 null（不是报错）", async () => {
+    const { svc, agents, sessions, runner, relay } = mk();
+    agents.findOrNull.mockResolvedValue({ id: "a1", remoteEnabled: true });
+    sessions.findOrNull.mockResolvedValue({ id: "s1", agentId: "a1" });
+    runner.getInflight.mockReturnValue(null);
+    await svc.onAgentWatch(startEvt() as never);
+    expect(relay.emitAgentWatchAccepted).toHaveBeenCalledWith("u1", {
+      watchId: "w1",
+      ok: true,
+      inflight: null,
+    });
+  });
+
+  it("agent scope：不查会话、不带 inflight", async () => {
+    const { svc, agents, sessions, watches, relay } = mk();
+    agents.findOrNull.mockResolvedValue({ id: "a1", remoteEnabled: true });
+    await svc.onAgentWatch(
+      startEvt({ scope: "agent", sessionId: undefined }) as never,
+    );
+    expect(sessions.findOrNull).not.toHaveBeenCalled();
+    expect(watches.addWatcher).not.toHaveBeenCalled(); // Agent 级不走 SessionWatchService
+    expect(relay.emitAgentWatchAccepted).toHaveBeenCalledWith("u1", {
+      watchId: "w1",
+      ok: true,
+      inflight: null,
+    });
+  });
+
+  it("action:stop → 注销观察者，不回受理包", async () => {
+    const { svc, watches, relay } = mk();
+    await svc.onAgentWatch(startEvt({ action: "stop" }) as never);
+    expect(watches.removeWatcher).toHaveBeenCalledWith("w1");
+    expect(relay.emitAgentWatchAccepted).not.toHaveBeenCalled();
+  });
+
+  it("action:stop 不做鉴权查表（云端断线清理下发，必须无条件生效）", async () => {
+    const { svc, agents } = mk();
+    await svc.onAgentWatch(startEvt({ action: "stop" }) as never);
+    expect(agents.findOrNull).not.toHaveBeenCalled();
+  });
+
+  it("内部异常 → 回 ok:false reason:error，不抛出（不炸 relay 监听器）", async () => {
+    const { svc, agents, relay } = mk();
+    agents.findOrNull.mockRejectedValue(new Error("boom"));
+    await expect(
+      svc.onAgentWatch(startEvt() as never),
+    ).resolves.toBeUndefined();
+    expect(relay.emitAgentWatchAccepted).toHaveBeenCalledWith("u1", {
+      watchId: "w1",
+      ok: false,
+      reason: "error",
+    });
+  });
+});
