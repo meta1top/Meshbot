@@ -1,9 +1,10 @@
-import { DEFAULT_AGENT_NAME } from "@meshbot/types-agent";
+import { AGENT_EVENTS, DEFAULT_AGENT_NAME } from "@meshbot/types-agent";
 import {
   AccountContextService,
   MeshbotConfigService,
 } from "@meshbot/lib-agent";
 import { NotFoundException } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { Test } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { DataSource } from "typeorm";
@@ -34,6 +35,8 @@ describe("AgentService", () => {
   };
   /** 假 MeshbotConfigService：只记 agentDirOf 调用，不碰真实磁盘。 */
   let fakeConfig: { agentDirOf: jest.Mock };
+  /** 假 EventEmitter2：断言 AGENT_EVENTS.changed 的发射时机与负载。 */
+  let emitter: { emit: jest.Mock };
 
   beforeEach(async () => {
     ds = new DataSource({
@@ -52,6 +55,7 @@ describe("AgentService", () => {
         .fn()
         .mockReturnValue("/tmp/agent-service-spec-nonexistent"),
     };
+    emitter = { emit: jest.fn() };
     const moduleRef = await Test.createTestingModule({
       providers: [
         AgentService,
@@ -63,6 +67,7 @@ describe("AgentService", () => {
         },
         { provide: MeshbotConfigService, useValue: fakeConfig },
         { provide: SessionService, useValue: fakeSessions },
+        { provide: EventEmitter2, useValue: emitter },
       ],
     }).compile();
     service = moduleRef.get(AgentService);
@@ -218,6 +223,88 @@ describe("AgentService", () => {
         expect(copy.avatar).toBe(src.avatar);
         expect(copy.description).toBe(src.description);
         expect(copy.systemPrompt).toBe(src.systemPrompt);
+      });
+    });
+  });
+
+  /**
+   * 发射点下沉到 Service 的回归护栏。
+   *
+   * 为什么必须在 Service 层测、而不是只在 Controller 层测：`rename_agent` 工具
+   * 改名走 `AGENT_RENAME_PORT` → `AgentService.update()`，**不经过 Controller**。
+   * 事件原先在 `AgentController` 里发，于是工具改名后浏览器收不到任何 Agent 列表
+   * 失效信号，侧栏 Agent 行与会话标题栏（都吃 `useAgents()` 的 `["agents"]` 缓存）
+   * 永远停在旧名字。下面的用例锁住「任何成功写入路径都发一次事件、失败路径不发」。
+   */
+  describe("AGENT_EVENTS.changed 发射契约", () => {
+    it("create 成功发一次，负载带账号与新建 id", async () => {
+      await account.run("acct-1", async () => {
+        emitter.emit.mockClear();
+        const created = await service.create(fixture("新建"));
+        expect(emitter.emit).toHaveBeenCalledTimes(1);
+        expect(emitter.emit).toHaveBeenCalledWith(AGENT_EVENTS.changed, {
+          cloudUserId: "acct-1",
+          agentId: created.id,
+        });
+      });
+    });
+
+    it("update 成功发一次 —— 这条正是 rename_agent 工具改名走的路径", async () => {
+      await account.run("acct-1", async () => {
+        const created = await service.create(fixture("旧名"));
+        emitter.emit.mockClear();
+        await service.update(created.id, { name: "新名" });
+        expect(emitter.emit).toHaveBeenCalledTimes(1);
+        expect(emitter.emit).toHaveBeenCalledWith(AGENT_EVENTS.changed, {
+          cloudUserId: "acct-1",
+          agentId: created.id,
+        });
+      });
+    });
+
+    it("removeWithData 成功发一次，负载带被删 id", async () => {
+      await account.run("acct-1", async () => {
+        await service.ensureDefault(); // 保证不是最后一个
+        const doomed = await service.create(fixture("待删"));
+        emitter.emit.mockClear();
+        await service.removeWithData(doomed.id);
+        expect(emitter.emit).toHaveBeenCalledTimes(1);
+        expect(emitter.emit).toHaveBeenCalledWith(AGENT_EVENTS.changed, {
+          cloudUserId: "acct-1",
+          agentId: doomed.id,
+        });
+      });
+    });
+
+    it("duplicate 只发一次（委托 create，不重复发）", async () => {
+      await account.run("acct-1", async () => {
+        const src = await service.create(fixture("源"));
+        emitter.emit.mockClear();
+        const copy = await service.duplicate(src.id);
+        expect(emitter.emit).toHaveBeenCalledTimes(1);
+        expect(emitter.emit).toHaveBeenCalledWith(AGENT_EVENTS.changed, {
+          cloudUserId: "acct-1",
+          agentId: copy.id,
+        });
+      });
+    });
+
+    it("删除被拒（只剩一个 Agent）不发事件", async () => {
+      await account.run("acct-1", async () => {
+        const only = await service.ensureDefault();
+        emitter.emit.mockClear();
+        await expect(service.removeWithData(only.id)).rejects.toThrow();
+        expect(emitter.emit).not.toHaveBeenCalled();
+      });
+    });
+
+    it("update 目标不存在（404）不发事件", async () => {
+      await account.run("acct-1", async () => {
+        emitter.emit.mockClear();
+        await expect(service.update("ghost", { name: "x" })).rejects.toThrow(
+          NotFoundException,
+        );
+        expect(emitter.emit).not.toHaveBeenCalled();
       });
     });
   });

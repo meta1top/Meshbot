@@ -9,6 +9,7 @@ import type {
 } from "@meshbot/types";
 import { AUTH_WS_EVENTS, IM_WS_EVENTS } from "@meshbot/types";
 import {
+  AGENT_EVENTS,
   MODEL_CONFIG_EVENTS,
   QUICK_ASSISTANT_EVENTS,
   type QuickAssistantRenamedEvent,
@@ -34,6 +35,7 @@ import {
 import { addScheduleActivityAtom } from "@/atoms/schedule-activity";
 import { updateSessionStatusAtom } from "@/atoms/sessions";
 import { getEventsSocket } from "@/lib/events-socket";
+import { agentsQueryKey } from "@/rest/agents";
 import { remoteAgentsQueryKey } from "@/rest/remote-agents";
 
 /** 全局事件分发表：按信封 type 调对应 handler。纯函数，便于单测。 */
@@ -46,6 +48,7 @@ export interface GlobalEventHandlers {
   onScheduleFired: (p: ScheduleFiredEvent) => void;
   onSessionStatusChanged: (p: SessionStatusChangedEvent) => void;
   onQuickAssistantRenamed: (p: QuickAssistantRenamedEvent) => void;
+  onAgentChanged: () => void;
   onModelConfigUpdated: () => void;
   onRemoteAgentsChanged: () => void;
   onReauthRequired: (p: { cloudUserId: string }) => void;
@@ -79,6 +82,9 @@ export function dispatchGlobalEvent(
       break;
     case QUICK_ASSISTANT_EVENTS.renamed:
       h.onQuickAssistantRenamed(env.payload as QuickAssistantRenamedEvent);
+      break;
+    case AGENT_EVENTS.changed:
+      h.onAgentChanged();
       break;
     case MODEL_CONFIG_EVENTS.updated:
       h.onModelConfigUpdated();
@@ -136,6 +142,10 @@ export function useGlobalEvents(): void {
       onSessionStatusChanged: (p) =>
         updateSessionStatus({ id: p.sessionId, status: p.status }),
       onQuickAssistantRenamed: (p) => setQuickAssistantName(p.name),
+      // 本机任一 Agent 增删改（表单 / rename_agent 工具 / 另一个窗口）→ 重拉
+      //  Agent 列表：侧栏 Agent 行与会话标题栏共用这份缓存，改名后立刻跟着变
+      onAgentChanged: () =>
+        queryClient.invalidateQueries({ queryKey: agentsQueryKey }),
       // 云端模型配置同步完成 → 刷新模型列表（选择器/设置页实时更新）
       onModelConfigUpdated: () =>
         queryClient.invalidateQueries({ queryKey: ["model-configs"] }),
@@ -152,9 +162,12 @@ export function useGlobalEvents(): void {
     // 模型」假象）；远程 Agent 同理，且还要兜住「本机离线期间别的设备改了开关」
     // 以及云端广播的两个盲区（设备无 orgId / 两台设备 orgId 不同 → 事件投不到，
     // 见 EventsGateway.onRemoteAgentsChanged 的 JSDoc）。幂等且便宜。
+    // 本地 Agent 列表同理补拉：断线期间 `rename_agent` 工具或别的窗口改了名，
+    // agent.changed 信封会丢，重连时重拉一次兜住。
     const onConnect = () => {
       queryClient.invalidateQueries({ queryKey: ["model-configs"] });
       queryClient.invalidateQueries({ queryKey: remoteAgentsQueryKey });
+      queryClient.invalidateQueries({ queryKey: agentsQueryKey });
     };
     socket.on("event", onEvent);
     socket.on("connect", onConnect);

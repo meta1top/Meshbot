@@ -8,6 +8,7 @@ jest.mock("@meshbot/web-common", () => ({ clearAccessToken: jest.fn() }));
 jest.mock("@/rest/remote-agents", () => ({
   remoteAgentsQueryKey: ["remote-agents"],
 }));
+jest.mock("@/rest/agents", () => ({ agentsQueryKey: ["agents"] }));
 jest.mock("@/lib/events-socket", () => ({ getEventsSocket: jest.fn() }));
 jest.mock("jotai", () => ({ useSetAtom: jest.fn() }));
 jest.mock("react", () => ({
@@ -18,6 +19,7 @@ jest.mock("@tanstack/react-query", () => ({ useQueryClient: jest.fn() }));
 
 import { AUTH_WS_EVENTS, IM_WS_EVENTS } from "@meshbot/types";
 import {
+  AGENT_EVENTS,
   MODEL_CONFIG_EVENTS,
   QUICK_ASSISTANT_EVENTS,
   REMOTE_AGENT_EVENTS,
@@ -27,6 +29,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { getEventsSocket } from "@/lib/events-socket";
+import { agentsQueryKey } from "@/rest/agents";
 import { remoteAgentsQueryKey } from "@/rest/remote-agents";
 import { dispatchGlobalEvent, useGlobalEvents } from "./use-global-events";
 
@@ -42,6 +45,7 @@ function makeHandlers() {
     onQuickAssistantRenamed: jest.fn(),
     onModelConfigUpdated: jest.fn(),
     onRemoteAgentsChanged: jest.fn(),
+    onAgentChanged: jest.fn(),
     onReauthRequired: jest.fn(),
   };
 }
@@ -86,6 +90,21 @@ describe("dispatchGlobalEvent", () => {
     expect(h.onRemoteAgentsChanged).toHaveBeenCalled();
     // 失效信号：不误派给别的 handler
     expect(h.onModelConfigUpdated).not.toHaveBeenCalled();
+  });
+
+  it("agent.changed → onAgentChanged（无参失效信号）", () => {
+    const h = makeHandlers();
+    dispatchGlobalEvent(
+      {
+        type: AGENT_EVENTS.changed,
+        payload: { cloudUserId: "U1", agentId: "a1" },
+        ts: 1,
+      },
+      h,
+    );
+    expect(h.onAgentChanged).toHaveBeenCalled();
+    // 失效信号：不误派给邻近的远程 Agent handler（两者语义不同、缓存键不同）
+    expect(h.onRemoteAgentsChanged).not.toHaveBeenCalled();
   });
 
   it("未知 type → 不抛错、不调用任何 handler", () => {
@@ -159,6 +178,37 @@ describe("useGlobalEvents 远程 Agent 列表接线", () => {
 
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: remoteAgentsQueryKey,
+    });
+  });
+
+  it("收到 agent.changed → invalidate agentsQueryKey（侧栏 Agent 行 + 会话标题栏跟着改名刷新）", () => {
+    const { listeners, invalidateQueries } = runHook();
+
+    listeners.event?.({
+      type: AGENT_EVENTS.changed,
+      payload: { cloudUserId: "U1", agentId: "a1" },
+      ts: 1,
+    });
+
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: agentsQueryKey,
+    });
+  });
+
+  it("socket 重连 → 补拉本地 Agent 列表（兜住断线期间 rename_agent 工具改名丢事件）", () => {
+    const { listeners, invalidateQueries } = runHook();
+
+    listeners.connect?.();
+
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: agentsQueryKey,
+    });
+    // 原有两条补拉不能被挤掉
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: remoteAgentsQueryKey,
+    });
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["model-configs"],
     });
   });
 });

@@ -1,6 +1,7 @@
 import { AccountContextService } from "@meshbot/lib-agent";
 import { AUTH_WS_EVENTS, IM_WS_EVENTS } from "@meshbot/types";
 import {
+  AGENT_EVENTS,
   REMOTE_AGENT_EVENTS,
   SCHEDULE_EVENTS,
   SESSION_STATUS_EVENTS,
@@ -139,6 +140,18 @@ describe("EventsGateway 下行信封 + 账号路由", () => {
     const [eventName, env] = roomEmit.mock.calls[0];
     expect(eventName).toBe("event");
     expect(env.type).toBe(SESSION_STATUS_EVENTS.changed);
+    expect(env.payload).toEqual(payload);
+  });
+
+  it("agent.changed 本地事件包信封下发到 acct 房间（侧栏/标题栏改名实时刷新）", () => {
+    const account = new AccountContextService();
+    const { gw, roomEmit, to } = makeGateway(account);
+    const payload = { cloudUserId: "U1", agentId: "a1" };
+    account.run("U1", () => gw.onAgentChanged(payload));
+    expect(to).toHaveBeenCalledWith("acct:U1");
+    const [eventName, env] = roomEmit.mock.calls[0];
+    expect(eventName).toBe("event");
+    expect(env.type).toBe(AGENT_EVENTS.changed);
     expect(env.payload).toEqual(payload);
   });
 

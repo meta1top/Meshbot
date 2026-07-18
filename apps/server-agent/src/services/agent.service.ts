@@ -5,8 +5,10 @@ import {
   MeshbotConfigService,
 } from "@meshbot/lib-agent";
 import {
+  AGENT_EVENTS,
   DEFAULT_AGENT_AVATAR,
   DEFAULT_AGENT_NAME,
+  type AgentChangedEvent,
   type AgentCreateInput,
   type AgentUpdateInput,
 } from "@meshbot/types-agent";
@@ -15,6 +17,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { ScopedRepository } from "../account/scoped-repository";
@@ -51,9 +54,24 @@ export class AgentService {
     // 默认 Agent），模块级形成环，用 forwardRef 打开；Service 层本身单向
     // （SessionService 不反向依赖 AgentService），无需在此处也包 forwardRef。
     private readonly sessions: SessionService,
+    private readonly emitter: EventEmitter2,
   ) {
     this.repo = scopedFactory.create(rawRepo);
     this.txAnchorRepo = rawRepo;
+  }
+
+  /**
+   * Agent 增删改成功后发 `AGENT_EVENTS.changed`。
+   *
+   * 放在 Service 层而非 Controller：`rename_agent` 工具走 `AGENT_RENAME_PORT`
+   * → `update()`，不经过 Controller；发射点下沉后两条路径（REST 表单 / Agent
+   * 工具）都能同时驱动云端对账推送与浏览器侧栏刷新。
+   */
+  private emitChanged(agentId: string): void {
+    this.emitter.emit(AGENT_EVENTS.changed, {
+      cloudUserId: this.accountContext.getOrThrow(),
+      agentId,
+    } satisfies AgentChangedEvent);
   }
 
   /** 列出当前账号的全部 Agent，按 sortOrder、创建时间升序。 */
@@ -84,20 +102,24 @@ export class AgentService {
    * 才会触发生成雪花 id；`ScopedRepository` 本身不暴露 `create()` 方法。
    */
   async create(input: AgentCreateInput): Promise<Agent> {
-    return this.repo.save({
+    const created = await this.repo.save({
       name: input.name,
       avatar: input.avatar,
       description: input.description,
       systemPrompt: input.systemPrompt,
       defaultModelConfigId: input.defaultModelConfigId,
     } as Agent);
+    this.emitChanged(created.id);
+    return created;
   }
 
   /** 更新 Agent（只覆盖传入字段）。 */
   async update(id: string, input: AgentUpdateInput): Promise<Agent> {
     const agent = await this.findOrThrow(id);
     Object.assign(agent, input);
-    return this.repo.save(agent);
+    const saved = await this.repo.save(agent);
+    this.emitChanged(saved.id);
+    return saved;
   }
 
   /**
@@ -127,6 +149,7 @@ export class AgentService {
   async removeWithData(id: string): Promise<void> {
     await this.removeInDb(id);
     rmSync(this.config.agentDirOf(id), { recursive: true, force: true });
+    this.emitChanged(id);
   }
 
   /**

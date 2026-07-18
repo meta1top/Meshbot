@@ -18,6 +18,8 @@ import {
   type PresenceState,
 } from "@meshbot/types";
 import {
+  AGENT_EVENTS,
+  type AgentChangedEvent,
   QUICK_ASSISTANT_EVENTS,
   type QuickAssistantRenamedEvent,
   MODEL_CONFIG_EVENTS,
@@ -200,12 +202,28 @@ export class EventsGateway extends BaseWebSocketGateway {
   }
 
   /**
+   * 本地 Agent 增删改（含改名）→ 信封投递给所属账号浏览器，侧栏 Agent 列表与
+   * 会话标题栏实时刷新（前端 invalidate `["agents"]` 查询）。
+   *
+   * 发射点在 `AgentService.create/update/removeWithData`，故表单改名（REST
+   * `AgentController.update`）与 `rename_agent` 工具改名（`AGENT_RENAME_PORT`）
+   * 两条路径都会走到这里——修「工具改名后侧栏/标题栏仍显示旧名」。
+   * 两条路径都在账号上下文内 emit（REST 经鉴权拦截器、工具经 GraphService.run），
+   * 故 emitEnvelope 能取到账号并路由到 acct 房间。
+   */
+  @OnEvent(AGENT_EVENTS.changed)
+  onAgentChanged(payload: AgentChangedEvent): void {
+    this.emitEnvelope(AGENT_EVENTS.changed, payload);
+  }
+
+  /**
    * 本地随手问改名 → 信封投递给所属账号浏览器，dock 标题实时刷新。
    *
-   * QuickAssistantController.rename（UI 改名，写默认 Agent 的 name）经 EventEmitter2 触发，
-   * 在账号上下文内 emit，故 emitEnvelope 能取到账号路由到 acct 房间。注意：`rename_agent`
-   * 工具改名走 AGENT_RENAME_PORT，不经过此处，不会触发这个事件（已知取舍，见
-   * QuickAssistantController 的 JSDoc）。
+   * QuickAssistantController.rename（UI 改名，写默认 Agent 的 name）与
+   * `rename_agent` 工具（`AGENT_RENAME_PORT`，见 runtime-context.module）都会
+   * 在改到默认 Agent 时 emit 此事件；两者都在账号上下文内 emit，故 emitEnvelope
+   * 能取到账号路由到 acct 房间。与上面的 `agent.changed` 分工：这个只喂 dock 的
+   * `quickAssistantNameAtom`（默认 Agent 的显示名），那个失效整份 Agent 列表缓存。
    */
   @OnEvent(QUICK_ASSISTANT_EVENTS.renamed)
   onQuickAssistantRenamed(payload: QuickAssistantRenamedEvent): void {

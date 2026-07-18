@@ -117,22 +117,22 @@ describe("AgentController", () => {
       fakeSchedules as unknown as never,
       fakeModelConfigs as unknown as never,
     );
+    mcp = { teardownAgent: jest.fn().mockResolvedValue(undefined) };
+    emitter = { emit: jest.fn() };
     agentService = new AgentService(
       ds.getRepository(Agent),
       scopedFactory,
       account,
       config,
       sessionService,
+      emitter as unknown as EventEmitter2,
     );
-    mcp = { teardownAgent: jest.fn().mockResolvedValue(undefined) };
-    emitter = { emit: jest.fn() };
     controller = new AgentController(
       agentService,
       agentCtx,
       config,
       mcp as unknown as McpService,
       account,
-      emitter as unknown as EventEmitter2,
     );
   });
 
@@ -276,9 +276,10 @@ describe("AgentController", () => {
     it("create 成功后 emit agent.changed（携带当前账号）", async () => {
       await run(async () => {
         emitter.emit.mockClear();
-        await controller.create(fixture("新 Agent") as never);
+        const created = await controller.create(fixture("新 Agent") as never);
         expect(emitter.emit).toHaveBeenCalledWith("agent.changed", {
           cloudUserId: DEFAULT_USER,
+          agentId: created.id,
         });
       });
     });
@@ -290,6 +291,7 @@ describe("AgentController", () => {
         await controller.update(created.id, { name: "改名" } as never);
         expect(emitter.emit).toHaveBeenCalledWith("agent.changed", {
           cloudUserId: DEFAULT_USER,
+          agentId: created.id,
         });
       });
     });
@@ -302,6 +304,7 @@ describe("AgentController", () => {
         await controller.remove(agent.id);
         expect(emitter.emit).toHaveBeenCalledWith("agent.changed", {
           cloudUserId: DEFAULT_USER,
+          agentId: agent.id,
         });
       });
     });
@@ -310,10 +313,13 @@ describe("AgentController", () => {
       await run(async () => {
         const src = await controller.create(fixture("源") as never);
         emitter.emit.mockClear();
-        await controller.duplicate(src.id);
+        const copy = await controller.duplicate(src.id);
         expect(emitter.emit).toHaveBeenCalledWith("agent.changed", {
           cloudUserId: DEFAULT_USER,
+          agentId: copy.id,
         });
+        // duplicate 委托 create()，发射点已下沉到 Service，只应发一次（不重复）
+        expect(emitter.emit).toHaveBeenCalledTimes(1);
       });
     });
   });
