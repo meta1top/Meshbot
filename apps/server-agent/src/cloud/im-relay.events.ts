@@ -1,6 +1,7 @@
 import type {
   AgentRunControlForwarded,
   AgentRunStartForwarded,
+  AgentWatchForwarded,
   DeviceQueryForwarded,
 } from "@meshbot/types";
 
@@ -26,6 +27,12 @@ export const IM_RELAY_EVENTS = {
   agentRunFrame: "im.relay.agent_run_frame",
   /** L3：云端回流的流终止通知（B→云→A），桥给 RemoteRunService.onEnd。 */
   agentRunEnd: "im.relay.agent_run_end",
+  /** Agent 级观察通道：云端转发给本设备的 watch 登记/注销（观察者→云→本设备），供 AgentWatchInboundService 消费。 */
+  agentWatchInbound: "im.relay.agent_watch",
+  /** Agent 级观察通道：云端回流的观察帧（A 侧作为观察者，T18 消费）。 */
+  agentWatchFrameInbound: "im.relay.agent_watch_frame",
+  /** Agent 级观察通道：云端回流的 watch 受理回包（含 inflight 快照），供 web-agent 代理层消费。 */
+  agentWatchAcceptedInbound: "im.relay.agent_watch_accepted",
 } as const;
 
 /** relay 重连成功事件负载。 */
@@ -71,4 +78,14 @@ export interface ImRelayAgentRunRequestEvent {
 export interface ImRelayAgentRunControlEvent {
   cloudUserId: string;
   forwarded: AgentRunControlForwarded;
+}
+
+/**
+ * Agent 级观察通道：入站 watch 登记/注销本地事件负载（云端转发，供本设备
+ * `AgentWatchInboundService` 消费并驱动 `SessionWatchService` /
+ * `AgentWatchMirrorService`）。
+ */
+export interface ImRelayAgentWatchEvent {
+  cloudUserId: string;
+  forwarded: AgentWatchForwarded;
 }
