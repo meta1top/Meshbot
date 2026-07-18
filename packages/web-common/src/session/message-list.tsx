@@ -35,18 +35,30 @@ export interface MessageListLabels {
   compactionRowTitle: (count: number) => string;
   /**
    * 远程二次门控拒绝的专属文案（Bug #13）：`m.errorReason === "agent_not_remotable"`
-   * 时展示这条，而不是展示 `errorText` 里未经翻译的原始兜底文本（如「目标 Agent
-   * 未开启远程访问，本次消息未发送」）。
+   * 时展示这条，而不是展示 `errorText` 里未经翻译的原始兜底文本。
+   *
+   * 语义边界：这条 reason **只**表示「目标 Agent 不存在，或它没开启远程访问」
+   * 两种事实（文案须同时覆盖，别说死「未开启远程访问」）。会话归属不匹配是
+   * 另一条独立 reason，见 {@link runErrorSessionAgentMismatch}。
    */
   runErrorAgentNotRemotable: string;
+  /**
+   * 远程 run 预检拒绝——会话归属不匹配——的专属文案：
+   * `m.errorReason === "session_agent_mismatch"` 时展示。
+   *
+   * 与 `agent_not_remotable` 的区别：Agent 本身**是**可远程的，只是这次 append
+   * 的会话不归它（或该 sessionId 在目标设备上查无）。此前两者共用一条 reason，
+   * 前端一律显示「该 Agent 未开启远程访问」，把排查带得完全偏了。
+   */
+  runErrorSessionAgentMismatch: string;
   /**
    * 远程 run 预检拒绝——目标设备离线——的专属文案（原 bug #13 残留）：
    * `m.errorReason === "offline"` 时展示这条，而不是 `errorText` 里
    * `RemoteRunService.describePreflightRejection` 生成的硬编码中文兜底
    * （「目标设备已离线，本次消息未发送」，对非中文用户不友好）。
    *
-   * `errorReason` 目前只有两个稳定取值会走到这里——`"agent_not_remotable"`
-   * 与 `"offline"`——均来自 A 侧 `RemoteRunService` 对 L3 远程 run 预检拒绝
+   * `errorReason` 目前只有三个稳定取值会走到这里——`"agent_not_remotable"`、
+   * `"session_agent_mismatch"` 与 `"offline"`——均来自 A 侧 `RemoteRunService` 对 L3 远程 run 预检拒绝
    * 的结构化标注；其余情形（本地 run 失败、idle 超时等）不设 `reason`，
    * 继续走 `errorText` 兜底展示原始文本。
    */
@@ -268,9 +280,11 @@ export function MessageList({
                     {labels.runErrorPrefix}
                     {m.errorReason === "agent_not_remotable"
                       ? labels.runErrorAgentNotRemotable
-                      : m.errorReason === "offline"
-                        ? labels.runErrorOffline
-                        : m.errorText}
+                      : m.errorReason === "session_agent_mismatch"
+                        ? labels.runErrorSessionAgentMismatch
+                        : m.errorReason === "offline"
+                          ? labels.runErrorOffline
+                          : m.errorText}
                   </div>
                 )}
                 {m.role === "assistant" &&

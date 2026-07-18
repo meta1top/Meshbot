@@ -118,7 +118,9 @@ export class RemoteRunInboundService {
    * requester 篡改），本方法**只使用 `localAgentId`**、绝不读取 `targetAgentId`
    * 做寻址或鉴权。本地 `agents` 表的 `remote_enabled` 才是唯一真相：查到的 Agent
    * 必须存在且 `remoteEnabled === true` 才允许落会话触发远程 run，否则一律拒绝
-   * 并回 `agentRunEnd{reason:"agent_not_remotable"}`（不建会话、不 kick）。
+   * 并回 `agentRunEnd{reason:"agent_not_remotable"}`（不建会话、不 kick）——该
+   * reason 只表示「Agent 不存在或未开远程」这一件事，会话归属不符是另一条
+   * `session_agent_mismatch`（见下）。
    *
    * 【append 模式二次门控——真正执行的 agent 是 session.agentId，不是 localAgentId】
    * create 模式新会话的 `agentId` 就是 `localAgentId`，查它的 `remoteEnabled`
@@ -134,7 +136,9 @@ export class RemoteRunInboundService {
    * 且比「只查 session.agentId 的 remoteEnabled、不比对身份」更严格——后者会
    * 放行「用 remote_enabled 的 X 越权 append 进另一个同样 remote_enabled 的 Y
    * 的会话」这种未寻址却被接受的串门，相等校验把这条路也堵死。会话查无（含
-   * append 一个不存在的 sessionId）同样归入拒绝路径，不放行也不崩。
+   * append 一个不存在的 sessionId）同样归入拒绝路径，不放行也不崩。这条路径回
+   * 的是 `reason:"session_agent_mismatch"`（**不是** `agent_not_remotable`）：
+   * 此处 Agent 已确认可远程，拒绝的是「会话不归它」，前端据此给准确文案。
    */
   @OnEvent(IM_RELAY_EVENTS.agentRunRequest)
   async onAgentRunRequest(evt: ImRelayAgentRunRequestEvent): Promise<void> {
@@ -155,10 +159,13 @@ export class RemoteRunInboundService {
         if (mode === "append" && forwarded.sessionId) {
           const owner = await this.sessions.findOrNull(forwarded.sessionId);
           if (!owner || owner.agentId !== agent.id) {
+            // 独立 reason：Agent 本身可远程，只是这个会话不归它（或查无）。
+            // 复用 agent_not_remotable 会让前端说成「该 Agent 未开启远程访问」，
+            // 与真实原因完全不符。
             this.relay.emitAgentRunEnd(cloudUserId, {
               streamId,
               requesterDeviceId,
-              reason: "agent_not_remotable",
+              reason: "session_agent_mismatch",
             });
             return;
           }

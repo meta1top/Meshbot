@@ -216,10 +216,12 @@ describe("RemoteRunInboundService", () => {
 
       expect(sessions.appendMessage).not.toHaveBeenCalled();
       expect(runner.kick).not.toHaveBeenCalled();
+      // 独立 reason：Agent X 本身是可远程的，拒绝的是「会话不归它」——
+      // 复用 agent_not_remotable 会让前端谎称「该 Agent 未开启远程访问」。
       expect(relay.emitAgentRunEnd).toHaveBeenCalledWith("u1", {
         streamId: "stream-1",
         requesterDeviceId: "dA",
-        reason: "agent_not_remotable",
+        reason: "session_agent_mismatch",
       });
     });
 
@@ -250,7 +252,7 @@ describe("RemoteRunInboundService", () => {
       expect(runner.kick).toHaveBeenCalledWith("remote-sess-1");
     });
 
-    it("append 一个不存在的 sessionId → 拒绝不崩，回 agentRunEnd{reason:agent_not_remotable}", async () => {
+    it("append 一个不存在的 sessionId → 拒绝不崩，回 agentRunEnd{reason:session_agent_mismatch}", async () => {
       const { svc, sessions, runner, relay, agents } = make();
       agents.findOrNull.mockResolvedValueOnce({
         id: "agent-remote",
@@ -272,7 +274,7 @@ describe("RemoteRunInboundService", () => {
       expect(relay.emitAgentRunEnd).toHaveBeenCalledWith("u1", {
         streamId: "stream-1",
         requesterDeviceId: "dA",
-        reason: "agent_not_remotable",
+        reason: "session_agent_mismatch",
       });
     });
 

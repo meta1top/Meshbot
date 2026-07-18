@@ -85,8 +85,23 @@ describe("RemoteRunTracker", () => {
         messageId: null,
         pendingIds: [],
         error: expect.any(String),
+        // 结构化 reason 一并透传：渲染层据此走 next-intl 专属文案，
+        // 而不是展示上面那条硬编码中文兜底。
+        reason: "offline",
       },
     });
+  });
+
+  it("end(reason=session_agent_mismatch) → 合成 run.error 且 reason 原样透传（与 agent_not_remotable 区分开）", () => {
+    const t = new RemoteRunTracker();
+    t.register("s1", "sess-1");
+    const result = t.handleEnd(end({ reason: "session_agent_mismatch" }));
+    expect((result?.payload as { reason: string; error: string }).reason).toBe(
+      "session_agent_mismatch",
+    );
+    expect((result?.payload as { error: string }).error).toContain(
+      "该会话不属于所选 Agent",
+    );
   });
 
   it("从未收到过程帧且 sessionId 未知（create 模式尚无首帧）→ 无法路由，返回 null", () => {

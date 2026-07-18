@@ -61,7 +61,9 @@ interface StreamEntry {
 function describePreflightRejection(reason: AgentRunEnd["reason"]): string {
   switch (reason) {
     case "agent_not_remotable":
-      return "目标 Agent 未开启远程访问，本次消息未发送";
+      return "目标 Agent 不可远程访问（不存在或未开启远程），本次消息未发送";
+    case "session_agent_mismatch":
+      return "该会话不属于所选 Agent，本次消息未发送";
     case "offline":
       return "目标设备已离线，本次消息未发送";
     default:

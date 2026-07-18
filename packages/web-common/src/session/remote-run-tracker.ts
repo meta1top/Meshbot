@@ -16,7 +16,8 @@ const END_REASON_TEXT: Record<AgentRunEnd["reason"], string> = {
   error: "远程运行未能建立",
   interrupted: "远程运行已中断",
   done: "远程运行已结束",
-  agent_not_remotable: "目标设备未开启该 Agent 的远程调度",
+  agent_not_remotable: "目标 Agent 不可远程访问（不存在或未开启远程）",
+  session_agent_mismatch: "该会话不属于所选 Agent",
 };
 
 /**
@@ -100,6 +101,9 @@ export class RemoteRunTracker {
         messageId: null,
         pendingIds: [],
         error: END_REASON_TEXT[end.reason],
+        // 同时透传结构化 reason：渲染层（MessageList）优先按它走 next-intl
+        // 专属文案，上面的中文常量退居兜底（未覆盖到的 reason / 非渲染消费方）。
+        reason: end.reason,
       } satisfies RunErrorEvent,
     };
   }

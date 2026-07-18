@@ -203,6 +203,31 @@ describe("RemoteRunService", () => {
       });
     });
 
+    it("reason=session_agent_mismatch（会话归属不符）→ 补发影子 run.error，reason 与兜底文案都是这条独立语义，不复用 agent_not_remotable", () => {
+      const { svc, emitter } = make();
+      const { streamId } = svc.startRun(
+        "u1",
+        "dB",
+        "append",
+        "remote-sess-1",
+        "hello",
+      );
+
+      svc.onEnd({
+        streamId,
+        requesterDeviceId: "dA",
+        reason: "session_agent_mismatch",
+      });
+
+      const call = (emitter.emit as jest.Mock).mock.calls.find(
+        ([evt]: [string]) => evt === REMOTE_SHADOW_FRAME_EVENT,
+      );
+      const payload = call?.[1].payload as { reason: string; error: string };
+      expect(payload.reason).toBe("session_agent_mismatch");
+      expect(payload.error).toContain("该会话不属于所选 Agent");
+      expect(payload.error).not.toContain("远程 run 未能开始");
+    });
+
     it("用户主动打断且赶在任何帧之前（从未收到过帧 + reason=interrupted）→ 补发影子 run.interrupted，不是 run.error", () => {
       const { svc, emitter } = make();
       const { streamId } = svc.startRun(
