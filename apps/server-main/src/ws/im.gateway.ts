@@ -26,6 +26,10 @@ import {
   type AgentRunFrame,
   type AgentRunStartForwarded,
   type AgentRunStartInput,
+  type AgentWatchAccepted,
+  type AgentWatchForwarded,
+  type AgentWatchStartInput,
+  type AgentWatchStopInput,
   IM_WS_EVENTS,
   IM_WS_NAMESPACE,
   type ConversationSummary,
@@ -37,6 +41,7 @@ import {
   type ImReadInput,
   type ImSendInput,
   type PresenceState,
+  type WatchScope,
 } from "@meshbot/types";
 import { Logger, UseFilters, UseGuards } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
@@ -57,6 +62,22 @@ import type { Socket } from "socket.io";
 type RunRequester =
   | { kind: "device"; deviceId: string }
   | { kind: "user"; socketId: string };
+
+/** Agent 级观察通道的一条观察路由（spec §B）。 */
+interface WatchRoute {
+  requester: RunRequester;
+  scope: WatchScope;
+  /** 寻址目标：云端 Agent id。 */
+  targetAgentId: string;
+  /** 由 targetAgentId 解出的目标设备本地 Agent id（转发给设备用）。 */
+  localAgentId: string;
+  /** 宿主设备 id。字段名受泛型 `cleanupRoutes` 的读取面约束，不可改名。 */
+  targetDeviceId: string;
+  /** scope="session" 时为被观察会话 id。 */
+  sessionId?: string;
+  /** 发起 watch 的用户 id（HITL watchId 寻址的越权校验用，见 Task 16）。 */
+  userId: string;
+}
 
 /**
  * IM WebSocket Gateway —— Phase 2 B6。
@@ -126,6 +147,41 @@ export class ImGateway extends BaseWebSocketGateway {
     string,
     { requester: RunRequester; targetAgentId: string; targetDeviceId: string }
   >();
+
+  /**
+   * Agent 级观察通道（spec §B）：watchId → 观察路由。
+   *
+   * 与 `agentRunRoutes`（streamId → **单个** requester 的 1:1）的关键差异：
+   * watch 是 **1:N fan-out**——同一个会话/Agent 可能有多个观察者，故除主表外
+   * 另有两张**反向索引表**（`agentWatchers` / `sessionWatchers`）。设备侧对
+   * 每个 agent/session **只上行一份**镜像帧，由本网关按索引表扇出成一份份带
+   * watchId 的 `AgentRunFrame`（spec §C 取舍：省设备上行，观察者增减不影响
+   * 设备侧行为）。
+   *
+   * Agent 级与 Session 级**共用同一个 watchId 命名空间、同一张主表**，靠
+   * `scope` 字段区分——清理路径（四条）因此只需维护这一张主表 + 两张索引，
+   * 不必为两级各造一套。
+   *
+   * `targetDeviceId` 字段名**不可改**：泛型 `cleanupRoutes` 按
+   * `{requester, targetDeviceId}` 读取面约束，改名会让本表用不上那套复用。
+   *
+   * 进程内 Map，server-main 多实例部署时需迁移到共享存储（同 agentRunRoutes /
+   * queryRoutes 的既有限制）。
+   */
+  private readonly watchRoutes = new Map<string, WatchRoute>();
+
+  /**
+   * Agent 级 fan-out 反向索引：`${deviceId}:${localAgentId}` → watchId 集合。
+   *
+   * 键用**设备本地** agentId 而非云端 targetAgentId：设备回发的
+   * `AgentWatchFrame.localAgentId` 是它自己的本地 id（设备根本不知道云端
+   * agent id），fan-out 时按「发送方 deviceId + 帧里的 localAgentId」查表，
+   * 键必须同构才查得到。
+   */
+  private readonly agentWatchers = new Map<string, Set<string>>();
+
+  /** Session 级 fan-out 反向索引：`${deviceId}:${sessionId}` → watchId 集合。 */
+  private readonly sessionWatchers = new Map<string, Set<string>>();
 
   constructor(
     private readonly jwt: JwtService,
@@ -233,6 +289,98 @@ export class ImGateway extends BaseWebSocketGateway {
         }
       }
     }
+  }
+
+  /** 索引键：Agent 级。 */
+  private static agentWatchKey(deviceId: string, localAgentId: string): string {
+    return `${deviceId}:${localAgentId}`;
+  }
+
+  /** 索引键：Session 级。 */
+  private static sessionWatchKey(deviceId: string, sessionId: string): string {
+    return `${deviceId}:${sessionId}`;
+  }
+
+  /** 三表一致地登记一条 watch 路由（主表 + 对应 scope 的反向索引）。 */
+  private registerWatch(watchId: string, route: WatchRoute): void {
+    this.watchRoutes.set(watchId, route);
+    const index =
+      route.scope === "agent" ? this.agentWatchers : this.sessionWatchers;
+    const key =
+      route.scope === "agent"
+        ? ImGateway.agentWatchKey(route.targetDeviceId, route.localAgentId)
+        : ImGateway.sessionWatchKey(
+            route.targetDeviceId,
+            route.sessionId ?? "",
+          );
+    let set = index.get(key);
+    if (!set) {
+      set = new Set<string>();
+      index.set(key, set);
+    }
+    set.add(watchId);
+  }
+
+  /**
+   * 三表一致地注销一条 watch 路由，并（可选）通知设备 stop。
+   * **四条清理路径全部走这一个出口**（显式 unwatch / 观察者断线 / 设备断线 /
+   * idle），杜绝「主表删了索引没删」的半清理泄漏。
+   * @param notifyDevice 设备自身断线时为 false（设备已不在，通知无意义且会
+   *                     往一个空房间发帧）。
+   */
+  private unregisterWatch(watchId: string, notifyDevice: boolean): void {
+    const route = this.watchRoutes.get(watchId);
+    if (!route) return;
+    this.watchRoutes.delete(watchId);
+    const index =
+      route.scope === "agent" ? this.agentWatchers : this.sessionWatchers;
+    const key =
+      route.scope === "agent"
+        ? ImGateway.agentWatchKey(route.targetDeviceId, route.localAgentId)
+        : ImGateway.sessionWatchKey(
+            route.targetDeviceId,
+            route.sessionId ?? "",
+          );
+    const set = index.get(key);
+    if (set) {
+      set.delete(watchId);
+      if (set.size === 0) index.delete(key); // 空集合即删键，防 Map 无界增长
+    }
+    if (notifyDevice) {
+      this.server
+        .to(`device:${route.targetDeviceId}`)
+        .emit(IM_WS_EVENTS.agentWatchForwarded, {
+          watchId,
+          localAgentId: route.localAgentId,
+          scope: route.scope,
+          sessionId: route.sessionId,
+          action: "stop",
+          requesterDeviceId: this.encodeRequester(route.requester),
+        } satisfies AgentWatchForwarded);
+    }
+  }
+
+  /** 诊断/测试探针：当前 watch 路由数。 */
+  watchRouteCount(): number {
+    return this.watchRoutes.size;
+  }
+
+  /** 诊断/测试探针：某设备某本地 Agent 的观察者 watchId 列表。 */
+  agentWatcherIds(deviceId: string, localAgentId: string): string[] {
+    return [
+      ...(this.agentWatchers.get(
+        ImGateway.agentWatchKey(deviceId, localAgentId),
+      ) ?? []),
+    ];
+  }
+
+  /** 诊断/测试探针：某设备某会话的观察者 watchId 列表。 */
+  sessionWatcherIds(deviceId: string, sessionId: string): string[] {
+    return [
+      ...(this.sessionWatchers.get(
+        ImGateway.sessionWatchKey(deviceId, sessionId),
+      ) ?? []),
+    ];
   }
 
   /**
@@ -624,6 +772,76 @@ export class ImGateway extends BaseWebSocketGateway {
         requesterDeviceId: this.encodeRequester(requester),
         localAgentId: route.localAgentId,
       } satisfies AgentRunControlForwarded);
+  }
+
+  /**
+   * Agent 级观察通道：观察者发起 watch → 鉴权（同账号 + 设备在线）→ 三表登记
+   * → 定向下发到目标设备。
+   *
+   * 鉴权复用既有范式（同 `handleDeviceQueryRequest` / `handleAgentRunStart`）：
+   * `CloudAgentService.findActiveById` + `agent.userId === requesterUserId`。
+   * 跨账号**静默拒**（不回包，避免用 watchId 探测他人 Agent 是否存在）；设备
+   * 离线**明确回包** `{ok:false, reason:"offline"}`（spec 错误处理：「设备离线 →
+   * watch 送不达 → 云端回明确失败，观察者提示，不静默」）。
+   */
+  @SubscribeMessage(IM_WS_EVENTS.agentWatchStart)
+  @UseGuards(WsAuthGuard)
+  async handleAgentWatchStart(
+    @MessageBody() body: AgentWatchStartInput,
+    @ConnectedSocket() client: Socket,
+  ): Promise<void> {
+    const requesterUserId = (client.data.user as { userId?: string })?.userId;
+    const requester = this.requesterOf(client);
+    const agent = await this.agents.findActiveById(body.targetAgentId);
+    if (!agent || agent.userId !== requesterUserId) return; // 静默拒（防探测）
+    const online = await this.devicePresence.isOnline(
+      agent.orgId ?? "",
+      agent.deviceId,
+    );
+    if (!online) {
+      this.emitToRequester(requester, IM_WS_EVENTS.agentWatchAccepted, {
+        watchId: body.watchId,
+        ok: false,
+        reason: "offline",
+      } satisfies AgentWatchAccepted);
+      return;
+    }
+    this.registerWatch(body.watchId, {
+      requester,
+      scope: body.scope,
+      targetAgentId: agent.id,
+      localAgentId: agent.localAgentId,
+      targetDeviceId: agent.deviceId,
+      sessionId: body.sessionId,
+      userId: requesterUserId as string,
+    });
+    this.server
+      .to(`device:${agent.deviceId}`)
+      .emit(IM_WS_EVENTS.agentWatchForwarded, {
+        watchId: body.watchId,
+        localAgentId: agent.localAgentId,
+        scope: body.scope,
+        sessionId: body.sessionId,
+        action: "start",
+        requesterDeviceId: this.encodeRequester(requester),
+      } satisfies AgentWatchForwarded);
+  }
+
+  /**
+   * Agent 级观察通道：观察者显式 unwatch（泄漏防线 4）。
+   * 只有登记该 watchId 的 requester 本人能注销（`sameRequester` 全等校验），
+   * 否则任意已认证连接都能拆别人的观察通道（DoS）。
+   */
+  @SubscribeMessage(IM_WS_EVENTS.agentWatchStop)
+  @UseGuards(WsAuthGuard)
+  handleAgentWatchStop(
+    @MessageBody() body: AgentWatchStopInput,
+    @ConnectedSocket() client: Socket,
+  ): void {
+    const route = this.watchRoutes.get(body.watchId);
+    if (!route) return;
+    if (!this.sameRequester(route.requester, this.requesterOf(client))) return;
+    this.unregisterWatch(body.watchId, true);
   }
 
   /**

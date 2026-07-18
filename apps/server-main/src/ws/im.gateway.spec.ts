@@ -105,12 +105,37 @@ function makeGateway(overrides: {
   // 不再假造 server.sockets.sockets 二层 Map（那不是本 namespace gateway
   // 运行时 this.server 的真实结构）。device room 与 user 直发共用同一
   // toSpy/roomEmitSpy，断言方式同构：都是 `expect(toSpy).toHaveBeenCalledWith(id)`。
-  (gw as unknown as { server: unknown }).server = {
+  // `server.emit` 是 `roomEmitSpy` 的别名（同一个 mock 函数对象）：真实代码只
+  // 走 `this.server.to(room).emit(...)` 链式调用，从不裸调 `this.server.emit`，
+  // 让顶层 `server.emit` 复用同一 mock 既能满足 Task 8 新用例
+  // `expect(server.emit).toHaveBeenCalledWith(...)` 的断言风格，又不引入第二条
+  // 独立的调用记录（避免两处断言各查各的、漏判）。
+  const server = {
     in: jest.fn().mockReturnValue({ fetchSockets }),
     to: toSpy,
+    emit: roomEmitSpy,
   };
+  (gw as unknown as { server: unknown }).server = server;
+
+  // Task 8：收集 `emitToRequester`（私有方法）投递的 [event, payload] 对，供
+  // watch 登记测试直接断言「回给发起方的包」，不必关心它内部走 device room
+  // 还是 user socket 直发（两条路径最终都汇入 emitToRequester，探针挂在这一
+  // 层最稳，不随内部路由分支变化而碎片化断言）。原实现原样执行，只是多记一笔。
+  const emitted: Array<[string, unknown]> = [];
+  const gwAny = gw as unknown as {
+    emitToRequester: (r: unknown, event: string, payload: unknown) => void;
+  };
+  const originalEmitToRequester = gwAny.emitToRequester.bind(gw);
+  gwAny.emitToRequester = (r: unknown, event: string, payload: unknown) => {
+    emitted.push([event, payload]);
+    originalEmitToRequester(r, event, payload);
+  };
+
   return {
     gw,
+    // Task 8 新用例用 `gateway` 这个名字（与 brief 一致）；`gw` 保留给既有用例，
+    // 两者是同一个实例，改哪个都同步生效。
+    gateway: gw,
     conversation,
     presence,
     userService,
@@ -120,6 +145,8 @@ function makeGateway(overrides: {
     devicePresence,
     toSpy,
     roomEmitSpy,
+    server,
+    emitted,
   };
 }
 
@@ -1579,5 +1606,213 @@ describe("ImGateway.handleAgentRunControl(L3 Phase A 控制帧路由 + 越权拒
     );
 
     expect(toSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("Agent 级观察通道：watch 登记", () => {
+  const client = (over: Record<string, unknown> = {}) =>
+    ({
+      id: "sock-1",
+      data: { user: { userId: "u1" }, orgId: "org-1" },
+      ...over,
+    }) as never;
+
+  it("跨账号 watch 被拒（不下发设备、不登记）", async () => {
+    const { gateway, server } = makeGateway({
+      agents: {
+        findActiveById: jest.fn().mockResolvedValue({
+          id: "cloud-a1",
+          userId: "别人",
+          orgId: "org-1",
+          deviceId: "dev-b",
+          localAgentId: "local-a1",
+        }),
+      },
+    });
+    await gateway.handleAgentWatchStart(
+      { watchId: "w1", targetAgentId: "cloud-a1", scope: "agent" },
+      client(),
+    );
+    expect(server.to).not.toHaveBeenCalledWith("device:dev-b");
+    expect(gateway.watchRouteCount()).toBe(0);
+  });
+
+  it("设备离线 → 回 accepted{ok:false,reason:'offline'}，不登记（不静默）", async () => {
+    const { gateway, emitted } = makeGateway({
+      agents: {
+        findActiveById: jest.fn().mockResolvedValue({
+          id: "cloud-a1",
+          userId: "u1",
+          orgId: "org-1",
+          deviceId: "dev-b",
+          localAgentId: "local-a1",
+        }),
+      },
+      devicePresence: { isOnline: jest.fn().mockResolvedValue(false) },
+    });
+    await gateway.handleAgentWatchStart(
+      { watchId: "w1", targetAgentId: "cloud-a1", scope: "agent" },
+      client(),
+    );
+    expect(emitted).toContainEqual([
+      IM_WS_EVENTS.agentWatchAccepted,
+      { watchId: "w1", ok: false, reason: "offline" },
+    ]);
+    expect(gateway.watchRouteCount()).toBe(0);
+  });
+
+  it("agent scope 合法 → 登记 watchRoutes + agentWatchers 并转发设备", async () => {
+    const { gateway, server } = makeGateway({
+      agents: {
+        findActiveById: jest.fn().mockResolvedValue({
+          id: "cloud-a1",
+          userId: "u1",
+          orgId: "org-1",
+          deviceId: "dev-b",
+          localAgentId: "local-a1",
+        }),
+      },
+    });
+    await gateway.handleAgentWatchStart(
+      { watchId: "w1", targetAgentId: "cloud-a1", scope: "agent" },
+      client(),
+    );
+    expect(gateway.watchRouteCount()).toBe(1);
+    expect(gateway.agentWatcherIds("dev-b", "local-a1")).toEqual(["w1"]);
+    expect(server.to).toHaveBeenCalledWith("device:dev-b");
+    expect(server.emit).toHaveBeenCalledWith(IM_WS_EVENTS.agentWatchForwarded, {
+      watchId: "w1",
+      localAgentId: "local-a1",
+      scope: "agent",
+      sessionId: undefined,
+      action: "start",
+      requesterDeviceId: "user:sock-1",
+    });
+  });
+
+  it("session scope 合法 → 登记到 sessionWatchers（不是 agentWatchers）", async () => {
+    const { gateway } = makeGateway({
+      agents: {
+        findActiveById: jest.fn().mockResolvedValue({
+          id: "cloud-a1",
+          userId: "u1",
+          orgId: "org-1",
+          deviceId: "dev-b",
+          localAgentId: "local-a1",
+        }),
+      },
+    });
+    await gateway.handleAgentWatchStart(
+      {
+        watchId: "w1",
+        targetAgentId: "cloud-a1",
+        scope: "session",
+        sessionId: "s1",
+      },
+      client(),
+    );
+    expect(gateway.sessionWatcherIds("dev-b", "s1")).toEqual(["w1"]);
+    expect(gateway.agentWatcherIds("dev-b", "local-a1")).toEqual([]);
+  });
+
+  it("多观察者登记到同一索引键（fan-out 前提）", async () => {
+    const { gateway } = makeGateway({
+      agents: {
+        findActiveById: jest.fn().mockResolvedValue({
+          id: "cloud-a1",
+          userId: "u1",
+          orgId: "org-1",
+          deviceId: "dev-b",
+          localAgentId: "local-a1",
+        }),
+      },
+    });
+    await gateway.handleAgentWatchStart(
+      {
+        watchId: "w1",
+        targetAgentId: "cloud-a1",
+        scope: "session",
+        sessionId: "s1",
+      },
+      client({ id: "sock-1" }),
+    );
+    await gateway.handleAgentWatchStart(
+      {
+        watchId: "w2",
+        targetAgentId: "cloud-a1",
+        scope: "session",
+        sessionId: "s1",
+      },
+      client({ id: "sock-2" }),
+    );
+    expect(gateway.sessionWatcherIds("dev-b", "s1").sort()).toEqual([
+      "w1",
+      "w2",
+    ]);
+  });
+
+  it("显式 unwatch → 三表一致清空并通知设备 stop（泄漏防线 4）", async () => {
+    const { gateway, server } = makeGateway({
+      agents: {
+        findActiveById: jest.fn().mockResolvedValue({
+          id: "cloud-a1",
+          userId: "u1",
+          orgId: "org-1",
+          deviceId: "dev-b",
+          localAgentId: "local-a1",
+        }),
+      },
+    });
+    await gateway.handleAgentWatchStart(
+      {
+        watchId: "w1",
+        targetAgentId: "cloud-a1",
+        scope: "session",
+        sessionId: "s1",
+      },
+      client(),
+    );
+    gateway.handleAgentWatchStop({ watchId: "w1" }, client());
+    expect(gateway.watchRouteCount()).toBe(0);
+    expect(gateway.sessionWatcherIds("dev-b", "s1")).toEqual([]);
+    expect(server.emit).toHaveBeenCalledWith(
+      IM_WS_EVENTS.agentWatchForwarded,
+      expect.objectContaining({ watchId: "w1", action: "stop" }),
+    );
+  });
+
+  it("unwatch 他人的 watchId 被拒（越权，路由不动）", async () => {
+    const { gateway } = makeGateway({
+      agents: {
+        findActiveById: jest.fn().mockResolvedValue({
+          id: "cloud-a1",
+          userId: "u1",
+          orgId: "org-1",
+          deviceId: "dev-b",
+          localAgentId: "local-a1",
+        }),
+      },
+    });
+    await gateway.handleAgentWatchStart(
+      {
+        watchId: "w1",
+        targetAgentId: "cloud-a1",
+        scope: "session",
+        sessionId: "s1",
+      },
+      client({ id: "sock-1" }),
+    );
+    gateway.handleAgentWatchStop(
+      { watchId: "w1" },
+      client({ id: "别人的sock" }),
+    );
+    expect(gateway.watchRouteCount()).toBe(1);
+  });
+
+  it("unwatch 未知 watchId 静默无操作（不抛）", () => {
+    const { gateway } = makeGateway({});
+    expect(() =>
+      gateway.handleAgentWatchStop({ watchId: "不存在" }, client()),
+    ).not.toThrow();
   });
 });
