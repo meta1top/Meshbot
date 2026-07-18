@@ -85,6 +85,16 @@ export interface SessionTransport {
    * `transport.dispose?.()` 调用，缺失时安全 no-op。
    */
   dispose?: () => void;
+  /**
+   * 开始观察某会话的推理帧（Agent 级观察通道 · Session 级 watch，spec D5
+   * 「打开会话即 session-watch」）。返回 unwatch 函数（幂等，可安全重复调用）。
+   * 契约扩展（Task 12）——远程 relay 实现（web-main）用它建立 watchId 通道，
+   * 中途接入靠 D7 inflight 快照续上半截输出，跨多轮 run 存活直到显式 unwatch。
+   * 本机专属实现（web-agent local 分支）可为 no-op 或不实现——本机 `ws/session`
+   * 本身已是实时的，不需要一条独立的观察通道。消费方统一按
+   * `transport.watchSession?.(sessionId)` 调用，缺失时安全跳过。
+   */
+  watchSession?: (sessionId: string) => () => void;
 }
 
 /**

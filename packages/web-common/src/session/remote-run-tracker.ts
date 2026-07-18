@@ -95,6 +95,17 @@ export class RemoteRunTracker {
     this.watches.delete(watchId);
   }
 
+  /**
+   * 只清 watch 表，不动 stream 表（D5 断线重连专用）。观察者 socket 断开时，
+   * 云端已把该连接名下的全部 watch 路由清掉（旧 watchId 在云端已失效），但
+   * 用户可能同时持有一条正在跑的自发起 stream（如刚点了发送、还没收到 end）
+   * ——那条 stream 与 socket 连接本身无关，不能被重连清理误伤，故与
+   * {@link reset} 分开一个只清半张表的入口。
+   */
+  resetWatches(): void {
+    this.watches.clear();
+  }
+
   /** 该 watchId 是否本实例登记（供调用方短路无需处理的事件）。 */
   ownsWatch(watchId: string): boolean {
     return this.watches.has(watchId);

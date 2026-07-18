@@ -5,6 +5,9 @@ import type {
   AgentRunEnd,
   AgentRunFrame,
   AgentRunStartInput,
+  AgentWatchAccepted,
+  AgentWatchStartInput,
+  AgentWatchStopInput,
   DeviceQueryKind,
   DeviceQueryRequestInput,
 } from "@meshbot/types";
@@ -15,13 +18,42 @@ import type {
   SessionSummary,
 } from "@meshbot/types-agent";
 import { clientSnowflakeId } from "@meshbot/web-common";
+import { RemoteRunTracker } from "@meshbot/web-common/session/remote-run-tracker";
 import {
   MulticastRunEvents,
-  RemoteRunTracker,
   type SessionTransport,
-} from "@meshbot/web-common/session";
+} from "@meshbot/web-common/session/transport";
+// 特意不走 `@meshbot/web-common/session` 桶装 barrel（`./session`）——那份导出
+// 把 `MarkdownContent`/`ArtifactBody` 等一整套 JSX 组件也捆在一起，后者经
+// `@meshbot/design` 再传递引入 `next-intl`/`react-markdown` 等纯 ESM 包。本文件
+// 只是 socket 事件编排（无 UI），走这三个专属子路径直连纯逻辑源文件，既避免
+// 生产 bundle 平白多背一份 UI 依赖，也让本文件可被 jest 独立加载测试（不必
+// 拉通整条 JSX 依赖链，见 `session-transport.spec.ts` / `apps/web-main/jest.config.ts`
+// 的排查记录）。三个子路径已在 `packages/web-common/package.json` 的
+// `exports` 显式声明，与既有 `"./session"` 直连源码（非 dist）的写法一致。
+import { inflightToSnapshotEvent } from "@meshbot/web-common/session/watch-inflight";
 import { remoteQuery } from "./device-query";
 import { getImSocket } from "./im-socket";
+
+/**
+ * 观察通道被云端/设备拒绝时，合成给本 transport 实例 `subscribe()` 消费者的
+ * 事件名——纯前端内部信号，不进 `IM_WS_EVENTS` 协议、不占用任何
+ * `SESSION_WS_EVENTS.*` 命名空间。`reason` 原样透传自
+ * {@link AgentWatchAccepted}（`offline`/`cross_account`/`not_found`/
+ * `session_agent_mismatch`/`error`）。调用方（`remote-session-view.tsx`）据此
+ * 渲染「无法实时观察」的可见提示，走 next-intl 按 reason 分文案——本层不碰
+ * next-intl（铁律），只负责把信号送出去。
+ *
+ * 修复上一轮 review 的遗留问题：watch 被拒此前只 `console.warn`，用户完全无
+ * 感知（设备离线时界面看着「正常」，实际上永远收不到任何实时帧）。
+ */
+export const WATCH_REJECTED_EVENT = "watch.rejected";
+
+/** {@link WATCH_REJECTED_EVENT} 的 payload 形状。 */
+export interface WatchRejectedEvent {
+  sessionId: string;
+  reason?: AgentWatchAccepted["reason"];
+}
 
 /**
  * web-main（B 端浏览器）远程会话 `SessionTransport`：用户 `ws/im` socket 单例
@@ -75,6 +107,69 @@ export function createRemoteSessionTransport(
   // （见该文件说明：per-instance 监听器会在 remount 时丢掉尚未 settle 的响应）。
   socket.on(IM_WS_EVENTS.agentRunFrame, onRunFrame);
   socket.on(IM_WS_EVENTS.agentRunEnd, onRunEnd);
+
+  /** watchId → 该通道观察的 sessionId，仅**已受理**的通道（重连重 watch 与 unwatch 用）。 */
+  const activeWatches = new Map<string, string>();
+  /** watchId → sessionId，**受理前**的通道（`watch_accepted` 到达前的窗口期）。 */
+  const pendingWatches = new Map<string, string>();
+
+  /** 发起一路 Session 级 watch，返回本次的 watchId（受理前先记 pending）。 */
+  const startWatch = (sessionId: string): string => {
+    const watchId = clientSnowflakeId();
+    pendingWatches.set(watchId, sessionId);
+    socket.emit(IM_WS_EVENTS.agentWatchStart, {
+      watchId,
+      targetAgentId: agentId,
+      scope: "session",
+      sessionId,
+    } satisfies AgentWatchStartInput);
+    return watchId;
+  };
+
+  const onWatchAccepted = (accepted: AgentWatchAccepted) => {
+    const sessionId = pendingWatches.get(accepted.watchId);
+    if (!sessionId) return; // 非本实例发起的 watch
+    pendingWatches.delete(accepted.watchId);
+    if (!accepted.ok) {
+      // 设备拒绝（离线 / Agent 不可远程 / 会话不归它）：不登记通道，观察者
+      // 退化为「不实时」。console.warn 给排查用，同时合成
+      // WATCH_REJECTED_EVENT 交给 subscribe() 消费者——上层据此渲染可见提示
+      // （见该常量文档：上一轮 review 明确指出「不能只 console.warn」）。
+      console.warn(
+        `观察通道被拒（watchId=${accepted.watchId}, reason=${accepted.reason}）`,
+      );
+      runEvents.emit(WATCH_REJECTED_EVENT, {
+        sessionId,
+        reason: accepted.reason,
+      } satisfies WatchRejectedEvent);
+      return;
+    }
+    activeWatches.set(accepted.watchId, sessionId);
+    runs.registerWatch(accepted.watchId, sessionId);
+    // D7 中途续上：把 inflight 快照合成 run.snapshot 事件先吐一发，
+    // 观察者立刻渲染半截输出，之后的增量帧接着往上贴。
+    const snapshot = inflightToSnapshotEvent(sessionId, accepted.inflight);
+    if (snapshot) runEvents.emit(snapshot.event, snapshot.payload);
+  };
+
+  /**
+   * 断线重连自动重 watch（D5）：云端在观察者 socket 断开时已把该连接的全部
+   * watch 路由清掉（泄漏防线 2），重连后是一条**新 socket**（socketId 变了，
+   * requester 身份也变了），必须用**新 watchId** 重新发起——沿用旧 watchId 会
+   * 在云端建出一条 requester 指向已死 socketId 的路由。
+   */
+  const onReconnect = () => {
+    const sessionIds = [
+      ...new Set([...activeWatches.values(), ...pendingWatches.values()]),
+    ];
+    activeWatches.clear();
+    pendingWatches.clear();
+    runs.resetWatches();
+    for (const sessionId of sessionIds) startWatch(sessionId);
+  };
+
+  socket.on(IM_WS_EVENTS.agentWatchAccepted, onWatchAccepted);
+  socket.on("connect", onReconnect);
 
   const query = (
     kind: DeviceQueryKind,
@@ -202,6 +297,27 @@ export function createRemoteSessionTransport(
       })) as { fileId: string; name: string };
     },
 
+    /**
+     * 开始观察某会话的推理帧（Session 级 watch，spec D5「打开会话即
+     * session-watch」）。返回 unwatch 函数（幂等）——调用方在会话视图卸载 /
+     * 切换会话时必须调用，否则设备侧常驻转发器要等满 5 分钟 idle 才拆
+     * （能兜住，但白占资源）。
+     */
+    watchSession(sessionId: string) {
+      const watchId = startWatch(sessionId);
+      let stopped = false;
+      return () => {
+        if (stopped) return;
+        stopped = true;
+        activeWatches.delete(watchId);
+        pendingWatches.delete(watchId);
+        runs.releaseWatch(watchId);
+        socket.emit(IM_WS_EVENTS.agentWatchStop, {
+          watchId,
+        } satisfies AgentWatchStopInput);
+      };
+    },
+
     subscribe(events) {
       return runEvents.subscribe(events);
     },
@@ -213,6 +329,20 @@ export function createRemoteSessionTransport(
       // 监听器归 device-query.ts 单例常驻，不在此摘除。
       socket.off(IM_WS_EVENTS.agentRunFrame, onRunFrame);
       socket.off(IM_WS_EVENTS.agentRunEnd, onRunEnd);
+      // 释放本实例名下全部 watch（含尚未受理的）——泄漏防线：remount /
+      // 切 agentId 时若不主动 stop，旧通道要等设备侧 5 分钟 idle 才拆。
+      for (const watchId of [
+        ...activeWatches.keys(),
+        ...pendingWatches.keys(),
+      ]) {
+        socket.emit(IM_WS_EVENTS.agentWatchStop, {
+          watchId,
+        } satisfies AgentWatchStopInput);
+      }
+      activeWatches.clear();
+      pendingWatches.clear();
+      socket.off(IM_WS_EVENTS.agentWatchAccepted, onWatchAccepted);
+      socket.off("connect", onReconnect);
       runs.reset();
       runEvents.reset();
     },

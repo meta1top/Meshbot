@@ -24,7 +24,11 @@ import {
 } from "@/hooks/use-remote-sessions";
 import { useStoredWidth } from "@/hooks/use-stored-width";
 import { takeLauncherDraft } from "@/lib/launcher-draft";
-import { createRemoteSessionTransport } from "@/lib/session-transport";
+import {
+  createRemoteSessionTransport,
+  WATCH_REJECTED_EVENT,
+  type WatchRejectedEvent,
+} from "@/lib/session-transport";
 import { useProfile } from "@/rest/auth";
 import { ComposerActions } from "./composer-actions";
 import { RemoteModelSelect } from "./remote-model-select";
@@ -227,6 +231,39 @@ function RemoteSessionViewReady({
     streamId,
   );
 
+  // 观察通道被拒（设备离线 / Agent 不可远程 / 会话不归它）的可见反馈——
+  // `session-transport.ts` 的 `onWatchAccepted` 在 `ok:false` 时合成
+  // `WATCH_REJECTED_EVENT` 交给 `subscribe()`，不能只 console.warn 静默
+  // （上一轮 review 明确要求）。只认当前 sessionId 的拒绝（换会话后旧会话
+  // 迟到的拒绝回执不应污染新会话的横幅）。
+  const [watchNotice, setWatchNotice] = useState<WatchRejectedEvent | null>(
+    null,
+  );
+
+  // Session 级观察通道（spec D5「打开会话即 session-watch」）：进入会话即
+  // `transport.watchSession(sessionId)`，卸载/切会话时调用返回的 unwatch——
+  // 否则设备侧常驻转发器要等满 5 分钟 idle 才拆（能兜住，但白占资源）。
+  // `transport.watchSession` 内部已处理断线重连自动重 watch（T12
+  // `onReconnect`），本组件不需要感知 socket 连接状态。
+  useEffect(() => {
+    setWatchNotice(null); // 换会话/换 transport 先清掉上一轮的拒绝提示
+    if (!sessionId) return;
+    const unwatch = transport.watchSession?.(sessionId);
+    return () => unwatch?.();
+  }, [transport, sessionId]);
+
+  useEffect(() => {
+    const unsubscribe = transport.subscribe({
+      onEvent(event, payload) {
+        if (event !== WATCH_REJECTED_EVENT) return;
+        const rejected = payload as WatchRejectedEvent;
+        if (rejected.sessionId !== sessionId) return;
+        setWatchNotice(rejected);
+      },
+    });
+    return unsubscribe;
+  }, [transport, sessionId]);
+
   const { data: sessions } = useRemoteSessions(agentId, true);
   const currentSession = sessions?.find((s) => s.id === sessionId);
   const [modelOverride, setModelOverride] = useState<string | null>(null);
@@ -395,6 +432,46 @@ function RemoteSessionViewReady({
     </div>
   );
 
+  /** watch 被拒的 reason → 文案（`session-transport.ts` 的 `WATCH_REJECTED_EVENT`，
+   * reason 原样透传自 `AgentWatchAccepted`）。 */
+  const watchRejectedReasonText = (
+    reason: WatchRejectedEvent["reason"],
+  ): string => {
+    switch (reason) {
+      case "offline":
+        return t("watchRejectedOffline");
+      case "not_found":
+        return t("watchRejectedNotFound");
+      case "session_agent_mismatch":
+        return t("watchRejectedSessionAgentMismatch");
+      case "cross_account":
+        return t("watchRejectedCrossAccount");
+      case "error":
+        return t("watchRejectedError");
+      default:
+        return t("watchRejectedUnknown");
+    }
+  };
+
+  /** 观察通道被拒的可见提示——警示色（非 destructive）：会话历史仍可正常看，
+   * 只是收不到「实时」帧，语义上是降级而非失败。可关闭，换会话会自动清空
+   * （见上方 effect）。 */
+  const watchNoticeBanner = watchNotice && (
+    <div className="mx-4 mt-2 flex items-center justify-between gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[13px] text-amber-700 dark:text-amber-400">
+      <span>
+        {t("watchRejectedPrefix")}
+        {watchRejectedReasonText(watchNotice.reason)}
+      </span>
+      <button
+        type="button"
+        onClick={() => setWatchNotice(null)}
+        className="shrink-0 text-amber-700/70 hover:text-amber-700 dark:text-amber-400/70"
+      >
+        {t("dismiss")}
+      </button>
+    </div>
+  );
+
   /**
    * 产物右侧滑入面板（对齐 web-agent `(shell)/layout.tsx` 的 `ArtifactSplitPane`
    * aside 挂法，删掉的旧版是居中弹窗 `artifact-preview-panel.tsx`）：条件挂载
@@ -488,6 +565,7 @@ function RemoteSessionViewReady({
             </div>
           </div>
           {errorBanner}
+          {watchNoticeBanner}
           <div className="sticky bottom-4 mt-auto w-full bg-background">
             {/* Task 1 抽出的完整 ChatInput（web-agent 同款）。leadingActions
                 （技能/连应用/权限）是共享的占位动作链，云端与本地端 composer 一致；
@@ -536,6 +614,7 @@ function RemoteSessionViewReady({
         }
       >
         {errorBanner}
+        {watchNoticeBanner}
         <SessionConversationView
           historyLoading={stream.historyLoading}
           historyError={stream.historyError}

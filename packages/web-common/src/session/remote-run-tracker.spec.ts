@@ -255,6 +255,19 @@ describe("RemoteRunTracker：watchId 通道", () => {
     expect(t.ownsWatch("w1")).toBe(false);
   });
 
+  it("resetWatches 只清 watch 不动 stream", () => {
+    const t = new RemoteRunTracker();
+    t.register("st1", "s1");
+    t.registerWatch("w1", "s2");
+    t.resetWatches();
+    expect(t.ownsWatch("w1")).toBe(false);
+    // stream 登记必须原样保留——断线重连不应打断用户自己正在跑的 run。
+    expect(t.owns("st1")).toBe(true);
+    expect(
+      t.handleFrame(frame({ streamId: "st1", sessionId: "s1" })),
+    ).toHaveLength(1);
+  });
+
   it("既有 streamId 行为零变化（回归）", () => {
     const t = new RemoteRunTracker();
     t.register("st1", null);
