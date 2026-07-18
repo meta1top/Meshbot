@@ -293,8 +293,9 @@ function DeviceRow({
  *  是并列关系，没有全局当前态可切。
  *
  *  远程 Agent（`info.remote`）在同一行名字后跟弱化的「· 宿主设备名」——保持与
- *  本机 Agent 一致的单行 h-7 节奏（早前的两行版实机偏臃肿），放不下就整体
- *  ellipsis，完整信息靠 hover tooltip 补全；无编辑铅笔（远程 Agent 只读，不可
+ *  本机 Agent 一致的单行 h-7 节奏（早前的两行版实机偏臃肿），放不下先截设备名
+ *  （Agent 名 `shrink-0` 优先完整、`max-w-[65%]` 兜底极端长名字），完整信息靠
+ *  hover tooltip 补全；无编辑铅笔（远程 Agent 只读，不可
  *  从这里改名/改人设）；宿主离线（`info.online === false`）时整行
  *  `pointer-events-none` 灰化——不可展开/不可点击，右侧换成「离线」徽标（同设备
  *  行的离线呈现）；灰化层的 `pointer-events-none` 让指针事件穿透到外层 tooltip
@@ -330,7 +331,18 @@ function AgentRow({
       }
       label={
         <span className="flex min-w-0 items-center gap-1.5">
-          <span className="truncate font-semibold text-(--shell-sidebar-fg)">
+          <span
+            className={cn(
+              "truncate font-semibold text-(--shell-sidebar-fg)",
+              // 收缩优先级：带「· 设备名」后缀时 Agent 名不参与 flex 收缩
+              // （shrink-0），宽度不够先截设备名——名字才是识别对象，被截成
+              // 「塞尔…」而让宿主设备名占满是本末倒置。max-w 是极端长名字的
+              // 兜底：名字自己最多吃 65%，再长就自己 truncate，不会把设备名
+              // 挤没、也不会撑破整行。本机 Agent（无后缀）不加限宽，避免在还
+              // 有空间时提前截断。
+              hostName && "max-w-[65%] shrink-0",
+            )}
+          >
             {info.name}
           </span>
           {info.running ? (
@@ -340,7 +352,7 @@ function AgentRow({
             />
           ) : null}
           {hostName ? (
-            <span className="truncate text-[11px] font-normal text-(--shell-sidebar-fg)/50">
+            <span className="min-w-0 truncate text-[11px] font-normal text-(--shell-sidebar-fg)/50">
               · {hostName}
             </span>
           ) : null}

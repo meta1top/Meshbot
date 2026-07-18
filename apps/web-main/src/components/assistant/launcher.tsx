@@ -7,6 +7,7 @@ import { ChevronRight, MonitorSmartphone } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { parseAgentAvatar } from "@/lib/agent-avatar";
 import {
   buildLauncherAgentRows,
   pickDefaultAgentId,
@@ -175,6 +176,24 @@ export function Launcher() {
 }
 
 /**
+ * 圆形色底 emoji 头像（起手台目标条触发器 / 下拉项共用）。与侧栏 Agent 行
+ * （`assistant-sidebar.tsx`）同一份 `avatar` 串、同一个 `parseAgentAvatar`
+ * 解析口，保证「侧栏有头像、选择器没头像」的两处不一致不再出现。
+ */
+function AgentAvatarDot({ avatar }: { avatar: string }) {
+  const { emoji, color } = parseAgentAvatar(avatar);
+  return (
+    <span
+      className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px]"
+      style={{ backgroundColor: color }}
+      aria-hidden
+    >
+      {emoji}
+    </span>
+  );
+}
+
+/**
  * composer 面板内、输入框下方的目标选择条（对位 web-agent 的 ComposerTargetBar
  * 「本地 › 默认工作区」）：web-main 这里选的是「哪个远程 Agent 执行」，选项
  * 副标题显示宿主设备名。计划二 2c · F1：`disabled` 离线项灰化 + 点击不触发
@@ -190,6 +209,7 @@ function AgentTargetBar({
   agents: Array<{
     id: string;
     name: string;
+    avatar: string;
     deviceName: string;
     online: boolean;
     disabled: boolean;
@@ -215,7 +235,11 @@ function AgentTargetBar({
             : "text-muted-foreground hover:text-foreground",
         )}
       >
-        <MonitorSmartphone className="h-3.5 w-3.5" />
+        {current ? (
+          <AgentAvatarDot avatar={current.avatar} />
+        ) : (
+          <MonitorSmartphone className="h-3.5 w-3.5" />
+        )}
         <span className="max-w-[220px] truncate">
           {current?.name ?? placeholder}
         </span>
@@ -245,17 +269,20 @@ function AgentTargetBar({
                   setOpen(false);
                 }}
                 className={cn(
-                  "flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
                   a.disabled
                     ? "cursor-not-allowed text-muted-foreground/50"
                     : "text-foreground hover:bg-muted",
                 )}
               >
-                <span className="min-w-0 w-full truncate">{a.name}</span>
-                <span className="min-w-0 w-full truncate text-[10px] text-muted-foreground">
-                  {a.online
-                    ? a.deviceName
-                    : t("launcher.hostOffline", { device: a.deviceName })}
+                <AgentAvatarDot avatar={a.avatar} />
+                <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+                  <span className="w-full min-w-0 truncate">{a.name}</span>
+                  <span className="w-full min-w-0 truncate text-[10px] text-muted-foreground">
+                    {a.online
+                      ? a.deviceName
+                      : t("launcher.hostOffline", { device: a.deviceName })}
+                  </span>
                 </span>
               </button>
             ))}

@@ -84,7 +84,7 @@ function TargetAvatar({ avatar }: { avatar: string }) {
   const { emoji, color } = parseAgentAvatar(avatar);
   return (
     <span
-      className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px]"
+      className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px]"
       style={{ backgroundColor: color }}
     >
       {emoji}

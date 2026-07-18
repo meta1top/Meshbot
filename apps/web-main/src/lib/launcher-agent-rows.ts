@@ -9,6 +9,8 @@
 export interface LauncherAgentRow {
   id: string;
   name: string;
+  /** `emoji|色值` 两段式头像串，交 `parseAgentAvatar` 渲染（与侧栏同一份数据）。 */
+  avatar: string;
   deviceName: string;
   /** 宿主设备在线态。 */
   online: boolean;
@@ -18,7 +20,12 @@ export interface LauncherAgentRow {
 
 /** 组装起手台 Agent 下拉行：合并 Agent 列表、宿主设备名、宿主在线态三份数据。 */
 export function buildLauncherAgentRows(
-  agents: ReadonlyArray<{ id: string; name: string; deviceId: string }>,
+  agents: ReadonlyArray<{
+    id: string;
+    name: string;
+    avatar?: string;
+    deviceId: string;
+  }>,
   deviceNameById: ReadonlyMap<string, string>,
   onlineByDevice: ReadonlyMap<string, boolean>,
 ): LauncherAgentRow[] {
@@ -27,6 +34,9 @@ export function buildLauncherAgentRows(
     return {
       id: a.id,
       name: a.name,
+      // 头像串原样透传（缺失落空串）——解析/兜底统一交 parseAgentAvatar，
+      // 这里不复制一份默认值，避免两处默认漂移。
+      avatar: a.avatar ?? "",
       deviceName: deviceNameById.get(a.deviceId) ?? a.deviceId,
       online,
       disabled: !online,

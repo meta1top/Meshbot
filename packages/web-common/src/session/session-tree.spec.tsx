@@ -254,6 +254,68 @@ describe("SessionTree 远程 Agent 节点（review finding #2 补测）", () => 
     expect(row).not.toHaveClass("min-h-9");
   });
 
+  it("收缩优先级：Agent 名 shrink-0 + 限宽兜底，设备名承担截断", () => {
+    const groups = [
+      {
+        key: "agents",
+        items: [{ key: "rag:5", label: "塞尔达", children: [] }],
+      },
+    ];
+    render(
+      <SessionTree
+        groups={groups}
+        nodeInfo={() => ({
+          kind: "agent",
+          emoji: "🤖",
+          color: "#f59e0b",
+          name: "塞尔达",
+          running: false,
+          remote: true,
+          deviceName: "grant@MacBook-Pro.local",
+          online: true,
+        })}
+        labels={STUB_LABELS}
+      />,
+    );
+    const name = screen.getByText("塞尔达");
+    // Agent 名不参与 flex 收缩 —— 宽度不够时先截设备名，名字优先完整显示。
+    expect(name).toHaveClass("shrink-0");
+    // 极端长名字兜底：名字自己最多吃 65%，再长自己 truncate，不撑破整行。
+    expect(name).toHaveClass("max-w-[65%]");
+    expect(name).toHaveClass("truncate");
+    // 设备名是承担截断的一方：可收缩（无 shrink-0）+ min-w-0 允许缩到 0 以下界。
+    const host = screen.getByText("· grant@MacBook-Pro.local");
+    expect(host).toHaveClass("truncate");
+    expect(host).toHaveClass("min-w-0");
+    expect(host).not.toHaveClass("shrink-0");
+  });
+
+  it("本机 Agent（无设备名后缀）不加限宽/不禁收缩，避免有空间时提前截断", () => {
+    const groups = [
+      {
+        key: "agents",
+        items: [{ key: "ag:5", label: "本机助手", children: [] }],
+      },
+    ];
+    render(
+      <SessionTree
+        groups={groups}
+        nodeInfo={() => ({
+          kind: "agent",
+          emoji: "🛠",
+          color: "#3b82f6",
+          name: "本机助手",
+          running: false,
+        })}
+        labels={STUB_LABELS}
+      />,
+    );
+    const name = screen.getByText("本机助手");
+    expect(name).toHaveClass("truncate");
+    expect(name).not.toHaveClass("shrink-0");
+    expect(name).not.toHaveClass("max-w-[65%]");
+  });
+
   it("本机 Agent 对照：编辑铅笔正常出现（远程无、本机有）", () => {
     const onEditAgent = jest.fn();
     const groups = [
