@@ -6,6 +6,14 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SessionTree, type SessionTreeLabels } from "./session-tree";
 
+// jsdom 不实现 ResizeObserver，而 Radix Tooltip 的箭头（use-size）在打开时会用到，
+// 缺失会让整棵树在 layout effect 阶段崩掉。补一个空壳即可，测试不关心尺寸。
+globalThis.ResizeObserver ??= class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as unknown as typeof ResizeObserver;
+
 /** 全字段桩，覆盖 SessionTreeLabels 所有字段（含本任务新增的 editAgent）。 */
 const STUB_LABELS: SessionTreeLabels = {
   offline: "离线",
@@ -115,7 +123,7 @@ describe("SessionTree agent 节点", () => {
 });
 
 describe("SessionTree 远程 Agent 节点（review finding #2 补测）", () => {
-  it("远程 Agent 渲染宿主设备名副标题，且不出编辑铅笔（在线也不出）", () => {
+  it("远程 Agent 单行渲染「名字 · 设备名」，行高仍 h-7，且不出编辑铅笔（在线也不出）", () => {
     const onEditAgent = jest.fn();
     const groups = [
       {
@@ -150,15 +158,75 @@ describe("SessionTree 远程 Agent 节点（review finding #2 补测）", () => 
         labels={STUB_LABELS}
       />,
     );
-    expect(screen.getByText("小明的电脑")).toBeInTheDocument();
+    // 设备名与 Agent 名同处一行，以「· 」分隔、弱化呈现。
+    const host = screen.getByText("· 小明的电脑");
+    expect(host).toBeInTheDocument();
+    // 溢出省略：设备名后缀自身 truncate，外层 label 也 truncate。
+    expect(host).toHaveClass("truncate");
     expect(
       screen.queryByRole("button", { name: STUB_LABELS.editAgent }),
     ).not.toBeInTheDocument();
-    // 带设备名 = 两行结构 → 必须把 twoLine 透给 SidebarRow 放开死高 h-7，
-    // 否则名字+设备名（约 32px）在 28px 盒里溢出，hover/选中背景块包不住文字。
+    // 单行 → 与本机 Agent 行同一 h-7 节奏，不再有两行的 min-h-9。
     const row = screen.getByText("远程助手").closest("button")?.parentElement;
-    expect(row).toHaveClass("min-h-9");
-    expect(row).not.toHaveClass("h-7");
+    expect(row).toHaveClass("h-7");
+    expect(row).not.toHaveClass("min-h-9");
+  });
+
+  it("远程 Agent 行套 tooltip 触发器，hover 出完整「名字 + 宿主设备名」", async () => {
+    const groups = [
+      {
+        key: "agents",
+        items: [{ key: "rag:4", label: "远程助手", children: [] }],
+      },
+    ];
+    const { container } = render(
+      <SessionTree
+        groups={groups}
+        nodeInfo={() => ({
+          kind: "agent",
+          emoji: "🤖",
+          color: "#f59e0b",
+          name: "远程助手",
+          running: false,
+          remote: true,
+          deviceName: "小明的电脑",
+          online: true,
+        })}
+        labels={STUB_LABELS}
+      />,
+    );
+    const trigger = container.querySelector('[data-slot="tooltip-trigger"]');
+    expect(trigger).not.toBeNull();
+    expect(trigger).toHaveTextContent("远程助手");
+    await userEvent.hover(trigger as HTMLElement);
+    // 内容渲染到 portal（document.body），故用全局查询；Radix 会同时渲染一份
+    // 可视内容和一份 role=tooltip 的无障碍副本，所以按 All 取。
+    expect(
+      (await screen.findAllByText("小明的电脑")).length,
+    ).toBeGreaterThanOrEqual(1);
+  });
+
+  it("本机 Agent 行不套 tooltip 触发器（单行 truncate 已足够）", () => {
+    const groups = [
+      {
+        key: "agents",
+        items: [{ key: "ag:9", label: "本机助手", children: [] }],
+      },
+    ];
+    const { container } = render(
+      <SessionTree
+        groups={groups}
+        nodeInfo={() => ({
+          kind: "agent",
+          emoji: "🛠",
+          color: "#3b82f6",
+          name: "本机助手",
+          running: false,
+        })}
+        labels={STUB_LABELS}
+      />,
+    );
+    expect(container.querySelector('[data-slot="tooltip-trigger"]')).toBeNull();
   });
 
   it("单行 Agent 行（无设备名）保持原有 h-7 节奏不变", () => {

@@ -13,48 +13,24 @@ function rowOf(labelText: string): HTMLElement {
 }
 
 describe("SidebarRow 行高", () => {
-  it("默认（单行）沿用死高 h-7，不带两行的 min-h", () => {
+  it("统一死高 h-7（侧栏所有行同一节奏，没有两行变体）", () => {
     render(<SidebarRow label="研发助手" />);
     const row = rowOf("研发助手");
     expect(row).toHaveClass("h-7");
     expect(row).not.toHaveClass("min-h-9");
+    expect(row).not.toHaveClass("py-1");
   });
 
-  it("twoLine 时换成 min-h-9 + py-1，放开死高让背景块跟着内容长高", () => {
-    render(<SidebarRow twoLine label="研发助手" />);
-    const row = rowOf("研发助手");
-    expect(row).toHaveClass("min-h-9");
-    expect(row).toHaveClass("py-1");
-    expect(row).not.toHaveClass("h-7");
-  });
-
-  it("圆角与居中在两种模式下都保留（背景块形状不变）", () => {
-    render(<SidebarRow twoLine label="两行" />);
-    expect(rowOf("两行")).toHaveClass("rounded-md", "items-center");
+  it("圆角与居中保留（背景块形状）", () => {
+    render(<SidebarRow label="一行" />);
+    expect(rowOf("一行")).toHaveClass("rounded-md", "items-center");
   });
 });
 
 describe("SidebarRow label 溢出处理", () => {
-  it("单行 label 外层保留 truncate（长名字出省略号）", () => {
+  it("label 外层恒带 truncate（超宽出省略号）", () => {
     render(<SidebarRow label="研发助手" />);
     const labelSpan = screen.getByText("研发助手");
     expect(labelSpan).toHaveClass("truncate");
-  });
-
-  it("两行 label 外层改用 overflow-hidden，不带 truncate（否则裁掉第二行下沿）", () => {
-    render(
-      <SidebarRow
-        twoLine
-        label={
-          <span className="flex min-w-0 flex-col">
-            <span>研发助手</span>
-            <span>MacBook Pro</span>
-          </span>
-        }
-      />,
-    );
-    const outer = screen.getByText("研发助手").parentElement?.parentElement;
-    expect(outer).toHaveClass("overflow-hidden");
-    expect(outer).not.toHaveClass("truncate");
   });
 });

@@ -7,6 +7,10 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
 } from "@meshbot/design";
 import {
   Loader2,
@@ -288,10 +292,13 @@ function DeviceRow({
  *  是 NavItem 的 toggle 分支）——不再有「设为当前 Agent」的并行通道，Agent
  *  是并列关系，没有全局当前态可切。
  *
- *  远程 Agent（`info.remote`）额外带宿主设备名副标题（名字下一行、小号弱化）；
- *  无编辑铅笔（远程 Agent 只读，不可从这里改名/改人设）；宿主离线
- *  （`info.online === false`）时整行 `pointer-events-none` 灰化——不可展开/
- *  不可点击，右侧换成「离线」徽标（同设备行的离线呈现）。 */
+ *  远程 Agent（`info.remote`）在同一行名字后跟弱化的「· 宿主设备名」——保持与
+ *  本机 Agent 一致的单行 h-7 节奏（早前的两行版实机偏臃肿），放不下就整体
+ *  ellipsis，完整信息靠 hover tooltip 补全；无编辑铅笔（远程 Agent 只读，不可
+ *  从这里改名/改人设）；宿主离线（`info.online === false`）时整行
+ *  `pointer-events-none` 灰化——不可展开/不可点击，右侧换成「离线」徽标（同设备
+ *  行的离线呈现）；灰化层的 `pointer-events-none` 让指针事件穿透到外层 tooltip
+ *  触发器，所以离线行照样能 hover 出完整信息。 */
 function AgentRow({
   node,
   defaults,
@@ -307,9 +314,7 @@ function AgentRow({
 }) {
   const offline = info.remote === true && info.online === false;
   const showPencil = !!onEditAgent && !info.remote;
-  // 远程 Agent 行会在名字下面多渲染一行设备名——告诉 SidebarRow 放开死高 h-7，
-  // 否则两行内容在 28px 盒里溢出（背景块包不住文字、还挤压相邻行）。
-  const twoLine = !!(info.remote && info.deviceName);
+  const hostName = info.remote ? info.deviceName : undefined;
   const row = (
     <SidebarRow
       icon={
@@ -324,24 +329,23 @@ function AgentRow({
         </>
       }
       label={
-        <span className="flex min-w-0 flex-col">
-          <span className="flex items-center gap-1.5 font-semibold text-(--shell-sidebar-fg)">
-            <span className="truncate">{info.name}</span>
-            {info.running ? (
-              <span
-                className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[#16a34a]"
-                aria-hidden
-              />
-            ) : null}
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate font-semibold text-(--shell-sidebar-fg)">
+            {info.name}
           </span>
-          {info.remote && info.deviceName ? (
-            <span className="truncate text-[11px] leading-tight font-normal text-(--shell-sidebar-fg)/50">
-              {info.deviceName}
+          {info.running ? (
+            <span
+              className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[#16a34a]"
+              aria-hidden
+            />
+          ) : null}
+          {hostName ? (
+            <span className="truncate text-[11px] font-normal text-(--shell-sidebar-fg)/50">
+              · {hostName}
             </span>
           ) : null}
         </span>
       }
-      twoLine={twoLine}
       depth={defaults.depth}
       onClick={offline ? undefined : defaults.onClick}
       trailing={
@@ -369,10 +373,28 @@ function AgentRow({
       }
     />
   );
-  return offline ? (
+  const body = offline ? (
     <div className="pointer-events-none opacity-50">{row}</div>
   ) : (
     row
+  );
+  // 无宿主设备名（本机 Agent）不套 tooltip：单行 truncate 已经够用，多包一层
+  // 触发器只会白白多出一个 DOM 节点。
+  if (!hostName) return body;
+  return (
+    // 自带 Provider：两端 layout 未必都挂了全局 TooltipProvider，Radix 的
+    // Provider 可嵌套且开销极小，就地兜底最省心。
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="w-full">{body}</div>
+        </TooltipTrigger>
+        <TooltipContent side="right" className="max-w-[220px]">
+          <div className="font-medium">{info.name}</div>
+          <div className="opacity-75">{hostName}</div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
