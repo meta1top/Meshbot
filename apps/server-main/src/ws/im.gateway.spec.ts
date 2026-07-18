@@ -2159,6 +2159,41 @@ describe("Agent 级观察通道：四路清理（泄漏防护）", () => {
     jest.useRealTimers();
   });
 
+  it("路径④idle 清扫也必须通知观察者（reason:'idle'，不只通知设备）——T12 review Finding 5", async () => {
+    jest.useFakeTimers();
+    const { gateway, emitted } = mk();
+    await gateway.handleAgentWatchStart(
+      {
+        watchId: "w1",
+        targetAgentId: "cloud-a1",
+        scope: "session",
+        sessionId: "s1",
+      },
+      browserClient("sock-1"),
+    );
+    emitted.length = 0; // 只看 sweep 触发的那一发，登记阶段没有回给观察者的包（无需清也能过，留着更稳）
+
+    jest.advanceTimersByTime(WATCH_IDLE_MS + 1000);
+    gateway.sweepIdleWatches();
+
+    // 失败场景：用户开着 web-main 页面闲置 >5 分钟，云端回收了它的 watch；
+    // 若不通知观察者，之后设备上再有新消息，web-main 会一片死寂且毫无提示
+    // （必须用户手动刷新页面才能恢复）——这条断言就是防这个回归。
+    const idleNotices = emitted.filter(
+      ([e, p]) =>
+        e === IM_WS_EVENTS.agentWatchAccepted &&
+        (p as { reason?: string }).reason === "idle",
+    );
+    expect(idleNotices).toHaveLength(1);
+    expect(idleNotices[0][1]).toMatchObject({ watchId: "w1", ok: false });
+    // reason 必须与「设备真的断线」的 offline 区分开——观察者前端据此决定
+    // 要不要自动重连（idle 该，offline 不该），混用会导致误判。
+    expect((idleNotices[0][1] as { reason?: string }).reason).not.toBe(
+      "offline",
+    );
+    jest.useRealTimers();
+  });
+
   it("idle 清扫：有帧活动的 watch 被续期，不回收", async () => {
     jest.useFakeTimers();
     const { gateway } = mk();

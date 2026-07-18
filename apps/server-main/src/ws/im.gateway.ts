@@ -436,6 +436,28 @@ export class ImGateway extends BaseWebSocketGateway implements OnModuleDestroy {
   }
 
   /**
+   * 通知**观察者**它的 watch 因 idle 超时被云端回收（T12 review Finding 5）。
+   *
+   * 与 `notifyWatcherOffline` 刻意用不同 reason（`"idle"` 而非 `"offline"`）：
+   * 宿主设备大概率仍在线，只是这条通道长时间（{@link WATCH_IDLE_MS}）没有
+   * 任何帧活动被 `sweepIdleWatches` 清扫——不是「设备真的不在了」。语义不同，
+   * 前端据此决定要不要自动重连也不同（`session-transport.ts`
+   * `handleWatchRejected`：`idle` 原地自动重新发起，`offline` 弹横幅等用户
+   * 手动救，误用 `offline` 会让前端要么不该重连时重连、要么该重连时不重连）。
+   *
+   * 不发这条信号的失败场景：用户开着 web-main 页面闲置超过 5 分钟，云端
+   * 回收了它的 watch；之后设备上又有新消息时，web-main 一片死寂且毫无
+   * 提示，用户必须手动刷新页面才能恢复实时观察。
+   */
+  private notifyWatcherIdle(watchId: string, route: WatchRoute): void {
+    this.emitToRequester(route.requester, IM_WS_EVENTS.agentWatchAccepted, {
+      watchId,
+      ok: false,
+      reason: "idle",
+    } satisfies AgentWatchAccepted);
+  }
+
+  /**
    * 三表一致地注销一条 watch 路由，并（可选）通知设备 stop。
    * 门面方法：删主表 + 调 `removeWatchIndex` + （可选）`notifyWatchStop`。
    * **全部注销路径最终都落到 `removeWatchIndex`（唯一清索引出口）**，杜绝
@@ -470,6 +492,11 @@ export class ImGateway extends BaseWebSocketGateway implements OnModuleDestroy {
     for (const [watchId, route] of this.watchRoutes) {
       if (now - route.lastActiveAt >= WATCH_IDLE_MS) {
         this.unregisterWatch(watchId, true);
+        // Finding 5：不仅要通知设备（上面 unregisterWatch 已做），也要通知
+        // 观察者——它自己的连接是好的，不会自然感知到这条通道被回收，不发
+        // 信号只会静默停更、界面卡在半截（同 `notifyWatcherOffline` 的错误
+        // 处理要求，这里换 idle 专属 reason）。
+        this.notifyWatcherIdle(watchId, route);
       }
     }
   }
