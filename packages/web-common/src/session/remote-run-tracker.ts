@@ -116,12 +116,19 @@ export class RemoteRunTracker {
     if (frame.watchId) {
       const entry = this.watches.get(frame.watchId);
       if (!entry) return [];
-      if (this.hasActiveStreamFor(entry.sessionId)) return []; // D6 抑制
-      return entry.sequencer.push({
+      const emitted = entry.sequencer.push({
         seq: frame.seq,
         event: frame.event,
         payload: frame.payload,
       });
+      // D6 抑制：**吃帧但保持记账**——必须先 push 再丢弃返回值，绝不能直接
+      // `return []` 跳过 sequencer。否则 nextExpectedSeq 冻结在抑制开始前的
+      // 值，而设备侧的 seq 计数器照常前进；抑制解除后的首帧 seq 远大于冻结值
+      // → 判为乱序塞进缓冲、永久等一批再也不会来的中间 seq → **通道卡死且
+      // 不自愈**。触发场景很自然：先观察某会话、再自己发消息接过去（watch
+      // 早已 prime 过），正是 spec 要求的「跨多轮 run 存活」。
+      if (this.hasActiveStreamFor(entry.sessionId)) return [];
+      return emitted;
     }
     if (!frame.streamId) return [];
     const entry = this.streams.get(frame.streamId);

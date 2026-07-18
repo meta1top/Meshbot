@@ -215,6 +215,26 @@ describe("RemoteRunTracker：watchId 通道", () => {
     expect(t.handleFrame(frame({ watchId: "w1", seq: 5 }))).toHaveLength(1);
   });
 
+  it("watch 先活跃、后被自己的 stream 抑制：解除后不卡死（抑制期吃帧但记账）", () => {
+    const t = new RemoteRunTracker();
+    t.registerWatch("w1", "s1");
+    // watch 先跑起来并 prime 过（中途接入，首帧 seq=10）
+    expect(t.handleFrame(frame({ watchId: "w1", seq: 10 }))).toHaveLength(1);
+    // 用户接着自己发消息 → 同一 session 起了 stream → 进入 D6 抑制
+    t.register("st1", "s1");
+    expect(t.handleFrame(frame({ watchId: "w1", seq: 11 }))).toEqual([]);
+    expect(t.handleFrame(frame({ watchId: "w1", seq: 12 }))).toEqual([]);
+    t.handleEnd({
+      streamId: "st1",
+      requesterDeviceId: "d",
+      reason: "done",
+    } as never);
+    // 抑制解除后必须立刻恢复吐出。若抑制期直接 return[] 跳过 sequencer，
+    // nextExpectedSeq 会冻结在 11，此处 seq=13 被判乱序塞进缓冲、永久卡死。
+    expect(t.handleFrame(frame({ watchId: "w1", seq: 13 }))).toHaveLength(1);
+    expect(t.handleFrame(frame({ watchId: "w1", seq: 14 }))).toHaveLength(1);
+  });
+
   it("抑制只针对同一 sessionId，别的会话的 watch 帧不受影响", () => {
     const t = new RemoteRunTracker();
     t.register("st1", "s1");
