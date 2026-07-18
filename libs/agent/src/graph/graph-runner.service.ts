@@ -398,13 +398,32 @@ export class GraphRunner {
           toolCalls,
         };
       }
-      yield {
-        kind: "assistant_done",
-        messageId: currentSid,
-        content,
-        reasoning,
-        toolCalls: toolCalls.length > 0 ? toolCalls : null,
-      };
+      // 空轮短路：正文 / reasoning / tool_calls 三者皆空的一轮不发 assistant_done。
+      //
+      // 上面 updates 分支在 supervisor 节点出口就提前 flush 了真正的一轮并把
+      // currentAcc/currentId 清空（**但不清 currentSid**）；langgraph 随后仍会吐
+      // 一条只带 finish_reason/usage 的尾随 AIMessageChunk，它被当成「新一轮」
+      // 重新累积，于是流结束时的收尾 flush 又发一次 content=""、toolCalls=null 的
+      // assistant_done。RunnerService 照单 `recordAssistant()` 落库——messageId
+      // 还是同一个雪花（sid 未变），既在前端渲染成「头像+名字+空」的空消息行，
+      // 又有把这条消息的真实正文覆盖成空串的风险。
+      //
+      // 只挡 assistant_done，不挡下面的 usage：usage_metadata 恰恰就挂在这条
+      // 尾随 chunk 上，挡掉会丢整轮的 token 计量。usage 的 messageId 用同一个
+      // sid，指向前一次 flush 已经落库的那条 assistant，归属仍然正确。
+      //
+      // checkpointer 不变量不受影响：本函数只产出对外事件流，消息序列由
+      // supervisor 节点写入 state，与这里 yield 与否无关；空轮既无 tool_calls
+      // 也就不存在 tool_call/tool_result 配对被打断的问题。
+      if (content !== "" || reasoning !== "" || toolCalls.length > 0) {
+        yield {
+          kind: "assistant_done",
+          messageId: currentSid,
+          content,
+          reasoning,
+          toolCalls: toolCalls.length > 0 ? toolCalls : null,
+        };
+      }
       const extracted = extractUsage(currentAcc);
       if (extracted) {
         yield {

@@ -178,6 +178,22 @@ export function MessageList({
         .filter(
           (m) => !(m.role === "system" && m.metadata?.kind !== "compaction"),
         )
+        // 全空 assistant 行不渲染（否则是「头像 + 粗体名字 + 空白」的幽灵行）。
+        // 根因已在后端修掉（`GraphRunner.flushRound` 的空轮短路：不再为只带
+        // finish_reason/usage 的尾随 chunk 发 assistant_done），这里是兜底——
+        // 修复前已经落库的历史空行仍会从 history 拉回来，只有前端能挡。
+        // 「决策轮」（只有 reasoning/toolCalls、正文为空）不受影响：下面 reasoning
+        // 块与工具块各自独立渲染，条件里都算「非空」。
+        .filter(
+          (m) =>
+            m.role !== "assistant" ||
+            !!m.content ||
+            !!m.reasoning ||
+            (m.toolCalls?.length ?? 0) > 0 ||
+            m.loading === true ||
+            m.streaming === true ||
+            m.failed === true,
+        )
         .map((m) => {
           // 压缩占位行：role=system + metadata.kind="compaction"
           if (m.role === "system" && m.metadata?.kind === "compaction") {
