@@ -134,7 +134,7 @@ describe("EventsGateway 下行信封 + 账号路由", () => {
   it("session.status_changed 本地事件包信封下发到 acct 房间", () => {
     const account = new AccountContextService();
     const { gw, roomEmit, to } = makeGateway(account);
-    const payload = { sessionId: "s1", status: "idle" as const };
+    const payload = { agentId: "a1", sessionId: "s1", status: "idle" as const };
     account.run("U1", () => gw.onSessionStatusChanged(payload));
     expect(to).toHaveBeenCalledWith("acct:U1");
     const [eventName, env] = roomEmit.mock.calls[0];

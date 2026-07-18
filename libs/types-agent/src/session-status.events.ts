@@ -12,6 +12,11 @@ export const SESSION_STATUS_EVENTS = {
 } as const;
 
 export const SessionStatusChangedEventSchema = z.object({
+  /**
+   * 会话归属的 Agent id。纳入统一生命周期契约（spec §A）后必填：云端按
+   * `${deviceId}:${localAgentId}` 键做 Agent 级 fan-out，缺了无法路由到观察者。
+   */
+  agentId: z.string(),
   sessionId: z.string(),
   status: SessionStatus,
 });

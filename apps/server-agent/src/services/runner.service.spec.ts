@@ -673,8 +673,8 @@ describe("RunnerService", () => {
     );
     await runner.kickAndWait("s1");
     expect(statusEvents).toEqual([
-      { sessionId: "s1", status: "running" },
-      { sessionId: "s1", status: "idle" },
+      { agentId: "agent-1", sessionId: "s1", status: "running" },
+      { agentId: "agent-1", sessionId: "s1", status: "idle" },
     ]);
   });
 

@@ -25,6 +25,7 @@ export * from "./remote-agent.events";
 export * from "./schedule";
 export * from "./schedule.events";
 export * from "./session";
+export * from "./session-lifecycle.events";
 export * from "./session-status.events";
 export * from "./sidebar";
 export * from "./skill";

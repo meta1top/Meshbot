@@ -11,6 +11,7 @@ import {
   SESSION_STATUS_EVENTS,
   SESSION_WS_EVENTS,
   type SessionStatus,
+  type SessionStatusChangedEvent,
 } from "@meshbot/types-agent";
 import { Injectable, Logger, type OnModuleInit } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
@@ -133,7 +134,16 @@ export class RunnerService implements OnModuleInit {
     status: SessionStatus,
   ): Promise<void> {
     await this.sessions.setStatus(sessionId, status);
-    this.emitter.emit(SESSION_STATUS_EVENTS.changed, { sessionId, status });
+    // 本方法只有 sessionId，没有现成的 session 行；agentId 纳入统一生命周期
+    // 契约后必填（云端按 agentId fan-out），故这里补一次回查。真正把「发射点
+    // 下沉、避免二次查询」的优化留给 Task 17 统一处理，本任务只保证契约不破。
+    const session = await this.sessions.findOrNull(sessionId);
+    if (!session) return;
+    this.emitter.emit(SESSION_STATUS_EVENTS.changed, {
+      agentId: session.agentId,
+      sessionId,
+      status,
+    } satisfies SessionStatusChangedEvent);
   }
 
   /** 启动消费循环（fire-and-forget）。已有消费循环则跳过（防重入）。 */
