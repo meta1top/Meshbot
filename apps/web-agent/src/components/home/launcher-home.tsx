@@ -16,6 +16,9 @@ import { useAgents } from "@/rest/agents";
 import { fetchRemoteRun, startRemoteRun } from "@/rest/remote-agent-sessions";
 import { createSession } from "@/rest/session";
 
+/** `sendToRemoteAgent` 轮询超时的可辨识 error code（供 handleSend 选文案）。 */
+const REMOTE_CREATE_TIMEOUT = "remote-create-timeout";
+
 /** 起手台中区：品牌大标题 + 场景分段 + 建议 chips + 重 composer；发送即建会话跳转。 */
 export function LauncherHome() {
   const t = useTranslations("home");
@@ -74,7 +77,12 @@ export function LauncherHome() {
       if (!sessionId) await new Promise((r) => setTimeout(r, 250));
     }
     if (!sessionId) {
-      throw new Error("远程会话未在预期时间内创建（目标设备可能已离线）");
+      // 只是「超时未回报 sessionId」，不能据此断言设备离线——B 侧二次门控
+      // （目标 Agent 未开启远程访问 `agent_not_remotable`）同样走这条路：预检
+      // 拒绝发生在建会话之前，本轮永远不会有带 sessionId 的帧回来。原文案写死
+      // 「目标设备可能已离线」，用户看到的原因是错的。抛可辨识的 code，由
+      // handleSend 走 next-intl 文案（措辞对两种原因都成立）。
+      throw new Error(REMOTE_CREATE_TIMEOUT);
     }
     router.push(
       `/assistant?remoteAgent=${cloudAgentId}&id=${sessionId}&streamId=${streamId}`,
@@ -101,7 +109,15 @@ export function LauncherHome() {
       router.push(`/assistant?id=${res.sessionId}`);
     } catch (err) {
       console.error("发送失败", err);
-      setSending(false); // 失败留在起手台，草稿由 ChatInput 已清——保守起见不自动重填
+      // ChatInput 的 onSend 无条件清空编辑器，失败时不回填 + 不提示的话，
+      // 用户打的字就凭空消失且零反馈（远程首轮要等满 10s 轮询才落到这里）。
+      setDraft(text);
+      window.alert(
+        err instanceof Error && err.message === REMOTE_CREATE_TIMEOUT
+          ? t("remoteCreateTimeout")
+          : t("sendFailed"),
+      );
+      setSending(false); // 失败留在起手台
     }
   };
 

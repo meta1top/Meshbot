@@ -4,7 +4,11 @@ import type {
   AgentRunEnd,
   AgentRunFrame,
 } from "@meshbot/types";
-import { SESSION_WS_EVENTS, type RunErrorEvent } from "@meshbot/types-agent";
+import {
+  SESSION_WS_EVENTS,
+  type RunErrorEvent,
+  type RunInterruptedEvent,
+} from "@meshbot/types-agent";
 import {
   ConflictException,
   Injectable,
@@ -199,16 +203,33 @@ export class RemoteRunService implements OnModuleDestroy {
   onEnd(end: AgentRunEnd): void {
     const entry = this.streams.get(end.streamId);
     if (entry && !entry.frameReceived && entry.sessionId) {
-      this.emitter.emit(REMOTE_SHADOW_FRAME_EVENT, {
-        event: SESSION_WS_EVENTS.runError,
-        payload: {
-          sessionId: entry.sessionId,
-          messageId: null,
-          pendingIds: [],
-          error: describePreflightRejection(end.reason),
-          reason: end.reason,
-        } satisfies RunErrorEvent,
-      } satisfies RemoteShadowFramePayload);
+      if (end.reason === "interrupted") {
+        // 用户主动打断，且打断赶在任何帧回流之前（append 模式常见）。这不是
+        // 「预检拒绝」，补 run.error 会让用户看到 describePreflightRejection 的
+        // 兜底文案「远程 run 未能开始（interrupted）」——把自己按的停止说成失败。
+        // 补一条影子 run.interrupted：同样能清 running（前端 onInterrupted），
+        // 但走的是「已停止」语义，不弹错误气泡。messageId 用空串——本轮从未有
+        // 帧回流，没有任何一条消息可指名，前端 settleInterruptedTimeline 按
+        // messageId 精确匹配不中即退化为不改任何气泡，正是期望行为。
+        this.emitter.emit(REMOTE_SHADOW_FRAME_EVENT, {
+          event: SESSION_WS_EVENTS.runInterrupted,
+          payload: {
+            sessionId: entry.sessionId,
+            messageId: "",
+          } satisfies RunInterruptedEvent,
+        } satisfies RemoteShadowFramePayload);
+      } else {
+        this.emitter.emit(REMOTE_SHADOW_FRAME_EVENT, {
+          event: SESSION_WS_EVENTS.runError,
+          payload: {
+            sessionId: entry.sessionId,
+            messageId: null,
+            pendingIds: [],
+            error: describePreflightRejection(end.reason),
+            reason: end.reason,
+          } satisfies RunErrorEvent,
+        } satisfies RemoteShadowFramePayload);
+      }
     }
     this.clear(end.streamId);
   }

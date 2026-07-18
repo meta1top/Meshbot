@@ -203,6 +203,30 @@ describe("RemoteRunService", () => {
       });
     });
 
+    it("用户主动打断且赶在任何帧之前（从未收到过帧 + reason=interrupted）→ 补发影子 run.interrupted，不是 run.error", () => {
+      const { svc, emitter } = make();
+      const { streamId } = svc.startRun(
+        "u1",
+        "dB",
+        "append",
+        "remote-sess-1",
+        "hello",
+      );
+
+      svc.onEnd({ streamId, requesterDeviceId: "dA", reason: "interrupted" });
+
+      // 走 run.error 的话，前端会撞上 describePreflightRejection 的兜底文案
+      // 「远程 run 未能开始（interrupted）」——把用户自己按的停止说成失败。
+      expect(emitter.emit).toHaveBeenCalledWith(REMOTE_SHADOW_FRAME_EVENT, {
+        event: SESSION_WS_EVENTS.runInterrupted,
+        payload: { sessionId: "remote-sess-1", messageId: "" },
+      });
+      expect(emitter.emit).not.toHaveBeenCalledWith(
+        REMOTE_SHADOW_FRAME_EVENT,
+        expect.objectContaining({ event: SESSION_WS_EVENTS.runError }),
+      );
+    });
+
     it("已收到过至少一帧（正常终止 done/error/interrupted）→ 不重复补发，B 侧转发的真实终止帧已经够了", () => {
       const { svc, emitter } = make();
       const { streamId } = svc.startRun(

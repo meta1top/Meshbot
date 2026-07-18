@@ -312,7 +312,14 @@ function RemoteSessionViewReady({
       return;
     }
     setDraft("");
-    await stream.send(text);
+    // send() 返回 false = 本条输入被拒绝且没有任何留痕（当前唯一来源：该会话
+    // 仍有 run 在跑的 I3 守卫）。ChatInput 的 onSend 是无条件清空编辑器的，
+    // 不回填 + 不提示的话用户打的字就凭空消失了（原 bug）。
+    const accepted = await stream.send(text);
+    if (!accepted) {
+      setDraft(text);
+      setActionError(t("sendWhileRunning"));
+    }
   };
 
   // 启动台草稿：挂载后取回（读即删）并自动发起首轮 create。

@@ -239,6 +239,7 @@
     "deletePending": "Delete",
     "cannotDeleteWhileProcessing": "Message is already being processed and cannot be deleted",
     "cannotEditWhileProcessing": "Message is already being processed and cannot be edited",
+    "cannotSendWhileRunning": "This session is still generating a reply. Wait for it to finish or stop it before sending a new message",
     "networkError": "Network error, please retry",
     "confirmOverwriteDraft": "Overwrite the current draft?",
     "reasoningProcess": "Reasoning",
@@ -389,6 +390,8 @@
     "copy": "Copy"
   },
   "home": {
+    "remoteCreateTimeout": "The remote session wasn't created in time. Check that the target agent has remote access enabled and its device is online, then retry.",
+    "sendFailed": "Failed to send, please retry",
     "title": "What's up next?",
     "slogan": "Your work co-pilot",
     "titles": {

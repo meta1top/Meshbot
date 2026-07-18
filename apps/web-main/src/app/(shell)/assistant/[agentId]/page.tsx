@@ -6,7 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Monitor } from "lucide-react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { RemoteSessionView } from "@/components/assistant/remote-session-view";
 import { remoteSessionsQueryKey } from "@/hooks/use-remote-sessions";
 import { useDeviceOnline, useDevicePresenceSync } from "@/rest/agent-devices";
@@ -21,10 +21,19 @@ import { useDevices } from "@/rest/devices";
  * （在线态字段已显示离线）+ 禁止输入的提示；Agent 不存在（未注册/已软删/
  * 宿主设备不存在或已吊销/加载失败）→ 空态。`?session=` 决定当前查看的会话；
  * 既无 `?session=` 也无 `?draft=`（起手台交接的建会话草稿）时重定向回
- * `/assistant` 起手台——「新建会话页」态已下线。`?streamId=` 只在本页自己刚
- * 发起 create 后由 `RemoteSessionView.onSessionCreated` 写入，用于把首轮
- * running/interrupt 路由带过去——直接导航进一个已有会话（点会话列表 /
- * 刷新页面）时天然没有这个参数，重连活跃流不在 V1 范围（见任务报告）。
+ * `/assistant` 起手台——「新建会话页」态已下线。
+ *
+ * 首轮 create 的 streamId（把 running/interrupt 路由带进刚建好的会话）**不再
+ * 走 URL**，改为本组件的 `createdStreamId` state：URL 参数会被刷新 / 后退 /
+ * 书签重放，而 streamId 是一次性交接凭证——那条流早已终止后再被读出来，
+ * `useSessionStream` 会乐观置 `running=true` 却永远等不到终止帧，界面永久卡在
+ * 「运行中」（停止按钮常亮 + 用户输入被 send() 的 I3 守卫吞掉）。state 只在本
+ * 次页面生命周期内有效，刷新即归零；历史 URL 里残留的 `?streamId=` 一律忽略
+ * 并就地 `router.replace` 清掉（见下方 effect）。
+ *
+ * 代价：create 首轮进行中立刻刷新会丢 interrupt 路由——重连活跃流本就不在 V1
+ * 范围（web-main 侧 L3 协议没有按 sessionId 反查 streamId 的通道，
+ * `lib/session-transport.ts` 的 `fetchActiveRun` 如实抛错）。
  *
  * `useDevices`/`useDeviceOnline` 仍按 Agent 的宿主设备（`agent.deviceId`）
  * 查询——设备在线态/详情字段（platform/lastSeenAt 等）本期仍来自 Device 行，
@@ -46,7 +55,20 @@ function AssistantAgentView() {
   const agentId = params.agentId;
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("session");
-  const streamId = searchParams.get("streamId");
+  /**
+   * 本页自己刚 create 出来的一次性 streamId（见组件 JSDoc：不进 URL）。
+   * 连同它所属的 sessionId 一起记——本页不随会话切换卸载，只记 streamId 的话，
+   * 用户切到同一 Agent 的另一个会话时会被当成那个会话的初始流（乐观 running
+   * 又卡死一次）。下面按 sessionId 匹配后才透传。
+   */
+  const [createdStream, setCreatedStream] = useState<{
+    sessionId: string;
+    streamId: string;
+  } | null>(null);
+  const createdStreamId =
+    createdStream && createdStream.sessionId === sessionId
+      ? createdStream.streamId
+      : null;
   // 启动台交接来的一次性草稿 token（读即删，见 lib/launcher-draft.ts）
   const draftToken = searchParams.get("draft");
   const router = useRouter();
@@ -86,6 +108,17 @@ function AssistantAgentView() {
     if (sessionId || draftToken) return;
     router.replace("/assistant");
   }, [sessionId, draftToken, router]);
+
+  // 历史 URL（旧版本写入的书签 / 浏览器后退栈）里残留的 `?streamId=` 一律
+  // 就地清掉：它是早已终止的流的一次性凭证，留着只会误导（本页已不再读它，
+  // 但用户复制这条 URL 分享/收藏时不该带上一个陈旧的运行凭证）。
+  useEffect(() => {
+    if (!searchParams.has("streamId")) return;
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("streamId");
+    const qs = next.toString();
+    router.replace(`/assistant/${agentId}${qs ? `?${qs}` : ""}`);
+  }, [searchParams, router, agentId]);
 
   // 侧栏（设备→会话展开树）由段 layout 的 AssistantSidebar 持久渲染，本页只出主区。
   return (
@@ -167,7 +200,7 @@ function AssistantAgentView() {
           agentId={agentId}
           deviceId={deviceId}
           sessionId={sessionId}
-          streamId={streamId}
+          streamId={createdStreamId}
           draftToken={draftToken}
           orgId={orgId}
           onSessionCreated={(newSessionId, newStreamId) => {
@@ -176,9 +209,14 @@ function AssistantAgentView() {
             void queryClient.invalidateQueries({
               queryKey: remoteSessionsQueryKey(agentId),
             });
-            router.replace(
-              `/assistant/${agentId}?session=${newSessionId}&streamId=${newStreamId}`,
-            );
+            // streamId 只进 state 不进 URL（见组件 JSDoc）：本页不卸载，
+            // sessionId 从 null 变成新会话时 useSessionStream 会带着它重跑
+            // 初始化，首轮的 running/interrupt 路由照常生效。
+            setCreatedStream({
+              sessionId: newSessionId,
+              streamId: newStreamId,
+            });
+            router.replace(`/assistant/${agentId}?session=${newSessionId}`);
           }}
         />
       )}

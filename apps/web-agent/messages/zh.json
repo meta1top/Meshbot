@@ -239,6 +239,7 @@
     "deletePending": "删除",
     "cannotDeleteWhileProcessing": "消息已开始处理，无法删除",
     "cannotEditWhileProcessing": "消息已开始处理，无法编辑",
+    "cannotSendWhileRunning": "当前会话仍在生成回复，请等待完成或先点停止，再发送新消息",
     "networkError": "网络错误，请重试",
     "confirmOverwriteDraft": "覆盖当前输入框内容？",
     "reasoningProcess": "思考过程",
@@ -389,6 +390,8 @@
     "copy": "复制"
   },
   "home": {
+    "remoteCreateTimeout": "远程会话未在预期时间内创建。请确认目标 Agent 已开启远程访问，且所在设备在线，然后重试。",
+    "sendFailed": "发送失败，请重试",
     "title": "接下来做什么？",
     "slogan": "你的工作副驾",
     "titles": {

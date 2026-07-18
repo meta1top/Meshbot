@@ -228,8 +228,16 @@ export interface SessionStream {
   historyError: boolean;
   /** 单一消息写入口（同步 ref+state），供视图做局部变更（pending 删/改、重生成截断）。 */
   apply: (next: (prev: TimelineMessage[]) => TimelineMessage[]) => void;
-  /** 发送一条消息：本地乐观插 pending user 气泡 + append；remote 走远程 run 隧道。 */
-  send: (msg: string) => Promise<void>;
+  /**
+   * 发送一条消息：本地乐观插 pending user 气泡 + append；remote 走远程 run 隧道。
+   *
+   * 返回 `false` 表示**本条输入被拒绝、没有任何留痕**（当前唯一来源：remote
+   * 分支 `running=true` 的 I3 守卫）——调用方**必须**据此给用户可见反馈并把
+   * 文本回填输入框：`ChatInput.onSend` 是无条件清空编辑器的，静默 return 会
+   * 让用户打的字凭空消失且零提示（原 bug）。返回 `true` 表示已受理（含
+   * 「发起失败但已补一条 failed 气泡」的情形——那已经是可见反馈了）。
+   */
+  send: (msg: string) => Promise<boolean>;
   /** 中断当前 run：本地经 WS，remote 经 relay 控制帧。 */
   interrupt: () => void;
   /** 上拉加载更早历史（含滚动锚定，需传 scrollContainerRef）。local/remote 均支持。 */
@@ -424,6 +432,14 @@ export function useSessionStream(
   /** remote 分支当前有效的 streamId（供 interrupt 路由用），见上方 hook 注释。 */
   const remoteStreamIdRef = useRef<string | null>(null);
   /**
+   * 切会话时那次异步 `fetchActiveRun` 的 running 校正是否已作废。服务端快照拍
+   * 于请求发出的时刻，响应到达前本会话若已有更新的权威事实（收到终止帧
+   * done/interrupted/error，或本端刚发起了一次新 run），就不能再按那份过期快照
+   * 校正 running——拨回 true 会没有终止帧来清（又一次永久卡死），拨回 false 则
+   * 会误清掉刚起的 run。每次切会话在同一个 effect 里重置为 false。
+   */
+  const remoteRunProbeStaleRef = useRef(false);
+  /**
    * remote 续写「刚发出去、还没等到 run.human 落地」的暂存内容（Bug #13）。
    * `send()` 的 remote 分支不做本地乐观占位（见该函数注释），真实 user 气泡
    * 完全交给 `onHuman`；但 B 侧二次门控等预检拒绝发生在 run.human 之前，
@@ -532,7 +548,8 @@ export function useSessionStream(
     setMessages([]);
     // remote 且带初始 streamId（起手台 create 刚发起、首轮尚在跑）→ 乐观置 running；
     // 否则（本地 / 直接进入远程会话未带 streamId）与原行为一致先置 false，
-    // 后续本地分支按 history.inflight 校正，remote 分支按实时帧校正。
+    // 后续本地分支按 history.inflight 校正，remote 分支按下方 fetchActiveRun
+    // 的服务端权威结果校正（乐观值只是首帧观感，不是最终事实）。
     setRunning(!!(remoteDeviceId && remoteInitialStreamId));
     oldestMessageIdRef.current = null;
     hasMoreHistoryRef.current = true;
@@ -548,19 +565,36 @@ export function useSessionStream(
     setHistoryLoading(true);
 
     if (remoteDeviceId) {
-      // reclaim：刷新页面 / 直接进入远程会话时 remoteStreamIdRef 没有初值
-      // （非起手台 create 场景），靠 transport.fetchActiveRun 按 sessionId 查回
-      // B 侧当前活跃 run 的 streamId，回填后 confirm/interrupt 才可路由。查无 /
-      // 失败只吞掉——不影响历史渲染，用户仍能看会话，只是深层 HITL 卡片暂不可点。
-      if (remoteStreamIdRef.current == null) {
-        transport
-          .fetchActiveRun(sessionId)
-          .then((run) => {
-            if (cancelled) return;
-            if (run) remoteStreamIdRef.current = run.streamId;
-          })
-          .catch(() => {});
-      }
+      // reclaim + running 校正：**无条件**查一次 transport.fetchActiveRun。
+      //
+      // 原实现被 `remoteStreamIdRef.current == null` 门住，恰好在「URL 带
+      // streamId」时跳过——而那正是最需要校正的场景：`?streamId=` 是一次性
+      // 交接参数，刷新/后退/书签重进时它是陈旧值（那条流早已终止，网关的
+      // agentRunRoutes 已删、本 transport 的 RemoteRunTracker 也从未 register
+      // 过它），上面的乐观 setRunning(true) 于是永远等不到 done/error/interrupted
+      // → running 永久卡 true → 停止按钮常亮 + send() 的 I3 守卫吞掉一切输入。
+      // 现在按服务端权威结果校正：run==null（run 已结束，findRunBySession 返回
+      // null）→ 清 streamId + running=false；run!=null → 回填 streamId +
+      // running=true（真在跑，刷新后也能接上 HITL 路由与停止按钮）。
+      //
+      // 竞态守卫 remoteRunProbeStaleRef：请求在途期间若已收到本会话的终止帧，
+      // 说明服务端快照已过期，不再把 running 拨回 true（否则又是一次永久卡死）。
+      // 失败（如 web-main 远程实现如实抛「协议不支持 reclaim」）只吞掉，保持
+      // 原有乐观值——不影响历史渲染。
+      remoteRunProbeStaleRef.current = false;
+      transport
+        .fetchActiveRun(sessionId)
+        .then((run) => {
+          if (cancelled || remoteRunProbeStaleRef.current) return;
+          if (run) {
+            remoteStreamIdRef.current = run.streamId;
+            setRunning(true);
+          } else {
+            remoteStreamIdRef.current = null;
+            setRunning(false);
+          }
+        })
+        .catch(() => {});
       // L3 remote：首屏历史走 L2c fetchHistory（经 transport，防御式映射
       // B 侧原始行），不查本地 fetchPending（远程无该概念）。不显式传 limit
       // （与本地首屏一致，交由 B 端 listPage 默认值 50 兜底）；hasMore 读
@@ -874,6 +908,7 @@ export function useSessionStream(
     };
     const onDone = (e: RunDoneEvent) => {
       if (e.sessionId !== sessionId) return;
+      remoteRunProbeStaleRef.current = true;
       setRunning(false);
       apply((prev) =>
         prev.map((m) =>
@@ -885,6 +920,7 @@ export function useSessionStream(
     };
     const onInterrupted = (e: RunInterruptedEvent) => {
       if (e.sessionId !== sessionId) return;
+      remoteRunProbeStaleRef.current = true;
       setRunning(false);
       // 该会话本轮如果真正跑起来过，run.human 早已落地，remote 续写的
       // 乐观占位没有留存的必要——清掉，避免和下一次 send() 的暂存串台。
@@ -893,6 +929,7 @@ export function useSessionStream(
     };
     const onError = (e: RunErrorEvent) => {
       if (e.sessionId !== sessionId) return;
+      remoteRunProbeStaleRef.current = true;
       setRunning(false);
       // 【Bug #13】远程二次门控等预检拒绝（reason="agent_not_remotable"）发生在
       // B 侧建会话/回 run.human 之前——这条 user 消息从未在 timeline 里出现过。
@@ -1162,8 +1199,8 @@ export function useSessionStream(
    * loading 占位 + 迁出 pending 区到聊天区末尾，全部交给 onHuman 处理。
    */
   const send = useCallback(
-    async (msg: string) => {
-      if (!sessionId) return;
+    async (msg: string): Promise<boolean> => {
+      if (!sessionId) return false;
       if (remoteDeviceId) {
         // I3 守卫：该远程会话已有活跃 run（running=true，含首轮 create 场景）时
         // 不再发起第二个 append——避免 B 侧同 sessionId 注册两套监听器导致
@@ -1172,8 +1209,10 @@ export function useSessionStream(
         // server 侧 RemoteRunService.startRun 对同 (device,session) 也有 409
         // 兜底拒绝，这里提前短路只是省一次网络往返、给更快反馈。
         if (running) {
+          // 返回 false 而非静默 return：调用方据此提示 + 回填输入框，
+          // 否则 ChatInput 已经清空了编辑器，用户输入凭空消失（见 SessionStream.send）。
           console.warn("远程会话仍有 run 在进行中，请等待完成后再发送");
-          return;
+          return false;
         }
         // L3 remote 续写：不做本地乐观占位——B 侧 appendMessage 自己生成
         // messageId（randomUUID，与本地无法对齐），乐观插入的话，等真正的
@@ -1188,6 +1227,9 @@ export function useSessionStream(
             content: msg,
           });
           remoteStreamIdRef.current = streamId;
+          // 本端刚起了一轮新 run：切会话那次 fetchActiveRun 的快照已过期，
+          // 不能再让它把 running/streamId 拨回去（见该 ref 注释）。
+          remoteRunProbeStaleRef.current = true;
           setRunning(true);
           // 暂存本轮内容（Bug #13）：streamId 已经拿到、A 本地已接受，但 B
           // 侧是否真的接受（二次门控）要等异步的 run.human/agentRunEnd 才知道。
@@ -1211,7 +1253,7 @@ export function useSessionStream(
             },
           ]);
         }
-        return;
+        return true;
       }
       const messageId = clientSnowflakeId();
       apply((prev) => [
@@ -1230,6 +1272,7 @@ export function useSessionStream(
       } catch (err) {
         console.error("追加消息失败", err);
       }
+      return true;
     },
     [sessionId, apply, remoteDeviceId, running, transport],
   );

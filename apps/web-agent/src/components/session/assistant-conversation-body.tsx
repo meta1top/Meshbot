@@ -178,6 +178,20 @@ export function AssistantConversationBody({
   });
 
   /**
+   * 发送：`stream.send` 返回 false = 本条输入被拒绝且没有任何留痕（当前唯一
+   * 来源：远程会话仍有 run 在跑的 I3 守卫）。`ChatInput.onSend` 是无条件清空
+   * 编辑器的，不回填 + 不提示的话用户打的字就凭空消失了（原 bug）。回填的是
+   * 用户真正打的 `text`，不是 `prefix(text)`（后者带隐藏的 llmuse 上下文块）。
+   */
+  const handleSend = async (text: string) => {
+    const accepted = await stream.send(prefix(text));
+    if (accepted) return;
+    setDraft(text);
+    chatInputRef.current?.focus(text);
+    window.alert(t("cannotSendWhileRunning"));
+  };
+
+  /**
    * 删除一条 pending 消息。
    * - 200：本地从 messages 移除
    * - 404：消息已不存在，本地也移除（兜底）
@@ -324,7 +338,7 @@ export function AssistantConversationBody({
           ref={chatInputRef}
           value={draft}
           onChange={setDraft}
-          onSend={(text) => stream.send(prefix(text))}
+          onSend={(text) => void handleSend(text)}
           onInterrupt={stream.interrupt}
           isLoading={stream.running}
           placeholder={inputPlaceholder}

@@ -543,6 +543,7 @@
     "remoteLoadFailed": "Failed to load session history",
     "actionFailed": "Action failed, please retry",
     "createFailed": "Failed to create session — the device may be offline. Please retry",
+    "sendWhileRunning": "This session is still generating a reply. Wait for it to finish or stop it before sending a new message",
     "dismiss": "Dismiss",
     "modelSelect": "Select model",
     "input": {
