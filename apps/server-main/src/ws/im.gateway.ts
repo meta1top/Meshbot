@@ -303,6 +303,13 @@ export class ImGateway extends BaseWebSocketGateway {
 
   /** 三表一致地登记一条 watch 路由（主表 + 对应 scope 的反向索引）。 */
   private registerWatch(watchId: string, route: WatchRoute): void {
+    // 幂等：同一 watchId 重复登记时先按**旧**路由把索引清干净，再写新的。
+    // 否则 `watchRoutes` 被原地覆盖、而旧索引 Set 里那条 watchId 留了下来，
+    // 变成指向已失效路由的悬挂项——fan-out 是按索引 Set 反查主表的，悬挂项
+    // 会把帧扇到新 route 的 requester 身上（跨会话/跨 Agent 串台）。
+    if (this.watchRoutes.has(watchId)) {
+      this.unregisterWatch(watchId, false);
+    }
     this.watchRoutes.set(watchId, route);
     const index =
       route.scope === "agent" ? this.agentWatchers : this.sessionWatchers;

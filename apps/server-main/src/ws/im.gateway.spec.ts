@@ -1715,6 +1715,45 @@ describe("Agent 级观察通道：watch 登记", () => {
     expect(gateway.agentWatcherIds("dev-b", "local-a1")).toEqual([]);
   });
 
+  it("同一 watchId 二次登记：按旧路由清索引，不留悬挂条目（fan-out 串台防线）", async () => {
+    const { gateway } = makeGateway({
+      agents: {
+        findActiveById: jest.fn().mockResolvedValue({
+          id: "cloud-a1",
+          userId: "u1",
+          orgId: "org-1",
+          deviceId: "dev-b",
+          localAgentId: "local-a1",
+        }),
+      },
+    });
+    const c = client();
+    // 先按 session s1 登记，再用同一个 watchId 改登记到 s2。
+    await gateway.handleAgentWatchStart(
+      {
+        watchId: "w1",
+        targetAgentId: "cloud-a1",
+        scope: "session",
+        sessionId: "s1",
+      },
+      c,
+    );
+    await gateway.handleAgentWatchStart(
+      {
+        watchId: "w1",
+        targetAgentId: "cloud-a1",
+        scope: "session",
+        sessionId: "s2",
+      },
+      c,
+    );
+    // 旧索引键必须被清空——否则 fan-out 按 s1 的 Set 反查主表会拿到 s2 的
+    // 路由，把 s2 的帧扇给以为在看 s1 的观察者（跨会话串台）。
+    expect(gateway.sessionWatcherIds("dev-b", "s1")).toEqual([]);
+    expect(gateway.sessionWatcherIds("dev-b", "s2")).toEqual(["w1"]);
+    expect(gateway.watchRouteCount()).toBe(1);
+  });
+
   it("多观察者登记到同一索引键（fan-out 前提）", async () => {
     const { gateway } = makeGateway({
       agents: {
