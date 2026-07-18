@@ -1,8 +1,10 @@
 import { AgentModule } from "@meshbot/lib-agent";
 import { TxTypeOrmModule } from "@meshbot/common";
 import { Module, forwardRef } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { AgentsModule } from "./agents.module";
 import { AgentCloudSyncService } from "./services/agent-cloud-sync.service";
+import { AgentWatchInboundService } from "./services/agent-watch-inbound.service";
 import { CheckpointerCleanupService } from "./services/checkpointer-cleanup.service";
 import { CloudModelConfigProxyService } from "./services/cloud-model-config-proxy.service";
 import { ContextCompactor } from "./services/context-compactor.service";
@@ -28,9 +30,11 @@ import { ScheduleExecutor } from "./services/schedule-executor.service";
 import { SessionMessageService } from "./services/session-message.service";
 import { SessionService } from "./services/session.service";
 import { SessionTitleService } from "./services/session-title.service";
+import { SessionWatchService } from "./services/session-watch.service";
 import { StatsService } from "./services/stats.service";
 import { SuggestionService } from "./services/suggestion.service";
 import { AuthModule } from "./auth.module";
+import { ImRelayClientService } from "./cloud/im-relay-client.service";
 import { SessionGateway } from "./ws/session.gateway";
 
 /**
@@ -56,6 +60,15 @@ import { SessionGateway } from "./ws/session.gateway";
  * 云端组织模型配置、不落库，无同步落库 provider，前端刷新走
  * `MODEL_CONFIG_EVENTS.updated` 单次 emit（见该 service 的 modelConfigChanged
  * 订阅）。
+ * Agent 级观察通道（设备侧）：`SessionWatchService`（会话级常驻转发器登记表）
+ * 与 `AgentWatchInboundService`（消费 `IM_RELAY_EVENTS.agentWatchInbound`
+ * 的入站处理器，依赖面与 `RemoteRunInboundService` 一致——本模块的
+ * `SessionService`/`RunnerService`/`AgentsModule` 导出的 `AgentService`/
+ * `AuthModule` 导出的 `ImRelayClientService`/`AccountContextService`）同列
+ * 注册于此，均不导出，仅作为 `@OnEvent` 监听器 / 模块内被注入方存在。
+ * `SessionWatchService` 的第二个构造参数是接口 `WatchFrameRelay`（非 DI
+ * token，Nest 无法按接口解析），用工厂 provider 显式把 `ImRelayClientService`
+ * 实例（满足该接口）注入——比改构造参数类型更干净，服务本身与其单测都不用动。
  */
 @Module({
   imports: [
@@ -97,6 +110,13 @@ import { SessionGateway } from "./ws/session.gateway";
     RemoteRunInboundService,
     RemoteRunControlService,
     RemoteRunRegistryService,
+    {
+      provide: SessionWatchService,
+      useFactory: (emitter: EventEmitter2, relay: ImRelayClientService) =>
+        new SessionWatchService(emitter, relay),
+      inject: [EventEmitter2, ImRelayClientService],
+    },
+    AgentWatchInboundService,
   ],
   exports: [
     CheckpointerCleanupService,
