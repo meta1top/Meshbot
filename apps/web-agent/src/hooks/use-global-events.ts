@@ -14,6 +14,8 @@ import {
   type QuickAssistantRenamedEvent,
   SCHEDULE_EVENTS,
   type ScheduleFiredEvent,
+  SESSION_STATUS_EVENTS,
+  type SessionStatusChangedEvent,
 } from "@meshbot/types-agent";
 import { clearAccessToken } from "@meshbot/web-common";
 import { useQueryClient } from "@tanstack/react-query";
@@ -29,6 +31,7 @@ import {
   upsertConversationAtom,
 } from "@/atoms/im";
 import { addScheduleActivityAtom } from "@/atoms/schedule-activity";
+import { updateSessionStatusAtom } from "@/atoms/sessions";
 import { getEventsSocket } from "@/lib/events-socket";
 
 /** 全局事件分发表：按信封 type 调对应 handler。纯函数，便于单测。 */
@@ -39,6 +42,7 @@ export interface GlobalEventHandlers {
   onConversationRemoved: (p: { conversationId: string }) => void;
   onConversationRead: (p: ImConversationReadEvent) => void;
   onScheduleFired: (p: ScheduleFiredEvent) => void;
+  onSessionStatusChanged: (p: SessionStatusChangedEvent) => void;
   onQuickAssistantRenamed: (p: QuickAssistantRenamedEvent) => void;
   onModelConfigUpdated: () => void;
   onReauthRequired: (p: { cloudUserId: string }) => void;
@@ -66,6 +70,9 @@ export function dispatchGlobalEvent(
       break;
     case SCHEDULE_EVENTS.fired:
       h.onScheduleFired(env.payload as ScheduleFiredEvent);
+      break;
+    case SESSION_STATUS_EVENTS.changed:
+      h.onSessionStatusChanged(env.payload as SessionStatusChangedEvent);
       break;
     case QUICK_ASSISTANT_EVENTS.renamed:
       h.onQuickAssistantRenamed(env.payload as QuickAssistantRenamedEvent);
@@ -104,6 +111,7 @@ export function useGlobalEvents(): void {
   const markConversationRead = useSetAtom(markConversationReadAtom);
   const addScheduleActivity = useSetAtom(addScheduleActivityAtom);
   const setQuickAssistantName = useSetAtom(quickAssistantNameAtom);
+  const updateSessionStatus = useSetAtom(updateSessionStatusAtom);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -118,6 +126,9 @@ export function useGlobalEvents(): void {
       onConversationRemoved: (p) => removeConversation(p.conversationId),
       onConversationRead: (p) => markConversationRead(p.conversationId),
       onScheduleFired: (p) => addScheduleActivity(p.sessionId),
+      // 会话跑完/开跑 → 侧栏「运行中」绿点实时熄灭/点亮（列表里没有的会话忽略）
+      onSessionStatusChanged: (p) =>
+        updateSessionStatus({ id: p.sessionId, status: p.status }),
       onQuickAssistantRenamed: (p) => setQuickAssistantName(p.name),
       // 云端模型配置同步完成 → 刷新模型列表（选择器/设置页实时更新）
       onModelConfigUpdated: () =>
@@ -147,6 +158,7 @@ export function useGlobalEvents(): void {
     markConversationRead,
     addScheduleActivity,
     setQuickAssistantName,
+    updateSessionStatus,
     queryClient,
   ]);
 }

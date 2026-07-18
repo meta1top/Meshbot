@@ -13,6 +13,7 @@ import {
 import { CompactionRow } from "./compaction-row";
 import { MarkdownContent } from "./markdown-content";
 import type { ModelConfigLike } from "./model-name";
+import { isReasoningThinking } from "./reasoning-thinking";
 import type { TimelineMessage, ToolCallView } from "./timeline";
 import { ToolCallBlock, type ToolCallBlockLabels } from "./tool-call-block";
 import { UserMessageActions } from "./user-message-actions";
@@ -344,9 +345,9 @@ function ReasoningBlock({
   durationMs?: number;
   /**
    * 父 message 是否在流式中（来自 inflight push 或 ws onChunk 标记）。
-   * 为 true 时强制走「思考中」分支 + 默认展开，无视 durationMs ——
-   * 刷新落在 reasoning 流式中时 durationMs=0 会被误判为「已思考」，
-   * 此 prop 是首要语义信号。
+   * 仅在 durationMs 缺失时作为「思考中」的兜底信号（刷新落在 reasoning 流式中
+   * 时只有 reasoningStartedAt、没有 durationMs）；durationMs 已锁定则以其为准。
+   * 判据详见 isReasoningThinking。
    */
   streaming?: boolean;
   labels: Pick<
@@ -354,8 +355,7 @@ function ReasoningBlock({
     "reasoningThinking" | "reasoningThought" | "reasoningProcess"
   >;
 }) {
-  const isThinking =
-    streaming === true || (durationMs === undefined && startedAt !== undefined);
+  const isThinking = isReasoningThinking({ startedAt, durationMs, streaming });
   // 思考中默认展开；思考一结束自动收起。用户点击切换会覆盖这个默认，
   // 但 isThinking 再变化时会再次同步（下一次新的推理流又会展开）。
   const [open, setOpen] = useState(isThinking);

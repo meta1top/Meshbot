@@ -991,6 +991,33 @@ describe("SessionService", () => {
     });
   });
 
+  describe("resetRunningToIdle（启动恢复）", () => {
+    it("把遗留 running 会话重置为 idle，跨账号全量（无账号上下文可调）", async () => {
+      const a = await ctx.run("u1", () =>
+        rawService.createSession({ content: "s-u1", agentId: TEST_AGENT_ID }),
+      );
+      const b = await ctx.run("u2", () =>
+        rawService.createSession({ content: "s-u2", agentId: TEST_AGENT_ID }),
+      );
+      await ctx.run("u1", () => rawService.setStatus(a.sessionId, "running"));
+      await ctx.run("u2", () => rawService.setStatus(b.sessionId, "running"));
+
+      // 无账号上下文直接调（模拟 onModuleInit 启动时机）
+      expect(await rawService.resetRunningToIdle()).toBe(2);
+
+      const listU1 = await ctx.run("u1", () => rawService.listAllSorted());
+      const listU2 = await ctx.run("u2", () => rawService.listAllSorted());
+      expect(listU1[0].status).toBe("idle");
+      expect(listU2[0].status).toBe("idle");
+    });
+
+    it("无遗留 running 时返回 0（零动作零日志的前提）", async () => {
+      const s = await service.createSession({ content: "s" });
+      await service.setStatus(s.sessionId, "idle");
+      expect(await rawService.resetRunningToIdle()).toBe(0);
+    });
+  });
+
   describe("账号隔离（ScopedRepository）", () => {
     it("两账号会话互不可见", async () => {
       await ctx.run("u1", () =>

@@ -4,7 +4,7 @@ import {
   ModelRunContext,
 } from "@meshbot/lib-agent";
 import { EventEmitter2 } from "@nestjs/event-emitter";
-import { SESSION_WS_EVENTS } from "@meshbot/types-agent";
+import { SESSION_STATUS_EVENTS, SESSION_WS_EVENTS } from "@meshbot/types-agent";
 import type { PendingMessage } from "../entities/pending-message.entity";
 import { RunnerService } from "./runner.service";
 
@@ -67,6 +67,12 @@ function fakeSessionService() {
       return rows;
     },
     async setStatus() {},
+    async rollbackProcessingToPending() {
+      return 0;
+    },
+    async resetRunningToIdle() {
+      return 0;
+    },
     enqueue(sessionId: string, content: string) {
       store.push({
         id: `m${seq++}`,
@@ -261,7 +267,11 @@ describe("RunnerService", () => {
     await runner.kickAndWait("s1");
     expect(
       events
-        .filter((e) => e.name !== SESSION_WS_EVENTS.runUsage)
+        .filter(
+          (e) =>
+            e.name !== SESSION_WS_EVENTS.runUsage &&
+            e.name !== SESSION_STATUS_EVENTS.changed,
+        )
         .map((e) => e.name),
     ).toEqual(["run.chunk", "run.chunk", "run.done"]);
     expect(sess.store.every((m) => m.status === "processed")).toBe(true);
@@ -611,6 +621,61 @@ describe("RunnerService", () => {
     );
     await runner.onModuleInit();
     expect(rolledBack).toBe(3);
+  });
+
+  it("onModuleInit：把遗留 running 会话重置为 idle（崩溃后绿点不残留）", async () => {
+    const sess = fakeSessionService();
+    let reset = 0;
+    const sessWithReset = {
+      ...sess,
+      async resetRunningToIdle() {
+        reset = 2;
+        return 2;
+      },
+    };
+    const runner = new RunnerService(
+      sessWithReset as never,
+      fakeGraphRunner() as never,
+      new EventEmitter2(),
+      fakeLlmCallService() as never,
+      fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
+      new AccountContextService(),
+      new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      fakeMcpService() as never,
+    );
+    await runner.onModuleInit();
+    expect(reset).toBe(2);
+  });
+
+  it("run 起止各 emit 一次 session.status_changed（侧栏绿点点亮/熄灭）", async () => {
+    const sess = fakeSessionService();
+    const emitter = new EventEmitter2();
+    const statusEvents: unknown[] = [];
+    emitter.on(SESSION_STATUS_EVENTS.changed, (p) => statusEvents.push(p));
+    sess.enqueue("s1", "hi");
+    const runner = new RunnerService(
+      sess as never,
+      fakeGraphRunner() as never,
+      emitter,
+      fakeLlmCallService() as never,
+      fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
+      new AccountContextService(),
+      new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      fakeMcpService() as never,
+    );
+    await runner.kickAndWait("s1");
+    expect(statusEvents).toEqual([
+      { sessionId: "s1", status: "running" },
+      { sessionId: "s1", status: "idle" },
+    ]);
   });
 
   it("收到 usage 事件 → 落库 + emit run.usage", async () => {

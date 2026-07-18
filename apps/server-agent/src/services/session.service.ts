@@ -403,6 +403,22 @@ export class SessionService {
     return res.affected ?? 0;
   }
 
+  /**
+   * 启动时把遗留的 running 会话重置为 idle，返回受影响行数。
+   *
+   * 进程崩在 run 中间时 RunnerService 的 finally 没机会跑，status 会永久停在
+   * running，侧栏「运行中」绿点冷启动后仍亮着且永不熄灭。
+   */
+  async resetRunningToIdle(): Promise<number> {
+    // 启动时（RunnerService.onModuleInit）无账号上下文，作用域仓库会抛
+    // NO_ACCOUNT_CONTEXT；本地轨单进程假设下跨账号全量重置是正确语义，故走裸仓库。
+    // scope-check: allow-unscoped
+    const res = await this.sessionRepo
+      .unscoped()
+      .update({ status: "running" }, { status: "idle" });
+    return res.affected ?? 0;
+  }
+
   /** 更新会话 status（idle / running）。 */
   async setStatus(sessionId: string, status: SessionStatus): Promise<void> {
     await this.sessionRepo.update({ id: sessionId }, { status });

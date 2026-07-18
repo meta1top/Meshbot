@@ -24,6 +24,8 @@ import {
   type ModelConfigUpdatedEvent,
   SCHEDULE_EVENTS,
   type ScheduleFiredEvent,
+  SESSION_STATUS_EVENTS,
+  type SessionStatusChangedEvent,
 } from "@meshbot/types-agent";
 import { UseFilters, UseGuards } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
@@ -176,6 +178,19 @@ export class EventsGateway extends BaseWebSocketGateway {
   @OnEvent(SCHEDULE_EVENTS.fired)
   onScheduleFired(payload: ScheduleFiredEvent): void {
     this.emitEnvelope(SCHEDULE_EVENTS.fired, payload);
+  }
+
+  /**
+   * 会话运行状态变更（idle ↔ running）→ 信封投递给所属账号浏览器，
+   * 侧栏「运行中」绿点在任何路由都实时落态。
+   *
+   * RunnerService.setSessionStatus 在 `account.run(owner, ...)` 上下文内 emit，
+   * 故 emitEnvelope 能取到账号并路由到 acct 房间。走全局总线而非 ws/session：
+   * 后者只在会话页挂载时建连，/home 与消息页的侧栏收不到。
+   */
+  @OnEvent(SESSION_STATUS_EVENTS.changed)
+  onSessionStatusChanged(payload: SessionStatusChangedEvent): void {
+    this.emitEnvelope(SESSION_STATUS_EVENTS.changed, payload);
   }
 
   /**

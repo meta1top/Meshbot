@@ -1,6 +1,7 @@
 // mock atoms/hooks dependencies（纯函数测试不需要真实 jotai/react/socket）
 jest.mock("@/atoms/im", () => ({}));
 jest.mock("@/atoms/schedule-activity", () => ({}));
+jest.mock("@/atoms/sessions", () => ({}));
 jest.mock("@/lib/events-socket", () => ({}));
 jest.mock("jotai", () => ({ useSetAtom: jest.fn() }));
 jest.mock("react", () => ({
@@ -13,6 +14,7 @@ import {
   MODEL_CONFIG_EVENTS,
   QUICK_ASSISTANT_EVENTS,
   SCHEDULE_EVENTS,
+  SESSION_STATUS_EVENTS,
 } from "@meshbot/types-agent";
 import { dispatchGlobalEvent } from "./use-global-events";
 
@@ -24,6 +26,7 @@ function makeHandlers() {
     onConversationRemoved: jest.fn(),
     onConversationRead: jest.fn(),
     onScheduleFired: jest.fn(),
+    onSessionStatusChanged: jest.fn(),
     onQuickAssistantRenamed: jest.fn(),
     onModelConfigUpdated: jest.fn(),
     onReauthRequired: jest.fn(),
@@ -38,6 +41,7 @@ describe("dispatchGlobalEvent", () => {
     [IM_WS_EVENTS.conversationRemoved, "onConversationRemoved"],
     [IM_WS_EVENTS.conversationRead, "onConversationRead"],
     [SCHEDULE_EVENTS.fired, "onScheduleFired"],
+    [SESSION_STATUS_EVENTS.changed, "onSessionStatusChanged"],
     [QUICK_ASSISTANT_EVENTS.renamed, "onQuickAssistantRenamed"],
     [AUTH_WS_EVENTS.reauthRequired, "onReauthRequired"],
   ])("%s → %s", (type, handlerKey) => {

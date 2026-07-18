@@ -1,6 +1,6 @@
 "use client";
 
-import type { SessionSummary } from "@meshbot/types-agent";
+import type { SessionStatus, SessionSummary } from "@meshbot/types-agent";
 import { atom } from "jotai";
 import {
   deleteSession as deleteSessionApi,
@@ -103,6 +103,35 @@ export const deleteSessionAtom = atom(null, async (get, set, id: string) => {
     get(sessionsAtom).filter((s) => s.id !== id),
   );
 });
+
+/**
+ * 按 id 局部 patch 会话运行状态；id 不在列表里则原样返回（引用不变）。
+ *
+ * 「存在才改」是硬要求：全局总线会广播所有会话的状态变更，其中随手问 quick /
+ * 子 agent 会话本就不在侧栏列表里，插进去会凭空多出行。
+ */
+export function patchSessionStatus(
+  arr: SessionSummary[],
+  id: string,
+  status: SessionStatus,
+): SessionSummary[] {
+  if (!arr.some((s) => s.id === id)) return arr;
+  return arr.map((s) => (s.id === id ? { ...s, status } : s));
+}
+
+/**
+ * 按 id 局部 patch session status（socket session.status_changed 收到时调）。
+ * 侧栏「运行中」绿点靠它熄灭 —— sessionsAtom 首屏之后从不重拉。
+ */
+export const updateSessionStatusAtom = atom(
+  null,
+  (get, set, params: { id: string; status: SessionStatus }) => {
+    const arr = get(sessionsAtom);
+    const next = patchSessionStatus(arr, params.id, params.status);
+    if (next === arr) return;
+    set(sessionsAtom, next);
+  },
+);
 
 /**
  * 按 id 局部 patch session title + titleGenerated=true。

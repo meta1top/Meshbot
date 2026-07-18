@@ -1,6 +1,6 @@
 import { AccountContextService } from "@meshbot/lib-agent";
 import { AUTH_WS_EVENTS, IM_WS_EVENTS } from "@meshbot/types";
-import { SCHEDULE_EVENTS } from "@meshbot/types-agent";
+import { SCHEDULE_EVENTS, SESSION_STATUS_EVENTS } from "@meshbot/types-agent";
 
 import { EventsGateway } from "./events.gateway";
 
@@ -109,6 +109,18 @@ describe("EventsGateway 下行信封 + 账号路由", () => {
     const [eventName, env] = roomEmit.mock.calls[0];
     expect(eventName).toBe("event");
     expect(env.type).toBe(SCHEDULE_EVENTS.fired);
+    expect(env.payload).toEqual(payload);
+  });
+
+  it("session.status_changed 本地事件包信封下发到 acct 房间", () => {
+    const account = new AccountContextService();
+    const { gw, roomEmit, to } = makeGateway(account);
+    const payload = { sessionId: "s1", status: "idle" as const };
+    account.run("U1", () => gw.onSessionStatusChanged(payload));
+    expect(to).toHaveBeenCalledWith("acct:U1");
+    const [eventName, env] = roomEmit.mock.calls[0];
+    expect(eventName).toBe("event");
+    expect(env.type).toBe(SESSION_STATUS_EVENTS.changed);
     expect(env.payload).toEqual(payload);
   });
 

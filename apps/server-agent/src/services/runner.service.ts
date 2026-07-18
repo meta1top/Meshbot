@@ -8,7 +8,9 @@ import {
 import {
   type InflightToolCall,
   type RunToolCallEndEvent,
+  SESSION_STATUS_EVENTS,
   SESSION_WS_EVENTS,
+  type SessionStatus,
 } from "@meshbot/types-agent";
 import { Injectable, Logger, type OnModuleInit } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
@@ -99,13 +101,39 @@ export class RunnerService implements OnModuleInit {
     private readonly mcp: McpService,
   ) {}
 
-  /** 启动时把遗留的 processing 消息退回 pending（重启 inflight 丢失后可重跑）。 */
+  /**
+   * 启动恢复：
+   * 1. 遗留 processing 消息退回 pending（重启 inflight 丢失后可重跑）；
+   * 2. 遗留 running 会话重置为 idle —— 进程崩在 run 中间时 kick* 的 finally
+   *    没机会执行，status 会永久停在 running，侧栏「运行中」绿点冷启动后
+   *    仍亮着且永不熄灭。本地轨单进程假设下，启动瞬间不可能有真正在跑的 run。
+   */
   async onModuleInit(): Promise<void> {
     // 本地轨单进程单用户：重启时全量回滚遗留 processing（无需按 session 过滤）
     const n = await this.sessions.rollbackProcessingToPending();
     if (n > 0) {
       this.logger.log(`启动恢复：${n} 条遗留 processing 消息已退回 pending`);
     }
+    const m = await this.sessions.resetRunningToIdle();
+    if (m > 0) {
+      this.logger.log(`启动恢复：${m} 个遗留 running 会话已重置为 idle`);
+    }
+  }
+
+  /**
+   * 写会话运行状态 + 经 ws/events 全局总线广播，让侧栏「运行中」绿点在任何
+   * 路由都能实时落态。
+   *
+   * 必须走全局总线而非 ws/session：后者只在会话页挂载时建连，在 /home 或消息页
+   * 收不到；且前端 sessionsAtom 首屏之后从不重拉，无事件就永远停在建会话时的
+   * status=running。
+   */
+  private async setSessionStatus(
+    sessionId: string,
+    status: SessionStatus,
+  ): Promise<void> {
+    await this.sessions.setStatus(sessionId, status);
+    this.emitter.emit(SESSION_STATUS_EVENTS.changed, { sessionId, status });
   }
 
   /** 启动消费循环（fire-and-forget）。已有消费循环则跳过（防重入）。 */
@@ -209,7 +237,7 @@ export class RunnerService implements OnModuleInit {
     await this.account.run(owner, async () => {
       if (this.running.has(sessionId)) return;
       this.running.add(sessionId);
-      await this.sessions.setStatus(sessionId, "running");
+      await this.setSessionStatus(sessionId, "running");
       try {
         while (true) {
           const batch = await this.sessions.claimPending(sessionId);
@@ -223,7 +251,7 @@ export class RunnerService implements OnModuleInit {
         }
       } finally {
         this.running.delete(sessionId);
-        await this.sessions.setStatus(sessionId, "idle");
+        await this.setSessionStatus(sessionId, "idle");
       }
     });
   }
@@ -244,7 +272,7 @@ export class RunnerService implements OnModuleInit {
     await this.account.run(owner, async () => {
       if (this.running.has(sessionId)) return;
       this.running.add(sessionId);
-      await this.sessions.setStatus(sessionId, "running");
+      await this.setSessionStatus(sessionId, "running");
       try {
         while (true) {
           const batch = await this.sessions.claimFailed(sessionId);
@@ -258,7 +286,7 @@ export class RunnerService implements OnModuleInit {
         }
       } finally {
         this.running.delete(sessionId);
-        await this.sessions.setStatus(sessionId, "idle");
+        await this.setSessionStatus(sessionId, "idle");
       }
     });
   }
@@ -286,14 +314,14 @@ export class RunnerService implements OnModuleInit {
     await this.account.run(owner, async () => {
       if (this.running.has(sessionId)) return;
       this.running.add(sessionId);
-      await this.sessions.setStatus(sessionId, "running");
+      await this.setSessionStatus(sessionId, "running");
       try {
         await this.runOnce(sessionId, [], true);
       } catch (err) {
         this.logger.warn(`resume runOnce 失败：${sessionId}`, err);
       } finally {
         this.running.delete(sessionId);
-        await this.sessions.setStatus(sessionId, "idle");
+        await this.setSessionStatus(sessionId, "idle");
       }
     });
   }
