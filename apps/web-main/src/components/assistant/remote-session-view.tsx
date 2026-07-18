@@ -26,7 +26,9 @@ import { useStoredWidth } from "@/hooks/use-stored-width";
 import { takeLauncherDraft } from "@/lib/launcher-draft";
 import {
   createRemoteSessionTransport,
+  WATCH_ACCEPTED_EVENT,
   WATCH_REJECTED_EVENT,
+  type WatchAcceptedEvent,
   type WatchRejectedEvent,
 } from "@/lib/session-transport";
 import { useProfile } from "@/rest/auth";
@@ -255,10 +257,21 @@ function RemoteSessionViewReady({
   useEffect(() => {
     const unsubscribe = transport.subscribe({
       onEvent(event, payload) {
-        if (event !== WATCH_REJECTED_EVENT) return;
-        const rejected = payload as WatchRejectedEvent;
-        if (rejected.sessionId !== sessionId) return;
-        setWatchNotice(rejected);
+        if (event === WATCH_REJECTED_EVENT) {
+          const rejected = payload as WatchRejectedEvent;
+          if (rejected.sessionId !== sessionId) return;
+          setWatchNotice(rejected);
+          return;
+        }
+        if (event === WATCH_ACCEPTED_EVENT) {
+          // 重 watch 成功后撤下此前可能挂着的旧横幅（T12 review Finding 7）：
+          // idle 回收之外的拒绝不会自动重连，但 socket 重连、或用户重新
+          // 打开设备后云端换发新 watchId 重新受理时，旧横幅不该继续挂着，
+          // 否则用户会以为仍然收不到实时帧。
+          const accepted = payload as WatchAcceptedEvent;
+          if (accepted.sessionId !== sessionId) return;
+          setWatchNotice(null);
+        }
       },
     });
     return unsubscribe;

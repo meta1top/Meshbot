@@ -76,6 +76,12 @@ export const AgentWatchAcceptedSchema = z.object({
    * - `session_agent_mismatch`：设备侧会话归属维度——缺 sessionId / 会话查无 /
    *   会话不归属该 Agent。字面量刻意与 `AgentRunEnd.reason` 同名，跨协议一致。
    * - `error`：设备侧处理异常。
+   * - `idle`：云端网关语义——通道长时间（`WATCH_IDLE_MS`）无帧活动被
+   *   `sweepIdleWatches` 回收。刻意与 `offline` 分开：宿主设备大概率仍在线，
+   *   只是这条通道没数据，语义完全不同——`offline` 是「设备真的不在了」，
+   *   `idle` 是「设备在，只是这条通道太久没动静」。观察者收到 `idle` 应
+   *   自动重新发起 watch（见 `session-transport.ts` `handleWatchRejected`），
+   *   不该像 `offline` 那样弹横幅等用户手动救。
    */
   reason: z
     .enum([
@@ -84,6 +90,7 @@ export const AgentWatchAcceptedSchema = z.object({
       "not_found",
       "session_agent_mismatch",
       "error",
+      "idle",
     ])
     .optional(),
   inflight: z.unknown().optional(),

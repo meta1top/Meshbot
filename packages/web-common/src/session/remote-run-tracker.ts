@@ -155,8 +155,18 @@ export class RemoteRunTracker {
     });
   }
 
-  /** 本实例是否持有该会话的活跃 stream（D6 抑制判定）。 */
-  private hasActiveStreamFor(sessionId: string): boolean {
+  /**
+   * 本实例是否持有该会话的活跃 stream（D6 抑制判定）。公开而非私有——
+   * `session-transport.ts` 的 `onWatchAccepted` 合成 `run.snapshot` 前也要复用
+   * 这个判定（T12 review Finding 4）：`hasActiveStreamFor` 原本只在
+   * {@link handleFrame} 内部抑制 watch **帧**，但 `watch_accepted.inflight` 合成
+   * 的首发快照是无条件 emit 的，且 `useSessionStream.onSnapshot` 对正文是
+   * SET 覆盖而非累加——若本实例同时持有一条自己发起、正在流式输出的
+   * stream，watch 受理带回的 inflight 快照大概率比已累积的内容更旧，直接
+   * emit 会把正文回退一段，之后的增量帧接在旧基线上，中间那段永久丢失
+   * （要到 run.done 全量 SET 才自愈）。调用方复用这同一份判定，不新写一套。
+   */
+  hasActiveStreamFor(sessionId: string): boolean {
     for (const entry of this.streams.values()) {
       if (entry.sessionId === sessionId) return true;
     }

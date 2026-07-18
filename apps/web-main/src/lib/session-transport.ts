@@ -27,10 +27,12 @@ import {
 // 把 `MarkdownContent`/`ArtifactBody` 等一整套 JSX 组件也捆在一起，后者经
 // `@meshbot/design` 再传递引入 `next-intl`/`react-markdown` 等纯 ESM 包。本文件
 // 只是 socket 事件编排（无 UI），走这三个专属子路径直连纯逻辑源文件，既避免
-// 生产 bundle 平白多背一份 UI 依赖，也让本文件可被 jest 独立加载测试（不必
-// 拉通整条 JSX 依赖链，见 `session-transport.spec.ts` / `apps/web-main/jest.config.ts`
-// 的排查记录）。三个子路径已在 `packages/web-common/package.json` 的
-// `exports` 显式声明，与既有 `"./session"` 直连源码（非 dist）的写法一致。
+// 生产 bundle 平白多背一份 UI 依赖，也让本文件可被根 jest.config.ts 直接加载
+// 测试（不必拉通整条 JSX 依赖链——曾误以为需要给 web-main 单独建一套 jest
+// 基建才能跑通，实测根配置本就吃得下，见 T12 review Finding 8：那套独立基建
+// 后来整个删掉了，仅保留下面这几个子路径 exports）。三个子路径已在
+// `packages/web-common/package.json` 的 `exports` 显式声明，与既有 `"./session"`
+// 直连源码（非 dist）的写法一致。
 import { inflightToSnapshotEvent } from "@meshbot/web-common/session/watch-inflight";
 import { remoteQuery } from "./device-query";
 import { getImSocket } from "./im-socket";
@@ -40,9 +42,11 @@ import { getImSocket } from "./im-socket";
  * 事件名——纯前端内部信号，不进 `IM_WS_EVENTS` 协议、不占用任何
  * `SESSION_WS_EVENTS.*` 命名空间。`reason` 原样透传自
  * {@link AgentWatchAccepted}（`offline`/`cross_account`/`not_found`/
- * `session_agent_mismatch`/`error`）。调用方（`remote-session-view.tsx`）据此
- * 渲染「无法实时观察」的可见提示，走 next-intl 按 reason 分文案——本层不碰
- * next-intl（铁律），只负责把信号送出去。
+ * `session_agent_mismatch`/`error`；**不含** `idle`——idle 回收由
+ * {@link handleWatchRejected} 原地自动重 watch 吞掉，不会冒泡成这个事件，见
+ * 该函数文档）。调用方（`remote-session-view.tsx`）据此渲染「无法实时观察」
+ * 的可见提示，走 next-intl 按 reason 分文案——本层不碰 next-intl（铁律），
+ * 只负责把信号送出去。
  *
  * 修复上一轮 review 的遗留问题：watch 被拒此前只 `console.warn`，用户完全无
  * 感知（设备离线时界面看着「正常」，实际上永远收不到任何实时帧）。
@@ -53,6 +57,20 @@ export const WATCH_REJECTED_EVENT = "watch.rejected";
 export interface WatchRejectedEvent {
   sessionId: string;
   reason?: AgentWatchAccepted["reason"];
+}
+
+/**
+ * 观察通道（重新）受理成功时合成的事件——用于撤下此前可能挂着的
+ * {@link WATCH_REJECTED_EVENT} 横幅（T12 review Finding 7：重 watch 成功后
+ * 旧横幅还挂着，容易让用户误以为仍然收不到实时帧）。典型触发点：
+ * `onReconnect` 换发新 watchId 后这次成功受理、或 idle 回收后的自动重 watch
+ * 成功受理。
+ */
+export const WATCH_ACCEPTED_EVENT = "watch.accepted";
+
+/** {@link WATCH_ACCEPTED_EVENT} 的 payload 形状。 */
+export interface WatchAcceptedEvent {
+  sessionId: string;
 }
 
 /**
@@ -108,48 +126,145 @@ export function createRemoteSessionTransport(
   socket.on(IM_WS_EVENTS.agentRunFrame, onRunFrame);
   socket.on(IM_WS_EVENTS.agentRunEnd, onRunEnd);
 
-  /** watchId → 该通道观察的 sessionId，仅**已受理**的通道（重连重 watch 与 unwatch 用）。 */
-  const activeWatches = new Map<string, string>();
-  /** watchId → sessionId，**受理前**的通道（`watch_accepted` 到达前的窗口期）。 */
-  const pendingWatches = new Map<string, string>();
+  /**
+   * 一路 watch 通道的稳定订阅句柄：`watchId` 会在重连（D5）/ idle 自动重连
+   * （Finding 5）后原地换新，`watchSession()` 返回的 `unwatch` 闭包必须通过
+   * 这个句柄间接寻址「当前」watchId，绝不能直接捕获首次拿到的 watchId 常量
+   * ——否则重连后旧 watchId 已经是云端认不出的僵尸值，`unwatch()` 停不掉真正
+   * 在用的新通道，旧通道要等满 5 分钟 idle 才回收；期间若用户切走又切回同一
+   * 会话，云端 `sessionWatchers` 索引下同时挂着僵尸通道与新通道，同一条
+   * run.chunk 帧被 fan-out 两次，正文逐字重复渲染（T12 review Finding 2，
+   * 实测复现）。`startWatch` 每次（含首次 / 重连 / idle 重连）都原地覆写
+   * `sessionId`/`watchId` 字段，句柄对象本身的引用不变。
+   */
+  interface WatchHandle {
+    sessionId: string;
+    /** 当前有效的 watchId；未发起过真正的 `agent.watch.start`（见下方
+     * `deferredWatches`）时为空串。 */
+    watchId: string;
+    /** `unwatch()` 是否已调用——幂等 + 防止 idle 自动重连「救活」一个用户
+     * 已经不关心的会话（`onWatchAccepted` 据此短路悬空句柄）。 */
+    stopped: boolean;
+  }
 
-  /** 发起一路 Session 级 watch，返回本次的 watchId（受理前先记 pending）。 */
-  const startWatch = (sessionId: string): string => {
+  /** watchId → 该通道观察的句柄，仅**已受理**的通道（重连重 watch 与 unwatch 用）。 */
+  const activeWatches = new Map<string, WatchHandle>();
+  /** watchId → 句柄，**受理前**的通道（`watch_accepted` 到达前的窗口期）。 */
+  const pendingWatches = new Map<string, WatchHandle>();
+  /**
+   * 尚未真正发起（`socket.connected===false` 时调用 `watchSession`）的句柄——
+   * 真正的 `emit` 延后到下一次 `"connect"` 触发时统一发起（见 `startWatch`
+   * 顶部注释 / T12 review Finding 3）。
+   */
+  const deferredWatches = new Set<WatchHandle>();
+
+  /**
+   * 发起一路 Session 级 watch（写入 `handle`，受理前先记 pending）。
+   *
+   * 首连时机注意（Finding 3）：socket.io 的 `onconnect` 内部实现是先
+   * `emitBuffered()` 再触发 `"connect"` 保留事件——若本函数在
+   * `!socket.connected` 时仍然直接 `socket.emit`，包会被 socket.io 自己的
+   * 发送缓冲区接住、在真正连上时**先于**我们的 `onReconnect` 监听器自动
+   * flush 出去；`onReconnect` 随后又会把这条 pending 判定成「需要换新 id
+   * 重新发起的旧通道」再发一条——云端因此收到同一 sessionId 的两条
+   * `agent.watch.start`，一条永远等不到我们确认、要等满 5 分钟 idle 才回收，
+   * 期间持续白白多扇一份帧。故未连接时不真正 `emit`，只登记进
+   * `deferredWatches`，交给 `onReconnect`（首连也会触发一次 `"connect"`）
+   * 统一在真正连接建立后发起。
+   */
+  const startWatch = (sessionId: string, handle: WatchHandle): void => {
+    handle.sessionId = sessionId;
+    if (!socket.connected) {
+      deferredWatches.add(handle);
+      return;
+    }
     const watchId = clientSnowflakeId();
-    pendingWatches.set(watchId, sessionId);
+    handle.watchId = watchId;
+    pendingWatches.set(watchId, handle);
     socket.emit(IM_WS_EVENTS.agentWatchStart, {
       watchId,
       targetAgentId: agentId,
       scope: "session",
       sessionId,
     } satisfies AgentWatchStartInput);
-    return watchId;
+  };
+
+  /**
+   * 把 `accepted.inflight` 合成 `run.snapshot` 吐给订阅者（D7 中途续上），
+   * 但先过一次 D6 同款「本实例是否持有该 sessionId 的活跃 stream」判定
+   * （T12 review Finding 4）：`hasActiveStreamFor` 原本只抑制 watch **帧**，
+   * 但这里的 emit 此前是无条件的——若本实例自己正在流式输出同一会话
+   * （如新建会话首帧刚回报 sessionId、watch effect 随即触发），watch 受理
+   * 带回的 inflight 快照几乎总比已累积的内容更旧，直接 emit 会把正文（SET
+   * 覆盖语义，见 `useSessionStream.onSnapshot`）回退一段，之后的增量帧接在
+   * 旧基线上，中间那段永久丢失，要到 run.done 全量 SET 才自愈。复用
+   * tracker 已有的判定，不新写一套。
+   */
+  const emitInflightSnapshot = (sessionId: string, inflight: unknown) => {
+    if (runs.hasActiveStreamFor(sessionId)) return;
+    const snapshot = inflightToSnapshotEvent(sessionId, inflight);
+    if (snapshot) runEvents.emit(snapshot.event, snapshot.payload);
+  };
+
+  /**
+   * 通道被拒（`ok:false`）的统一处理，pending / 已受理两条路径共用
+   * （见 {@link onWatchAccepted}）。
+   *
+   * `reason==="idle"`：云端 idle 清扫回收（Finding 5）——宿主设备大概率仍
+   * 在线，只是这条通道长时间无帧活动被清扫，不是真的「连不上」。原地复用
+   * 同一句柄自动重新发起（`startWatch` 覆写 `handle.watchId`，外部持有的
+   * `unwatch` 闭包因此始终寻址到新 id），组件侧无感知，不弹横幅打扰用户
+   * 手动救；`handle.stopped` 由 `onWatchAccepted` 的查表短路天然保证——若
+   * 组件已经 unwatch/卸载，句柄早已从 `activeWatches`/`pendingWatches` 摘除，
+   * 这条分支根本不会被走到。
+   *
+   * 其余 reason：真正的失败（设备离线 / 不可远程 / 会话不归属 / 跨账号 /
+   * 设备处理出错），合成 {@link WATCH_REJECTED_EVENT} 交给 `subscribe()`
+   * 消费者渲染可见提示（上一轮 review 明确指出「不能只 console.warn」）。
+   */
+  const handleWatchRejected = (
+    handle: WatchHandle,
+    reason: AgentWatchAccepted["reason"],
+  ) => {
+    if (reason === "idle") {
+      startWatch(handle.sessionId, handle);
+      return;
+    }
+    console.warn(`观察通道被拒（watchId=${handle.watchId}, reason=${reason}）`);
+    runEvents.emit(WATCH_REJECTED_EVENT, {
+      sessionId: handle.sessionId,
+      reason,
+    } satisfies WatchRejectedEvent);
   };
 
   const onWatchAccepted = (accepted: AgentWatchAccepted) => {
-    const sessionId = pendingWatches.get(accepted.watchId);
-    if (!sessionId) return; // 非本实例发起的 watch
-    pendingWatches.delete(accepted.watchId);
-    if (!accepted.ok) {
-      // 设备拒绝（离线 / Agent 不可远程 / 会话不归它）：不登记通道，观察者
-      // 退化为「不实时」。console.warn 给排查用，同时合成
-      // WATCH_REJECTED_EVENT 交给 subscribe() 消费者——上层据此渲染可见提示
-      // （见该常量文档：上一轮 review 明确指出「不能只 console.warn」）。
-      console.warn(
-        `观察通道被拒（watchId=${accepted.watchId}, reason=${accepted.reason}）`,
-      );
-      runEvents.emit(WATCH_REJECTED_EVENT, {
-        sessionId,
-        reason: accepted.reason,
-      } satisfies WatchRejectedEvent);
+    const pendingHandle = pendingWatches.get(accepted.watchId);
+    if (pendingHandle) {
+      pendingWatches.delete(accepted.watchId);
+      if (!accepted.ok) {
+        handleWatchRejected(pendingHandle, accepted.reason);
+        return;
+      }
+      activeWatches.set(accepted.watchId, pendingHandle);
+      runs.registerWatch(accepted.watchId, pendingHandle.sessionId);
+      emitInflightSnapshot(pendingHandle.sessionId, accepted.inflight);
+      runEvents.emit(WATCH_ACCEPTED_EVENT, {
+        sessionId: pendingHandle.sessionId,
+      } satisfies WatchAcceptedEvent);
       return;
     }
-    activeWatches.set(accepted.watchId, sessionId);
-    runs.registerWatch(accepted.watchId, sessionId);
-    // D7 中途续上：把 inflight 快照合成 run.snapshot 事件先吐一发，
-    // 观察者立刻渲染半截输出，之后的增量帧接着往上贴。
-    const snapshot = inflightToSnapshotEvent(sessionId, accepted.inflight);
-    if (snapshot) runEvents.emit(snapshot.event, snapshot.payload);
+    // 回落：已受理的通道事后被拒（T12 review Finding 1）——宿主设备断线
+    // （`im.gateway.ts` `notifyWatcherOffline`）或 idle 回收都是针对**已受理**
+    // 的 watchId 补发 `agentWatchAccepted{ok:false}`，此时 pendingWatches 早已
+    // 在受理时清空，只在 activeWatches 里查得到。此前的实现只查
+    // pendingWatches、miss 就静默 return，导致这两种此任务要解决的头号场景
+    // 全部被吃掉：横幅永不出现，activeWatches/runs.watches 里的死 watchId
+    // 也永不清理。
+    const activeHandle = activeWatches.get(accepted.watchId);
+    if (!activeHandle || accepted.ok) return; // 非本实例的 watch / 协议不会对已激活通道重复回 ok:true，防御性忽略
+    activeWatches.delete(accepted.watchId);
+    runs.releaseWatch(accepted.watchId);
+    handleWatchRejected(activeHandle, accepted.reason);
   };
 
   /**
@@ -157,15 +272,30 @@ export function createRemoteSessionTransport(
    * watch 路由清掉（泄漏防线 2），重连后是一条**新 socket**（socketId 变了，
    * requester 身份也变了），必须用**新 watchId** 重新发起——沿用旧 watchId 会
    * 在云端建出一条 requester 指向已死 socketId 的路由。
+   *
+   * 首连也会触发一次 `"connect"`：此时 `activeWatches`/`pendingWatches` 恒为
+   * 空（`startWatch` 在未连接时只登记进 `deferredWatches`，见其文档），本段
+   * 循环天然是空操作，真正要处理的是下面 `deferredWatches` 那段。
    */
   const onReconnect = () => {
-    const sessionIds = [
+    const liveHandles = [
       ...new Set([...activeWatches.values(), ...pendingWatches.values()]),
     ];
     activeWatches.clear();
     pendingWatches.clear();
     runs.resetWatches();
-    for (const sessionId of sessionIds) startWatch(sessionId);
+    for (const handle of liveHandles) {
+      if (handle.stopped) continue; // 防御：理论上 stopped 句柄不会残留在这两张表里
+      startWatch(handle.sessionId, handle);
+    }
+    // 连接建立前就调用过 watchSession 的句柄：此刻 socket 已连接，
+    // startWatch 会走正常分支真正 emit + 登记 pending（Finding 3）。
+    const deferred = [...deferredWatches];
+    deferredWatches.clear();
+    for (const handle of deferred) {
+      if (handle.stopped) continue;
+      startWatch(handle.sessionId, handle);
+    }
   };
 
   socket.on(IM_WS_EVENTS.agentWatchAccepted, onWatchAccepted);
@@ -302,19 +432,28 @@ export function createRemoteSessionTransport(
      * session-watch」）。返回 unwatch 函数（幂等）——调用方在会话视图卸载 /
      * 切换会话时必须调用，否则设备侧常驻转发器要等满 5 分钟 idle 才拆
      * （能兜住，但白占资源）。
+     *
+     * 返回的 unwatch 闭包捕获的是 {@link WatchHandle} 对象本身、不是某个
+     * watchId 快照——`handle.watchId` 会在重连 / idle 自动重连时被 `startWatch`
+     * 原地覆写，闭包读的永远是「当前」值（T12 review Finding 2）。
      */
     watchSession(sessionId: string) {
-      const watchId = startWatch(sessionId);
-      let stopped = false;
+      const handle: WatchHandle = { sessionId, watchId: "", stopped: false };
+      startWatch(sessionId, handle);
       return () => {
-        if (stopped) return;
-        stopped = true;
-        activeWatches.delete(watchId);
-        pendingWatches.delete(watchId);
-        runs.releaseWatch(watchId);
-        socket.emit(IM_WS_EVENTS.agentWatchStop, {
-          watchId,
-        } satisfies AgentWatchStopInput);
+        if (handle.stopped) return;
+        handle.stopped = true;
+        deferredWatches.delete(handle);
+        activeWatches.delete(handle.watchId);
+        pendingWatches.delete(handle.watchId);
+        runs.releaseWatch(handle.watchId);
+        if (handle.watchId) {
+          // 尚未真正发起过（一直卡在 deferredWatches，从未连接成功就被
+          // unwatch）时 watchId 是空串，不必也不能发 stop。
+          socket.emit(IM_WS_EVENTS.agentWatchStop, {
+            watchId: handle.watchId,
+          } satisfies AgentWatchStopInput);
+        }
       };
     },
 
@@ -329,18 +468,24 @@ export function createRemoteSessionTransport(
       // 监听器归 device-query.ts 单例常驻，不在此摘除。
       socket.off(IM_WS_EVENTS.agentRunFrame, onRunFrame);
       socket.off(IM_WS_EVENTS.agentRunEnd, onRunEnd);
-      // 释放本实例名下全部 watch（含尚未受理的）——泄漏防线：remount /
-      // 切 agentId 时若不主动 stop，旧通道要等设备侧 5 分钟 idle 才拆。
-      for (const watchId of [
-        ...activeWatches.keys(),
-        ...pendingWatches.keys(),
+      // 释放本实例名下全部 watch（含尚未受理的 / 尚未真正发起的 deferred）——
+      // 泄漏防线：remount / 切 agentId 时若不主动 stop，旧通道要等设备侧 5
+      // 分钟 idle 才拆。
+      for (const handle of [
+        ...activeWatches.values(),
+        ...pendingWatches.values(),
+        ...deferredWatches,
       ]) {
-        socket.emit(IM_WS_EVENTS.agentWatchStop, {
-          watchId,
-        } satisfies AgentWatchStopInput);
+        handle.stopped = true;
+        if (handle.watchId) {
+          socket.emit(IM_WS_EVENTS.agentWatchStop, {
+            watchId: handle.watchId,
+          } satisfies AgentWatchStopInput);
+        }
       }
       activeWatches.clear();
       pendingWatches.clear();
+      deferredWatches.clear();
       socket.off(IM_WS_EVENTS.agentWatchAccepted, onWatchAccepted);
       socket.off("connect", onReconnect);
       runs.reset();

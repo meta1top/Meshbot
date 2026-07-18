@@ -60,6 +60,15 @@ describe("watch schema", () => {
     expect(r.success).toBe(true);
   });
 
+  it("受理回包 ok=false 带 reason=idle（云端 idle 回收专属，T12 review Finding 5）", () => {
+    const r = AgentWatchAcceptedSchema.safeParse({
+      watchId: "w1",
+      ok: false,
+      reason: "idle",
+    });
+    expect(r.success).toBe(true);
+  });
+
   it("转发帧带 action 与 localAgentId", () => {
     const r = AgentWatchForwardedSchema.safeParse({
       watchId: "w1",
