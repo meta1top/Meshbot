@@ -435,15 +435,41 @@ export class SessionService {
    * .andWhere()，否则会覆盖账号 where 条件导致账号隔离失效。
    */
   async listAllSorted(): Promise<SessionSummary[]> {
-    const rows = await this.sessionRepo
+    const rows = await this.sortedUserSessionsQb().getMany();
+    return rows.map(toSummary);
+  }
+
+  /**
+   * 列出**某个 Agent 名下**的普通会话（kind='user'），排序规则与
+   * {@link listAllSorted} 完全一致。
+   *
+   * 供跨设备查询通道（B 侧 `RemoteQueryInboundService`）使用：一设备多 Agent 下
+   * 远端点开的是「设备上的某个 Agent」，会话列表必须按该 Agent 收窄——否则远端
+   * 会看到同设备上别的 Agent 的会话（数据越界），点进去发消息又必然撞上远程 run
+   * 的会话归属门控，报错原因还完全对不上。
+   *
+   * fail-closed：agentId 为空串/undefined 时直接返空列表，绝不退化成「列出全部」。
+   */
+  async listByAgentSorted(agentId: string): Promise<SessionSummary[]> {
+    if (!agentId) return [];
+    const rows = await this.sortedUserSessionsQb()
+      .andWhere("s.agentId = :agentId", { agentId })
+      .getMany();
+    return rows.map(toSummary);
+  }
+
+  /**
+   * 「固定优先 / 固定组按 pinnedAt desc / 其余按 updatedAt desc」的 kind='user'
+   * 会话查询构造器，供 listAllSorted 与 listByAgentSorted 共用。
+   */
+  private sortedUserSessionsQb() {
+    return this.sessionRepo
       .scopedQueryBuilder("s")
       .andWhere("s.kind = :kind", { kind: "user" })
       .orderBy("CASE WHEN s.pinned_at IS NULL THEN 1 ELSE 0 END", "ASC")
       .addOrderBy("s.pinned_at", "DESC")
       .addOrderBy("s.updated_at", "DESC")
-      .addOrderBy("s.id", "DESC")
-      .getMany();
-    return rows.map(toSummary);
+      .addOrderBy("s.id", "DESC");
   }
 
   /** 列出随手问临时会话（kind="quick"），按更新时间倒序——供随手问面板「历史」。 */

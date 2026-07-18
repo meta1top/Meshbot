@@ -478,6 +478,66 @@ describe("SessionService", () => {
     });
   });
 
+  describe("listByAgentSorted（跨设备查询按 Agent 收窄）", () => {
+    it("只返回该 agentId 的会话，不含同设备其他 Agent 的会话", async () => {
+      const a1 = await service.createSession({ content: "A1", agentId: "agA" });
+      const a2 = await service.createSession({ content: "A2", agentId: "agA" });
+      const b1 = await service.createSession({ content: "B1", agentId: "agB" });
+
+      const ids = (await service.listByAgentSorted("agA")).map((s) => s.id);
+      expect(ids).toHaveLength(2);
+      expect(ids).toEqual(expect.arrayContaining([a1.sessionId, a2.sessionId]));
+      expect(ids).not.toContain(b1.sessionId);
+    });
+
+    it("排序规则与 listAllSorted 一致（固定优先 / pinnedAt desc / updatedAt desc）", async () => {
+      const a = await service.createSession({ content: "A", agentId: "agA" });
+      const c = await service.createSession({ content: "C", agentId: "agA" });
+      const b = await service.createSession({ content: "B", agentId: "agA" });
+      await service.createSession({ content: "X", agentId: "agB" });
+
+      const db = (service as unknown as { __ds: DataSource }).__ds;
+      await db.query(`UPDATE sessions SET updated_at = ? WHERE id = ?`, [
+        "2026-01-01 00:00:01",
+        a.sessionId,
+      ]);
+      await db.query(`UPDATE sessions SET updated_at = ? WHERE id = ?`, [
+        "2026-01-01 00:00:02",
+        c.sessionId,
+      ]);
+      await service.patch(b.sessionId, { pinned: true });
+
+      const ids = (await service.listByAgentSorted("agA")).map((s) => s.id);
+      expect(ids).toEqual([b.sessionId, c.sessionId, a.sessionId]);
+    });
+
+    it("agentId 为空串 → fail-closed 返 []（绝不退化成列出全部）", async () => {
+      await service.createSession({ content: "A", agentId: "agA" });
+      expect(await service.listByAgentSorted("")).toEqual([]);
+    });
+
+    it("不含 subagent / quick 会话（与 listAllSorted 同口径）", async () => {
+      const parent = await service.createSession({
+        content: "P",
+        agentId: "agA",
+      });
+      const { subSessionId } = await service.createSubSession({
+        parentSessionId: parent.sessionId,
+        parentToolCallId: "tc1",
+        task: "sub",
+      });
+      const quick = await service.createSession({
+        content: "Q",
+        kind: "quick",
+        agentId: "agA",
+      });
+      const ids = (await service.listByAgentSorted("agA")).map((s) => s.id);
+      expect(ids).toEqual([parent.sessionId]);
+      expect(ids).not.toContain(subSessionId);
+      expect(ids).not.toContain(quick.sessionId);
+    });
+  });
+
   describe("patch", () => {
     it("更新 title", async () => {
       const { sessionId } = await service.createSession({ content: "old" });
