@@ -6,6 +6,7 @@ import { AgentCloudSyncService } from "./services/agent-cloud-sync.service";
 import { CheckpointerCleanupService } from "./services/checkpointer-cleanup.service";
 import { CloudModelConfigProxyService } from "./services/cloud-model-config-proxy.service";
 import { ContextCompactor } from "./services/context-compactor.service";
+import { RemoteAgentsController } from "./controllers/remote-agents.controller";
 import { SessionController } from "./controllers/session.controller";
 import { StatsController } from "./controllers/stats.controller";
 import { SuggestionController } from "./controllers/suggestion.controller";
@@ -16,6 +17,7 @@ import { Session } from "./entities/session.entity";
 import { SessionMessage } from "./entities/session-message.entity";
 import { LlmCallService } from "./services/llm-call.service";
 import { ModelConfigService } from "./services/model-config.service";
+import { RemoteAgentsService } from "./services/remote-agents.service";
 import { RemoteArtifactService } from "./services/remote-artifact.service";
 import { RemoteQueryInboundService } from "./services/remote-query-inbound.service";
 import { RemoteRunControlService } from "./services/remote-run-control.service";
@@ -44,6 +46,12 @@ import { SessionGateway } from "./ws/session.gateway";
  * `AgentCloudSyncService`（计划二 2b · T3，本地 remote_enabled Agent 变更 →
  * 全量推云端对账）需要本模块 import 的 `AgentsModule`（`AgentService.list()`）
  * 与 `AuthModule`（`CloudClientService`/`CloudIdentityService`），不导出。
+ * `RemoteAgentsService` + `RemoteAgentsController`（计划二 2c·A1，远程 Agent 列表）
+ * 从 `AuthModule` 挪到本模块：过滤「本机 Agent」需要权威的本地 Agent 全集
+ *（`AgentService.list()`），而 `AuthModule` 直接 import `AgentsModule` 会成环
+ *（AuthModule → AgentsModule → forwardRef(SessionModule) → AuthModule）；本模块
+ * 已同时持有 `AgentsModule` 与 `AuthModule`（`AgentCloudSyncService` 同款依赖），
+ * 现成无环。不导出，仅供 Controller 注入。
  * 云端模型配置读时合并（读时合并 C）：`CloudModelConfigProxyService` 实时代理
  * 云端组织模型配置、不落库，无同步落库 provider，前端刷新走
  * `MODEL_CONFIG_EVENTS.updated` 单次 emit（见该 service 的 modelConfigChanged
@@ -62,7 +70,12 @@ import { SessionGateway } from "./ws/session.gateway";
     forwardRef(() => AgentsModule),
     AuthModule,
   ],
-  controllers: [SessionController, StatsController, SuggestionController],
+  controllers: [
+    RemoteAgentsController,
+    SessionController,
+    StatsController,
+    SuggestionController,
+  ],
   providers: [
     AgentCloudSyncService,
     CheckpointerCleanupService,
@@ -78,6 +91,7 @@ import { SessionGateway } from "./ws/session.gateway";
     StatsService,
     SuggestionService,
     ScheduleExecutor,
+    RemoteAgentsService,
     RemoteQueryInboundService,
     RemoteArtifactService,
     RemoteRunInboundService,

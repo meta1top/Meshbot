@@ -14,7 +14,6 @@ import { AuthController } from "./controllers/auth.controller";
 import { CloudOrgController } from "./controllers/cloud-org.controller";
 import { DriveController } from "./controllers/drive.controller";
 import { RemoteAgentSessionController } from "./controllers/remote-agent-session.controller";
-import { RemoteAgentsController } from "./controllers/remote-agents.controller";
 import { CloudIdentity } from "./entities/cloud-identity.entity";
 import { CloudAuthService } from "./services/cloud-auth.service";
 import { CloudIdentityService } from "./services/cloud-identity.service";
@@ -23,7 +22,6 @@ import { CloudOrgService } from "./services/cloud-org.service";
 import { buildUnauthorizedHandler } from "./services/cloud-unauthorized.handler";
 import { DeviceAuthorizeService } from "./services/device-authorize.service";
 import { DriveGatewayService } from "./services/drive-gateway.service";
-import { RemoteAgentsService } from "./services/remote-agents.service";
 import { JWT_SECRET, JwtStrategy } from "./strategies/jwt.strategy";
 
 @Module({
@@ -40,7 +38,6 @@ import { JWT_SECRET, JwtStrategy } from "./strategies/jwt.strategy";
     CloudOrgController,
     DriveController,
     RemoteAgentSessionController,
-    RemoteAgentsController,
   ],
   providers: [
     CloudIdentityService,
@@ -50,7 +47,6 @@ import { JWT_SECRET, JwtStrategy } from "./strategies/jwt.strategy";
     DeviceAuthorizeService,
     DriveGatewayService,
     JwtStrategy,
-    RemoteAgentsService,
     RemoteDeviceQueryService,
     RemoteRunService,
     {
