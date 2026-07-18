@@ -8,7 +8,7 @@ import { SESSION_STATUS_EVENTS, SESSION_WS_EVENTS } from "@meshbot/types-agent";
 import type { PendingMessage } from "../entities/pending-message.entity";
 import { RunnerService } from "./runner.service";
 
-/** 测试默认 session 属主：runner 会按 findOwner 反查后建该账号上下文。 */
+/** 测试默认 session 属主：runner 会按 findOwnerAndAgent 反查后建该账号上下文。 */
 const OWNER = "u1";
 
 /** 内存版 SessionService 替身。 */
@@ -19,9 +19,14 @@ function fakeSessionService() {
   let claimFailedCalls = 0;
   return {
     store,
-    /** 反查归属账号：测试里全部 session 归 OWNER。 */
-    async findOwner(_sessionId: string): Promise<string | null> {
-      return OWNER;
+    /**
+     * 反查归属账号 + 归属 Agent：测试里全部 session 归 OWNER、agentId 默认
+     * "agent-1"（与下面 findOrNull 的默认 agentId 保持一致）。
+     */
+    async findOwnerAndAgent(
+      _sessionId: string,
+    ): Promise<{ cloudUserId: string; agentId: string } | null> {
+      return { cloudUserId: OWNER, agentId: "agent-1" };
     },
     /**
      * 按 id 查 session：测试默认都是主 Agent 会话（kind: "user"），非子 Agent，
@@ -32,7 +37,7 @@ function fakeSessionService() {
       kind: "user" | "subagent";
       agentId: string;
       modelConfigId?: string | null;
-    }> {
+    } | null> {
       return { id: sessionId, kind: "user", agentId: "agent-1" };
     },
     get claimPendingCalls() {
@@ -678,6 +683,39 @@ describe("RunnerService", () => {
     ]);
   });
 
+  it("会话在 run 收尾前被删除（deleteSession 与消费循环收尾竞态）：setSessionStatus 仍照常 emit idle 且不抛错——agentId 由 kickAndWait 起步时 findOwnerAndAgent 预先捕获，不再回查已删的 session 行", async () => {
+    const sess = fakeSessionService();
+    const emitter = new EventEmitter2();
+    const statusEvents: unknown[] = [];
+    emitter.on(SESSION_STATUS_EVENTS.changed, (p) => statusEvents.push(p));
+    sess.enqueue("s1", "hi");
+    // 模拟 deleteSession 在消费循环跑起来之后把 session 行删掉：
+    // findOrNull（consumeRunStream 内读 session 用）从此查不到该行；
+    // findOwnerAndAgent 早已在 kickAndWait 起步时把 agentId 取走，不受影响。
+    sess.findOrNull = async (_sessionId: string) => null;
+    const runner = new RunnerService(
+      sess as never,
+      fakeGraphRunner() as never,
+      emitter,
+      fakeLlmCallService() as never,
+      fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
+      new AccountContextService(),
+      new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      fakeMcpService() as never,
+    );
+    await expect(runner.kickAndWait("s1")).resolves.toBeUndefined();
+    // running / idle 两次都照常 emit，agentId 仍是 kick 起步时捕获的 "agent-1"
+    // （不是 undefined、不是抛错中断），侧栏绿点不会因为会话已删而卡死在亮着。
+    expect(statusEvents).toEqual([
+      { agentId: "agent-1", sessionId: "s1", status: "running" },
+      { agentId: "agent-1", sessionId: "s1", status: "idle" },
+    ]);
+  });
+
   it("收到 usage 事件 → 落库 + emit run.usage", async () => {
     const sess = fakeSessionService();
     const emitter = new EventEmitter2();
@@ -744,7 +782,7 @@ describe("RunnerService", () => {
     expect(sess.claimFailedCalls).toBe(0);
   });
 
-  it("kick：run 全程跑在 session 属主的账号上下文里（按 findOwner 反查建上下文）", async () => {
+  it("kick：run 全程跑在 session 属主的账号上下文里（按 findOwnerAndAgent 反查建上下文）", async () => {
     const account = new AccountContextService();
     const sess = fakeSessionService();
     // claimPending 调用时刻应已处于属主 OWNER 上下文（消费循环包在 account.run 内）。
@@ -782,10 +820,10 @@ describe("RunnerService", () => {
     expect(sess.store.every((m) => m.status === "processed")).toBe(true);
   });
 
-  it("kick：findOwner 返回 null（找不到属主）→ 跳过，不进消费循环", async () => {
+  it("kick：findOwnerAndAgent 返回 null（找不到属主）→ 跳过，不进消费循环", async () => {
     const account = new AccountContextService();
     const sess = fakeSessionService();
-    sess.findOwner = async () => null;
+    sess.findOwnerAndAgent = async () => null;
     let claimed = false;
     sess.claimPending = async (..._args: unknown[]) => {
       claimed = true;

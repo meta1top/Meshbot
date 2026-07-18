@@ -287,6 +287,26 @@ export class SessionService {
     return row?.cloudUserId ?? null;
   }
 
+  /**
+   * 按 session 反查其归属账号 + 归属 Agent（系统级，无账号上下文时用）。
+   * 与 {@link findOwner} 同款窄投影查询（同一张表、同一个 sessionId、同一次
+   * 索引查找），只多带一列 agentId——供 RunnerService 在建账号上下文的同时
+   * 一并拿到 agentId，喂给 `session.status_changed` 事件，省掉一次专门为
+   * agentId 而发的回查（见 setSessionStatus）。`findOwner` 本体不动，避免
+   * 影响它的另一个调用方 session-title.service.ts。
+   */
+  async findOwnerAndAgent(
+    sessionId: string,
+  ): Promise<{ cloudUserId: string; agentId: string } | null> {
+    // scope-check: allow-unscoped
+    const row = await this.sessionRepo.unscoped().findOne({
+      where: { id: sessionId },
+      select: { id: true, cloudUserId: true, agentId: true },
+    });
+    if (!row) return null;
+    return { cloudUserId: row.cloudUserId, agentId: row.agentId };
+  }
+
   /** 取会话，不存在抛 404。 */
   async findSessionOrFail(sessionId: string): Promise<Session> {
     const s = await this.sessionRepo.findOneBy({ id: sessionId });

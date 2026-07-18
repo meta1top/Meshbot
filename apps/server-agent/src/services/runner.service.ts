@@ -128,19 +128,22 @@ export class RunnerService implements OnModuleInit {
    * 必须走全局总线而非 ws/session：后者只在会话页挂载时建连，在 /home 或消息页
    * 收不到；且前端 sessionsAtom 首屏之后从不重拉，无事件就永远停在建会话时的
    * status=running。
+   *
+   * agentId 由调用方传入（三个 kick* 入口在建账号上下文时已用 findOwnerAndAgent
+   * 一并查到，与 findOwner 是同一次索引查找，零成本），本方法不再回查 session
+   * 行——`sessions.setStatus` 对已删会话的 update 是安全的 no-op（affected:0，
+   * 不抛错），即便 run 收尾时会话已被并发删除（deleteSession 支持「先 interrupt
+   * 再删」），事件仍会照常发出；前端 patchSessionStatus 对不在列表里的 id 本就
+   * 原样跳过，不会有副作用。
    */
   private async setSessionStatus(
     sessionId: string,
     status: SessionStatus,
+    agentId: string,
   ): Promise<void> {
     await this.sessions.setStatus(sessionId, status);
-    // 本方法只有 sessionId，没有现成的 session 行；agentId 纳入统一生命周期
-    // 契约后必填（云端按 agentId fan-out），故这里补一次回查。真正把「发射点
-    // 下沉、避免二次查询」的优化留给 Task 17 统一处理，本任务只保证契约不破。
-    const session = await this.sessions.findOrNull(sessionId);
-    if (!session) return;
     this.emitter.emit(SESSION_STATUS_EVENTS.changed, {
-      agentId: session.agentId,
+      agentId,
       sessionId,
       status,
     } satisfies SessionStatusChangedEvent);
@@ -239,15 +242,16 @@ export class RunnerService implements OnModuleInit {
    * 错误事件已在 runOnce 内发出，本方法对外正常 resolve。
    */
   async kickAndWait(sessionId: string): Promise<void> {
-    const owner = await this.sessions.findOwner(sessionId);
+    const owner = await this.sessions.findOwnerAndAgent(sessionId);
     if (!owner) {
       this.logger.warn(`kick ${sessionId}: 找不到归属账号，跳过`);
       return;
     }
-    await this.account.run(owner, async () => {
+    const { cloudUserId, agentId } = owner;
+    await this.account.run(cloudUserId, async () => {
       if (this.running.has(sessionId)) return;
       this.running.add(sessionId);
-      await this.setSessionStatus(sessionId, "running");
+      await this.setSessionStatus(sessionId, "running", agentId);
       try {
         while (true) {
           const batch = await this.sessions.claimPending(sessionId);
@@ -261,7 +265,7 @@ export class RunnerService implements OnModuleInit {
         }
       } finally {
         this.running.delete(sessionId);
-        await this.setSessionStatus(sessionId, "idle");
+        await this.setSessionStatus(sessionId, "idle", agentId);
       }
     });
   }
@@ -274,15 +278,16 @@ export class RunnerService implements OnModuleInit {
    * 上下文），running 哨兵防双 kick，runOnce 抛错时记录日志后中断循环。
    */
   async kickRetryAndWait(sessionId: string): Promise<void> {
-    const owner = await this.sessions.findOwner(sessionId);
+    const owner = await this.sessions.findOwnerAndAgent(sessionId);
     if (!owner) {
       this.logger.warn(`kickRetry ${sessionId}: 找不到归属账号，跳过`);
       return;
     }
-    await this.account.run(owner, async () => {
+    const { cloudUserId, agentId } = owner;
+    await this.account.run(cloudUserId, async () => {
       if (this.running.has(sessionId)) return;
       this.running.add(sessionId);
-      await this.setSessionStatus(sessionId, "running");
+      await this.setSessionStatus(sessionId, "running", agentId);
       try {
         while (true) {
           const batch = await this.sessions.claimFailed(sessionId);
@@ -296,7 +301,7 @@ export class RunnerService implements OnModuleInit {
         }
       } finally {
         this.running.delete(sessionId);
-        await this.setSessionStatus(sessionId, "idle");
+        await this.setSessionStatus(sessionId, "idle", agentId);
       }
     });
   }
@@ -316,22 +321,23 @@ export class RunnerService implements OnModuleInit {
   }
 
   async kickResumeAndWait(sessionId: string): Promise<void> {
-    const owner = await this.sessions.findOwner(sessionId);
+    const owner = await this.sessions.findOwnerAndAgent(sessionId);
     if (!owner) {
       this.logger.warn(`kickResume ${sessionId}: 找不到归属账号，跳过`);
       return;
     }
-    await this.account.run(owner, async () => {
+    const { cloudUserId, agentId } = owner;
+    await this.account.run(cloudUserId, async () => {
       if (this.running.has(sessionId)) return;
       this.running.add(sessionId);
-      await this.setSessionStatus(sessionId, "running");
+      await this.setSessionStatus(sessionId, "running", agentId);
       try {
         await this.runOnce(sessionId, [], true);
       } catch (err) {
         this.logger.warn(`resume runOnce 失败：${sessionId}`, err);
       } finally {
         this.running.delete(sessionId);
-        await this.setSessionStatus(sessionId, "idle");
+        await this.setSessionStatus(sessionId, "idle", agentId);
       }
     });
   }

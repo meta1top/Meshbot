@@ -1143,6 +1143,21 @@ describe("SessionService", () => {
       expect(await rawService.findOwner("nonexistent")).toBeNull();
     });
 
+    it("findOwnerAndAgent 无账号上下文反查归属账号 + agentId（同款窄投影，多带一列）", async () => {
+      const { sessionId } = await ctx.run("u1", () =>
+        rawService.createSession({ content: "s", agentId: TEST_AGENT_ID }),
+      );
+      // 故意不包 ctx.run：与 findOwner 一样必须能在无账号上下文时跑（unscoped）。
+      expect(await rawService.findOwnerAndAgent(sessionId)).toEqual({
+        cloudUserId: "u1",
+        agentId: TEST_AGENT_ID,
+      });
+    });
+
+    it("findOwnerAndAgent 未知 sessionId 返回 null", async () => {
+      expect(await rawService.findOwnerAndAgent("nonexistent")).toBeNull();
+    });
+
     it("rollbackProcessingToPending 跨账号全量重置（无上下文也可跑）", async () => {
       const u1 = await ctx.run("u1", () =>
         rawService.createSession({ content: "a", agentId: TEST_AGENT_ID }),
