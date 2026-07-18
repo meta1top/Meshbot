@@ -44,7 +44,12 @@ import {
   type PresenceState,
   type WatchScope,
 } from "@meshbot/types";
-import { Logger, UseFilters, UseGuards } from "@nestjs/common";
+import {
+  Logger,
+  type OnModuleDestroy,
+  UseFilters,
+  UseGuards,
+} from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
 import { JwtService } from "@nestjs/jwt";
 import {
@@ -53,7 +58,12 @@ import {
   SubscribeMessage,
   WebSocketGateway,
 } from "@nestjs/websockets";
-import type { Socket } from "socket.io";
+import type { Server, Socket } from "socket.io";
+
+/** watch 路由的 idle 回收阈值（与设备侧 `WATCH_IDLE_MS` 同值，两侧独立各扫各的）。 */
+export const WATCH_IDLE_MS = 5 * 60 * 1000;
+/** idle 清扫周期。 */
+const WATCH_SWEEP_INTERVAL_MS = 60 * 1000;
 
 /**
  * L3 发起方泛化：agent.run.* / device.query.* 的发起方既可能是设备连接
@@ -78,6 +88,12 @@ interface WatchRoute {
   sessionId?: string;
   /** 发起 watch 的用户 id（HITL watchId 寻址的越权校验用，见 Task 16）。 */
   userId: string;
+  /**
+   * 最近一次帧活动时间戳（`registerWatch` 时 `Date.now()`，`handleAgentWatchFrame`
+   * fan-out 命中该 route 时续期）。`sweepIdleWatches` 按此字段回收 idle watch
+   * （泄漏防线 4 的云端半边）。
+   */
+  lastActiveAt: number;
 }
 
 /**
@@ -108,8 +124,11 @@ interface WatchRoute {
  */
 @WebSocketGateway({ namespace: IM_WS_NAMESPACE, cors: true })
 @UseFilters(WsExceptionFilter)
-export class ImGateway extends BaseWebSocketGateway {
+export class ImGateway extends BaseWebSocketGateway implements OnModuleDestroy {
   private readonly logger = new Logger(ImGateway.name);
+
+  /** watch idle 清扫定时器句柄（`afterInit` 起、`onModuleDestroy` 清）。 */
+  private sweepTimer: ReturnType<typeof setInterval> | null = null;
 
   /**
    * L3 Phase A:agent.run.* 流的 streamId 路由表。
@@ -198,6 +217,27 @@ export class ImGateway extends BaseWebSocketGateway {
   }
 
   /**
+   * 网关初始化：先走基类 `afterInit`（trace + jwt middleware 挂载，**必须**
+   * 保留，否则鉴权中间件不生效），再起 watch idle 清扫定时器（`unref` 防
+   * 阻塞进程退出，纯兜底职责不该延长进程生命周期）。
+   */
+  afterInit(server: Server): void {
+    super.afterInit(server);
+    const timer = setInterval(
+      () => this.sweepIdleWatches(),
+      WATCH_SWEEP_INTERVAL_MS,
+    );
+    timer.unref?.();
+    this.sweepTimer = timer;
+  }
+
+  /** 模块销毁时清掉 idle 清扫定时器，防进程内测试/热重载残留计时器。 */
+  onModuleDestroy(): void {
+    if (this.sweepTimer) clearInterval(this.sweepTimer);
+    this.sweepTimer = null;
+  }
+
+  /**
    * 双凭据握手校验（Task 8）：
    * - `mbd_` 前缀（Agent device token）→ `DeviceService.verifyToken`（异步），
    *   payload 为 `{ userId, orgId, deviceId }`（orgId 来自 device.orgId，无 email）
@@ -256,12 +296,16 @@ export class ImGateway extends BaseWebSocketGateway {
   }
 
   /**
-   * 断连清理共用逻辑（`agentRunRoutes` / `queryRoutes` 同构，两表 value 形状不同
-   * ——agentRunRoutes 多 targetAgentId/localAgentId 字段——故用泛型约束到两表
-   * 共有的 `{requester, targetDeviceId}` 读取面）：
+   * 断连清理共用逻辑（`agentRunRoutes` / `queryRoutes` / `watchRoutes` 三表同构，
+   * value 形状不同故用泛型约束到共有的 `{requester, targetDeviceId}` 读取面）：
    * - device 分支：按 deviceId 键，双向清理（该连接作为发起方或目标涉及的路由项都删）。
    * - user 分支：浏览器用户连接无 deviceId，断线即毁，仅按 client.id(socket.id) 清理其
    *   作为发起方的路由（user 连接不会是 targetDeviceId，无需对称清理 target 侧）。
+   *
+   * `onRemoved`（Agent 级观察通道新增）：主表删除某项时回调，供 `watchRoutes`
+   * 同步清理两张反向索引表 + 通知设备 stop。**两个既有调用点不传此参，行为
+   * 完全不变**——扩展而非改写，正是为了让 watch 复用这套判定，不新造第二份
+   * 断线清理逻辑。
    */
   private cleanupRoutes<
     T extends { requester: RunRequester; targetDeviceId: string },
@@ -269,6 +313,7 @@ export class ImGateway extends BaseWebSocketGateway {
     routes: Map<string, T>,
     client: Socket,
     deviceId: string | undefined,
+    onRemoved?: (key: string, route: T) => void,
   ): void {
     if (deviceId) {
       for (const [key, route] of routes) {
@@ -278,6 +323,7 @@ export class ImGateway extends BaseWebSocketGateway {
           route.targetDeviceId === deviceId
         ) {
           routes.delete(key);
+          onRemoved?.(key, route);
         }
       }
     } else {
@@ -287,6 +333,7 @@ export class ImGateway extends BaseWebSocketGateway {
           route.requester.socketId === client.id
         ) {
           routes.delete(key);
+          onRemoved?.(key, route);
         }
       }
     }
@@ -302,8 +349,15 @@ export class ImGateway extends BaseWebSocketGateway {
     return `${deviceId}:${sessionId}`;
   }
 
-  /** 三表一致地登记一条 watch 路由（主表 + 对应 scope 的反向索引）。 */
-  private registerWatch(watchId: string, route: WatchRoute): void {
+  /**
+   * 三表一致地登记一条 watch 路由（主表 + 对应 scope 的反向索引）。
+   * `lastActiveAt` 由本方法统一盖 `Date.now()`——调用方（`handleAgentWatchStart`）
+   * 不必知道 idle 清扫的存在，故入参类型剔除该字段。
+   */
+  private registerWatch(
+    watchId: string,
+    route: Omit<WatchRoute, "lastActiveAt">,
+  ): void {
     // 幂等：同一 watchId 重复登记时先按**旧**路由把索引清干净，再写新的。
     // 否则 `watchRoutes` 被原地覆盖、而旧索引 Set 里那条 watchId 留了下来，
     // 变成指向已失效路由的悬挂项——fan-out 是按索引 Set 反查主表的，悬挂项
@@ -311,15 +365,19 @@ export class ImGateway extends BaseWebSocketGateway {
     if (this.watchRoutes.has(watchId)) {
       this.unregisterWatch(watchId, false);
     }
-    this.watchRoutes.set(watchId, route);
+    const fullRoute: WatchRoute = { ...route, lastActiveAt: Date.now() };
+    this.watchRoutes.set(watchId, fullRoute);
     const index =
-      route.scope === "agent" ? this.agentWatchers : this.sessionWatchers;
+      fullRoute.scope === "agent" ? this.agentWatchers : this.sessionWatchers;
     const key =
-      route.scope === "agent"
-        ? ImGateway.agentWatchKey(route.targetDeviceId, route.localAgentId)
+      fullRoute.scope === "agent"
+        ? ImGateway.agentWatchKey(
+            fullRoute.targetDeviceId,
+            fullRoute.localAgentId,
+          )
         : ImGateway.sessionWatchKey(
-            route.targetDeviceId,
-            route.sessionId ?? "",
+            fullRoute.targetDeviceId,
+            fullRoute.sessionId ?? "",
           );
     let set = index.get(key);
     if (!set) {
@@ -329,18 +387,8 @@ export class ImGateway extends BaseWebSocketGateway {
     set.add(watchId);
   }
 
-  /**
-   * 三表一致地注销一条 watch 路由，并（可选）通知设备 stop。
-   * **全部注销路径都走这一个出口**，杜绝「主表删了索引没删」的半清理泄漏：
-   * 显式 unwatch / 观察者断线 / 设备断线 / idle（前四条是泄漏防线），
-   * 外加设备回 `watch_accepted{ok:false}` 时的即时注销（T9）。
-   * @param notifyDevice 设备自身断线时为 false（设备已不在，通知无意义且会
-   *                     往一个空房间发帧）。
-   */
-  private unregisterWatch(watchId: string, notifyDevice: boolean): void {
-    const route = this.watchRoutes.get(watchId);
-    if (!route) return;
-    this.watchRoutes.delete(watchId);
+  /** 只清两张反向索引（主表已由调用方删除时用，如 cleanupRoutes 的 onRemoved）。 */
+  private removeWatchIndex(watchId: string, route: WatchRoute): void {
     const index =
       route.scope === "agent" ? this.agentWatchers : this.sessionWatchers;
     const key =
@@ -351,21 +399,61 @@ export class ImGateway extends BaseWebSocketGateway {
             route.sessionId ?? "",
           );
     const set = index.get(key);
-    if (set) {
-      set.delete(watchId);
-      if (set.size === 0) index.delete(key); // 空集合即删键，防 Map 无界增长
-    }
-    if (notifyDevice) {
-      this.server
-        .to(`device:${route.targetDeviceId}`)
-        .emit(IM_WS_EVENTS.agentWatchForwarded, {
-          watchId,
-          localAgentId: route.localAgentId,
-          scope: route.scope,
-          sessionId: route.sessionId,
-          action: "stop",
-          requesterDeviceId: this.encodeRequester(route.requester),
-        } satisfies AgentWatchForwarded);
+    if (!set) return;
+    set.delete(watchId);
+    if (set.size === 0) index.delete(key); // 空集合即删键，防 Map 无界增长
+  }
+
+  /** 通知目标设备注销某 watch（观察者已走/idle 超时，设备侧该释放常驻转发器了）。 */
+  private notifyWatchStop(watchId: string, route: WatchRoute): void {
+    this.server
+      .to(`device:${route.targetDeviceId}`)
+      .emit(IM_WS_EVENTS.agentWatchForwarded, {
+        watchId,
+        localAgentId: route.localAgentId,
+        scope: route.scope,
+        sessionId: route.sessionId,
+        action: "stop",
+        requesterDeviceId: this.encodeRequester(route.requester),
+      } satisfies AgentWatchForwarded);
+  }
+
+  /**
+   * 三表一致地注销一条 watch 路由，并（可选）通知设备 stop。
+   * 门面方法：删主表 + 调 `removeWatchIndex` + （可选）`notifyWatchStop`。
+   * **全部注销路径最终都落到 `removeWatchIndex`（唯一清索引出口）**，杜绝
+   * 「主表删了索引没删」的半清理泄漏：显式 unwatch（本方法）/ 观察者断线 /
+   * 设备断线（`cleanupRoutes` 的 `onRemoved` 直接调 `removeWatchIndex`，不
+   * 经本方法——因为主表已被 `cleanupRoutes` 删过，重入本方法会因
+   * `watchRoutes.get` 落空而空跑，见 `handleDisconnect`）/ idle（本方法）
+   * 外加设备回 `watch_accepted{ok:false}` 时的即时注销（T9，本方法）。
+   * @param notifyDevice 设备自身断线时为 false（设备已不在，通知无意义且会
+   *                     往一个空房间发帧）。
+   */
+  private unregisterWatch(watchId: string, notifyDevice: boolean): void {
+    const route = this.watchRoutes.get(watchId);
+    if (!route) return;
+    this.watchRoutes.delete(watchId);
+    this.removeWatchIndex(watchId, route);
+    if (notifyDevice) this.notifyWatchStop(watchId, route);
+  }
+
+  /**
+   * idle 清扫（泄漏防线 4 的云端半边）：回收超过 {@link WATCH_IDLE_MS} 没有
+   * 任何帧活动的 watch 路由。
+   *
+   * 为什么断线清理之外还要这一条：socket.io 的断线检测有窗口期，且存在
+   * 「连接还活着但客户端早已导航离开、忘了发 unwatch」的场景（页面被后台
+   * 挂起、JS 异常打断了 cleanup）。常驻转发器没有天然终点，多一层兜底。
+   *
+   * 公开方法而非私有：测试直接调它验证回收语义，不必等真实定时器。
+   */
+  sweepIdleWatches(): void {
+    const now = Date.now();
+    for (const [watchId, route] of this.watchRoutes) {
+      if (now - route.lastActiveAt >= WATCH_IDLE_MS) {
+        this.unregisterWatch(watchId, true);
+      }
     }
   }
 
@@ -506,6 +594,23 @@ export class ImGateway extends BaseWebSocketGateway {
       //   user 连接不会是 targetDeviceId(target 恒为设备)，无需对称清理。
       this.cleanupRoutes(this.agentRunRoutes, client, deviceId);
       this.cleanupRoutes(this.queryRoutes, client, deviceId);
+      // Agent 级观察通道（泄漏防线 2/3）：常驻转发器没有「run 终止」这个天然
+      // 终点，断线不清就永久泄漏。两条路径语义不同：
+      // - 观察者断线（user 分支，deviceId 为 undefined）→ 必须通知设备 stop，
+      //   否则设备侧的 SessionWatchService 要等满 5 分钟 idle 才拆。
+      // - 设备断线（device 分支）→ 不通知（设备已不在，往空房间发帧无意义），
+      //   观察者侧靠 relay 断开自行退化为「不实时」并在重连时重 watch。
+      // 主表由 cleanupRoutes 删除，两张反向索引由 onRemoved 回调同步清理——
+      // 走 removeWatchIndex 单一出口，杜绝「主表删了索引没删」的半清理泄漏。
+      this.cleanupRoutes(
+        this.watchRoutes,
+        client,
+        deviceId,
+        (watchId, route) => {
+          this.removeWatchIndex(watchId, route);
+          if (!deviceId) this.notifyWatchStop(watchId, route);
+        },
+      );
 
       if (!userId || !orgId) return;
 
@@ -899,6 +1004,9 @@ export class ImGateway extends BaseWebSocketGateway {
         );
         continue;
       }
+      // 有帧活动即续期：idle 清扫按 lastActiveAt 判定，正被扇出的 watch 不该
+      // 因为「没显式续期动作」而在下一次 sweep 被误回收。
+      route.lastActiveAt = Date.now();
       this.emitToRequester(route.requester, IM_WS_EVENTS.agentRunFrame, {
         watchId,
         requesterDeviceId: this.encodeRequester(route.requester),

@@ -1,6 +1,6 @@
 import { DevicePresenceService, PresenceService } from "@meshbot/main";
 import { IM_WS_EVENTS } from "@meshbot/types";
-import { ImGateway } from "./im.gateway";
+import { ImGateway, WATCH_IDLE_MS } from "./im.gateway";
 
 function makeGateway(overrides: {
   markReadReturn?: Date;
@@ -2029,5 +2029,158 @@ describe("Agent 级观察通道：fan-out", () => {
     expect(
       emitted.filter(([e]) => e === IM_WS_EVENTS.agentWatchAccepted),
     ).toHaveLength(0);
+  });
+});
+
+describe("Agent 级观察通道：四路清理（泄漏防护）", () => {
+  const mk = () =>
+    makeGateway({
+      agents: {
+        findActiveById: jest.fn().mockResolvedValue({
+          id: "cloud-a1",
+          userId: "u1",
+          orgId: "org-1",
+          deviceId: "dev-b",
+          localAgentId: "local-a1",
+        }),
+      },
+    });
+  const browserClient = (id: string) =>
+    ({ id, data: { user: { userId: "u1" }, orgId: "org-1" } }) as never;
+  const deviceClient = () =>
+    ({
+      id: "sock-dev",
+      data: { user: { userId: "u1", deviceId: "dev-b" }, orgId: "org-1" },
+    }) as never;
+
+  it("路径①观察者 socket 断开 → 清其全部 watchId 并通知设备 stop", async () => {
+    const { gateway, server } = mk();
+    await gateway.handleAgentWatchStart(
+      { watchId: "w1", targetAgentId: "cloud-a1", scope: "agent" },
+      browserClient("sock-1"),
+    );
+    await gateway.handleAgentWatchStart(
+      {
+        watchId: "w2",
+        targetAgentId: "cloud-a1",
+        scope: "session",
+        sessionId: "s1",
+      },
+      browserClient("sock-1"),
+    );
+    await gateway.handleAgentWatchStart(
+      {
+        watchId: "w3",
+        targetAgentId: "cloud-a1",
+        scope: "session",
+        sessionId: "s1",
+      },
+      browserClient("sock-别人"),
+    );
+
+    await gateway.handleDisconnect(browserClient("sock-1"));
+
+    expect(gateway.watchRouteCount()).toBe(1); // 只剩别人的 w3
+    expect(gateway.agentWatcherIds("dev-b", "local-a1")).toEqual([]); // 索引表同步清空
+    expect(gateway.sessionWatcherIds("dev-b", "s1")).toEqual(["w3"]);
+    const stops = (server.emit as jest.Mock).mock.calls.filter(
+      ([e, p]) => e === IM_WS_EVENTS.agentWatchForwarded && p.action === "stop",
+    );
+    expect(stops.map(([, p]) => p.watchId).sort()).toEqual(["w1", "w2"]);
+  });
+
+  it("路径②设备 socket 断开 → 清该设备全部 watch 路由（不回发 stop：设备已不在）", async () => {
+    const { gateway, server } = mk();
+    await gateway.handleAgentWatchStart(
+      {
+        watchId: "w1",
+        targetAgentId: "cloud-a1",
+        scope: "session",
+        sessionId: "s1",
+      },
+      browserClient("sock-1"),
+    );
+    (server.emit as jest.Mock).mockClear();
+
+    await gateway.handleDisconnect(deviceClient());
+
+    expect(gateway.watchRouteCount()).toBe(0);
+    expect(gateway.sessionWatcherIds("dev-b", "s1")).toEqual([]);
+    const stops = (server.emit as jest.Mock).mock.calls.filter(
+      ([e, p]) => e === IM_WS_EVENTS.agentWatchForwarded && p.action === "stop",
+    );
+    expect(stops).toHaveLength(0);
+  });
+
+  it("路径③显式 unwatch（T8 已覆盖，此处断言三表一致）", async () => {
+    const { gateway } = mk();
+    await gateway.handleAgentWatchStart(
+      {
+        watchId: "w1",
+        targetAgentId: "cloud-a1",
+        scope: "session",
+        sessionId: "s1",
+      },
+      browserClient("sock-1"),
+    );
+    gateway.handleAgentWatchStop({ watchId: "w1" }, browserClient("sock-1"));
+    expect(gateway.watchRouteCount()).toBe(0);
+    expect(gateway.sessionWatcherIds("dev-b", "s1")).toEqual([]);
+  });
+
+  it("路径④idle 清扫：超时未续期的 watch 被回收", async () => {
+    jest.useFakeTimers();
+    const { gateway } = mk();
+    await gateway.handleAgentWatchStart(
+      {
+        watchId: "w1",
+        targetAgentId: "cloud-a1",
+        scope: "session",
+        sessionId: "s1",
+      },
+      browserClient("sock-1"),
+    );
+    jest.advanceTimersByTime(WATCH_IDLE_MS + 1000);
+    gateway.sweepIdleWatches();
+    expect(gateway.watchRouteCount()).toBe(0);
+    jest.useRealTimers();
+  });
+
+  it("idle 清扫：有帧活动的 watch 被续期，不回收", async () => {
+    jest.useFakeTimers();
+    const { gateway } = mk();
+    await gateway.handleAgentWatchStart(
+      {
+        watchId: "w1",
+        targetAgentId: "cloud-a1",
+        scope: "session",
+        sessionId: "s1",
+      },
+      browserClient("sock-1"),
+    );
+    jest.advanceTimersByTime(WATCH_IDLE_MS - 1000);
+    gateway.handleAgentWatchFrame(
+      {
+        localAgentId: "local-a1",
+        scope: "session",
+        sessionId: "s1",
+        seq: 1,
+        event: "run.chunk",
+        payload: {},
+      },
+      deviceClient(),
+    );
+    jest.advanceTimersByTime(2000);
+    gateway.sweepIdleWatches();
+    expect(gateway.watchRouteCount()).toBe(1);
+    jest.useRealTimers();
+  });
+
+  it("既有两表清理行为不因泛型扩展而改变（回归）", async () => {
+    const { gateway } = mk();
+    // agentRunRoutes / queryRoutes 的既有清理用例应仍全绿——本用例只作提醒，
+    // 实际断言沿用该文件 describe("handleDisconnect") 下的既有用例，不重写。
+    await gateway.handleDisconnect(browserClient("sock-未登记"));
+    expect(gateway.watchRouteCount()).toBe(0);
   });
 });
