@@ -25,6 +25,7 @@ import { AgentErrorCode } from "../errors/agent.error-codes";
 import { AUTH_EVENTS } from "../services/auth.events";
 import {
   IM_RELAY_EVENTS,
+  type ImRelayAgentRegistryChangedEvent,
   type ImRelayConnectedEvent,
   type ImRelayModelConfigChangedEvent,
 } from "./im-relay.events";
@@ -151,6 +152,23 @@ export class ImRelayClientService implements OnModuleDestroy {
           this.emitter.emit(IM_RELAY_EVENTS.modelConfigChanged, {
             cloudUserId,
           } satisfies ImRelayModelConfigChangedEvent);
+        });
+      });
+
+      // 远程 Agent 注册表变更（云端广播的失效信号：同账号任一设备改了「允许远程」
+      // 开关或 Agent 元数据）→ 桥给 EventsGateway 下发浏览器重拉 /api/remote-agents。
+      //
+      // 两个已知盲区（云端广播侧限制，均退化为「不实时」而非「永久错」，由
+      // web-agent 重连时的补拉兜底，见 use-global-events.ts 的 onConnect）：
+      // 1. 设备/用户尚未归属组织（server-main 侧 orgId 为 null）→ 无 org 房间可投，
+      //    云端直接跳过广播（im.gateway.ts onCloudAgentChanged）。
+      // 2. 广播用的是变更方设备 token 解出的 orgId，而设备 orgId 与用户 activeOrgId
+      //    解耦：A、B 两台设备的 device.orgId 不同时，事件投不到 A。
+      socket.on(IM_WS_EVENTS.agentRegistryChanged, () => {
+        this.account.run(cloudUserId, () => {
+          this.emitter.emit(IM_RELAY_EVENTS.agentRegistryChanged, {
+            cloudUserId,
+          } satisfies ImRelayAgentRegistryChangedEvent);
         });
       });
 

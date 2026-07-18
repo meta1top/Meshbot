@@ -9,6 +9,11 @@ export const IM_RELAY_EVENTS = {
   connected: "im.relay.connected",
   /** 云端广播的 org 模型配置变更（失效信号）——sync 服务收到即全量重同步。 */
   modelConfigChanged: "im.relay.model_config_changed",
+  /**
+   * 云端广播的远程 Agent 注册表变更（失效信号）——EventsGateway 收到即下发浏览器
+   * 重拉 `/api/remote-agents`（修「B 关掉允许远程后 A 的列表不消失」）。
+   */
+  agentRegistryChanged: "im.relay.agent_registry_changed",
   /** L2c：云端回流的设备查询响应（B→云→A），桥给 RemoteDeviceQueryService.settle。 */
   deviceQueryResponse: "im.relay.device_query_response",
   /** L2c：云端转发给本设备的入站查询请求（A→云→B），供 Task4 入站消费。 */
@@ -30,6 +35,11 @@ export interface ImRelayConnectedEvent {
 
 /** 云端模型配置变更事件负载（失效信号，无明细）。 */
 export interface ImRelayModelConfigChangedEvent {
+  cloudUserId: string;
+}
+
+/** 云端远程 Agent 注册表变更事件负载（失效信号，无明细）。 */
+export interface ImRelayAgentRegistryChangedEvent {
   cloudUserId: string;
 }
 

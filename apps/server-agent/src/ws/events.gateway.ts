@@ -22,6 +22,8 @@ import {
   type QuickAssistantRenamedEvent,
   MODEL_CONFIG_EVENTS,
   type ModelConfigUpdatedEvent,
+  REMOTE_AGENT_EVENTS,
+  type RemoteAgentRegistryChangedEvent,
   SCHEDULE_EVENTS,
   type ScheduleFiredEvent,
   SESSION_STATUS_EVENTS,
@@ -40,6 +42,10 @@ import {
 import type { Socket } from "socket.io";
 import { AccountContextService } from "@meshbot/lib-agent";
 import { ImRelayClientService } from "../cloud/im-relay-client.service";
+import {
+  IM_RELAY_EVENTS,
+  type ImRelayAgentRegistryChangedEvent,
+} from "../cloud/im-relay.events";
 import { AUTH_EVENTS } from "../services/auth.events";
 
 /**
@@ -215,6 +221,27 @@ export class EventsGateway extends BaseWebSocketGateway {
   @OnEvent(MODEL_CONFIG_EVENTS.updated)
   onModelConfigUpdated(payload: ModelConfigUpdatedEvent): void {
     this.emitEnvelope(MODEL_CONFIG_EVENTS.updated, payload);
+  }
+
+  /**
+   * 云端下行：远程 Agent 注册表变更 → 信封投递给所属账号浏览器，侧栏/起手台的
+   * 远程 Agent 列表实时增删（修「B 关掉允许远程后 A 客户端列表不消失」）。
+   *
+   * `ImRelayClientService` 收到云端广播 `im.agent_registry_changed` 后在
+   * `account.run(cloudUserId, ...)` 上下文内 emit，故 emitEnvelope 能取到账号
+   * 并路由到 acct 房间。前端收到后 invalidate `remote-agents` 查询。
+   *
+   * 两个已知盲区（云端广播侧限制，退化为「不实时」而非「永久错」，由 web-agent
+   * socket 重连时的补拉兜底）：
+   * 1. 设备/用户未归属组织（server-main 侧 orgId 为 null）→ 无房间可投，云端跳过。
+   * 2. A、B 两台设备的 `device.orgId` 不同（设备 orgId 与用户 activeOrgId 解耦）
+   *    → 广播用变更方的 orgId 房间，投不到 A。
+   */
+  @OnEvent(IM_RELAY_EVENTS.agentRegistryChanged)
+  onRemoteAgentsChanged(payload: ImRelayAgentRegistryChangedEvent): void {
+    this.emitEnvelope(REMOTE_AGENT_EVENTS.registryChanged, {
+      cloudUserId: payload.cloudUserId,
+    } satisfies RemoteAgentRegistryChangedEvent);
   }
 
   /**

@@ -261,6 +261,34 @@ describe("ImRelayClientService", () => {
       svc.disconnect("u1");
     });
 
+    it("云端 agentRegistryChanged → 桥成本地 IM_RELAY_EVENTS.agentRegistryChanged 且在 account.run 上下文内", async () => {
+      const s1 = new FakeSocket();
+      const { svc, emitSpy, emitter, account } = makeService(
+        { u1: { deviceToken: "tok-u1", orgId: "org1" } },
+        { u1: s1 },
+      );
+
+      await svc.connect("u1");
+
+      // 不变量：emit 必须发生在账号 ALS 上下文内，否则 EventsGateway 无法路由到 acct 房间
+      let ctxAtEmit: string | null | undefined;
+      emitter.on(IM_RELAY_EVENTS.agentRegistryChanged, () => {
+        ctxAtEmit = account.get();
+      });
+
+      s1.simulateServerEvent(IM_WS_EVENTS.agentRegistryChanged, {});
+
+      expect(emitSpy).toHaveBeenCalledWith(
+        IM_RELAY_EVENTS.agentRegistryChanged,
+        {
+          cloudUserId: "u1",
+        },
+      );
+      expect(ctxAtEmit).toBe("u1");
+
+      svc.disconnect("u1");
+    });
+
     it("auth connect_error（unauthorized）→ disconnect + setLoggedOut(该账号) + emit reauthRequired", async () => {
       const s1 = new FakeSocket();
       const { svc, cloudIdentityService, emitSpy } = makeService(

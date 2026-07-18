@@ -21,6 +21,7 @@ export * from "./model-config.events";
 export * from "./present-file";
 export * from "./quick-assistant";
 export * from "./quick-assistant.events";
+export * from "./remote-agent.events";
 export * from "./schedule";
 export * from "./schedule.events";
 export * from "./session";

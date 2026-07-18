@@ -13,12 +13,6 @@ const config: Config = {
     "<rootDir>/libs/agent/",
     "<rootDir>/apps/cli/",
     "<rootDir>/packages/",
-    // 前端集成测试：为测 dispatchGlobalEvent 纯函数却传递性引入整条 atom 图
-    // （@/atoms/im → auth → jotai-tanstack-query）。jotai/jotai-tanstack-query 是
-    // 纯 ESM 包，本后端 jest（node + ts-jest，无 ESM/jsdom transform）无法加载，
-    // 该测试从未在 CI 跑通。web-agent 前端测试应迁到独立的 jsdom+ESM runner
-    // （如 next/jest 多 project 配置），届时移除本行。
-    "<rootDir>/apps/web-agent/src/hooks/use-global-events.spec.ts",
   ],
   moduleNameMapper: {
     "^@meshbot/common$": "<rootDir>/libs/common/src",

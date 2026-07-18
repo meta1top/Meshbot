@@ -12,6 +12,7 @@ import {
   MODEL_CONFIG_EVENTS,
   QUICK_ASSISTANT_EVENTS,
   type QuickAssistantRenamedEvent,
+  REMOTE_AGENT_EVENTS,
   SCHEDULE_EVENTS,
   type ScheduleFiredEvent,
   SESSION_STATUS_EVENTS,
@@ -33,6 +34,7 @@ import {
 import { addScheduleActivityAtom } from "@/atoms/schedule-activity";
 import { updateSessionStatusAtom } from "@/atoms/sessions";
 import { getEventsSocket } from "@/lib/events-socket";
+import { remoteAgentsQueryKey } from "@/rest/remote-agents";
 
 /** 全局事件分发表：按信封 type 调对应 handler。纯函数，便于单测。 */
 export interface GlobalEventHandlers {
@@ -45,6 +47,7 @@ export interface GlobalEventHandlers {
   onSessionStatusChanged: (p: SessionStatusChangedEvent) => void;
   onQuickAssistantRenamed: (p: QuickAssistantRenamedEvent) => void;
   onModelConfigUpdated: () => void;
+  onRemoteAgentsChanged: () => void;
   onReauthRequired: (p: { cloudUserId: string }) => void;
 }
 
@@ -79,6 +82,9 @@ export function dispatchGlobalEvent(
       break;
     case MODEL_CONFIG_EVENTS.updated:
       h.onModelConfigUpdated();
+      break;
+    case REMOTE_AGENT_EVENTS.registryChanged:
+      h.onRemoteAgentsChanged();
       break;
     case AUTH_WS_EVENTS.reauthRequired:
       h.onReauthRequired(env.payload as { cloudUserId: string });
@@ -133,15 +139,23 @@ export function useGlobalEvents(): void {
       // 云端模型配置同步完成 → 刷新模型列表（选择器/设置页实时更新）
       onModelConfigUpdated: () =>
         queryClient.invalidateQueries({ queryKey: ["model-configs"] }),
+      // 任一设备改了「允许远程」开关 / Agent 元数据 → 重拉远程 Agent 列表
+      //（侧栏与起手台共用同一份缓存，关掉开关的 Agent 立即消失）
+      onRemoteAgentsChanged: () =>
+        queryClient.invalidateQueries({ queryKey: remoteAgentsQueryKey }),
       onReauthRequired: () => handleReauthRequired(),
     };
     const onEvent = (env: GlobalEventEnvelope) =>
       dispatchGlobalEvent(env, handlers);
-    // 连接/重连成功即刷新模型列表：登录完成瞬间 syncNow 的 model-config.updated
-    // 事件可能早于本 socket 建立而被错过（授权后「组织没有模型」假象），
-    // 连接时补一次 invalidate 兜住时序洞（幂等且便宜）。
-    const onConnect = () =>
+    // 连接/重连成功即刷新模型列表 + 远程 Agent 列表：登录完成瞬间 syncNow 的
+    // model-config.updated 事件可能早于本 socket 建立而被错过（授权后「组织没有
+    // 模型」假象）；远程 Agent 同理，且还要兜住「本机离线期间别的设备改了开关」
+    // 以及云端广播的两个盲区（设备无 orgId / 两台设备 orgId 不同 → 事件投不到，
+    // 见 EventsGateway.onRemoteAgentsChanged 的 JSDoc）。幂等且便宜。
+    const onConnect = () => {
       queryClient.invalidateQueries({ queryKey: ["model-configs"] });
+      queryClient.invalidateQueries({ queryKey: remoteAgentsQueryKey });
+    };
     socket.on("event", onEvent);
     socket.on("connect", onConnect);
     if (socket.connected) onConnect();

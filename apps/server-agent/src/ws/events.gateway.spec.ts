@@ -1,6 +1,10 @@
 import { AccountContextService } from "@meshbot/lib-agent";
 import { AUTH_WS_EVENTS, IM_WS_EVENTS } from "@meshbot/types";
-import { SCHEDULE_EVENTS, SESSION_STATUS_EVENTS } from "@meshbot/types-agent";
+import {
+  REMOTE_AGENT_EVENTS,
+  SCHEDULE_EVENTS,
+  SESSION_STATUS_EVENTS,
+} from "@meshbot/types-agent";
 
 import { EventsGateway } from "./events.gateway";
 
@@ -51,6 +55,20 @@ describe("EventsGateway 下行信封 + 账号路由", () => {
     expect(eventName).toBe("event");
     expect(env.type).toBe(IM_WS_EVENTS.conversationRead);
     expect(env.payload).toEqual(payload);
+  });
+
+  it("远程 Agent 注册表变更 → 按账号发 acct 房间信封（前端据此重拉 remote-agents）", () => {
+    const account = new AccountContextService();
+    const { gw, roomEmit, to, broadcastEmit } = makeGateway(account);
+
+    account.run("U1", () => gw.onRemoteAgentsChanged({ cloudUserId: "U1" }));
+
+    expect(to).toHaveBeenCalledWith("acct:U1");
+    const [eventName, env] = roomEmit.mock.calls[0];
+    expect(eventName).toBe("event");
+    expect(env.type).toBe(REMOTE_AGENT_EVENTS.registryChanged);
+    expect(env.payload).toEqual({ cloudUserId: "U1" });
+    expect(broadcastEmit).not.toHaveBeenCalled();
   });
 
   it("无账号上下文 → 降级全量广播单一 event", () => {
