@@ -94,7 +94,17 @@ export class SessionWatchService implements OnModuleDestroy {
               this.relay.emitAgentWatchFrame(cloudUserId, {
                 localAgentId,
                 scope: "session",
-                sessionId: f.sessionId,
+                // **必须填被观察的主会话 id，不能用 `f.sessionId`。**
+                // 这个字段是**路由键**——云端按 `${deviceId}:${sessionId}` 查
+                // sessionWatchers 索引决定扇给谁。子代理帧的 `f.sessionId` 是
+                // **子会话 id**（转发器把 subSessionId 并进了 allowedSessions），
+                // 云端按它查不到索引 → 静默丢弃；而 seq 已被消耗 → 观察者收到
+                // 的序号出现空洞 → FrameSequencer 缓冲后续帧等一个永不到来的
+                // seq → **整条通道从此死掉**（表现为「用过 subagent 之后远端
+                // 就断了」「工具卡永远转圈」）。
+                // 子会话身份不会丢：它原样保留在 `payload.sessionId` 里，渲染
+                // 层照旧据此认子代理卡，与本地路径一致。
+                sessionId,
                 seq: f.seq,
                 event: f.event,
                 payload: f.payload,

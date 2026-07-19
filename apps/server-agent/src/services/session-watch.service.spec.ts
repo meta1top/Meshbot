@@ -62,7 +62,7 @@ describe("SessionWatchService（会话级常驻转发器）", () => {
     expect(sent.at(-1)?.frame.event).toBe(SESSION_WS_EVENTS.runChunk);
   });
 
-  it("subagent allowedSessions 逻辑未丢", () => {
+  it("subagent allowedSessions 逻辑未丢：子会话帧照样镜像", () => {
     svc.addWatcher("u1", "agent-1", "s1", "w1");
     emitter.emit(SESSION_WS_EVENTS.runSubagentSpawned, {
       sessionId: "s1",
@@ -73,7 +73,32 @@ describe("SessionWatchService（会话级常驻转发器）", () => {
       sessionId: "sub1",
       delta: "子",
     });
-    expect(sent.map((s) => s.frame.sessionId)).toEqual(["s1", "sub1"]);
+    expect(sent).toHaveLength(2);
+    // 子会话身份保留在 payload 里（渲染层据此认子代理卡）
+    expect((sent[1].frame.payload as { sessionId: string }).sessionId).toBe(
+      "sub1",
+    );
+  });
+
+  it("子代理帧的路由 sessionId 恒为被观察主会话，绝不能用子会话 id", () => {
+    svc.addWatcher("u1", "agent-1", "s1", "w1");
+    emitter.emit(SESSION_WS_EVENTS.runSubagentSpawned, {
+      sessionId: "s1",
+      subSessionId: "sub1",
+      toolCallId: "t1",
+    });
+    emitter.emit(SESSION_WS_EVENTS.runChunk, {
+      sessionId: "sub1",
+      delta: "子",
+    });
+    emitter.emit(SESSION_WS_EVENTS.runChunk, { sessionId: "s1", delta: "主" });
+    // 全部帧的路由键都必须是主会话——云端按 `${deviceId}:${sessionId}` 查
+    // sessionWatchers 决定扇给谁，填子会话 id 会查不到索引被静默丢弃；
+    // 而 seq 已被消耗 → 观察者序号出现空洞 → FrameSequencer 永久缓冲 →
+    // 整条通道死掉（真机症状：用过 subagent 后远端就断了、工具卡永远转圈）。
+    expect(sent.map((s) => s.frame.sessionId)).toEqual(["s1", "s1", "s1"]);
+    // seq 必须连续无空洞（这才是通道不卡死的根本保证）
+    expect(sent.map((s) => s.frame.seq)).toEqual([1, 2, 3]);
   });
 
   it("末个观察者离开后进入 idle 宽限，未到期不拆除", () => {
