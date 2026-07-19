@@ -1,4 +1,8 @@
-import { AGENT_EVENTS, DEFAULT_AGENT_NAME } from "@meshbot/types-agent";
+import {
+  AGENT_EVENTS,
+  DEFAULT_AGENT_NAME,
+  SESSION_LIFECYCLE_EVENTS,
+} from "@meshbot/types-agent";
 import {
   AccountContextService,
   MeshbotConfigService,
@@ -37,6 +41,8 @@ describe("AgentService", () => {
   let fakeConfig: { agentDirOf: jest.Mock };
   /** 假 EventEmitter2：断言 AGENT_EVENTS.changed 的发射时机与负载。 */
   let emitter: { emit: jest.Mock };
+  /** 按顺序收集全部发射，供生命周期事件的时机/顺序断言。 */
+  let emitted: Array<[string, unknown]>;
 
   beforeEach(async () => {
     ds = new DataSource({
@@ -48,14 +54,21 @@ describe("AgentService", () => {
     await ds.initialize();
     fakeSessions = {
       findByAgentId: jest.fn().mockResolvedValue([]),
-      removeWithMessages: jest.fn().mockResolvedValue(undefined),
+      // 返回 agentId（不再自己发 session.deleted，改由 removeWithData 事务外发）
+      removeWithMessages: jest.fn().mockResolvedValue("agent-x"),
     };
     fakeConfig = {
       agentDirOf: jest
         .fn()
         .mockReturnValue("/tmp/agent-service-spec-nonexistent"),
     };
-    emitter = { emit: jest.fn() };
+    emitted = [];
+    emitter = {
+      emit: jest.fn((event: string, payload: unknown) => {
+        emitted.push([event, payload]);
+        return true;
+      }),
+    };
     const moduleRef = await Test.createTestingModule({
       providers: [
         AgentService,
@@ -165,6 +178,73 @@ describe("AgentService", () => {
         expect(fakeSessions.removeWithMessages).toHaveBeenCalledWith("s1");
         expect(fakeSessions.removeWithMessages).toHaveBeenCalledWith("s2");
         expect(await service.findOrNull(target.id)).toBeNull();
+      });
+    });
+
+    it("session.deleted 由 removeWithData 在事务外统一发（不在 removeInDb 内逐个发）", async () => {
+      await account.run("acct-1", async () => {
+        await service.ensureDefault();
+        const target = await service.create(fixture("待删-事件"));
+        fakeSessions.findByAgentId.mockResolvedValueOnce([
+          { id: "s1" },
+          { id: "s2" },
+        ]);
+        // removeWithMessages 现在返回 agentId、不再自己发事件
+        fakeSessions.removeWithMessages
+          .mockResolvedValueOnce(target.id)
+          .mockResolvedValueOnce(target.id);
+        emitted.length = 0;
+        await service.removeWithData(target.id);
+        const deleted = emitted.filter(
+          ([e]) => e === SESSION_LIFECYCLE_EVENTS.deleted,
+        );
+        expect(
+          deleted.map(([, p]) => (p as { sessionId: string }).sessionId),
+        ).toEqual(["s1", "s2"]);
+        expect(
+          deleted.every(
+            ([, p]) => (p as { agentId: string }).agentId === target.id,
+          ),
+        ).toBe(true);
+      });
+    });
+
+    it("级联删到一半失败 → 一条 session.deleted 都不发（发射必须在事务提交之后）", async () => {
+      await account.run("acct-1", async () => {
+        await service.ensureDefault();
+        const target = await service.create(fixture("删一半炸"));
+        fakeSessions.findByAgentId.mockResolvedValueOnce([
+          { id: "s1" },
+          { id: "s2" },
+        ]);
+        // s1 删成功、s2 抛错 → removeInDb 在循环中途失败，外层事务回滚。
+        // 若发射写在 removeInDb 的循环里（review 指出的缺陷形态），s1 的
+        // deleted 已经发出去了：观察者把 s1 移出列表，而数据库回滚后 s1 其实
+        // 还在——更糟的是 schedules/checkpointer 是非事务删除、不随回滚恢复，
+        // 于是「会话复活但定时任务已丢」。发射挪到事务外才不会出现这个状态。
+        fakeSessions.removeWithMessages
+          .mockResolvedValueOnce(target.id)
+          .mockRejectedValueOnce(new Error("模拟级联删除中途失败"));
+        emitted.length = 0;
+        await expect(service.removeWithData(target.id)).rejects.toThrow(
+          /模拟级联删除中途失败/,
+        );
+        expect(
+          emitted.filter(([e]) => e === SESSION_LIFECYCLE_EVENTS.deleted),
+        ).toEqual([]);
+      });
+    });
+
+    it("只剩一个 Agent 被拒绝时，一条 session.deleted 都不发", async () => {
+      await account.run("acct-1", async () => {
+        const only = await service.ensureDefault();
+        emitted.length = 0;
+        await expect(service.removeWithData(only.id)).rejects.toThrow(
+          /至少保留一个/,
+        );
+        expect(
+          emitted.filter(([e]) => e === SESSION_LIFECYCLE_EVENTS.deleted),
+        ).toEqual([]);
       });
     });
 

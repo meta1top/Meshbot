@@ -8,9 +8,11 @@ import {
   AGENT_EVENTS,
   DEFAULT_AGENT_AVATAR,
   DEFAULT_AGENT_NAME,
+  SESSION_LIFECYCLE_EVENTS,
   type AgentChangedEvent,
   type AgentCreateInput,
   type AgentUpdateInput,
+  type SessionDeletedEvent,
 } from "@meshbot/types-agent";
 import {
   BadRequestException,
@@ -147,8 +149,20 @@ export class AgentService {
    * 只能在 DB 事务确认提交后再删盘）。
    */
   async removeWithData(id: string): Promise<void> {
-    await this.removeInDb(id);
+    const purged = await this.removeInDb(id);
     rmSync(this.config.agentDirOf(id), { recursive: true, force: true });
+    // `session.deleted` 统一在这里发，**不在 removeInDb 内部逐个发**：removeInDb
+    // 挂着 @Transactional()，而本仓事务是 REQUIRED 传播——嵌套的 deleteSessionInTx
+    // 只 join、不在本层提交，真正 commit 要等 removeInDb 整个方法体跑完。在事务
+    // 内发通知，一旦外层回滚就会出现「观察者已移除、数据库里还在」的不一致
+    // （且 schedules/checkpointer 是非事务性删除，不随回滚恢复 → 会话复活但
+    // 定时任务已丢）。挪到这里 = 事务已提交，通知即事实。
+    for (const s of purged) {
+      this.emitter.emit(SESSION_LIFECYCLE_EVENTS.deleted, {
+        agentId: s.agentId,
+        sessionId: s.sessionId,
+      } satisfies SessionDeletedEvent);
+    }
     this.emitChanged(id);
   }
 
@@ -179,17 +193,23 @@ export class AgentService {
    * pending_messages / llm_calls 多表写入，`@Transactional()` 必须保留。)
    */
   @Transactional()
-  private async removeInDb(id: string): Promise<void> {
+  private async removeInDb(
+    id: string,
+  ): Promise<Array<{ sessionId: string; agentId: string }>> {
     const all = await this.list();
     if (all.length <= 1) {
       throw new BadRequestException("至少保留一个 Agent");
     }
     await this.findOrThrow(id);
     const sessions = await this.sessions.findByAgentId(id);
+    // 只收集、不发事件——发射时机由事务外的 removeWithData 负责，理由见那里。
+    const purged: Array<{ sessionId: string; agentId: string }> = [];
     for (const s of sessions) {
-      await this.sessions.removeWithMessages(s.id);
+      const agentId = await this.sessions.removeWithMessages(s.id);
+      purged.push({ sessionId: s.id, agentId });
     }
     await this.repo.delete({ id });
+    return purged;
   }
 
   /**

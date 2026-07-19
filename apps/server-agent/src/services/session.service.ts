@@ -597,27 +597,43 @@ export class SessionService {
    * 让 service 保持「纯数据层」。
    */
   async deleteSession(sessionId: string): Promise<void> {
-    const session = await this.findSessionOrFail(sessionId);
-    await this.deleteSessionInTx(sessionId);
-    await this.schedules.deleteBySession(sessionId);
-    await this.checkpointer.deleteThread(sessionId);
+    const agentId = await this.purgeSession(sessionId);
     // 删完才通知：先通知的话观察者可能在数据还在时就把行移除，然后被某个
     // 并发的列表刷新又加回来（闪回）。agentId 取自删除前查到的会话（删完
     // 这行数据已经没了，回查不到）。
     this.emitter.emit(SESSION_LIFECYCLE_EVENTS.deleted, {
-      agentId: session.agentId,
+      agentId,
       sessionId,
     } satisfies SessionDeletedEvent);
   }
 
   /**
-   * 删除一个会话及其消息——语义与 `deleteSession` 完全相同，只是换了个更贴合
-   * 「批量级联删除」语境的名字，供 `AgentService.removeWithData`（删 Agent 时
-   * 连同其全部会话一起清）调用。调用方已通过 `findByAgentId` 确认会话存在，
-   * 这里复用 `deleteSession` 而非另起一套实现，避免两份级联删除逻辑各自维护。
+   * 删除一个会话及其消息，**不发 `session.deleted`**——返回该会话的 agentId，
+   * 由调用方在合适的时机自行通知。供 `AgentService.removeInDb`（删 Agent 时
+   * 连同其全部会话一起清）调用。
+   *
+   * **为什么这条路径不能自己发事件**（review 抓出的架构缺口）：`removeInDb`
+   * 本身挂着 `@Transactional()`，而本仓的事务装饰器是 REQUIRED 传播语义——
+   * 嵌套调用只 join 外层事务、**不在本层提交**。所以从 `removeInDb` 内部调过来
+   * 时，`purgeSession` 返回并不代表数据已落盘：真正的 commit 要等 `removeInDb`
+   * 整个方法体（含循环之后的 `repo.delete({ id })`）跑完。此时若发通知，而外层
+   * 事务随后回滚，就会出现「观察者已把这些会话移除，数据库里它们其实还在」
+   * ——更糟的是 schedules / checkpointer 的删除是非事务性的，不会随回滚恢复，
+   * 于是会话「复活」但定时任务和 checkpointer 已经没了。
+   *
+   * 与 `deleteSession` 共用 {@link purgeSession}，不另起一套级联删除实现。
    */
-  removeWithMessages(sessionId: string): Promise<void> {
-    return this.deleteSession(sessionId);
+  removeWithMessages(sessionId: string): Promise<string> {
+    return this.purgeSession(sessionId);
+  }
+
+  /** 级联删除的实际动作；返回被删会话的 agentId（供调用方组事件）。 */
+  private async purgeSession(sessionId: string): Promise<string> {
+    const session = await this.findSessionOrFail(sessionId);
+    await this.deleteSessionInTx(sessionId);
+    await this.schedules.deleteBySession(sessionId);
+    await this.checkpointer.deleteThread(sessionId);
+    return session.agentId;
   }
 
   @Transactional()
