@@ -141,8 +141,12 @@ export class AgentWatchMirrorService {
   ): void {
     const cloudUserId = this.account.get();
     if (!cloudUserId) return; // 无账号上下文：不猜，宁可不实时也不跨账号泄漏
+    // 复用 hasWatcher 而不是内联同一段判定：这一行同时扛着两个职责——「无人看
+    // 时零成本短路」与「账号隔离」（key 含 cloudUserId，别人账号的观察者查不到
+    // 本账号的键）。写成两份拷贝，将来改其中一处（比如给观察者加宽限期）就会
+    // 漏改另一处，而漏掉的那一半是安全语义。
+    if (!this.hasWatcher(cloudUserId, localAgentId)) return;
     const key = AgentWatchMirrorService.key(cloudUserId, localAgentId);
-    if ((this.watchers.get(key)?.size ?? 0) === 0) return;
     const seq = (this.seqs.get(key) ?? 0) + 1;
     this.seqs.set(key, seq);
     this.relay.emitAgentWatchFrame(cloudUserId, {
