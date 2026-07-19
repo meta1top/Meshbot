@@ -178,23 +178,41 @@ export function AssistantSidebar() {
       prev.has(routeAgentId) ? prev : new Set(prev).add(routeAgentId),
     );
   }, [routeAgentId]);
+
+  // Review M-5：Agent 删除后，其展开态 id 若不清理会永久留在 localStorage
+  // （落盘集合只增不减）。按当前 Agent 全集求交集，把已经不存在的 id 从
+  // expanded 里摘掉并重新落盘。agents 还没加载完成（agentsPending）时提前
+  // 返回、不做任何裁剪——不能拿还没到位的 agentList（`agents ?? []` 兜底出的
+  // 空数组）当「当前 Agent 都不存在」，把刚从 localStorage 恢复回来的展开态
+  // 误删。写盘发生在 setState 之外，理由同下面 handleToggleAgent 的 M-3 注释。
+  useEffect(() => {
+    if (agentsPending) return;
+    const known = new Set(agentList.map((a) => a.id));
+    const keep = [...expanded].filter((id) => known.has(id));
+    if (keep.length === expanded.size) return;
+    const next = new Set(keep);
+    writeExpandedKeys(EXPANDED_STORAGE_KEY, next);
+    setExpanded(next);
+  }, [agentsPending, agentList, expanded]);
   const expandedIds = [...expanded];
 
   // 展开态变化（开/合都触发）：更新 expanded + 落盘持久化。取代原先只在展开
   // 时触发一次、且不落盘的 onExpandDevice——onToggle 覆盖开合两个方向，这里
   // 收敛成唯一入口，不再需要额外一个仅做「加入 expanded」的 onExpand 处理器。
+  // Review M-3：写盘挪到 setState updater 外面的普通语句——updater 应为纯
+  // 函数，StrictMode 下会双调用，副作用嵌进去就是重复写盘。直接基于闭包里的
+  // expanded 计算 next（这个回调只由用户点击触发，不存在需要函数式更新规避
+  // 的并发场景）。
   const handleToggleAgent = (node: NavNode, open: boolean) => {
     const id = node.key.startsWith(AGENT_PREFIX)
       ? node.key.slice(AGENT_PREFIX.length)
       : undefined;
     if (!id) return;
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (open) next.add(id);
-      else next.delete(id);
-      writeExpandedKeys(EXPANDED_STORAGE_KEY, next);
-      return next;
-    });
+    const next = new Set(expanded);
+    if (open) next.add(id);
+    else next.delete(id);
+    writeExpandedKeys(EXPANDED_STORAGE_KEY, next);
+    setExpanded(next);
   };
 
   // 每个展开 Agent 并行拉会话（走 device-query 单例往返，正常秒回）。

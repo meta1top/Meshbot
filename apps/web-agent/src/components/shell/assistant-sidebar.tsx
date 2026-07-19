@@ -107,6 +107,27 @@ export function AssistantSidebar() {
     if (stored.size) setExpanded((prev) => new Set([...prev, ...stored]));
   }, []);
 
+  // Review M-5：Agent 删除后，其展开态 key 若不清理会永久留在 localStorage
+  // （落盘集合只增不减）。按当前 Agent 全集（本机 + 远程）求交集，把已经不
+  // 存在的 key 从 expanded 里摘掉并重新落盘。agents/remoteAgents 任一还没
+  // 加载完成（undefined）时提前返回、不做任何裁剪——不能拿还没到位的空列表
+  // 当「当前 Agent 都不存在」，把刚从 localStorage 恢复回来的展开态误删。
+  // writeExpandedKeys 是普通语句、不嵌在 setState updater 内部（Review
+  // M-3：updater 应为纯函数，嵌入副作用在 StrictMode 下会因 updater 被双调用
+  // 而重复写盘）。
+  useEffect(() => {
+    if (!agents || !remoteAgents) return;
+    const known = new Set([
+      ...agents.map((a) => `${AGENT_PREFIX}${a.id}`),
+      ...remoteAgents.map((r) => `${REMOTE_AGENT_PREFIX}${r.id}`),
+    ]);
+    const keep = [...expanded].filter((k) => known.has(k));
+    if (keep.length === expanded.size) return;
+    const next = new Set(keep);
+    writeExpandedKeys(EXPANDED_STORAGE_KEY, next);
+    setExpanded(next);
+  }, [agents, remoteAgents, expanded]);
+
   // URL 指向的 Agent key：远程 `rag:<id>`，本机会话反查其所属 Agent 拼
   // `ag:<id>`——直接查 agentGroups，不依赖 sessionChildren 装配结果。
   const urlLocalAgentId = urlSessionId
@@ -127,15 +148,47 @@ export function AssistantSidebar() {
     );
   }, [urlAgentKey]);
 
-  const handleToggleAgent = useCallback((node: NavNode, open: boolean) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
+  // Review C-1：远程会话拉取是事件驱动的，loadRemoteSessions 只有三个既有
+  // 触发点——urlRemoteAgent 的 effect（下面）、用户点击触发的 onExpand
+  // （handleExpandNode）、以及远程会话正文页自己的加载逻辑。从 localStorage
+  // 恢复展开态、以及上面 M-5 的裁剪都会把 `rag:` key 直接并入 expanded，完全
+  // 绕开这三个触发点：`open=true` 但 `remoteSessions[id]` 因 atom 刷新已重置为
+  // undefined，没有任何代码会再去拉，骨架占位子行会永久卡住。这里对 expanded
+  // 里所有 `rag:` key 补一次拉取，只对宿主在线的远程 Agent 触发（离线 Agent
+  // `children` 恒空数组，拉了也没地方渲染）。loadRemoteSessionsAtom 自身已有
+  // loading/loaded 短路（见 atoms/remote-sessions.ts），这里不需要再叠一层
+  // 去重守卫——多次调用（包括与 urlRemoteAgent effect、用户 onExpand 重叠）
+  // 都是安全的空操作。
+  useEffect(() => {
+    for (const key of expanded) {
+      if (!key.startsWith(REMOTE_AGENT_PREFIX)) continue;
+      const agentId = key.slice(REMOTE_AGENT_PREFIX.length);
+      const ra = remoteAgents?.find((r) => r.id === agentId);
+      if (ra?.deviceOnline) void loadRemoteSessions(agentId);
+    }
+  }, [expanded, remoteAgents, loadRemoteSessions]);
+
+  // 展开态变化（开/合都触发）：更新 expanded + 落盘持久化。Review M-4：只有
+  // Agent 节点（本机 `ag:`/远程 `rag:`）的展开态值得落盘，校验前缀，避免未来
+  // 若有非 Agent 节点接了这个 onToggle 把无关 key 混进展开集合。Review
+  // M-3：写盘是普通语句，不嵌在 setState updater 内部——updater 应为纯函数，
+  // StrictMode 下会双调用，副作用嵌进去就是重复写盘；这里直接基于闭包里的
+  // expanded 计算 next（不用函数式更新），这个回调只由用户点击触发，不存在
+  // 需要函数式更新规避的并发场景。
+  const handleToggleAgent = useCallback(
+    (node: NavNode, open: boolean) => {
+      const isAgentKey =
+        node.key.startsWith(AGENT_PREFIX) ||
+        node.key.startsWith(REMOTE_AGENT_PREFIX);
+      if (!isAgentKey) return;
+      const next = new Set(expanded);
       if (open) next.add(node.key);
       else next.delete(node.key);
       writeExpandedKeys(EXPANDED_STORAGE_KEY, next);
-      return next;
-    });
-  }, []);
+      setExpanded(next);
+    },
+    [expanded],
+  );
 
   useEffect(() => {
     void loadSidebar();
@@ -149,7 +202,8 @@ export function AssistantSidebar() {
 
   // 当前激活会话对应的树 key：本地 `s:<id>`，远程 `r:<cloudAgentId>:<id>`。
   // 两者 key 前缀不同、互斥，可安全合一成单个 activeSessionKey 交给
-  // SessionTree（驱动高亮 + 祖先 Agent 分支自动展开）。
+  // SessionTree（仅用于高亮——Agent 分支展开态已全量受控，不再靠这个 key
+  // 驱动自动展开，见 session-tree.tsx 的 activeSessionKey JSDoc）。
   const activeSessionKey =
     pathname === "/assistant" && urlSessionId
       ? urlRemoteAgent
@@ -251,17 +305,22 @@ export function AssistantSidebar() {
   };
 
   // 远程 Agent（其他设备上已注册）：本机在前、远程在后（D2）。宿主离线时
-  // 不产出任何子节点（`children` 空数组）、且强制不展开——「禁止展开」从根上
-  // 做到，不靠 URL 强开一个离线节点再指望灰化把泄漏的占位子行盖住（Review
+  // 不产出任何子节点（`children` 恒空数组）——防的是幽灵子行（Review
   // Finding #1：URL 直达离线 Agent 时 defaultOpen 曾经为真，占位子行渲染在
-  // AgentRow 灰化包裹之外、未置灰可 hover）。这条防线保留，改的是 chevron：
-  // `children` 恒空数组本会连带 `hasChildren` 为假，NavItem 索性连 chevron 都
-  // 不画，导致离线行图标位只剩头像、比在线行少一格 chevron 宽度，整列参差
-  // （真机验收缺陷）。修法不是把 children 填回去（正是上面要杜绝的幽灵子行
-  // 写法），而是单独传 `chevronPlaceholder: true`——NavItem 在没有 children
-  // 的前提下画一个灰化、恒折叠、不可点的占位 chevron，只对齐左缘。SessionTree
-  // 侧仍会把整行 pointer-events 关掉（online:false）+ 显示「离线」徽标，用户
-  // 能看到该 Agent 离线，只是展不开（D3）。
+  // AgentRow 灰化包裹之外、未置灰可 hover）。这条防线保留在 `children` 上；
+  // 至于 `open`，受控化之后不再单独按 `ra.deviceOnline` 门控——曾在线时展开
+  // 过、被记进 expanded 集合的 Agent 转离线后 `open` 实际可能仍是 true（见下
+  // 面的行内注释）。这本身是安全的：`NavItem` 只有 `hasChildren && open` 同
+  // 时为真才画子节点区块，`hasChildren` 已经因 `children` 恒空数组而为假，
+  // `open` 是否为真不影响是否泄漏子行，因此无需再对 `open` 额外 && 一次
+  // `ra.deviceOnline`。改的是 chevron：`children` 恒空数组本会连带
+  // `hasChildren` 为假，NavItem 索性连 chevron 都不画，导致离线行图标位只剩
+  // 头像、比在线行少一格 chevron 宽度，整列参差（真机验收缺陷）。修法不是把
+  // children 填回去（正是上面要杜绝的幽灵子行写法），而是单独传
+  // `chevronPlaceholder: true`——NavItem 在没有 children 的前提下画一个灰化、
+  // 恒折叠、不可点的占位 chevron，只对齐左缘。SessionTree 侧仍会把整行
+  // pointer-events 关掉（online:false）+ 显示「离线」徽标，用户能看到该
+  // Agent 离线，只是展不开（D3）。
   const remoteAgentNodes: NavNode[] = (remoteAgents ?? []).map((ra) => {
     const { emoji, color } = parseAgentAvatar(ra.avatar);
     metaByKey.set(`${REMOTE_AGENT_PREFIX}${ra.id}`, {

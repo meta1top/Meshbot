@@ -126,8 +126,11 @@ export type SessionTreeNodeInfo =
 
 export interface SessionTreeProps {
   groups: NavGroup[];
-  /** 当前激活会话对应的 `NavNode.key`；用于高亮 + 驱动祖先设备分支自动展开
-   *（`SidebarNav` 内建：`node.defaultOpen ?? isNavNodeActive(node, activeKey)`）。 */
+  /** 当前激活会话对应的 `NavNode.key`；仅用于高亮。曾经还兼职「驱动祖先 Agent
+   *  分支自动展开」（`SidebarNav` 非受控态下 `node.defaultOpen ?? isNavNodeActive
+   *  (node, activeKey)` 的机制），但两端调用方（web-agent/web-main）现已全量
+   *  受控——`NavNode.open` 改由调用方自持的 `expanded` 集合驱动，该自动展开
+   *  机制对 Agent 节点不再生效。 */
   activeSessionKey?: string;
   /** 顶层加载态（设备列表本身未到达前）；命中时整树替换为骨架。 */
   loading?: boolean;
