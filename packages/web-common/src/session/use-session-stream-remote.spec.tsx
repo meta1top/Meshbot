@@ -1,9 +1,11 @@
 /**
  * @jest-environment jsdom
  */
+import { SESSION_WS_EVENTS } from "@meshbot/types-agent";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { createRef } from "react";
 import type { SessionSocketLike } from "./socket-like";
+import type { TimelineMessage } from "./timeline";
 import type { SessionTransport } from "./transport";
 import { useSessionStream } from "./use-session-stream";
 
@@ -124,5 +126,193 @@ describe("useSessionStream remote 分支的 running 校正", () => {
       expect.objectContaining({ mode: "append", sessionId: "sess-1" }),
     );
     expect(result.current.running).toBe(true);
+  });
+});
+
+/**
+ * 工具事件（args_delta / start / end）的状态推进链回归。
+ *
+ * 背景：真机上云端观察通道里所有工具卡永远转圈、todo_write 不渲染成待办卡片。
+ * 判据是块卡在 `status === "streaming"`（`tool-call-block.tsx` 的一批专用卡片
+ * 分支条件都是 `status !== "streaming"`）。三个 handler 此前对「宿主消息/宿主块
+ * 找不到」的处理各不相同、且都以**静默丢弃**收场——本组用例把这些失败面逐条钉死。
+ *
+ * 注意：这些用例证明的是 reducer 在乱序/缺帧下不再丢事件，**不**证明真机转圈
+ * 就是由此引起（根因未经证实）。
+ */
+
+/** 能真正分发事件的假 socket（`noopSocket` 只吞不发，工具链测不了）。 */
+interface FakeSocket extends SessionSocketLike {
+  fire(event: string, payload: unknown): void;
+}
+
+function makeFakeSocket(): FakeSocket {
+  // biome-ignore lint/suspicious/noExplicitAny: 镜像 socket.io-client 的 listener 形状
+  const handlers = new Map<string, Set<(...a: any[]) => void>>();
+  return {
+    connected: true,
+    on(event, listener) {
+      const set = handlers.get(event) ?? new Set();
+      set.add(listener);
+      handlers.set(event, set);
+      return undefined;
+    },
+    off(event, listener) {
+      handlers.get(event)?.delete(listener);
+      return undefined;
+    },
+    emit() {
+      return undefined;
+    },
+    fire(event, payload) {
+      // 复制一份再遍历：handler 内部可能触发订阅变更
+      for (const h of [...(handlers.get(event) ?? [])]) h(payload);
+    },
+  };
+}
+
+const SID = "sess-1";
+
+/** 取整条时间线里所有工具块（跨消息）。 */
+function allTools(messages: TimelineMessage[]) {
+  return messages.flatMap((m) => m.toolCalls ?? []);
+}
+
+/** 渲染一路 remote 会话并等首屏历史落地（避免与工具事件竞态）。 */
+async function renderToolStream() {
+  const socket = makeFakeSocket();
+  const getFakeSocket = () => socket;
+  const transport = makeTransport();
+  const { result } = renderHook(() =>
+    useSessionStream(
+      SID,
+      scrollRef,
+      transport,
+      getFakeSocket,
+      noCallbacks,
+      "agent-1",
+      null,
+    ),
+  );
+  await waitFor(() => expect(result.current.historyLoading).toBe(false));
+  return { socket, result };
+}
+
+const argsDelta = (over: Record<string, unknown> = {}) => ({
+  sessionId: SID,
+  messageId: "msg-1",
+  toolCallId: "tc-1",
+  index: 0,
+  name: "todo_write",
+  delta: '{"todos"',
+  ...over,
+});
+
+const toolStart = (over: Record<string, unknown> = {}) => ({
+  sessionId: SID,
+  messageId: "msg-1",
+  toolCallId: "tc-1",
+  name: "todo_write",
+  args: { todos: [{ content: "写测试", status: "pending" }] },
+  ...over,
+});
+
+const toolEnd = (over: Record<string, unknown> = {}) => ({
+  sessionId: SID,
+  messageId: "msg-1",
+  toolCallId: "tc-1",
+  name: "todo_write",
+  ok: true,
+  resultPreview: "已更新 1 条待办",
+  ...over,
+});
+
+describe("useSessionStream 工具事件状态推进", () => {
+  it("正常序 args_delta → start → end：streaming → running → ok，且 start 后即命中卡片分支", async () => {
+    const { socket, result } = await renderToolStream();
+
+    act(() => socket.fire(SESSION_WS_EVENTS.runToolCallArgsDelta, argsDelta()));
+    let tool = allTools(result.current.messages)[0];
+    expect(tool?.status).toBe("streaming");
+    expect(tool?.argsText).toBe('{"todos"');
+
+    act(() => socket.fire(SESSION_WS_EVENTS.runToolCallStart, toolStart()));
+    tool = allTools(result.current.messages)[0];
+    expect(tool?.status).toBe("running");
+    // 权威 args 到位、流式预览文本清空
+    expect(tool?.args).toEqual({
+      todos: [{ content: "写测试", status: "pending" }],
+    });
+    expect(tool?.argsText).toBeUndefined();
+    // todo_write 待办卡片分支的条件（tool-call-block.tsx）：status !== "streaming"
+    expect(tool?.status).not.toBe("streaming");
+
+    act(() => socket.fire(SESSION_WS_EVENTS.runToolCallEnd, toolEnd()));
+    tool = allTools(result.current.messages)[0];
+    expect(tool?.status).toBe("ok");
+    expect(tool?.result).toBe("已更新 1 条待办");
+    expect(allTools(result.current.messages)).toHaveLength(1);
+  });
+
+  it("乱序 A：start 先到且时间线里没有该 messageId → 建壳并以 running 建出块（原实现整个事件被静默吞掉）", async () => {
+    const { socket, result } = await renderToolStream();
+
+    act(() => socket.fire(SESSION_WS_EVENTS.runToolCallStart, toolStart()));
+    expect(result.current.messages.map((m) => m.id)).toEqual(["msg-1"]);
+    let tool = allTools(result.current.messages)[0];
+    expect(tool?.status).toBe("running");
+    expect(tool?.name).toBe("todo_write");
+
+    act(() => socket.fire(SESSION_WS_EVENTS.runToolCallEnd, toolEnd()));
+    tool = allTools(result.current.messages)[0];
+    expect(tool?.status).toBe("ok");
+    expect(tool?.result).toBe("已更新 1 条待办");
+  });
+
+  it("乱序 B：end 先到且时间线里没有任何块 → 直接建出终态块（原实现静默丢弃 → 卡片永久转圈）", async () => {
+    const { socket, result } = await renderToolStream();
+
+    act(() =>
+      socket.fire(SESSION_WS_EVENTS.runToolCallEnd, toolEnd({ ok: false })),
+    );
+    expect(result.current.messages.map((m) => m.id)).toEqual(["msg-1"]);
+    const tool = allTools(result.current.messages)[0];
+    expect(tool?.status).toBe("error");
+    expect(tool?.name).toBe("todo_write");
+    expect(tool?.result).toBe("已更新 1 条待办");
+  });
+
+  it("乱序 B 续：迟到的 args_delta 不得把终态块打回 streaming、也不得复制出第二个块", async () => {
+    const { socket, result } = await renderToolStream();
+    act(() => socket.fire(SESSION_WS_EVENTS.runToolCallEnd, toolEnd()));
+
+    // 迟到的 args_delta（甚至挂在另一条消息上）：只允许累加 argsText
+    act(() =>
+      socket.fire(
+        SESSION_WS_EVENTS.runToolCallArgsDelta,
+        argsDelta({ messageId: "msg-other" }),
+      ),
+    );
+
+    const tools = allTools(result.current.messages);
+    expect(tools).toHaveLength(1);
+    expect(tools[0]?.status).toBe("ok");
+    // 也不该为了挂这条 delta 而凭空多出一条消息壳
+    expect(result.current.messages.map((m) => m.id)).toEqual(["msg-1"]);
+  });
+
+  it("幂等：重复 start / 重复 end 不产生第二个块，也不产生第二条消息壳", async () => {
+    const { socket, result } = await renderToolStream();
+
+    act(() => socket.fire(SESSION_WS_EVENTS.runToolCallStart, toolStart()));
+    act(() => socket.fire(SESSION_WS_EVENTS.runToolCallStart, toolStart()));
+    expect(allTools(result.current.messages)).toHaveLength(1);
+    expect(result.current.messages).toHaveLength(1);
+
+    act(() => socket.fire(SESSION_WS_EVENTS.runToolCallEnd, toolEnd()));
+    act(() => socket.fire(SESSION_WS_EVENTS.runToolCallEnd, toolEnd()));
+    expect(allTools(result.current.messages)).toHaveLength(1);
+    expect(result.current.messages).toHaveLength(1);
+    expect(allTools(result.current.messages)[0]?.status).toBe("ok");
   });
 });

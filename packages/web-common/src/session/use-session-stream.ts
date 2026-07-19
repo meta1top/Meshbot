@@ -887,11 +887,21 @@ export function useSessionStream(
     const onTitleUpdatedEvent = (e: SessionTitleUpdatedEvent) => {
       callbacksRef.current.onTitleUpdated?.(e.sessionId, e.title);
     };
+    /**
+     * LLM 正在逐 token 生成某个 tool_call 的参数 JSON。
+     *
+     * 定位顺序是**先按 toolCallId 全时间线找、再按 messageId 落位**，不能反过来：
+     * 该块可能已经被 start/end 建在别的消息上（乱序到达 / 重连补发 / provider
+     * 的 messageId 与 args 流不一致）。原实现只在 `e.messageId` 那条消息内部找，
+     * 找不到就 push 一个 `status:"streaming"` 的新块——同一个 toolCallId 于是
+     * 在时间线上出现两份，其中一份是永远转圈的 streaming 幽灵，且因
+     * `status === "streaming"` 会让 todo_write / ask_question / present_file 等
+     * 卡片分支全部退化成通用 JSON 块。这里改为命中既有块就**只 append argsText**，
+     * 绝不回写 status（终态块不会被打回 streaming）。
+     */
     const onToolArgsDelta = (e: RunToolCallArgsDeltaEvent) => {
       if (e.sessionId !== sessionId) return;
-      // 按 toolCallId 把 args 增量合并到「同一个工具块」（像 chunk 按 messageId
-      // 合并到消息）：流式 args → running → 完成 是同一个块的状态推进，不再先建
-      // 独立预览块再整批清空。个别 provider 流里不带 id → 跳过预览，等 onToolStart。
+      // 个别 provider 流里不带 id → 跳过预览，等 onToolStart。
       const toolCallId = e.toolCallId;
       if (!toolCallId) return;
       apply((rawPrev) => {
@@ -899,24 +909,33 @@ export function useSessionStream(
         // reasoning，空 delta 不发 chunk），loading 占位无人清 → 「…」悬置在工具块
         // 上方。本轮首个工具事件到达即视为 LLM 已应答，清掉占位。
         const prev = rawPrev.filter((m) => !m.loading);
-        const merge = (m: TimelineMessage): TimelineMessage => {
-          const list = m.toolCalls ? [...m.toolCalls] : [];
-          const i = list.findIndex((t) => t.toolCallId === toolCallId);
-          if (i === -1) {
-            list.push({
-              toolCallId,
-              name: e.name ?? "",
-              status: "streaming",
-              argsText: e.delta,
-            });
-          } else {
-            list[i] = {
-              ...list[i],
-              name: e.name ?? list[i].name,
-              argsText: (list[i].argsText ?? "") + e.delta,
-            };
-          }
-          return { ...m, toolCalls: list };
+        // 1) 全时间线找同 toolCallId 的既有块：只累加 argsText，status 原样保留。
+        const ownerIdx = prev.findIndex((m) =>
+          m.toolCalls?.some((t) => t.toolCallId === toolCallId),
+        );
+        if (ownerIdx !== -1) {
+          const copy = [...prev];
+          const owner = copy[ownerIdx];
+          copy[ownerIdx] = {
+            ...owner,
+            toolCalls: (owner.toolCalls ?? []).map((t) =>
+              t.toolCallId === toolCallId
+                ? {
+                    ...t,
+                    name: e.name ?? t.name,
+                    argsText: (t.argsText ?? "") + e.delta,
+                  }
+                : t,
+            ),
+          };
+          return copy;
+        }
+        // 2) 确实是新块：挂到 e.messageId 那条消息上。
+        const fresh = {
+          toolCallId,
+          name: e.name ?? "",
+          status: "streaming" as const,
+          argsText: e.delta,
         };
         const idx = prev.findIndex((m) => m.id === e.messageId);
         // 中间决策轮可能无 content/reasoning：不存在则建一个无正文的 assistant 壳，
@@ -924,57 +943,79 @@ export function useSessionStream(
         if (idx === -1) {
           return [
             ...prev,
-            merge({ id: e.messageId, role: "assistant", content: "" }),
+            {
+              id: e.messageId,
+              role: "assistant" as const,
+              content: "",
+              toolCalls: [fresh],
+            },
           ];
         }
         const copy = [...prev];
-        copy[idx] = merge(copy[idx]);
+        copy[idx] = {
+          ...copy[idx],
+          toolCalls: [...(copy[idx].toolCalls ?? []), fresh],
+        };
         return copy;
       });
     };
+    /**
+     * 工具开始执行：填权威 args、升级 running、清流式文本。
+     *
+     * 宿主消息不存在时**建壳**（与 onToolArgsDelta 同款写法）。原实现是
+     * `prev.map(m => m.id !== e.messageId ? m : ...)`——只改不建，宿主消息不在
+     * 时间线上（args 流不带 id 的 provider 直达 start、乱序到达、跨设备观察通道
+     * 中途接入没有前序帧）就把整个事件**静默吞掉**，那个工具块要么根本不出现、
+     * 要么永远停在 args_delta 建出的 streaming 态转圈。原注释声称本函数处理
+     * 「本轮首个工具事件」，但 map-only 的结构做不到，注释与实现不符，一并修正。
+     */
     const onToolStart = (e: RunToolCallStartEvent) => {
       if (e.sessionId !== sessionId) return;
-      // 同 onToolArgsDelta：args 流不带 id 的 provider 跳过预览直达 start，
-      // 这里是该路径下本轮的首个工具事件，同样要清 loading 占位。
-      apply((prev) =>
-        prev
-          .filter((m) => !m.loading)
-          .map((m) => {
-            if (m.id !== e.messageId) return m;
-            // tool_call 开始 = 本轮 LLM 文本已收尾。
-            // 1) 锁住 reasoningDurationMs，否则「思考中 Xs」会一直跳到本轮 LLM 结束才能切回「已思考」。
-            // 2) 清 streaming 标记，否则中间决策轮（content 已停 + tool_call 进行中）
-            //    气泡尾部的闪烁光标永不熄灭 —— runDone 要等整轮跑完才发。
-            const lockDuration =
-              m.reasoningStartedAt !== undefined &&
-              m.reasoningDurationMs === undefined
-                ? { reasoningDurationMs: Date.now() - m.reasoningStartedAt }
-                : {};
-            // 合并到流式阶段已建的同一块（按 toolCallId 命中）：升级 running、填权威
-            // args、清流式文本。命不中（无流式预览 / 重复 start）则新建/覆盖。
-            // 按 toolCallId 命中 = 幂等：重复 start 不会再 push 出重复块。
-            const list = m.toolCalls ? [...m.toolCalls] : [];
-            const i = list.findIndex((t) => t.toolCallId === e.toolCallId);
-            const next = {
-              toolCallId: e.toolCallId,
-              name: e.name,
-              args: e.args,
-              status: "running" as const,
-              argsText: undefined,
-            };
-            if (i === -1) {
-              list.push(next);
-            } else {
-              list[i] = { ...list[i], ...next };
-            }
-            return {
-              ...m,
-              ...lockDuration,
-              streaming: false,
-              toolCalls: list,
-            };
-          }),
-      );
+      apply((rawPrev) => {
+        // 同 onToolArgsDelta：本轮首个工具事件到达即视为 LLM 已应答，清 loading 占位。
+        const prev = rawPrev.filter((m) => !m.loading);
+        const upgrade = (m: TimelineMessage): TimelineMessage => {
+          // tool_call 开始 = 本轮 LLM 文本已收尾。
+          // 1) 锁住 reasoningDurationMs，否则「思考中 Xs」会一直跳到本轮 LLM 结束才能切回「已思考」。
+          // 2) 清 streaming 标记，否则中间决策轮（content 已停 + tool_call 进行中）
+          //    气泡尾部的闪烁光标永不熄灭 —— runDone 要等整轮跑完才发。
+          const lockDuration =
+            m.reasoningStartedAt !== undefined &&
+            m.reasoningDurationMs === undefined
+              ? { reasoningDurationMs: Date.now() - m.reasoningStartedAt }
+              : {};
+          // 合并到流式阶段已建的同一块（按 toolCallId 命中）：升级 running、填权威
+          // args、清流式文本。命不中（无流式预览 / 重复 start）则新建/覆盖。
+          // 按 toolCallId 命中 = 幂等：重复 start 不会再 push 出重复块。
+          const list = m.toolCalls ? [...m.toolCalls] : [];
+          const i = list.findIndex((t) => t.toolCallId === e.toolCallId);
+          const next = {
+            toolCallId: e.toolCallId,
+            name: e.name,
+            args: e.args,
+            status: "running" as const,
+            argsText: undefined,
+          };
+          if (i === -1) {
+            list.push(next);
+          } else {
+            list[i] = { ...list[i], ...next };
+          }
+          return { ...m, ...lockDuration, streaming: false, toolCalls: list };
+        };
+        const idx = prev.findIndex((m) => m.id === e.messageId);
+        // 建壳幂等：壳的 id 就是 e.messageId，重复 start 第二次会命中上面的
+        // findIndex 走覆盖分支，不会建出第二条消息，也不会建出第二个块。
+        if (idx === -1) {
+          return [
+            ...prev,
+            upgrade({ id: e.messageId, role: "assistant", content: "" }),
+          ];
+        }
+        const copy = [...prev];
+        copy[idx] = upgrade(copy[idx]);
+        return copy;
+      });
     };
     const onToolProgress = (e: RunToolCallProgressEvent) => {
       if (e.sessionId !== sessionId) return;
@@ -993,29 +1034,64 @@ export function useSessionStream(
         ),
       );
     };
+    /**
+     * 工具执行结束：按 toolCallId 全局找到块并置终态。
+     *
+     * 找不到块时**兜底建壳建块**并直接置终态，而不是像原实现那样静默丢弃——end
+     * 事件自带 `messageId`/`toolCallId`/`name`/`ok`/`resultPreview`，字段足够渲染
+     * 一张完整的终态卡。丢掉它的代价是：前序 start 若因任何原因没落到时间线上，
+     * 这个工具就永远没有终态、卡片永久转圈（且没有任何后续事件能救它）。
+     */
     const onToolEnd = (
       // gateway 已剥 content；前端只用 resultPreview
       e: Omit<RunToolCallEndEvent, "content">,
     ) => {
       if (e.sessionId !== sessionId) return;
-      apply((prev) =>
-        prev.map((m) =>
-          m.toolCalls?.some((t) => t.toolCallId === e.toolCallId)
-            ? {
-                ...m,
-                toolCalls: m.toolCalls.map((t) =>
-                  t.toolCallId === e.toolCallId
-                    ? {
-                        ...t,
-                        status: e.ok ? ("ok" as const) : ("error" as const),
-                        result: e.resultPreview,
-                      }
-                    : t,
-                ),
-              }
-            : m,
-        ),
-      );
+      const status = e.ok ? ("ok" as const) : ("error" as const);
+      apply((prev) => {
+        const ownerIdx = prev.findIndex((m) =>
+          m.toolCalls?.some((t) => t.toolCallId === e.toolCallId),
+        );
+        // 幂等：重复 end 走这条命中分支，重复写同样的终态，不产生新块。
+        if (ownerIdx !== -1) {
+          const copy = [...prev];
+          const owner = copy[ownerIdx];
+          copy[ownerIdx] = {
+            ...owner,
+            toolCalls: (owner.toolCalls ?? []).map((t) =>
+              t.toolCallId === e.toolCallId
+                ? { ...t, status, result: e.resultPreview }
+                : t,
+            ),
+          };
+          return copy;
+        }
+        const settled = {
+          toolCallId: e.toolCallId,
+          name: e.name,
+          status,
+          result: e.resultPreview,
+        };
+        const idx = prev.findIndex((m) => m.id === e.messageId);
+        if (idx !== -1) {
+          const copy = [...prev];
+          copy[idx] = {
+            ...copy[idx],
+            toolCalls: [...(copy[idx].toolCalls ?? []), settled],
+          };
+          return copy;
+        }
+        // 宿主消息也不在：建壳。此路径下本轮 LLM 已应答完毕，loading 占位一并清掉。
+        return [
+          ...prev.filter((m) => !m.loading),
+          {
+            id: e.messageId,
+            role: "assistant" as const,
+            content: "",
+            toolCalls: [settled],
+          },
+        ];
+      });
     };
     const onSubagentSpawned = (e: RunSubagentSpawnedEvent) => {
       if (e.sessionId !== sessionId) return;
