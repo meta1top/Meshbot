@@ -386,6 +386,51 @@ describe("SessionTree 远程 Agent 节点（review finding #2 补测）", () => 
     expect(screen.queryByText("隐藏会话")).not.toBeInTheDocument();
   });
 
+  it("离线远程 Agent 无 children（真实数据装配）时仍画占位 chevron 对齐左缘，且不可展开", async () => {
+    // 真实调用方（web-agent/web-main）离线时 children 恒为空数组，chevron 由
+    // NavNode.chevronPlaceholder 单独撑出——不是靠非空 children，回归上一轮
+    // review 否掉的「填占位 children」写法。
+    const groups = [
+      {
+        key: "agents",
+        items: [
+          {
+            key: "rag:6",
+            label: "离线远程助手",
+            children: [],
+            chevronPlaceholder: true,
+          },
+        ],
+      },
+    ];
+    const { container } = render(
+      <SessionTree
+        groups={groups}
+        nodeInfo={() => ({
+          kind: "agent",
+          emoji: "🤖",
+          color: "#f59e0b",
+          name: "离线远程助手",
+          running: false,
+          remote: true,
+          deviceName: "小明的电脑",
+          online: false,
+        })}
+        labels={STUB_LABELS}
+      />,
+    );
+    // 占位 chevron 确实渲染（灰化 + 恒折叠朝向），而不是回退到无 chevron。
+    const placeholderChevron = container.querySelector(
+      "svg.-rotate-90.opacity-40",
+    );
+    expect(placeholderChevron).not.toBeNull();
+    // 灰化包裹内不应残留任何未置灰的子行（幽灵行防线：children 恒空）。
+    await userEvent.click(screen.getByText("离线远程助手"));
+    expect(
+      container.querySelectorAll(".pointer-events-none.opacity-50"),
+    ).toHaveLength(1);
+  });
+
   it("在线远程 Agent 正常渲染，不灰化、无离线徽标", () => {
     const groups = [
       {

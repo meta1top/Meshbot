@@ -75,9 +75,18 @@ export type SessionTreeNodeInfo =
       kind: "device";
       /** 在线态：决定 chevron 是否可点、offline 徽标是否显示。 */
       online: boolean;
-      /** 是否可展开（离线设备 hasChildren 仍可为 true 以撑出 chevron，
-       *  但点击/展开态由 expandable 挡住 —— 对齐 web-agent「离线也显示 chevron，
-       *  置灰不可点」的既有交互）。 */
+      /**
+       * 是否可展开——只控制这一行本身：为 false 时 `onClick` 置空、整行套
+       * `pointer-events-none opacity-50` 灰化不可点（见 `DeviceRow` 的
+       * `info.expandable ? row : <div className="pointer-events-none opacity-50">…`）。
+       * 注意它不管子节点是否渲染——`hasChildren && open` 是 `NavItem` 自己的
+       * 逻辑，落在 `renderRow` 返回值之外，不会被这层灰化包裹住。所以哪怕这里
+       * 传 `expandable: false`，也不能靠给非空 `children` 撑 chevron：会重演
+       * Agent 侧踩过的幽灵子行（未置灰、可 hover，见 `NavNode.chevronPlaceholder`
+       * 的 JSDoc）——离线时 `children` 仍要给空数组，chevron 改用
+       * `chevronPlaceholder` 单独撑出。当前没有调用方产出 `kind: "device"`
+       * 节点，这段是该判别分支留存的历史 API 说明。
+       */
       expandable: boolean;
     }
   | {

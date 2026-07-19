@@ -15,6 +15,13 @@ export interface NavNode {
   trailing?: ReactNode;
   children?: NavNode[];
   defaultOpen?: boolean;
+  /**
+   * 无 children 时仍占一个 chevron 位（灰化、恒折叠、不可点）。
+   * 用于离线远程 Agent：行不可展开，但左缘要和可展开的行对齐，否则整列参差。
+   * 刻意与「给一个占位 children 撑 chevron」区分——后者会让占位子行渲染在
+   * 调用方的灰化包裹之外，漏出未置灰、可 hover 的幽灵行。
+   */
+  chevronPlaceholder?: boolean;
 }
 
 export interface NavGroup {

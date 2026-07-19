@@ -33,6 +33,10 @@ function NavItem({
       <ChevronDown
         className={cn("transition-transform", open ? "" : "-rotate-90")}
       />
+    ) : node.chevronPlaceholder ? (
+      // 恒折叠、不可点的占位 chevron——只对齐左缘，不参与 open/toggle 逻辑
+      // （hasChildren 为假时下面的 onClick 本来就不会走 toggle 分支）。
+      <ChevronDown className="-rotate-90 opacity-40" />
     ) : (
       node.icon
     ),

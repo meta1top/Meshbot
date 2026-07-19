@@ -226,18 +226,21 @@ export function AssistantSidebar() {
       deviceName: deviceNameById.get(a.deviceId) ?? a.deviceId,
       online,
     });
-    // 展开态/子节点开关抽成纯函数 computeAgentNodeExpansion（同目录），离线
-    // 强制不展开、不产出子节点——见该函数顶部注释（Task 6 review Finding
-    // #1，与 web-agent T5 `4ea1244e` 同构修法保持两端一致）。
-    const { defaultOpen, hasChildren } = computeAgentNodeExpansion(
-      online,
-      expanded.has(a.id) || a.id === routeAgentId,
-    );
+    // 展开态/子节点开关/占位 chevron 抽成纯函数 computeAgentNodeExpansion
+    // （同目录），离线强制不展开、不产出子节点、但仍要有占位 chevron 对齐
+    // 左缘——见该函数顶部注释（Task 6 review Finding #1 + 真机验收 chevron
+    // 缺陷，与 web-agent 同构修法保持两端一致）。
+    const { defaultOpen, hasChildren, chevronPlaceholder } =
+      computeAgentNodeExpansion(
+        online,
+        expanded.has(a.id) || a.id === routeAgentId,
+      );
     return {
       key: `${AGENT_PREFIX}${a.id}`,
       label: a.name,
       defaultOpen,
       children: hasChildren ? sessionChildren(a.id) : [],
+      chevronPlaceholder,
     };
   });
 
