@@ -1,4 +1,5 @@
 import { Global, Module } from "@nestjs/common";
+import { EventEmitterModule } from "@nestjs/event-emitter";
 import { Test } from "@nestjs/testing";
 import { describe, expect, it } from "vitest";
 import { AgentModule } from "../../src/agent.module";
@@ -51,11 +52,32 @@ class HostPortStubModule {}
 
 async function compileAgentModule() {
   return Test.createTestingModule({
-    imports: [HostPortStubModule, AgentModule],
+    // EventEmitterModule.forRoot() 由**测试**提供，AgentModule 自己不再 import。
+    // 生产环境唯一持有方是 apps/server-agent 的 app.module；库模块再调一次会
+    // 产生第二个 EventEmitter2 实例（详见 agent.module.ts 顶部那段长注释——
+    // 那正是「云端观察端工具卡永远转圈」的根因）。
+    imports: [HostPortStubModule, EventEmitterModule.forRoot(), AgentModule],
   }).compile();
 }
 
 describe("AgentModule", () => {
+  it("绝不自带 EventEmitterModule.forRoot()（否则全局出现第二个 EventEmitter2）", () => {
+    // 回归防线。`forRoot()` 每次返回**新的** DynamicModule 对象，NestJS 按动态
+    // 模块身份去重，库模块调一次 + app 层调一次 = 两个 EventEmitter2 实例。
+    // 后果不是「全都坏了」而是「一半是好的」：`@OnEvent` 装饰器监听会被每个
+    // EventEmitterModule 实例各自绑一遍（本地 UI 照常工作），而运行时
+    // `emitter.on()` 只挂在注入的那一个上 → 跨设备镜像转发器永远收不到图执行
+    // 侧发的 run.tool_call_start / run.tool_call_end。真机表现为「云端工具卡
+    // 永远转圈、特化卡不渲染」，查了四轮。
+    const imports: unknown[] =
+      Reflect.getMetadata("imports", AgentModule) ?? [];
+    const names = imports.map((m) => {
+      const dyn = m as { module?: { name?: string }; name?: string };
+      return dyn?.module?.name ?? dyn?.name ?? String(m);
+    });
+    expect(names).not.toContain("EventEmitterModule");
+  });
+
   it("compiles and provides GraphRunner", async () => {
     const moduleRef = await compileAgentModule();
     expect(moduleRef.get(GraphRunner)).toBeDefined();
