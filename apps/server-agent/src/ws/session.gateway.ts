@@ -177,6 +177,10 @@ export class SessionGateway extends BaseWebSocketGateway {
   /** RunnerService → run.tool_call_start → 转发到房间。 */
   @OnEvent(SESSION_WS_EVENTS.runToolCallStart)
   onRunToolCallStart(payload: RunToolCallStartEvent): void {
+    // PROBE-TS 临时排查埋点（云端工具卡永不收敛）——定位后整块删除
+    console.warn(
+      `[PROBE-TS][bus] run.tool_call_start sid=${payload.sessionId} msg=${payload.messageId} tc=${payload.toolCallId}`,
+    );
     this.server
       .to(payload.sessionId)
       .emit(SESSION_WS_EVENTS.runToolCallStart, payload);
@@ -205,6 +209,10 @@ export class SessionGateway extends BaseWebSocketGateway {
    */
   @OnEvent(SESSION_WS_EVENTS.runToolCallEnd)
   onRunToolCallEnd(payload: RunToolCallEndEvent): void {
+    // PROBE-TS 临时排查埋点（云端工具卡永不收敛）——定位后整块删除
+    console.warn(
+      `[PROBE-TS][bus] run.tool_call_end sid=${payload.sessionId} msg=${payload.messageId} tc=${payload.toolCallId} ok=${payload.ok}`,
+    );
     const { content: _content, ...wireOut } = payload;
     this.server
       .to(payload.sessionId)
