@@ -3,6 +3,11 @@ import type { AgentWatchFrame } from "@meshbot/types";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { SessionWatchService, WATCH_IDLE_MS } from "./session-watch.service";
 
+/** 最简 relay 桩：满足 WatchFrameRelay 接口，供不关心镜像帧内容的用例用。 */
+function relayMock() {
+  return { emitAgentWatchFrame: jest.fn() };
+}
+
 describe("SessionWatchService（会话级常驻转发器）", () => {
   let emitter: EventEmitter2;
   let sent: Array<{ cloudUserId: string; frame: AgentWatchFrame }>;
@@ -143,6 +148,28 @@ describe("SessionWatchService（会话级常驻转发器）", () => {
 
   it("removeWatcher 未知 watchId 不抛", () => {
     expect(() => svc.removeWatcher("不存在")).not.toThrow();
+  });
+
+  it("移除观察者时同步触发 onWatchReleased 回调（防 registry watchId 映射泄漏，T16）", () => {
+    const released: string[] = [];
+    const svc2 = new SessionWatchService(emitter, relayMock(), (w) =>
+      released.push(w),
+    );
+    svc2.addWatcher("u1", "agent-1", "s1", "w1");
+    expect(released).toEqual([]); // 加入观察不触发释放回调
+    svc2.removeWatcher("w1");
+    expect(released).toEqual(["w1"]);
+    svc2.onModuleDestroy();
+  });
+
+  it("未知 watchId 移除不触发 onWatchReleased（回调只对真实登记项触发）", () => {
+    const released: string[] = [];
+    const svc2 = new SessionWatchService(emitter, relayMock(), (w) =>
+      released.push(w),
+    );
+    svc2.removeWatcher("不存在");
+    expect(released).toEqual([]);
+    svc2.onModuleDestroy();
   });
 
   it("不同账号同名 sessionId 互不干扰（账号隔离）", () => {

@@ -151,18 +151,42 @@ export const AgentRunAnswerItemSchema = z.object({
 });
 export type AgentRunAnswerItem = z.infer<typeof AgentRunAnswerItemSchema>;
 
-/** L3:A→B 运行中控制(confirm/answer/interrupt)。 */
-export const AgentRunControlSchema = z.object({
-  streamId: z.string().min(1),
-  /** 目标云端 Agent id(计划二 2b:寻址从设备细化到设备上的某 Agent)。 */
-  targetAgentId: z.string().min(1),
-  sessionId: z.string().min(1),
-  kind: z.enum(["confirm", "answer", "interrupt"]),
-  toolCallId: z.string().optional(),
-  decision: z.enum(["send", "cancel"]).optional(),
-  content: z.string().optional(),
-  answers: z.array(AgentRunAnswerItemSchema).optional(),
-});
+/**
+ * L3:A→B 运行中控制(confirm/answer/interrupt)。
+ *
+ * **双寻址（Agent 级观察通道 D2：观察者也能应答 HITL）**：`streamId` 与
+ * `watchId` **二选一必填**（同 {@link AgentRunFrameSchema} 的双寻址）：
+ * - `streamId`：自己发起的流（既有语义，不变）；
+ * - `watchId`：观察中的通道——观察者据此应答别人发起的 run 挂起的 HITL 关卡。
+ *   **不可携带 `kind:"interrupt"`**——打断权限仍限发起方（spec「不在本轮」：
+ *   观察者只能应答 HITL，不能打断）。
+ */
+export const AgentRunControlSchema = z
+  .object({
+    /** 自己发起的流；与 watchId 二选一必填。 */
+    streamId: z.string().min(1).optional(),
+    /**
+     * 观察中的通道（Agent 级观察通道 D2：观察者也能应答 HITL）；与 streamId
+     * 二选一必填。**不可携带 `kind:"interrupt"`**——打断权限仍限发起方
+     * （spec「不在本轮」：观察者只能应答 HITL）。
+     */
+    watchId: z.string().min(1).optional(),
+    /** 目标云端 Agent id(计划二 2b:寻址从设备细化到设备上的某 Agent)。 */
+    targetAgentId: z.string().min(1),
+    sessionId: z.string().min(1),
+    kind: z.enum(["confirm", "answer", "interrupt"]),
+    toolCallId: z.string().optional(),
+    decision: z.enum(["send", "cancel"]).optional(),
+    content: z.string().optional(),
+    answers: z.array(AgentRunAnswerItemSchema).optional(),
+  })
+  .refine((v) => !!v.streamId !== !!v.watchId, {
+    message: "streamId 与 watchId 二选一必填",
+  })
+  .refine((v) => !(v.watchId && v.kind === "interrupt"), {
+    message: "观察者不可中断他人发起的 run（打断权限限发起方）",
+    path: ["kind"],
+  });
 export type AgentRunControlInput = z.infer<typeof AgentRunControlSchema>;
 /**
  * requesterDeviceId 同 AgentRunStartForwarded：device 为 deviceId，user 为 `"user:" + socketId`。

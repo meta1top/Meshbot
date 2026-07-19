@@ -1609,6 +1609,145 @@ describe("ImGateway.handleAgentRunControl(L3 Phase A 控制帧路由 + 越权拒
   });
 });
 
+describe("ImGateway.handleAgentRunControl watchId 寻址（Task 16：观察者应答 HITL）", () => {
+  const client = (over: Record<string, unknown> = {}) =>
+    ({
+      id: "sock-1",
+      data: { user: { userId: "u1" }, orgId: "org-1" },
+      ...over,
+    }) as never;
+
+  function makeAgentGateway() {
+    return makeGateway({
+      agents: {
+        findActiveById: jest.fn().mockResolvedValue({
+          id: "cloud-a1",
+          userId: "u1",
+          orgId: "org-1",
+          deviceId: "dev-b",
+          localAgentId: "local-a1",
+        }),
+      },
+    });
+  }
+
+  it("watchId control 路由到目标设备", async () => {
+    const { gateway, toSpy, roomEmitSpy } = makeAgentGateway();
+    await gateway.handleAgentWatchStart(
+      {
+        watchId: "w1",
+        targetAgentId: "cloud-a1",
+        scope: "session",
+        sessionId: "s1",
+      } as never,
+      client(),
+    );
+    toSpy.mockClear();
+    roomEmitSpy.mockClear();
+
+    await gateway.handleAgentRunControl(
+      {
+        watchId: "w1",
+        targetAgentId: "cloud-a1",
+        sessionId: "s1",
+        kind: "confirm",
+        toolCallId: "tc1",
+        decision: "send",
+      } as never,
+      client(),
+    );
+
+    expect(toSpy).toHaveBeenCalledWith("device:dev-b");
+    expect(roomEmitSpy).toHaveBeenCalledWith(IM_WS_EVENTS.agentRunControl, {
+      watchId: "w1",
+      targetAgentId: "cloud-a1",
+      sessionId: "s1",
+      kind: "confirm",
+      toolCallId: "tc1",
+      decision: "send",
+      requesterDeviceId: "user:sock-1",
+      localAgentId: "local-a1",
+    });
+  });
+
+  it("他人的 watchId control 被拒", async () => {
+    const { gateway, toSpy } = makeAgentGateway();
+    await gateway.handleAgentWatchStart(
+      {
+        watchId: "w1",
+        targetAgentId: "cloud-a1",
+        scope: "session",
+        sessionId: "s1",
+      } as never,
+      client(),
+    );
+    toSpy.mockClear();
+
+    await gateway.handleAgentRunControl(
+      {
+        watchId: "w1",
+        targetAgentId: "cloud-a1",
+        sessionId: "s1",
+        kind: "confirm",
+        toolCallId: "tc1",
+        decision: "send",
+      } as never,
+      client({ id: "别人的sock" }),
+    );
+
+    expect(toSpy).not.toHaveBeenCalled();
+  });
+
+  it("Agent 级 watchId 的 control 被拒", async () => {
+    const { gateway, toSpy } = makeAgentGateway();
+    await gateway.handleAgentWatchStart(
+      { watchId: "w1", targetAgentId: "cloud-a1", scope: "agent" } as never,
+      client(),
+    );
+    toSpy.mockClear();
+
+    await gateway.handleAgentRunControl(
+      {
+        watchId: "w1",
+        targetAgentId: "cloud-a1",
+        sessionId: "s1",
+        kind: "confirm",
+        toolCallId: "tc1",
+        decision: "send",
+      } as never,
+      client(),
+    );
+
+    expect(toSpy).not.toHaveBeenCalled();
+  });
+
+  it("watchId + interrupt 被拒", async () => {
+    const { gateway, toSpy } = makeAgentGateway();
+    await gateway.handleAgentWatchStart(
+      {
+        watchId: "w1",
+        targetAgentId: "cloud-a1",
+        scope: "session",
+        sessionId: "s1",
+      } as never,
+      client(),
+    );
+    toSpy.mockClear();
+
+    await gateway.handleAgentRunControl(
+      {
+        watchId: "w1",
+        targetAgentId: "cloud-a1",
+        sessionId: "s1",
+        kind: "interrupt",
+      } as never,
+      client(),
+    );
+
+    expect(toSpy).not.toHaveBeenCalled();
+  });
+});
+
 describe("Agent 级观察通道：watch 登记", () => {
   const client = (over: Record<string, unknown> = {}) =>
     ({

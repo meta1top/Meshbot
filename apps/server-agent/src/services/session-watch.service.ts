@@ -59,6 +59,17 @@ export class SessionWatchService implements OnModuleDestroy {
   constructor(
     private readonly emitter: EventEmitter2,
     private readonly relay: WatchFrameRelay,
+    /**
+     * watchId 释放时的可选回调（HITL watchId 寻址防泄漏，Task 16）：
+     * `RemoteRunRegistryService.watchToSession` 是本服务 `watchIndex` 的一份
+     * 镜像（供 `RemoteRunControlService` 校验，两服务无直接依赖），必须在
+     * 本服务任何一处删除 watchId 映射时同步通知，否则会出现「转发器已被
+     * idle 拆除、但 registry 里的 watchId→sessionId 映射还在」——HITL 会对
+     * 一个已无观察通道的 watchId 放行。用回调而非直接依赖
+     * `RemoteRunRegistryService`：保持本服务与观察通道的传输细节解耦，
+     * module 工厂里接线（`registry.unbindWatch`）。
+     */
+    private readonly onWatchReleased?: (watchId: string) => void,
   ) {}
 
   /** 条目键：账号隔离——不同账号可能有同名 sessionId（各自独立 SQLite）。 */
@@ -135,6 +146,11 @@ export class SessionWatchService implements OnModuleDestroy {
     const key = this.watchIndex.get(watchId);
     if (!key) return;
     this.watchIndex.delete(watchId);
+    // 与 watchIndex 的删除同一个同步 tick 内完成：不管这次移除是不是最后
+    // 一个观察者（是否会触发下面的 idle 宽限计时器），watchId→sessionId 的
+    // 映射都已经在**此刻**失效，registry 侧必须同步失效，不能等到 idle
+    // 定时器真正拆除转发器那一刻才通知（那时该 watchId 早就不该再放行 HITL 了）。
+    this.onWatchReleased?.(watchId);
     const entry = this.entries.get(key);
     if (!entry) return;
     entry.watchers.delete(watchId);

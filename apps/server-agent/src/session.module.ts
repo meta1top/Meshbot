@@ -72,6 +72,10 @@ import { SessionGateway } from "./ws/session.gateway";
  * `SessionWatchService` 的第二个构造参数是接口 `WatchFrameRelay`（非 DI
  * token，Nest 无法按接口解析），用工厂 provider 显式把 `ImRelayClientService`
  * 实例（满足该接口）注入——比改构造参数类型更干净，服务本身与其单测都不用动。
+ * 第三个构造参数 `onWatchReleased`（Task 16：HITL watchId 寻址防泄漏）经同一
+ * 工厂接上 `RemoteRunRegistryService.unbindWatch`——watchId 释放时同步失效
+ * registry 侧的镜像映射，防止「转发器已 idle 拆除、registry 里的
+ * watchId→sessionId 映射还在」导致 HITL 对失效通道放行。
  */
 @Module({
   imports: [
@@ -115,9 +119,15 @@ import { SessionGateway } from "./ws/session.gateway";
     RemoteRunRegistryService,
     {
       provide: SessionWatchService,
-      useFactory: (emitter: EventEmitter2, relay: ImRelayClientService) =>
-        new SessionWatchService(emitter, relay),
-      inject: [EventEmitter2, ImRelayClientService],
+      useFactory: (
+        emitter: EventEmitter2,
+        relay: ImRelayClientService,
+        registry: RemoteRunRegistryService,
+      ) =>
+        new SessionWatchService(emitter, relay, (watchId) =>
+          registry.unbindWatch(watchId),
+        ),
+      inject: [EventEmitter2, ImRelayClientService, RemoteRunRegistryService],
     },
     AgentWatchInboundService,
     AgentWatchMirrorService,

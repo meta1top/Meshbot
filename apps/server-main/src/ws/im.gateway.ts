@@ -918,6 +918,15 @@ export class ImGateway extends BaseWebSocketGateway implements OnModuleDestroy {
    * localAgentId 取自 handleAgentRunStart 登记时解出的值，不必每条 control
    * 帧都重新查 CloudAgentService——发起方身份已由 sameRequester 校验过，
    * 复用登记值既省一次查表也不改变安全语义)。
+   *
+   * **双寻址（Agent 级观察通道 D2，Task 16）**：`body.watchId` 存在时走
+   * `watchRoutes`（观察者应答 HITL），否则走既有的 `agentRunRoutes`（发起方
+   * 控制，行为零变化）。两条路鉴权语义一致——必须是登记该 id 的 requester
+   * 本人（`sameRequester` 全等）；watchId 分支额外拒两类：非 session scope
+   * （Agent 级 watch 不承载 HITL）与 `kind:"interrupt"`（打断权限限发起方，
+   * 协议层 zod 已拒，这里是二次门控）。信任锚点是连接层身份
+   * （`client.data.user`），不是消息体字段——同 `handleAgentWatchStop`/
+   * `handleAgentRunFrame` 等既有帧上行校验的模式。
    */
   @SubscribeMessage(IM_WS_EVENTS.agentRunControl)
   @UseGuards(WsAuthGuard)
@@ -926,7 +935,21 @@ export class ImGateway extends BaseWebSocketGateway implements OnModuleDestroy {
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
     const requester = this.requesterOf(client);
-    const route = this.agentRunRoutes.get(body.streamId);
+    if (body.watchId) {
+      const route = this.watchRoutes.get(body.watchId);
+      if (!route || !this.sameRequester(route.requester, requester)) return; // 越权/未知拒
+      if (route.scope !== "session") return; // Agent 级 watch 不承载 HITL
+      if (body.kind === "interrupt") return; // 打断限发起方
+      this.server
+        .to(`device:${route.targetDeviceId}`)
+        .emit(IM_WS_EVENTS.agentRunControl, {
+          ...body,
+          requesterDeviceId: this.encodeRequester(requester),
+          localAgentId: route.localAgentId,
+        } satisfies AgentRunControlForwarded);
+      return;
+    }
+    const route = this.agentRunRoutes.get(body.streamId as string);
     if (!route || !this.sameRequester(route.requester, requester)) return; // 越权/未知拒
     this.server
       .to(`device:${route.targetDeviceId}`)

@@ -9,6 +9,7 @@ describe("AgentWatchInboundService", () => {
     const sessions = { findOrNull: jest.fn() };
     const relay = { emitAgentWatchAccepted: jest.fn() };
     const account = { run: jest.fn((_: string, fn: () => unknown) => fn()) };
+    const registry = { bindWatch: jest.fn(), unbindWatch: jest.fn() };
     const svc = new AgentWatchInboundService(
       watches as never,
       mirror as never,
@@ -17,8 +18,9 @@ describe("AgentWatchInboundService", () => {
       sessions as never,
       relay as never,
       account as never,
+      registry as never,
     );
-    return { svc, watches, mirror, runner, agents, sessions, relay };
+    return { svc, watches, mirror, runner, agents, sessions, relay, registry };
   };
 
   const startEvt = (over: Record<string, unknown> = {}) => ({
@@ -90,7 +92,7 @@ describe("AgentWatchInboundService", () => {
   });
 
   it("session scope 合法 → 登记观察者并回 inflight 快照（D7 中途续上）", async () => {
-    const { svc, agents, sessions, runner, watches, relay } = mk();
+    const { svc, agents, sessions, runner, watches, relay, registry } = mk();
     agents.findOrNull.mockResolvedValue({ id: "a1", remoteEnabled: true });
     sessions.findOrNull.mockResolvedValue({ id: "s1", agentId: "a1" });
     const inflight = {
@@ -104,6 +106,8 @@ describe("AgentWatchInboundService", () => {
     runner.getInflight.mockReturnValue(inflight);
     await svc.onAgentWatch(startEvt() as never);
     expect(watches.addWatcher).toHaveBeenCalledWith("u1", "a1", "s1", "w1");
+    // HITL watchId 寻址（Task 16）：session scope 受理必须同步登记 registry。
+    expect(registry.bindWatch).toHaveBeenCalledWith("w1", "s1");
     expect(relay.emitAgentWatchAccepted).toHaveBeenCalledWith("u1", {
       watchId: "w1",
       ok: true,
@@ -125,7 +129,7 @@ describe("AgentWatchInboundService", () => {
   });
 
   it("agent scope：不查会话、不带 inflight，登记到 AgentWatchMirrorService", async () => {
-    const { svc, agents, sessions, watches, mirror, relay } = mk();
+    const { svc, agents, sessions, watches, mirror, relay, registry } = mk();
     agents.findOrNull.mockResolvedValue({ id: "a1", remoteEnabled: true });
     await svc.onAgentWatch(
       startEvt({ scope: "agent", sessionId: undefined }) as never,
@@ -133,6 +137,8 @@ describe("AgentWatchInboundService", () => {
     expect(sessions.findOrNull).not.toHaveBeenCalled();
     expect(watches.addWatcher).not.toHaveBeenCalled(); // Agent 级不走 SessionWatchService
     expect(mirror.addWatcher).toHaveBeenCalledWith("u1", "a1", "w1"); // 而是走 AgentWatchMirrorService
+    // Agent 级不涉及 HITL，不登记 registry（HITL 只发生在 session 级）。
+    expect(registry.bindWatch).not.toHaveBeenCalled();
     expect(relay.emitAgentWatchAccepted).toHaveBeenCalledWith("u1", {
       watchId: "w1",
       ok: true,
@@ -141,10 +147,13 @@ describe("AgentWatchInboundService", () => {
   });
 
   it("action:stop → 两级都注销观察者（不知道是哪级，各自对未知 id 幂等），不回受理包", async () => {
-    const { svc, watches, mirror, relay } = mk();
+    const { svc, watches, mirror, relay, registry } = mk();
     await svc.onAgentWatch(startEvt({ action: "stop" }) as never);
     expect(watches.removeWatcher).toHaveBeenCalledWith("w1");
     expect(mirror.removeWatcher).toHaveBeenCalledWith("w1");
+    // HITL watchId 寻址（Task 16）：stop 必须对称注销 registry 映射，
+    // 否则 idle 拆除前这个 watchId 仍能放行 HITL。
+    expect(registry.unbindWatch).toHaveBeenCalledWith("w1");
     expect(relay.emitAgentWatchAccepted).not.toHaveBeenCalled();
   });
 

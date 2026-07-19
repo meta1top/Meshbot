@@ -9,6 +9,7 @@ import {
 } from "../cloud/im-relay.events";
 import { AgentService } from "./agent.service";
 import { AgentWatchMirrorService } from "./agent-watch-mirror.service";
+import { RemoteRunRegistryService } from "./remote-run-registry.service";
 import { RunnerService } from "./runner.service";
 import { SessionService } from "./session.service";
 import { SessionWatchService } from "./session-watch.service";
@@ -55,6 +56,7 @@ export class AgentWatchInboundService {
     private readonly sessions: SessionService,
     private readonly relay: ImRelayClientService,
     private readonly account: AccountContextService,
+    private readonly registry: RemoteRunRegistryService,
   ) {}
 
   /** relay 收到云端转发的 agent.watch.forwarded（被观察设备侧入站）时触发。 */
@@ -67,6 +69,12 @@ export class AgentWatchInboundService {
       // 不区分 scope：stop 帧只带 watchId，两级各自对未知 id 幂等，都调一遍最简单可靠。
       this.watches.removeWatcher(watchId);
       this.mirror.removeWatcher(watchId);
+      // HITL watchId 寻址（Task 16）：session scope 建立时登记了
+      // registry.bindWatch，这里对称注销——`SessionWatchService` 的
+      // `onWatchReleased` 回调已经会兜底 unbindWatch 一次，这里再显式调
+      // 一遍是双保险（幂等 no-op，见 registry.unbindWatch 实现），不依赖
+      // 调用顺序也不留竞态窗口。
+      this.registry.unbindWatch(watchId);
       return;
     }
 
@@ -109,6 +117,11 @@ export class AgentWatchInboundService {
           return;
         }
         this.watches.addWatcher(cloudUserId, agent.id, sessionId, watchId);
+        // HITL watchId 寻址（Task 16）：session scope 受理即登记
+        // watchId→sessionId，供 RemoteRunControlService 校验观察者的
+        // confirm/answer 帧确实在观察这个会话。Agent scope 不涉及 HITL，
+        // 不登记（RemoteRunControlService 也据 registry 查无而拒）。
+        this.registry.bindWatch(watchId, sessionId);
         // D7 中途续上：把 runner 现成的 inflight 快照随受理包带回，观察者据此
         // 渲染半截输出（无活跃 run 时为 null，不是错误）。
         this.relay.emitAgentWatchAccepted(cloudUserId, {

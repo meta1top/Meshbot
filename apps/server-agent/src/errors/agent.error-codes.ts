@@ -89,4 +89,14 @@ export const AgentErrorCode = defineErrorCode({
     message: "modelConfig.readonly",
     httpStatus: 409,
   },
+  /**
+   * HITL 卡片已被其它端应答（Agent 级观察通道 D3 先到先得）。
+   * `ConfirmationService` 是单例挂起核心，天然只 resolve 一次；晚到的应答
+   * 收到本错误，客户端据此把卡片置为**已完成**而非弹错误框。
+   */
+  HITL_ALREADY_ANSWERED: {
+    code: 3019,
+    message: "im.hitlAlreadyAnswered",
+    httpStatus: 409,
+  },
 });

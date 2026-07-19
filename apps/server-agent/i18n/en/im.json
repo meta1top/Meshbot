@@ -1,3 +1,4 @@
 {
-  "notConnected": "IM connection not established"
+  "notConnected": "IM connection not established",
+  "hitlAlreadyAnswered": "This confirmation was already answered on another client."
 }
