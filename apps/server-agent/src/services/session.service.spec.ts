@@ -1083,6 +1083,39 @@ describe("SessionService", () => {
       );
       expect(await service.listQuickSessions()).toHaveLength(0);
     });
+
+    it("promoteToSidebar() 发 session.created（提升这一刻才第一次成为侧栏成员）", async () => {
+      const { sessionId } = await service.createSession({
+        content: "随手",
+        kind: "quick",
+      });
+      // 建 quick 会话本身刻意不发 created，此处基线应为空
+      expect(
+        emitted.filter(([e]) => e === SESSION_LIFECYCLE_EVENTS.created),
+      ).toHaveLength(0);
+
+      await service.promoteToSidebar(sessionId);
+      const created = emitted.filter(
+        ([e]) => e === SESSION_LIFECYCLE_EVENTS.created,
+      );
+      expect(created).toHaveLength(1);
+      expect((created[0][1] as { session: { id: string } }).session.id).toBe(
+        sessionId,
+      );
+    });
+
+    it("promoteToSidebar() 重复调用不再发（affected 为 0，语义上不成立的事件会污染排查现场）", async () => {
+      const { sessionId } = await service.createSession({
+        content: "随手",
+        kind: "quick",
+      });
+      await service.promoteToSidebar(sessionId);
+      emitted.length = 0;
+      await service.promoteToSidebar(sessionId);
+      expect(
+        emitted.filter(([e]) => e === SESSION_LIFECYCLE_EVENTS.created),
+      ).toEqual([]);
+    });
   });
 
   describe("countCreatedSince", () => {

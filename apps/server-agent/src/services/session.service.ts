@@ -95,8 +95,10 @@ export class SessionService {
   ): Promise<{ sessionId: string; session: SessionSummary }> {
     const created = await this.createSessionInTx(input);
     // 生命周期事件（统一契约，spec §A）：本地端经 ws/events 消费，远程 Agent 级
-    // 观察者经 relay 镜像消费。发射点在 Service 而非 Controller——REST 建会话、
-    // 远程 run 入站建会话、定时任务建会话三条路径自动共享，不留静默洞。
+    // 观察者经 relay 镜像消费。发射点在 Service 而非 Controller——REST 建会话与
+    // 远程 run 入站建会话两条路径自动共享，不留静默洞。（早先这里写的是「三条
+    // 路径，含定时任务建会话」，是错的：`ScheduleExecutor.fire()` 只对已存在
+    // 会话 appendMessage，全仓 `createSession` 调用点只有上述两处。）
     // 放在事务方法**之外**：事务未提交就通知，观察者回查会看不到这条会话。
     //
     // kind="quick"（随手问临时会话）不发：`listAllSorted`/`listByAgentSorted`
@@ -526,13 +528,35 @@ export class SessionService {
     return rows.map(toSummary);
   }
 
-  /** 把随手问临时会话沉淀为侧栏会话（kind: quick→user）。 */
+  /**
+   * 把随手问临时会话沉淀为侧栏会话（kind: quick→user）。
+   *
+   * 提升成功后要发 `created`：`kind="quick"` 建会话时刻意**不发**（那类会话被
+   * 侧栏的 `kind='user'` 白名单挡着，发了会被 `applySessionListEvent` 的
+   * 「不认识就插入」语义凭空插进列表）。提升这一刻它才第一次成为侧栏成员，
+   * 对全部观察者（本机其他标签页的 `sessionsAtom`、云端 Agent 级观察者）而言
+   * 正是「之前不认识、现在该出现」——`created` 的插入语义完全适配，不需要
+   * 发明新事件类型。
+   *
+   * 不发的话，只有触发提升的那个标签页能看到（它自己改了本地状态），其余
+   * 观察者要等下次回源——这类只在多标签页/远程观察下才可见的不一致极难复现。
+   */
   async promoteToSidebar(sessionId: string): Promise<SessionSummary> {
-    await this.sessionRepo.update(
+    const res = await this.sessionRepo.update(
       { id: sessionId, kind: "quick" },
       { kind: "user" },
     );
     const s = await this.findSessionOrFail(sessionId);
+    // 仅在本次调用真的完成了 quick→user 转换时才发：重复调用（会话已是 user）
+    // 的 affected 为 0，此时再发会让观察者收到一条它已经有的会话——虽然
+    // `applySessionListEvent` 的 created 分支按 id 查重不会真的插重，但发一条
+    // 语义上不成立的事件会污染排查现场。同 patchIfNotGenerated 的既有做法。
+    if (res.affected) {
+      this.emitter.emit(SESSION_LIFECYCLE_EVENTS.created, {
+        agentId: s.agentId,
+        session: toSummary(s),
+      } satisfies SessionCreatedEvent);
+    }
     return toSummary(s);
   }
 
