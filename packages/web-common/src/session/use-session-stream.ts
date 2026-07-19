@@ -70,6 +70,11 @@ function historyMessageToTimeline(m: HistoryMessage): TimelineMessage {
           })),
         }
       : {}),
+    // 结构化 metadata（压缩占位行携带 kind="compaction"）：曾经这里连 metadata
+    // 这个键都不映射（回归——旧的 remoteMessageToTimeline 会解析并带上）。丢了它
+    // 之后 message-list.tsx 的 `!(role==="system" && metadata?.kind!=="compaction")`
+    // 过滤会把 role="system" 的压缩占位行整条丢弃，「已压缩 N 条消息」分隔条消失。
+    ...(m.metadata ? { metadata: m.metadata } : {}),
     feedback: m.feedback ?? null,
   };
 }
@@ -968,6 +973,14 @@ export function useSessionStream(
      * 中途接入没有前序帧）就把整个事件**静默吞掉**，那个工具块要么根本不出现、
      * 要么永远停在 args_delta 建出的 streaming 态转圈。原注释声称本函数处理
      * 「本轮首个工具事件」，但 map-only 的结构做不到，注释与实现不符，一并修正。
+     *
+     * **不得下调已终态（ok/error）块的 status**——与 onToolArgsDelta 的硬化对称：
+     * `onToolEnd` 兜底会建出终态块（见该 handler 注释），这意味着「块已是终态」
+     * 现在是一个真实存在的前提，而不再是「start 必然先于 end 到达」的假设。
+     * 迟到/重放的 start（乱序、relay 补发、重连补发截断成只重放 start）命中一个
+     * 已经 ok/error 的块时，若无条件 `status: "running"` 覆盖，会把已完成的卡片
+     * 打回转圈态，且此后再无 end 事件能救它——永久转圈。status 之外的字段（权威
+     * `args`/`name`）仍然合并：这正是 start 本身的价值，只是不能连带拖累 status。
      */
     const onToolStart = (e: RunToolCallStartEvent) => {
       if (e.sessionId !== sessionId) return;
@@ -989,11 +1002,15 @@ export function useSessionStream(
           // 按 toolCallId 命中 = 幂等：重复 start 不会再 push 出重复块。
           const list = m.toolCalls ? [...m.toolCalls] : [];
           const i = list.findIndex((t) => t.toolCallId === e.toolCallId);
+          // 已是终态（ok/error）则不下调回 running——迟到/重放的 start 只补权威
+          // args，不复活转圈态。见上方 handler 注释。
+          const alreadySettled =
+            i !== -1 && (list[i].status === "ok" || list[i].status === "error");
           const next = {
             toolCallId: e.toolCallId,
             name: e.name,
             args: e.args,
-            status: "running" as const,
+            status: alreadySettled ? list[i].status : ("running" as const),
             argsText: undefined,
           };
           if (i === -1) {

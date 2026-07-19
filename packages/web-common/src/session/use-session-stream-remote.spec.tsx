@@ -130,6 +130,46 @@ describe("useSessionStream remote 分支的 running 校正", () => {
 });
 
 /**
+ * Important 2 回归：`historyMessageToTimeline`（本地 REST 与远程 L3 device query
+ * 共用的同一份 history 映射）曾经连 `metadata` 这个键都不映射——被删掉的
+ * `remoteMessageToTimeline` 原本会带上。远程会话发生过上下文压缩后进入/刷新该
+ * 会话，服务端返回 `role="system"` + `metadata.kind="compaction"` 行，前端丢弃
+ * metadata 后 `message-list.tsx` 的可见性过滤会把这行整条丢弃，「已压缩 N 条
+ * 消息」分隔条不再出现。
+ */
+describe("useSessionStream remote 分支的 history metadata 映射", () => {
+  it("compaction 占位行的 metadata 被保留（回归：曾经整个 metadata 键都不映射）", async () => {
+    const transport = makeTransport({
+      fetchHistory: jest.fn().mockResolvedValue({
+        messages: [
+          {
+            id: "m-compaction",
+            role: "system",
+            content: "",
+            metadata: {
+              kind: "compaction",
+              removedCount: 3,
+              fromMessageId: "a",
+              toMessageId: "b",
+            },
+          },
+        ],
+        hasMore: false,
+      }),
+    });
+    const { result } = renderRemoteStream(transport, null);
+
+    await waitFor(() => expect(result.current.historyLoading).toBe(false));
+    expect(result.current.messages[0]?.metadata).toEqual({
+      kind: "compaction",
+      removedCount: 3,
+      fromMessageId: "a",
+      toMessageId: "b",
+    });
+  });
+});
+
+/**
  * 工具事件（args_delta / start / end）的状态推进链回归。
  *
  * 背景：真机上云端观察通道里所有工具卡永远转圈、todo_write 不渲染成待办卡片。
@@ -299,6 +339,26 @@ describe("useSessionStream 工具事件状态推进", () => {
     expect(tools[0]?.status).toBe("ok");
     // 也不该为了挂这条 delta 而凭空多出一条消息壳
     expect(result.current.messages.map((m) => m.id)).toEqual(["msg-1"]);
+  });
+
+  it("乱序 C：end 已建出终态块后，迟到/重放的 start 不得把它打回 running（Important 1：onToolEnd 兜底建出的终态块制造了『终态块先于 start 存在』这个前提，start 若无条件覆盖 status 会把它永久打回转圈）", async () => {
+    const { socket, result } = await renderToolStream();
+
+    // end 先到：无任何前序块，直接建出终态 ok 块。
+    act(() => socket.fire(SESSION_WS_EVENTS.runToolCallEnd, toolEnd()));
+    let tool = allTools(result.current.messages)[0];
+    expect(tool?.status).toBe("ok");
+
+    // 迟到 / 重放的 start 到达：不得下调 status，但权威 args 仍应合并
+    // （这是 start 本身的价值，与 onToolArgsDelta 只 append 不回写 status 对称）。
+    act(() => socket.fire(SESSION_WS_EVENTS.runToolCallStart, toolStart()));
+    tool = allTools(result.current.messages)[0];
+    expect(tool?.status).toBe("ok"); // 没被打回 running
+    expect(tool?.result).toBe("已更新 1 条待办"); // 结果没丢
+    expect(tool?.args).toEqual({
+      todos: [{ content: "写测试", status: "pending" }],
+    }); // start 的权威 args 仍然合并进来
+    expect(allTools(result.current.messages)).toHaveLength(1); // 没有多出第二个块
   });
 
   it("幂等：重复 start / 重复 end 不产生第二个块，也不产生第二条消息壳", async () => {

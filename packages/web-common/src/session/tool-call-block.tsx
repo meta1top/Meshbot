@@ -121,7 +121,18 @@ export function ToolCallBlock({
   if (tool.name === "drive_create_share" && tool.status !== "streaming") {
     return <DriveCreateShareCard tool={tool} onConfirm={onConfirm} />;
   }
-  if (tool.name === "todo_write" && tool.status !== "streaming") {
+  // `tool.args !== undefined` 守卫：onToolEnd 的兜底建块路径（宿主消息/宿主块
+  // 都不在时间线上，直接建终态块）拿不到 args——end 事件本身不带这个字段。
+  // todo_write 卡片不像其余特化卡（im_send_message/ask_question/drive_*）那样
+  // 有「pending/终态」两态分叉、终态分支不依赖 args——它无条件从 args 取 todos
+  // 渲染，args 缺失时会画出一张看起来「清单已清空」的空卡，比通用 JSON 块更容易
+  // 误导（这正是本轮真机验收报的「待办清单渲染不出来」症状之一）。这里退回通用
+  // 渲染分支（能看到 status/结果文本），不新增专属空态文案。
+  if (
+    tool.name === "todo_write" &&
+    tool.status !== "streaming" &&
+    tool.args !== undefined
+  ) {
     const todos = ((tool.args ?? {}) as { todos?: TodoItem[] }).todos ?? [];
     return (
       <div className="flex w-full flex-col gap-1.5 rounded-[8px] border border-border bg-muted/30 px-3 py-2">
