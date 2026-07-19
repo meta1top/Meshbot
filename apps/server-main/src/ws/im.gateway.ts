@@ -86,7 +86,12 @@ interface WatchRoute {
   targetDeviceId: string;
   /** scope="session" 时为被观察会话 id。 */
   sessionId?: string;
-  /** 发起 watch 的用户 id（HITL watchId 寻址的越权校验用，见 Task 16）。 */
+  /**
+   * 发起 watch 的用户 id。**预留未用**——Task 16 落地时 HITL watchId 寻址的
+   * 越权校验实际走的是 `sameRequester(route.requester, requester)`（连接层
+   * 身份，同本文件其余帧上行校验的既有模式），本字段目前没有消费者；如后续
+   * 任务也用不上，建议清理。
+   */
   userId: string;
   /**
    * 最近一次帧活动时间戳（`registerWatch` 时 `Date.now()`，`handleAgentWatchFrame`
@@ -922,10 +927,12 @@ export class ImGateway extends BaseWebSocketGateway implements OnModuleDestroy {
    * **双寻址（Agent 级观察通道 D2，Task 16）**：`body.watchId` 存在时走
    * `watchRoutes`（观察者应答 HITL），否则走既有的 `agentRunRoutes`（发起方
    * 控制，行为零变化）。两条路鉴权语义一致——必须是登记该 id 的 requester
-   * 本人（`sameRequester` 全等）；watchId 分支额外拒两类：非 session scope
-   * （Agent 级 watch 不承载 HITL）与 `kind:"interrupt"`（打断权限限发起方，
-   * 协议层 zod 已拒，这里是二次门控）。信任锚点是连接层身份
-   * （`client.data.user`），不是消息体字段——同 `handleAgentWatchStop`/
+   * 本人（`sameRequester` 全等）；watchId 分支额外拒三类：非 session scope
+   * （Agent 级 watch 不承载 HITL）、`body.sessionId` 与该 watchId 登记的
+   * `route.sessionId` 不符（route 里有 sessionId 却不比对会让设备侧的同款
+   * 校验变成"串联必需"而非"各自充分"的独立防线）、与 `kind:"interrupt"`
+   * （打断权限限发起方，协议层 zod 已拒，这里是二次门控）。信任锚点是连接层
+   * 身份（`client.data.user`），不是消息体字段——同 `handleAgentWatchStop`/
    * `handleAgentRunFrame` 等既有帧上行校验的模式。
    */
   @SubscribeMessage(IM_WS_EVENTS.agentRunControl)
@@ -939,6 +946,7 @@ export class ImGateway extends BaseWebSocketGateway implements OnModuleDestroy {
       const route = this.watchRoutes.get(body.watchId);
       if (!route || !this.sameRequester(route.requester, requester)) return; // 越权/未知拒
       if (route.scope !== "session") return; // Agent 级 watch 不承载 HITL
+      if (route.sessionId !== body.sessionId) return; // 控制帧声称的会话与该 watchId 登记的不符，拒（设备侧有同款校验，这里是独立防线，不是靠它兜底）
       if (body.kind === "interrupt") return; // 打断限发起方
       this.server
         .to(`device:${route.targetDeviceId}`)

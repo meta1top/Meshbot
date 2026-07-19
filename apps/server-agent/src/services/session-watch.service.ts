@@ -167,7 +167,12 @@ export class SessionWatchService implements OnModuleDestroy {
     entry.idleTimer = timer;
   }
 
-  /** watchId → 被观察 sessionId；未登记返 undefined（HITL watchId 寻址校验用）。 */
+  /**
+   * watchId → 被观察 sessionId；未登记返 undefined。**预留未用**——HITL
+   * watchId 寻址校验实际走的是 `RemoteRunRegistryService.sessionIdOfWatch`
+   * （经本服务的 `onWatchReleased` 回调保持镜像同步的独立表，两服务无直接
+   * 依赖），本方法目前没有生产路径调用它；如后续任务也用不上，建议清理。
+   */
   sessionIdOf(watchId: string): string | undefined {
     const key = this.watchIndex.get(watchId);
     if (!key) return undefined;
@@ -197,6 +202,13 @@ export class SessionWatchService implements OnModuleDestroy {
       entry.forwarder.stop();
     }
     this.entries.clear();
+    // 构造函数注释（:62-72）的不变量：本服务任何一处删除 watchId 映射都必须
+    // 同步通知 `onWatchReleased`。`removeWatcher` 已做到；本方法此前直接
+    // `clear()` 是该不变量仅剩的失配口子——进程正在退出所以今天无害，但
+    // registry 侧的镜像表理应跟着清空，不能靠"反正马上就整体退出了"当借口。
+    for (const watchId of this.watchIndex.keys()) {
+      this.onWatchReleased?.(watchId);
+    }
     this.watchIndex.clear();
   }
 }

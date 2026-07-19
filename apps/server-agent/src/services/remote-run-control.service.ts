@@ -88,15 +88,28 @@ export class RemoteRunControlService {
           forwarded.sessionId,
           forwarded.toolCallId,
         );
-        const ok =
-          forwarded.kind === "confirm"
-            ? this.confirmation.resolve(key, {
-                action: forwarded.decision ?? "cancel",
-                content: forwarded.content,
-              })
-            : this.confirmation.resolve(key, {
-                answers: forwarded.answers ?? [],
-              });
+        // 显式收窄成 === "answer"，不能用「非 confirm 即 answer」的三元——
+        // relay 转发的是已解析对象，不能假设它一定过了 schema（同 :56-57 的
+        // 二次门控理由，且经核实网关的 zod 校验实际未生效）。一条 kind
+        // 缺失/拼错但 toolCallId 合法、绑定校验也通过的转发帧，若被当成
+        // answer 处理，会拿 `{answers: []}` 去 resolve 一个挂起的
+        // ask_question——这正是改动前 `else if` 版本本就防住的情形。
+        let ok: boolean;
+        if (forwarded.kind === "confirm") {
+          ok = this.confirmation.resolve(key, {
+            action: forwarded.decision ?? "cancel",
+            content: forwarded.content,
+          });
+        } else if (forwarded.kind === "answer") {
+          ok = this.confirmation.resolve(key, {
+            answers: forwarded.answers ?? [],
+          });
+        } else {
+          this.logger.warn(
+            `远程控制帧 kind 非法（kind=${String(forwarded.kind)}，toolCallId=${forwarded.toolCallId}），拒`,
+          );
+          return;
+        }
         // 先到先得（D3）：ConfirmationService 是单例挂起核心，天然只 resolve
         // 一次——首个到达的应答返 true 并关卡，其余返 false。晚到方靠 Task 17
         // 的关卡广播帧把卡片置为已完成（不是弹错误框）。

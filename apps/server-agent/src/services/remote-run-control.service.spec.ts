@@ -11,19 +11,13 @@ function mk() {
     sessionIdOf: jest.fn(() => "sess-1"),
     sessionIdOfWatch: jest.fn(),
   };
-  // relay 未接入 RemoteRunControlService 的构造依赖（Task 17 才会消费），
-  // 这里只是给"先到先得"用例提供一个占位断言对象，验证本任务不误触发它。
-  const relay = {
-    emitAgentWatchAccepted: jest.fn(),
-    emitAgentRunEnd: jest.fn(),
-  };
   const svc = new RemoteRunControlService(
     runner as never,
     account as never,
     confirmation as never,
     registry as never,
   );
-  return { svc, runner, account, confirmation, registry, relay };
+  return { svc, runner, account, confirmation, registry };
 }
 
 const fwd = (over: object) => ({
@@ -214,27 +208,47 @@ describe("RemoteRunControlService", () => {
       expect(confirmation.resolve).not.toHaveBeenCalled();
     });
 
-    it("先到先得：resolve 返 false（已被应答）→ 回 HITL_ALREADY_ANSWERED 给该端", () => {
-      const { svc, registry, confirmation, relay } = mk();
+    it("先到先得：resolve 返 false（已被应答）→ 不抛、只 resolve 一次（回包留给 Task 17 的 hitl_settled 关卡帧，本服务不回任何东西）", () => {
+      const { svc, registry, confirmation } = mk();
       registry.sessionIdOfWatch.mockReturnValue("s1");
       confirmation.resolve.mockReturnValue(false);
+      expect(() =>
+        svc.onAgentRunControl({
+          cloudUserId: "u1",
+          forwarded: {
+            watchId: "w1",
+            targetAgentId: "a1",
+            sessionId: "s1",
+            kind: "confirm",
+            toolCallId: "t1",
+            decision: "send",
+            requesterDeviceId: "user:x",
+            localAgentId: "a1",
+          },
+        } as never),
+      ).not.toThrow();
+      // resolve() 只被调一次——晚到方不会因为本服务的处理逻辑而触发第二次
+      // resolve（那会打破 ConfirmationService 的先到先得语义本身）。
+      expect(confirmation.resolve).toHaveBeenCalledTimes(1);
+    });
+
+    it("kind 拼错（非 confirm/answer/interrupt）→ no-op，绝不当 answer 误 resolve（文件自述的二次门控，relay 转发对象不能假设过了 schema）", () => {
+      const { svc, registry, confirmation } = mk();
+      registry.sessionIdOfWatch.mockReturnValue("s1");
       svc.onAgentRunControl({
         cloudUserId: "u1",
         forwarded: {
           watchId: "w1",
           targetAgentId: "a1",
           sessionId: "s1",
-          kind: "confirm",
+          kind: "cofnirm", // 拼错，非法值
           toolCallId: "t1",
           decision: "send",
           requesterDeviceId: "user:x",
           localAgentId: "a1",
         },
       } as never);
-      expect(relay.emitAgentWatchAccepted).not.toHaveBeenCalled();
-      expect(relay.emitAgentRunEnd).not.toHaveBeenCalled();
-      // 晚到应答的告知走 hitl_settled 关卡帧（Task 17），此处只断言未误 resolve、未崩
-      expect(confirmation.resolve).toHaveBeenCalledTimes(1);
+      expect(confirmation.resolve).not.toHaveBeenCalled();
     });
 
     it("watchId 携带 interrupt → 拒（打断仍限发起方）", () => {

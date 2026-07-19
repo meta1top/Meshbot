@@ -45,6 +45,20 @@ describe("ConfirmationService", () => {
     expect(svc.resolve("nope", { action: "cancel" })).toBe(false);
   });
 
+  it("同 key 连续两次 resolve → 先到先得：首个返 true 且生效，第二个返 false（Agent 级观察通道 D3 仲裁地基）", async () => {
+    const svc = new ConfirmationService();
+    const ac = new AbortController();
+    const p = svc.waitForDecision("k", ac.signal, 10_000);
+    const first = svc.resolve("k", { action: "send", content: "先到" });
+    const second = svc.resolve("k", { action: "cancel", content: "后到" });
+    // 断言的是 resolve() 的返回值本身——这是双端仲裁的唯一信号：客户端据此
+    // 判定「我的决定生效了」还是「已被别端抢先」。若两次都返 true，两端都
+    // 会被本地误判为已生效（哪怕最终 Promise 只采纳了第一个），这正是本用例
+    // 要钉住的地基。
+    expect([first, second]).toEqual([true, false]);
+    await expect(p).resolves.toEqual({ action: "send", content: "先到" });
+  });
+
   it("泛型 resolve/waitForDecision 支持任意 payload（非 send/cancel）", async () => {
     const svc = new ConfirmationService();
     const ac = new AbortController();

@@ -188,6 +188,18 @@ describe("SessionWatchService（会话级常驻转发器）", () => {
     expect(emitter.listenerCount(SESSION_WS_EVENTS.runChunk)).toBe(0);
   });
 
+  it("onModuleDestroy 对全部仍登记的 watchId 同步触发 onWatchReleased（构造函数不变量：任何一处删除映射都要回调，本方法此前是仅剩的失配口子）", () => {
+    const released: string[] = [];
+    const svc2 = new SessionWatchService(emitter, relayMock(), (w) =>
+      released.push(w),
+    );
+    svc2.addWatcher("u1", "agent-1", "s1", "w1");
+    svc2.addWatcher("u1", "agent-1", "s2", "w2");
+    expect(released).toEqual([]);
+    svc2.onModuleDestroy();
+    expect(released.sort()).toEqual(["w1", "w2"]);
+  });
+
   it("反复 watch/unwatch 不累积 idle 定时器（泄漏防线 2：只有最后一次到期才真正拆除）", () => {
     svc.addWatcher("u1", "agent-1", "s1", "w1");
     // 连续 5 轮 unwatch/watch 往返，每轮都应取消上一轮挂起的 idle 定时器
