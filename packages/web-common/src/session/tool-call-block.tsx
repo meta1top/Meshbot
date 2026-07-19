@@ -16,9 +16,14 @@ import type { ToolCallView } from "./timeline";
 import { TodoList } from "./todo-list";
 import { sanitizeMeshbotPaths, toolDisplayName } from "./tool-display";
 
-/** ArtifactFileCard 的唯一一处 i18n 文案，随 ToolCallBlock 一并透传。 */
+/** ArtifactFileCard / HITL 关卡广播的 i18n 文案，随 ToolCallBlock 一并透传。 */
 export interface ToolCallBlockLabels {
   artifactPresentFailed: string;
+  /**
+   * 「已由其他端应答」（Task 17）：im_send_message / ask_question 卡片被
+   * `run.hitl_settled` 标记为 settled、但真正的工具终态尚未到达时展示。
+   */
+  hitlSettledElsewhere: string;
 }
 
 export interface ToolCallBlockProps {
@@ -99,11 +104,18 @@ export function ToolCallBlock({
         tool={tool}
         targetName={targetName}
         onConfirm={onConfirm}
+        hitlSettledLabel={labels.hitlSettledElsewhere}
       />
     );
   }
   if (tool.name === "ask_question" && tool.status !== "streaming") {
-    return <AskQuestionCard tool={tool} onAnswer={onAnswer} />;
+    return (
+      <AskQuestionCard
+        tool={tool}
+        onAnswer={onAnswer}
+        hitlSettledLabel={labels.hitlSettledElsewhere}
+      />
+    );
   }
   if (tool.name === "present_file" && tool.status !== "streaming") {
     return (

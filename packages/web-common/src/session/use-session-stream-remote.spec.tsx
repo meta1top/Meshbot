@@ -390,6 +390,48 @@ describe("useSessionStream 工具事件状态推进", () => {
     expect(tools.filter((t) => t.status === "streaming")).toEqual([]);
   });
 
+  it("run.hitl_settled（Task 17）：按 toolCallId 找到卡片写 hitlSettledBy，不影响 status/result", async () => {
+    const { socket, result } = await renderToolStream();
+
+    act(() => socket.fire(SESSION_WS_EVENTS.runToolCallStart, toolStart()));
+    let tool = allTools(result.current.messages)[0];
+    expect(tool?.status).toBe("running");
+    expect(tool?.hitlSettledBy).toBeUndefined();
+
+    act(() =>
+      socket.fire(SESSION_WS_EVENTS.runHitlSettled, {
+        sessionId: SID,
+        toolCallId: "tc-1",
+        by: "observer",
+      }),
+    );
+    tool = allTools(result.current.messages)[0];
+    // 卡片进入 settled 态（供渲染层禁用交互），但不冒充真正的工具终态——
+    // 那要等 run.tool_call_end（可能因实际副作用晚到）。
+    expect(tool?.hitlSettledBy).toBe("observer");
+    expect(tool?.status).toBe("running");
+
+    act(() => socket.fire(SESSION_WS_EVENTS.runToolCallEnd, toolEnd()));
+    tool = allTools(result.current.messages)[0];
+    expect(tool?.status).toBe("ok");
+    expect(tool?.hitlSettledBy).toBe("observer");
+  });
+
+  it("run.hitl_settled：不同 sessionId 不生效（防串台）", async () => {
+    const { socket, result } = await renderToolStream();
+    act(() => socket.fire(SESSION_WS_EVENTS.runToolCallStart, toolStart()));
+
+    act(() =>
+      socket.fire(SESSION_WS_EVENTS.runHitlSettled, {
+        sessionId: "OTHER",
+        toolCallId: "tc-1",
+        by: "observer",
+      }),
+    );
+    const tool = allTools(result.current.messages)[0];
+    expect(tool?.hitlSettledBy).toBeUndefined();
+  });
+
   it("幂等：重复 start / 重复 end 不产生第二个块，也不产生第二条消息壳", async () => {
     const { socket, result } = await renderToolStream();
 

@@ -161,7 +161,10 @@ export function MessageList({
           ? { deviceId: remote.remoteAgentId, sessionId: remote.sessionId }
           : null
       }
-      toolCallLabels={{ artifactPresentFailed: tArtifact("presentFailed") }}
+      toolCallLabels={{
+        artifactPresentFailed: tArtifact("presentFailed"),
+        hitlSettledElsewhere: t("hitlSettledElsewhere"),
+      }}
       renderSubagentCard={(subTool) => (
         <SubagentCard tool={subTool} agentId={agentId} />
       )}

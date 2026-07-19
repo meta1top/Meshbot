@@ -15,7 +15,10 @@ import { ToolCallBlock, type ToolCallBlockLabels } from "./tool-call-block";
  * 渲染分支（详见 `tool-call-block.tsx` 的守卫注释）。
  */
 
-const LABELS: ToolCallBlockLabels = { artifactPresentFailed: "预览失败" };
+const LABELS: ToolCallBlockLabels = {
+  artifactPresentFailed: "预览失败",
+  hitlSettledElsewhere: "已由其他端应答",
+};
 
 function renderBlock(tool: ToolCallView) {
   return render(
@@ -60,5 +63,46 @@ describe("ToolCallBlock — todo_write 的 args 缺失兜底（Minor 4）", () =
     });
     expect(screen.getByText("待办清单")).toBeInTheDocument();
     expect(screen.getByText("写测试")).toBeInTheDocument();
+  });
+});
+
+describe("ToolCallBlock — HITL 关卡广播（run.hitl_settled，Task 17）", () => {
+  it("im_send_message 卡片：hitlSettledBy 已设但 result 未落地 → 收起待发送表单，展示「已由其他端应答」", () => {
+    renderBlock({
+      toolCallId: "tc-1",
+      name: "im_send_message",
+      status: "running",
+      args: { conversationId: "c1", content: "草稿" },
+      hitlSettledBy: "observer",
+      // 真正的工具终态（run.tool_call_end）尚未到达
+    });
+    expect(screen.getByText(/已由其他端应答/)).toBeInTheDocument();
+    // 可编辑表单已收起：不再有发送/取消按钮
+    expect(screen.queryByText("发送")).not.toBeInTheDocument();
+  });
+
+  it("ask_question 卡片：hitlSettledBy 已设但 result 未落地 → 收起问题表单，展示「已由其他端应答」", () => {
+    renderBlock({
+      toolCallId: "tc-2",
+      name: "ask_question",
+      status: "running",
+      args: { questions: [{ question: "继续吗？", options: [] }] },
+      hitlSettledBy: "remote",
+    });
+    expect(screen.getByText(/已由其他端应答/)).toBeInTheDocument();
+    expect(screen.queryByText("提交")).not.toBeInTheDocument();
+  });
+
+  it("im_send_message 卡片：hitlSettledBy 已设、result 也已落地 → 展示真实终态而非占位文案", () => {
+    renderBlock({
+      toolCallId: "tc-3",
+      name: "im_send_message",
+      status: "ok",
+      args: { conversationId: "c1", content: "内容" },
+      hitlSettledBy: "local",
+      result: JSON.stringify({ status: "sent" }),
+    });
+    expect(screen.getByText(/已发送/)).toBeInTheDocument();
+    expect(screen.queryByText(/已由其他端应答/)).not.toBeInTheDocument();
   });
 });

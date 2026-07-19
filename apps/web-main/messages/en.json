@@ -541,6 +541,7 @@
     "runErrorAgentNotRemotable": "The target agent isn't available for remote access (it doesn't exist or remote access is off), so this message wasn't sent",
     "runErrorSessionAgentMismatch": "This conversation doesn't belong to the selected agent, so this message wasn't sent",
     "runErrorOffline": "The target device is offline, so this message wasn't sent",
+    "hitlSettledElsewhere": "Answered on another client",
     "watchRejectedPrefix": "Can't watch this device's output in real time: ",
     "watchRejectedOffline": "The target device is offline",
     "watchRejectedNotFound": "This agent isn't available for remote access (it doesn't exist or remote access is off)",

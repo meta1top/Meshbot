@@ -9,6 +9,7 @@ import {
   RunCompactionDoneEventSchema,
   RunCompactionErrorEventSchema,
   RunCompactionStartEventSchema,
+  RunHitlSettledEventSchema,
   RunUsageEventSchema,
   SESSION_WS_EVENTS,
   SessionDeleteResponseSchema,
@@ -363,5 +364,26 @@ describe("Context compaction WS events", () => {
       lastInputTokens: 100,
     });
     expect(t.lastInputTokens).toBe(100);
+  });
+});
+
+describe("HITL 关卡广播帧（run.hitl_settled，Task 17）", () => {
+  it("RunHitlSettledEventSchema 校验 sessionId/toolCallId/by", () => {
+    const payload = { sessionId: "s1", toolCallId: "t1", by: "observer" };
+    expect(RunHitlSettledEventSchema.parse(payload)).toEqual(payload);
+  });
+
+  it("RunHitlSettledEventSchema 的 by 只接受 local/remote/observer", () => {
+    expect(() =>
+      RunHitlSettledEventSchema.parse({
+        sessionId: "s1",
+        toolCallId: "t1",
+        by: "bogus",
+      }),
+    ).toThrow();
+  });
+
+  it("SESSION_WS_EVENTS.runHitlSettled 常量存在", () => {
+    expect(SESSION_WS_EVENTS.runHitlSettled).toBe("run.hitl_settled");
   });
 });

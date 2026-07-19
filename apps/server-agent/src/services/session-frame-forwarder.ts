@@ -10,8 +10,8 @@ import type { EventEmitter2 } from "@nestjs/event-emitter";
  * 需要转发出设备的 `SESSION_WS_EVENTS.*` 全集（`session.subscribe` /
  * `unsubscribe` / `interrupt` 是客户端上行 socket 消息、`runSnapshot` 只在
  * 订阅时点对点补发，均不经 EventEmitter2 广播，转发这些名字永远收不到事件，
- * 故排除；其余 18 个由 RunnerService / ContextCompactor / DispatchSubagentService /
- * SessionTitleService 经 EventEmitter2 广播，逐个转发）。
+ * 故排除；其余 19 个由 RunnerService / ContextCompactor / DispatchSubagentService /
+ * SessionTitleService / ConfirmationService 经 EventEmitter2 广播，逐个转发）。
  */
 export const FORWARDED_SESSION_EVENTS: readonly string[] = [
   SESSION_WS_EVENTS.runHuman,
@@ -32,6 +32,11 @@ export const FORWARDED_SESSION_EVENTS: readonly string[] = [
   SESSION_WS_EVENTS.runSubagentSpawned,
   SESSION_WS_EVENTS.runSubagentSettled,
   SESSION_WS_EVENTS.titleUpdated,
+  // HITL 关卡广播帧（Task 17）：ConfirmationService.resolve 成功解锁时 emit，
+  // 必须进白名单——否则 per-run 发起方与全部观察者永远收不到，UI 会一直挂着
+  // 一张已经无效的确认卡（本地房间 SessionGateway 走独立的 @OnEvent，不依赖
+  // 这份白名单，但仍需 emitter 广播这一次，两条转发路径共用同一次 emit）。
+  SESSION_WS_EVENTS.runHitlSettled,
 ];
 
 /** 终止事件 → 终止原因映射。 */

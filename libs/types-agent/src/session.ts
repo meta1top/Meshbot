@@ -563,6 +563,23 @@ export type SessionTitleUpdatedEvent = z.infer<
   typeof SessionTitleUpdatedEventSchema
 >;
 
+/**
+ * socket: run.hitl_settled —— HITL 关卡广播帧（Agent 级观察通道 D3，Task 17）。
+ *
+ * `ConfirmationService.resolve` 首次成功解锁某个挂起的 confirm/ask_question
+ * 关卡时广播一次：告诉所有在看这张卡片的端——本地 ws/session 房间、per-run
+ * 发起方、全部观察者——「已被应答，收起这张卡」，包括没抢到的那个观察者
+ * （否则它的 UI 会一直挂着一张已经无效的确认卡，甚至把自己被丢弃的决定当成
+ * 已生效）。晚到的 resolve（先到先得已判负）不广播，避免重复帧造成 UI 抖动。
+ */
+export const RunHitlSettledEventSchema = z.object({
+  sessionId: z.string(),
+  toolCallId: z.string(),
+  /** 应答来源：本机浏览器 / 远程发起方 / 观察者。前端可据此提示「已由其他端应答」。 */
+  by: z.enum(["local", "remote", "observer"]),
+});
+export type RunHitlSettledEvent = z.infer<typeof RunHitlSettledEventSchema>;
+
 /** WS namespace 与事件名常量。 */
 export const SESSION_WS_NAMESPACE = "ws/session";
 export const SESSION_WS_EVENTS = {
@@ -588,4 +605,5 @@ export const SESSION_WS_EVENTS = {
   runCompactionError: "run.compaction_error",
   runSubagentSpawned: "run.subagent_spawned",
   runSubagentSettled: "run.subagent_settled",
+  runHitlSettled: "run.hitl_settled",
 } as const;

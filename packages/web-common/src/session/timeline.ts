@@ -26,6 +26,14 @@ export interface ToolCallView {
   subSessionId?: string;
   /** streaming = LLM 仍在流式生成本工具的参数（尚未开始执行）。 */
   status: "streaming" | "running" | "ok" | "error";
+  /**
+   * HITL 关卡已被应答的来源（Task 17，`run.hitl_settled` 广播帧写入）：非空
+   * 即该 confirm/ask 卡片已终局，即便 `status` 仍是 `"running"`——真正的工具
+   * 执行结果（`run.tool_call_end`）可能因实际副作用（发消息等）而晚到。卡片
+   * 据此立即禁用交互，避免用户对着一张早已失效的确认卡反复点击，或把自己
+   * 被丢弃的决定误当成已生效（Agent 级观察通道 D3 先到先得仲裁）。
+   */
+  hitlSettledBy?: "local" | "remote" | "observer";
 }
 
 /** 时间线上的一条消息（统一视图模型）。 */

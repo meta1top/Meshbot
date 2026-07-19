@@ -7,6 +7,7 @@ import {
   type RunChunkEvent,
   type RunDoneEvent,
   type RunErrorEvent,
+  type RunHitlSettledEvent,
   type RunHumanEvent,
   type RunInterruptedEvent,
   type RunReasoningChunkEvent,
@@ -1147,6 +1148,30 @@ export function useSessionStream(
         ];
       });
     };
+    /**
+     * HITL 关卡广播帧（Task 17）：某个挂起的 confirm/ask_question 已被应答
+     * （可能是本机、远程发起方或另一个观察者），按 toolCallId 全时间线找到
+     * 对应卡片标记 `hitlSettledBy`——卡片据此立即禁用交互，不必等真正的工具
+     * 执行结果（`run.tool_call_end`）才收尾，也不让「先到先得」的输家继续
+     * 对着一张已经无效的卡片反复点击。
+     */
+    const onHitlSettled = (e: RunHitlSettledEvent) => {
+      if (e.sessionId !== sessionId) return;
+      apply((prev) =>
+        prev.map((m) =>
+          m.toolCalls?.some((t) => t.toolCallId === e.toolCallId)
+            ? {
+                ...m,
+                toolCalls: m.toolCalls.map((t) =>
+                  t.toolCallId === e.toolCallId
+                    ? { ...t, hitlSettledBy: e.by }
+                    : t,
+                ),
+              }
+            : m,
+        ),
+      );
+    };
     const onSubagentSpawned = (e: RunSubagentSpawnedEvent) => {
       if (e.sessionId !== sessionId) return;
       apply((prev) =>
@@ -1186,6 +1211,7 @@ export function useSessionStream(
     socket.on(SESSION_WS_EVENTS.runToolCallEnd, onToolEnd);
     socket.on(SESSION_WS_EVENTS.runSubagentSpawned, onSubagentSpawned);
     socket.on(SESSION_WS_EVENTS.runSubagentSettled, onSubagentSettled);
+    socket.on(SESSION_WS_EVENTS.runHitlSettled, onHitlSettled);
 
     // === Compaction 三事件 —— banner 状态 + 完成后触发 history 重新拉取 ===
     const onCompactionStart = (payload: {
@@ -1237,6 +1263,7 @@ export function useSessionStream(
       socket.off(SESSION_WS_EVENTS.runToolCallEnd, onToolEnd);
       socket.off(SESSION_WS_EVENTS.runSubagentSpawned, onSubagentSpawned);
       socket.off(SESSION_WS_EVENTS.runSubagentSettled, onSubagentSettled);
+      socket.off(SESSION_WS_EVENTS.runHitlSettled, onHitlSettled);
       socket.off(SESSION_WS_EVENTS.runCompactionStart, onCompactionStart);
       socket.off(SESSION_WS_EVENTS.runCompactionDone, onCompactionDone);
       socket.off(SESSION_WS_EVENTS.runCompactionError, onCompactionError);

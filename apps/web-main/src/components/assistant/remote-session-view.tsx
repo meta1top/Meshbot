@@ -701,7 +701,10 @@ function RemoteSessionViewReady({
               runErrorSessionAgentMismatch: t("runErrorSessionAgentMismatch"),
               runErrorOffline: t("runErrorOffline"),
             },
-            toolCall: { artifactPresentFailed: t("artifact.presentFailed") },
+            toolCall: {
+              artifactPresentFailed: t("artifact.presentFailed"),
+              hitlSettledElsewhere: t("hitlSettledElsewhere"),
+            },
             pendingList: {
               editPending: t("editPending"),
               deletePending: t("deletePending"),

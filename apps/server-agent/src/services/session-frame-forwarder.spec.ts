@@ -64,6 +64,22 @@ describe("SessionFrameForwarder", () => {
     expect(frames.map((f) => f.sessionId)).toEqual(["s1", "sub1", "s1"]);
   });
 
+  it("run.hitl_settled 在转发白名单里（关卡广播帧，Task 17；不加白名单观察者收不到）", () => {
+    const fwd = new SessionFrameForwarder(emitter, "s1", sink(), true);
+    fwd.start();
+    emitter.emit(SESSION_WS_EVENTS.runHitlSettled, {
+      sessionId: "s1",
+      toolCallId: "t1",
+      by: "observer",
+    });
+    expect(frames).toHaveLength(1);
+    expect(frames[0]).toMatchObject({
+      event: SESSION_WS_EVENTS.runHitlSettled,
+      sessionId: "s1",
+      payload: { sessionId: "s1", toolCallId: "t1", by: "observer" },
+    });
+  });
+
   it("run.tool_call_end 剥掉 content 字段", () => {
     const fwd = new SessionFrameForwarder(emitter, "s1", sink(), true);
     fwd.start();

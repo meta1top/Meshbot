@@ -189,7 +189,11 @@ export class SessionController {
       sessionId,
       toolCallId,
     );
-    this.confirmation.resolve(key, { action: decision, content });
+    this.confirmation.resolve(
+      key,
+      { action: decision, content },
+      { sessionId, toolCallId, by: "local" },
+    );
     return { ok: true };
   }
 
@@ -206,7 +210,11 @@ export class SessionController {
       sessionId,
       toolCallId,
     );
-    this.confirmation.resolve(key, { answers });
+    this.confirmation.resolve(
+      key,
+      { answers },
+      { sessionId, toolCallId, by: "local" },
+    );
     return { ok: true };
   }
 

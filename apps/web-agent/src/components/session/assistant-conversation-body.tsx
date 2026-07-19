@@ -396,7 +396,10 @@ export function AssistantConversationBody({
           runErrorSessionAgentMismatch: t("runErrorSessionAgentMismatch"),
           runErrorOffline: t("runErrorOffline"),
         },
-        toolCall: { artifactPresentFailed: tArtifact("presentFailed") },
+        toolCall: {
+          artifactPresentFailed: tArtifact("presentFailed"),
+          hitlSettledElsewhere: t("hitlSettledElsewhere"),
+        },
         pendingList: {
           editPending: t("editPending"),
           deletePending: t("deletePending"),

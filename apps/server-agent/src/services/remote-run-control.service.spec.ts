@@ -63,6 +63,7 @@ describe("RemoteRunControlService", () => {
       expect(confirmation.resolve).toHaveBeenCalledWith(
         ConfirmationService.key("u1", "sess-1", "tc1"),
         { action: "send", content: "改写" },
+        { sessionId: "sess-1", toolCallId: "tc1", by: "remote" },
       );
     });
 
@@ -86,6 +87,7 @@ describe("RemoteRunControlService", () => {
       expect(confirmation.resolve).toHaveBeenCalledWith(
         ConfirmationService.key("u1", "sess-1", "tc1"),
         { answers },
+        { sessionId: "sess-1", toolCallId: "tc1", by: "remote" },
       );
     });
 
@@ -164,10 +166,11 @@ describe("RemoteRunControlService", () => {
           localAgentId: "a1",
         },
       } as never);
-      expect(confirmation.resolve).toHaveBeenCalledWith("u1:s1:t1", {
-        action: "send",
-        content: undefined,
-      });
+      expect(confirmation.resolve).toHaveBeenCalledWith(
+        "u1:s1:t1",
+        { action: "send", content: undefined },
+        { sessionId: "s1", toolCallId: "t1", by: "observer" },
+      );
     });
 
     it("watchId 与 sessionId 绑定不符 → 拒（防跨会话越权 resolve）", () => {
@@ -284,10 +287,11 @@ describe("RemoteRunControlService", () => {
           localAgentId: "a1",
         },
       } as never);
-      expect(confirmation.resolve).toHaveBeenCalledWith("u1:s1:t1", {
-        action: "send",
-        content: undefined,
-      });
+      expect(confirmation.resolve).toHaveBeenCalledWith(
+        "u1:s1:t1",
+        { action: "send", content: undefined },
+        { sessionId: "s1", toolCallId: "t1", by: "remote" },
+      );
     });
   });
 });
