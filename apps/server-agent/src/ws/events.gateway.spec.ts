@@ -4,6 +4,7 @@ import {
   AGENT_EVENTS,
   REMOTE_AGENT_EVENTS,
   SCHEDULE_EVENTS,
+  SESSION_LIFECYCLE_EVENTS,
   SESSION_STATUS_EVENTS,
 } from "@meshbot/types-agent";
 
@@ -140,6 +141,56 @@ describe("EventsGateway 下行信封 + 账号路由", () => {
     const [eventName, env] = roomEmit.mock.calls[0];
     expect(eventName).toBe("event");
     expect(env.type).toBe(SESSION_STATUS_EVENTS.changed);
+    expect(env.payload).toEqual(payload);
+  });
+
+  it("session.created 本地事件包信封下发到 acct 房间（侧栏会话列表实时插入）", () => {
+    const account = new AccountContextService();
+    const { gw, roomEmit, to } = makeGateway(account);
+    const payload = {
+      agentId: "a1",
+      session: {
+        id: "s1",
+        title: "新会话",
+        status: "running" as const,
+        pinned: false,
+        pinnedAt: null,
+        titleGenerated: false,
+        modelConfigId: null,
+        agentId: "a1",
+        createdAt: "2026-07-19T00:00:00.000Z",
+        updatedAt: "2026-07-19T00:00:00.000Z",
+      },
+    };
+    account.run("U1", () => gw.onSessionCreated(payload));
+    expect(to).toHaveBeenCalledWith("acct:U1");
+    const [eventName, env] = roomEmit.mock.calls[0];
+    expect(eventName).toBe("event");
+    expect(env.type).toBe(SESSION_LIFECYCLE_EVENTS.created);
+    expect(env.payload).toEqual(payload);
+  });
+
+  it("session.deleted 本地事件包信封下发到 acct 房间（侧栏会话列表实时移除）", () => {
+    const account = new AccountContextService();
+    const { gw, roomEmit, to } = makeGateway(account);
+    const payload = { agentId: "a1", sessionId: "s1" };
+    account.run("U1", () => gw.onSessionDeleted(payload));
+    expect(to).toHaveBeenCalledWith("acct:U1");
+    const [eventName, env] = roomEmit.mock.calls[0];
+    expect(eventName).toBe("event");
+    expect(env.type).toBe(SESSION_LIFECYCLE_EVENTS.deleted);
+    expect(env.payload).toEqual(payload);
+  });
+
+  it("session.renamed 本地事件包信封下发到 acct 房间（侧栏会话标题实时刷新）", () => {
+    const account = new AccountContextService();
+    const { gw, roomEmit, to } = makeGateway(account);
+    const payload = { agentId: "a1", sessionId: "s1", title: "新标题" };
+    account.run("U1", () => gw.onSessionRenamed(payload));
+    expect(to).toHaveBeenCalledWith("acct:U1");
+    const [eventName, env] = roomEmit.mock.calls[0];
+    expect(eventName).toBe("event");
+    expect(env.type).toBe(SESSION_LIFECYCLE_EVENTS.renamed);
     expect(env.payload).toEqual(payload);
   });
 

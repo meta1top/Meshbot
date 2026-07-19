@@ -98,10 +98,19 @@ export class SessionService {
     // 观察者经 relay 镜像消费。发射点在 Service 而非 Controller——REST 建会话、
     // 远程 run 入站建会话、定时任务建会话三条路径自动共享，不留静默洞。
     // 放在事务方法**之外**：事务未提交就通知，观察者回查会看不到这条会话。
-    this.emitter.emit(SESSION_LIFECYCLE_EVENTS.created, {
-      agentId: input.agentId,
-      session: created.session,
-    } satisfies SessionCreatedEvent);
+    //
+    // kind="quick"（随手问临时会话）不发：`listAllSorted`/`listByAgentSorted`
+    // 都用 `kind='user'` 白名单过滤、不进侧栏，若照样 emit created，观察者
+    // （本地侧栏 sessionsAtom / 远程 Agent 会话列表）会用 applySessionListEvent
+    // 的「不认识就插入」语义把它凭空插进列表——与 kind="subagent"
+    // （`createSubSession` 走另一方法、从不 emit created）是同一类坑，这里补
+    // 上是因为 T13 设计统一事件契约时只排除了 subagent，漏看了 quick。
+    if (input.kind !== "quick") {
+      this.emitter.emit(SESSION_LIFECYCLE_EVENTS.created, {
+        agentId: input.agentId,
+        session: created.session,
+      } satisfies SessionCreatedEvent);
+    }
     return created;
   }
 

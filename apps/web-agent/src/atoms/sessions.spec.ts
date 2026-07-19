@@ -1,13 +1,22 @@
 import type { SessionSummary } from "@meshbot/types-agent";
-import { patchSessionStatus } from "./sessions";
+import { applySessionListEventToArray, patchSessionStatus } from "./sessions";
 
-function makeSession(id: string, status: "idle" | "running"): SessionSummary {
+function makeSession(
+  id: string,
+  status: "idle" | "running",
+  updatedAt = "2026-07-18T00:00:00.000Z",
+): SessionSummary {
   return {
     id,
     title: `会话 ${id}`,
     status,
+    pinned: false,
+    pinnedAt: null,
+    titleGenerated: false,
+    modelConfigId: null,
+    agentId: "a1",
     createdAt: "2026-07-18T00:00:00.000Z",
-    updatedAt: "2026-07-18T00:00:00.000Z",
+    updatedAt,
   } as SessionSummary;
 }
 
@@ -29,5 +38,73 @@ describe("patchSessionStatus", () => {
   it("空列表 → 原样返回", () => {
     const arr: SessionSummary[] = [];
     expect(patchSessionStatus(arr, "a", "idle")).toBe(arr);
+  });
+});
+
+describe("applySessionListEventToArray", () => {
+  it("created → 插入新会话（按 updatedAt 排到应在的位置）", () => {
+    const arr = [
+      makeSession("a", "idle", "2026-07-18T00:00:01.000Z"),
+      makeSession("b", "idle", "2026-07-18T00:00:00.000Z"),
+    ];
+    const newSession = makeSession("c", "running", "2026-07-18T00:00:02.000Z");
+    const next = applySessionListEventToArray(arr, {
+      type: "created",
+      session: newSession,
+    });
+    expect(next.map((s) => s.id)).toEqual(["c", "a", "b"]);
+  });
+
+  it("created 同 id 幂等 → 不产生重复行", () => {
+    const arr = [makeSession("a", "idle")];
+    const next = applySessionListEventToArray(arr, {
+      type: "created",
+      session: makeSession("a", "idle"),
+    });
+    expect(next.map((s) => s.id)).toEqual(["a"]);
+  });
+
+  it("deleted → 移除对应会话", () => {
+    const arr = [makeSession("a", "idle"), makeSession("b", "idle")];
+    const next = applySessionListEventToArray(arr, {
+      type: "deleted",
+      sessionId: "a",
+    });
+    expect(next.map((s) => s.id)).toEqual(["b"]);
+  });
+
+  it("renamed → 改标题并置 titleGenerated=true", () => {
+    const arr = [makeSession("a", "idle")];
+    const next = applySessionListEventToArray(arr, {
+      type: "renamed",
+      sessionId: "a",
+      title: "新标题",
+    });
+    expect(next[0]).toMatchObject({ title: "新标题", titleGenerated: true });
+  });
+
+  it("不认识的会话（deleted/renamed 命中不到 id）→ 原样返回，引用不变，不插入新行", () => {
+    const arr = [makeSession("a", "idle")];
+    const deletedNext = applySessionListEventToArray(arr, {
+      type: "deleted",
+      sessionId: "不存在",
+    });
+    expect(deletedNext).toBe(arr);
+    const renamedNext = applySessionListEventToArray(arr, {
+      type: "renamed",
+      sessionId: "不存在",
+      title: "x",
+    });
+    expect(renamedNext).toBe(arr);
+  });
+
+  it("不可变：不修改传入数组", () => {
+    const arr = [makeSession("a", "idle")];
+    applySessionListEventToArray(arr, {
+      type: "renamed",
+      sessionId: "a",
+      title: "改了",
+    });
+    expect(arr[0].title).toBe("会话 a");
   });
 });

@@ -28,6 +28,10 @@ import {
   type RemoteAgentRegistryChangedEvent,
   SCHEDULE_EVENTS,
   type ScheduleFiredEvent,
+  SESSION_LIFECYCLE_EVENTS,
+  type SessionCreatedEvent,
+  type SessionDeletedEvent,
+  type SessionRenamedEvent,
   SESSION_STATUS_EVENTS,
   type SessionStatusChangedEvent,
 } from "@meshbot/types-agent";
@@ -199,6 +203,52 @@ export class EventsGateway extends BaseWebSocketGateway {
   @OnEvent(SESSION_STATUS_EVENTS.changed)
   onSessionStatusChanged(payload: SessionStatusChangedEvent): void {
     this.emitEnvelope(SESSION_STATUS_EVENTS.changed, payload);
+  }
+
+  /**
+   * 本地新建会话 → 信封投递给所属账号浏览器，侧栏会话列表实时插入新行。
+   *
+   * `SessionService.createSession` 在 `createSessionInTx` 事务提交之后 emit
+   * （REST 建会话 `SessionController.create` / 远程 run 入站建会话
+   * `RemoteRunInboundService.onAgentRunRequest` 两条路径共用同一方法，因而
+   * 共用同一发射点：前者经 REST 鉴权拦截器建账号上下文，后者显式
+   * `account.run(cloudUserId, ...)`），故 emitEnvelope 能取到账号并路由到
+   * acct 房间。子 Agent 会话（`createSubSession`）与随手问会话
+   * （`kind="quick"`）刻意不触发这个事件——两者都不进侧栏，发了只会让侧栏
+   * 凭空多出一行（quick 的排除见 `SessionService.createSession` 内注释）。
+   */
+  @OnEvent(SESSION_LIFECYCLE_EVENTS.created)
+  onSessionCreated(payload: SessionCreatedEvent): void {
+    this.emitEnvelope(SESSION_LIFECYCLE_EVENTS.created, payload);
+  }
+
+  /**
+   * 本地会话删除 → 信封投递给所属账号浏览器，侧栏会话列表实时移除对应行。
+   *
+   * 两条发射路径都在账号上下文内 emit：单会话直接删（`SessionService
+   * .deleteSession`，REST 经鉴权拦截器）；Agent 整体删除的级联删除路径
+   * （`AgentService.removeWithData`，同样 REST 触发）——`session.deleted`
+   * 特意挪到 `removeWithData` 的 `@Transactional()` 事务**外面**发射（见 commit
+   * f8ef6f18），避免事务回滚后「已通知却没真删掉」。两条路径 emitEnvelope
+   * 都能取到账号并路由到 acct 房间。
+   */
+  @OnEvent(SESSION_LIFECYCLE_EVENTS.deleted)
+  onSessionDeleted(payload: SessionDeletedEvent): void {
+    this.emitEnvelope(SESSION_LIFECYCLE_EVENTS.deleted, payload);
+  }
+
+  /**
+   * 本地会话改名 → 信封投递给所属账号浏览器，侧栏会话标题实时刷新。
+   *
+   * 两条发射路径都在账号上下文内 emit：手动改名（`SessionService.patch`，
+   * REST 经鉴权拦截器）；LLM 自动生成标题（`patchIfNotGenerated`，由
+   * `SessionTitleService` fire-and-forget 触发——脱离了请求的 ALS 账号上下文，
+   * 该 Service 显式按会话 owner 重建 `account.run(owner, ...)` 后才调用）。
+   * 两条路径 emitEnvelope 都能取到账号并路由到 acct 房间。
+   */
+  @OnEvent(SESSION_LIFECYCLE_EVENTS.renamed)
+  onSessionRenamed(payload: SessionRenamedEvent): void {
+    this.emitEnvelope(SESSION_LIFECYCLE_EVENTS.renamed, payload);
   }
 
   /**

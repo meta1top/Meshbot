@@ -758,6 +758,13 @@ describe("SessionService", () => {
       ]);
     });
 
+    it("createSession(kind='quick') 不发 created（随手问会话不进侧栏）", async () => {
+      await service.createSession({ content: "随手问", kind: "quick" });
+      expect(
+        emitted.filter(([e]) => e === SESSION_LIFECYCLE_EVENTS.created),
+      ).toHaveLength(0);
+    });
+
     it("createSubSession 不发 created（子 Agent 会话不进侧栏）", async () => {
       const parent = await service.createSession({ content: "父" });
       // 只关心 createSubSession 本身是否发 created，parent 自己的 created 先清掉。

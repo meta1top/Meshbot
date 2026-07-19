@@ -24,6 +24,7 @@ import {
   QUICK_ASSISTANT_EVENTS,
   REMOTE_AGENT_EVENTS,
   SCHEDULE_EVENTS,
+  SESSION_LIFECYCLE_EVENTS,
   SESSION_STATUS_EVENTS,
 } from "@meshbot/types-agent";
 import { useQueryClient } from "@tanstack/react-query";
@@ -42,6 +43,7 @@ function makeHandlers() {
     onConversationRead: jest.fn(),
     onScheduleFired: jest.fn(),
     onSessionStatusChanged: jest.fn(),
+    onSessionListEvent: jest.fn(),
     onQuickAssistantRenamed: jest.fn(),
     onModelConfigUpdated: jest.fn(),
     onRemoteAgentsChanged: jest.fn(),
@@ -111,6 +113,85 @@ describe("dispatchGlobalEvent", () => {
     const h = makeHandlers();
     dispatchGlobalEvent({ type: "x.unknown", payload: {}, ts: 1 }, h);
     for (const fn of Object.values(h)) expect(fn).not.toHaveBeenCalled();
+  });
+
+  describe("会话生命周期事件（created/deleted/renamed 共用 onSessionListEvent）", () => {
+    const session = {
+      id: "s1",
+      title: "新会话",
+      status: "running" as const,
+      pinned: false,
+      pinnedAt: null,
+      titleGenerated: false,
+      modelConfigId: null,
+      agentId: "a1",
+      createdAt: "2026-07-19T00:00:00.000Z",
+      updatedAt: "2026-07-19T00:00:00.000Z",
+    };
+
+    it("session.created → onSessionListEvent（归一为 SessionListEvent）", () => {
+      const h = makeHandlers();
+      dispatchGlobalEvent(
+        {
+          type: SESSION_LIFECYCLE_EVENTS.created,
+          payload: { agentId: "a1", session },
+          ts: 1,
+        },
+        h,
+      );
+      expect(h.onSessionListEvent).toHaveBeenCalledWith({
+        type: "created",
+        session,
+      });
+    });
+
+    it("session.deleted → onSessionListEvent（归一为 SessionListEvent）", () => {
+      const h = makeHandlers();
+      dispatchGlobalEvent(
+        {
+          type: SESSION_LIFECYCLE_EVENTS.deleted,
+          payload: { agentId: "a1", sessionId: "s1" },
+          ts: 1,
+        },
+        h,
+      );
+      expect(h.onSessionListEvent).toHaveBeenCalledWith({
+        type: "deleted",
+        sessionId: "s1",
+      });
+    });
+
+    it("session.renamed → onSessionListEvent（归一为 SessionListEvent）", () => {
+      const h = makeHandlers();
+      dispatchGlobalEvent(
+        {
+          type: SESSION_LIFECYCLE_EVENTS.renamed,
+          payload: { agentId: "a1", sessionId: "s1", title: "新标题" },
+          ts: 1,
+        },
+        h,
+      );
+      expect(h.onSessionListEvent).toHaveBeenCalledWith({
+        type: "renamed",
+        sessionId: "s1",
+        title: "新标题",
+      });
+    });
+
+    it("payload 形状不符（畸形帧）→ toSessionListEvent 返 null，不调用 onSessionListEvent、不抛错", () => {
+      const h = makeHandlers();
+      expect(() =>
+        dispatchGlobalEvent(
+          {
+            type: SESSION_LIFECYCLE_EVENTS.created,
+            payload: { bogus: true },
+            ts: 1,
+          },
+          h,
+        ),
+      ).not.toThrow();
+      expect(h.onSessionListEvent).not.toHaveBeenCalled();
+    });
   });
 });
 

@@ -16,10 +16,15 @@ import {
   REMOTE_AGENT_EVENTS,
   SCHEDULE_EVENTS,
   type ScheduleFiredEvent,
+  SESSION_LIFECYCLE_EVENTS,
   SESSION_STATUS_EVENTS,
   type SessionStatusChangedEvent,
 } from "@meshbot/types-agent";
 import { clearAccessToken } from "@meshbot/web-common";
+import {
+  type SessionListEvent,
+  toSessionListEvent,
+} from "@meshbot/web-common/session/session-list-events";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSetAtom } from "jotai";
 import { useEffect } from "react";
@@ -33,7 +38,10 @@ import {
   upsertConversationAtom,
 } from "@/atoms/im";
 import { addScheduleActivityAtom } from "@/atoms/schedule-activity";
-import { updateSessionStatusAtom } from "@/atoms/sessions";
+import {
+  applySessionListEventAtom,
+  updateSessionStatusAtom,
+} from "@/atoms/sessions";
 import { getEventsSocket } from "@/lib/events-socket";
 import { agentsQueryKey } from "@/rest/agents";
 import { remoteAgentsQueryKey } from "@/rest/remote-agents";
@@ -47,6 +55,12 @@ export interface GlobalEventHandlers {
   onConversationRead: (p: ImConversationReadEvent) => void;
   onScheduleFired: (p: ScheduleFiredEvent) => void;
   onSessionStatusChanged: (p: SessionStatusChangedEvent) => void;
+  /**
+   * 会话生命周期事件（created/deleted/renamed）已归一为 SessionListEvent——
+   * 三个信封 type 共用同一个 handler，与 `@meshbot/web-common/session` 的
+   * `applySessionListEvent` 消费端签名对齐（本地/远程共用一套模型）。
+   */
+  onSessionListEvent: (evt: SessionListEvent) => void;
   onQuickAssistantRenamed: (p: QuickAssistantRenamedEvent) => void;
   onAgentChanged: () => void;
   onModelConfigUpdated: () => void;
@@ -80,6 +94,17 @@ export function dispatchGlobalEvent(
     case SESSION_STATUS_EVENTS.changed:
       h.onSessionStatusChanged(env.payload as SessionStatusChangedEvent);
       break;
+    // 会话生命周期事件（created/deleted/renamed）三个信封 type 共用一套归一
+    // 逻辑：ws 信封原生就是 (event, payload) 形状，`toSessionListEvent` 正是
+    // 为这个形状设计的入口——归一失败（理论不该发生，防御性）返回 null，
+    // 原样丢弃，不调用 handler。
+    case SESSION_LIFECYCLE_EVENTS.created:
+    case SESSION_LIFECYCLE_EVENTS.deleted:
+    case SESSION_LIFECYCLE_EVENTS.renamed: {
+      const evt = toSessionListEvent(env.type, env.payload);
+      if (evt) h.onSessionListEvent(evt);
+      break;
+    }
     case QUICK_ASSISTANT_EVENTS.renamed:
       h.onQuickAssistantRenamed(env.payload as QuickAssistantRenamedEvent);
       break;
@@ -124,6 +149,7 @@ export function useGlobalEvents(): void {
   const addScheduleActivity = useSetAtom(addScheduleActivityAtom);
   const setQuickAssistantName = useSetAtom(quickAssistantNameAtom);
   const updateSessionStatus = useSetAtom(updateSessionStatusAtom);
+  const applySessionListEventToStore = useSetAtom(applySessionListEventAtom);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -141,6 +167,10 @@ export function useGlobalEvents(): void {
       // 会话跑完/开跑 → 侧栏「运行中」绿点实时熄灭/点亮（列表里没有的会话忽略）
       onSessionStatusChanged: (p) =>
         updateSessionStatus({ id: p.sessionId, status: p.status }),
+      // 会话新建/删除/改名 → 侧栏会话列表实时增删改（applySessionListEvent
+      // 统一归并，created 插入 / deleted 移除 / renamed 改标题，不认识的
+      // 会话一律忽略，不凭空造行）
+      onSessionListEvent: (evt) => applySessionListEventToStore(evt),
       onQuickAssistantRenamed: (p) => setQuickAssistantName(p.name),
       // 本机任一 Agent 增删改（表单 / rename_agent 工具 / 另一个窗口）→ 重拉
       //  Agent 列表：侧栏 Agent 行与会话标题栏共用这份缓存，改名后立刻跟着变
@@ -186,6 +216,7 @@ export function useGlobalEvents(): void {
     addScheduleActivity,
     setQuickAssistantName,
     updateSessionStatus,
+    applySessionListEventToStore,
     queryClient,
   ]);
 }

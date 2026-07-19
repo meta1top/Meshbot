@@ -1,6 +1,10 @@
 "use client";
 
 import type { SessionStatus, SessionSummary } from "@meshbot/types-agent";
+import {
+  applySessionListEvent,
+  type SessionListEvent,
+} from "@meshbot/web-common/session/session-list-events";
 import { atom } from "jotai";
 import {
   deleteSession as deleteSessionApi,
@@ -130,6 +134,41 @@ export const updateSessionStatusAtom = atom(
     const next = patchSessionStatus(arr, params.id, params.status);
     if (next === arr) return;
     set(sessionsAtom, next);
+  },
+);
+
+/**
+ * 会话生命周期事件（created 插入 / deleted 移除 / renamed 改标题）应用到列表，
+ * 返回新数组；命中不到的会话（deleted/renamed）原样返回（引用不变）。
+ *
+ * 薄封装：合并逻辑委托 `@meshbot/web-common/session` 的 `applySessionListEvent`
+ * ——与 web-main 远程 Agent 观察通道共用同一份归并（spec D9「上层处理逻辑一份」，
+ * 不重复实现，两份实现漂移是「会话列表和真实状态不一致」这类极难复现 bug 的
+ * 根因）。这里只加一层 sortSessions 保持列表顺序不变式（其余改动列表的 atom
+ * 都在写入前重排）；独立抽成纯函数是为了不依赖 jotai store 就能单测。
+ */
+export function applySessionListEventToArray(
+  arr: SessionSummary[],
+  evt: SessionListEvent,
+): SessionSummary[] {
+  const next = applySessionListEvent(arr, evt);
+  return next === arr ? arr : sortSessions(next);
+}
+
+/**
+ * 全局事件总线收到 session.created/deleted/renamed（`EventsGateway` 转发的
+ * 本地会话生命周期事件）时调用，落 sessionsAtom。
+ *
+ * `status_changed` 不走这条路径——它有独立的处理入口 `updateSessionStatusAtom`
+ * （「存在才改」的语义与这里的 created 会插入新行不同，硬拆开更清楚，见该
+ * atom 文档），继续保持现状，不在此处顺带合并。
+ */
+export const applySessionListEventAtom = atom(
+  null,
+  (get, set, evt: SessionListEvent) => {
+    const arr = get(sessionsAtom);
+    const next = applySessionListEventToArray(arr, evt);
+    if (next !== arr) set(sessionsAtom, next);
   },
 );
 
