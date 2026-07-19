@@ -1,10 +1,8 @@
-import { computeToolCallStatus } from "./session-history-status";
 import { AccountContextService } from "@meshbot/lib-agent";
 import {
   type CreateSessionResponse,
   type DeletePendingResponse,
   type HistoryResponse,
-  type HistoryToolCall,
   HistoryQuerySchema,
   MessageFeedbackSchema,
   type MessageUsage,
@@ -40,6 +38,7 @@ import { AgentService } from "../services/agent.service";
 import { ConfirmationService } from "../services/confirmation.service";
 import { LlmCallService } from "../services/llm-call.service";
 import { RunnerService } from "../services/runner.service";
+import { assembleHistoryMessages } from "../services/session-history-assembler";
 import { SessionMessageService } from "../services/session-message.service";
 import { SessionTitleService } from "../services/session-title.service";
 import { SessionService } from "../services/session.service";
@@ -138,14 +137,6 @@ export class SessionController {
 
     const isFirstPage = !before;
 
-    const rows = page.messages;
-    const toolByCallId = new Map<string, (typeof rows)[number]>();
-    for (const r of rows) {
-      if (r.role === "tool" && r.toolCallId) {
-        toolByCallId.set(r.toolCallId, r);
-      }
-    }
-
     // dispatch_subagent 嵌套卡认领：按 parent_tool_call_id 反查子会话。
     // 子 run 进行中工具结果未落库（无 tool 行），前端刷新后唯有此路能认领。
     const children = await this.sessions.listChildren(id);
@@ -154,61 +145,17 @@ export class SessionController {
       if (c.parentToolCallId) childByToolCallId.set(c.parentToolCallId, c.id);
     }
 
-    const messages = rows
-      .filter((r) => r.role !== "tool")
-      .map((r) => {
-        const meta = r.metadata
-          ? (JSON.parse(r.metadata) as Record<string, unknown>)
-          : null;
-        const fb =
-          meta && (meta.feedback === "up" || meta.feedback === "down")
-            ? (meta.feedback as "up" | "down")
-            : null;
-        const base = {
-          id: r.id,
-          role: r.role as "user" | "assistant" | "system",
-          content: r.content,
-          ...(r.reasoning ? { reasoning: r.reasoning } : {}),
-          metadata:
-            meta && meta.kind === "compaction"
-              ? (meta as unknown as {
-                  kind: "compaction";
-                  removedCount: number;
-                  fromMessageId: string;
-                  toMessageId: string;
-                })
-              : null,
-          feedback: fb,
-        };
-        if (r.role !== "assistant" || !r.toolCalls) return base;
-        try {
-          const calls = JSON.parse(r.toolCalls) as Array<{
-            id: string;
-            name: string;
-            args: unknown;
-          }>;
-          const toolCalls: HistoryToolCall[] = calls.map((c) => {
-            const tr = toolByCallId.get(c.id);
-            const status = computeToolCallStatus(tr);
-            const subSessionId = childByToolCallId.get(c.id);
-            return {
-              toolCallId: c.id,
-              name: c.name,
-              args: c.args,
-              status,
-              result: tr?.content ?? "",
-              ...(subSessionId ? { subSessionId } : {}),
-            };
-          });
-          return { ...base, toolCalls };
-        } catch {
-          return base;
-        }
-      });
+    // assistant 的 tool_calls JSON 与独立 role="tool" 结果行的合并只此一处
+    // （纯函数，与跨设备 history 分支 RemoteQueryInboundService 共用同一份）。
+    const { messages, hasMore } = assembleHistoryMessages({
+      rows: page.messages,
+      hasMore: page.hasMore,
+      childByToolCallId,
+    });
 
     return {
       messages,
-      hasMore: page.hasMore,
+      hasMore,
       inflight: isFirstPage ? this.runner.getInflight(id) : null,
       ...(isFirstPage
         ? { sessionTotals: await this.llmCalls.getSessionTotals(id) }

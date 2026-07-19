@@ -7,9 +7,12 @@
  * - 其余（metadata null / 解析失败 / ok===true） → "ok"：兼容老数据。
  *
  * 纯函数、不依赖 ORM 实体，便于单测覆盖三态分支。
+ *
+ * `metadata` 可选（`undefined` 与 `null` 等价，都走 "ok" 兼容分支）：调用方
+ * `assembleHistoryMessages` 的行形状里该列是可选字段。
  */
 export function computeToolCallStatus(
-  toolRow: { metadata: string | null } | undefined,
+  toolRow: { metadata?: string | null } | undefined,
 ): "running" | "ok" | "error" {
   if (!toolRow) return "running";
   if (!toolRow.metadata) return "ok";

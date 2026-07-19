@@ -269,11 +269,22 @@ export type HistoryQuery = z.infer<typeof HistoryQuerySchema>;
  * cursor 分页：messages 按 createdAt asc，hasMore 表示老消息是否还有。
  * 仅首次（before 未传）返 inflight + sessionTotals；翻页时不返。byMessage
  * 始终是本批 messages 对应的 LLM usage 投影，前端合并到 atom。
+ *
+ * 【跨设备（L3 device query kind="history"）的能力边界——显式声明，不让调用方猜】
+ * 宿主设备 B 回给发起方 A 的 history 与本地 REST 同形（同一个
+ * `assembleHistoryMessages` 装配），但三个字段**刻意不跨设备传**：
+ * - `inflight`：不传（`undefined`）。远程「当前正在跑什么」由观察通道自己送——
+ *   `agent.watch.accepted` 携带 inflight，A 侧合成 `run.snapshot` 注入时间线，
+ *   比 history 快照更实时；history 再传一份只会与之打架（SET 覆盖语义会把
+ *   已累积的正文回退）。**不要**把 `undefined` 读成「远程没有活跃 run」。
+ * - `sessionTotals`：不传。token 用量属设备本地计费明细，不跨设备暴露。
+ * - `byMessage`：远程恒为 `{}`（空投影），同上。
  */
 export const HistoryResponseSchema = z.object({
   messages: z.array(HistoryMessageSchema),
   hasMore: z.boolean(),
-  inflight: InflightSnapshotSchema.nullable(),
+  /** 本地 REST 恒有（首页为快照、翻页为 null）；跨设备 history 不传，见上方说明。 */
+  inflight: InflightSnapshotSchema.nullable().optional(),
   sessionTotals: SessionTotalsSchema.optional(),
   byMessage: z.record(z.string(), MessageUsageSchema),
 });

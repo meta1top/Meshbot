@@ -9,6 +9,8 @@ function make() {
     // 默认：sessionId 指向的会话归属本次寻址的 agA（各用例可覆盖）
     findOrNull: jest.fn().mockResolvedValue({ id: "s1", agentId: "agA" }),
     patch: jest.fn().mockResolvedValue({ id: "s1", modelConfigId: "mc1" }),
+    // history 装配要按 parent_tool_call_id 反查子会话（嵌套卡认领），与 REST 同源
+    listChildren: jest.fn().mockResolvedValue([]),
   };
   const messages = {
     listPage: jest.fn().mockResolvedValue({
@@ -170,6 +172,52 @@ describe("RemoteQueryInboundService", () => {
     const call = relay.emitDeviceQueryResponse.mock.calls[0][1];
     expect(call.ok).toBe(true);
     expect(call.data.messages[0].id).toBe("m1");
+    expect(call.data.hasMore).toBe(false);
+    expect(call.data.byMessage).toEqual({});
+  });
+
+  it("kind=history → 与 REST 同一份装配：tool 行被过滤、状态/结果/subSessionId 合并", async () => {
+    const { svc, messages, sessions, relay } = make();
+    messages.listPage.mockResolvedValueOnce({
+      messages: [
+        { id: "u1", role: "user", content: "跑一下" },
+        {
+          id: "a1",
+          role: "assistant",
+          content: "",
+          toolCalls: JSON.stringify([
+            { id: "tc1", name: "bash", args: { cmd: "ls" } },
+            { id: "tc2", name: "dispatch_subagent", args: {} },
+          ]),
+        },
+        {
+          id: "t1",
+          role: "tool",
+          content: "boom",
+          toolCallId: "tc1",
+          metadata: JSON.stringify({ ok: false }),
+        },
+      ],
+      hasMore: true,
+    });
+    sessions.listChildren.mockResolvedValueOnce([
+      { id: "sub-1", parentToolCallId: "tc2" },
+    ]);
+    await svc.onDeviceQueryRequest(
+      fwd({ kind: "history", params: { sessionId: "s1" } }) as never,
+    );
+    const data = relay.emitDeviceQueryResponse.mock.calls[0][1].data;
+    // role="tool" 行不再混进可见消息（原实现直出裸行，前端只能自己过滤）
+    expect(data.messages.map((m: { id: string }) => m.id)).toEqual([
+      "u1",
+      "a1",
+    ]);
+    const tcs = data.messages[1].toolCalls;
+    // 失败的工具必须是 error，不能像原防御式补救那样硬编码成 ok
+    expect(tcs[0]).toMatchObject({ status: "error", result: "boom" });
+    expect(tcs[1].subSessionId).toBe("sub-1");
+    // 可见消息只剩 2 条也不影响 hasMore（不得按可见条数反推）
+    expect(data.hasMore).toBe(true);
   });
 
   it("kind=history → limit 超大值被 clamp 到 100（防止拉整个会话）", async () => {

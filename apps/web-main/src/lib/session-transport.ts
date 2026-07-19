@@ -316,6 +316,19 @@ export function createRemoteSessionTransport(
       return (await query("sessions", {})) as SessionSummary[];
     },
 
+    /**
+     * 跨设备取历史。`as HistoryResponse` 现在是**真实成立**的断言，不再是编译期
+     * 谎言：B 侧 `RemoteQueryInboundService` 的 history 分支已与本地 REST 共用
+     * 同一份 `assembleHistoryMessages`，回的就是 `HistoryResponse`（工具状态/
+     * 结果/subSessionId 合并完毕、role="tool" 行已过滤）。此前该分支直出裸 ORM
+     * 行，这句强转把形状不符一路掩盖到运行时，前端只好防御式补救。
+     *
+     * 本层不加 Zod parse：`device.query` 通道对所有 kind 一律是 `unknown` 出参 +
+     * 调用点断言（见本文件 `listSessions`/`readArtifact` 等），单独给 history 开
+     * 运行时校验会与该惯例不一致；且校验失败只能整屏报错，不比
+     * `historyMessageToTimeline` 里逐字段兜底更有用（对端设备可能是旧版
+     * server-agent，那里有 `Array.isArray` 守卫兜住）。
+     */
     async fetchHistory(sessionId, opts) {
       return (await query("history", {
         sessionId,

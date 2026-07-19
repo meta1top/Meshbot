@@ -34,85 +34,17 @@ import type { TimelineMessage } from "./timeline";
 import type { SessionTransport } from "./transport";
 
 /**
- * B 侧 `RemoteRunInboundService`/`RemoteQueryInboundService` 直出
- * `SessionMessageService.listPage()` 的原始 SessionMessage 行，并非真正的
- * HistoryMessage：toolCalls / metadata 是未解析的 JSON 字符串，无 feedback
- * 字段，且可能混入 role="tool" 行。A 侧 controller 把它 `as` 成 HistoryResponse
- * 只是编译期类型糊弄，运行时字段对不上，这里必须防御式映射（原在
- * assistant/page.tsx 的 RemoteSessionView，随只读→可交互升级一并挪到这里，
- * 供 useSessionStream 的 remote 分支直接复用）。
- */
-interface RemoteRawMessage {
-  id: string;
-  role: string;
-  content: string;
-  reasoning?: string | null;
-  /** JSON 字符串，形如 `[{id,name,args}]`（LangChain AIMessage.tool_calls 原始形状）。 */
-  toolCalls?: string | null;
-  /** JSON 字符串（session_message.metadata 原始列）；压缩占位行携带 kind="compaction"。 */
-  metadata?: string | null;
-  [key: string]: unknown;
-}
-
-interface RemoteRawHistory {
-  messages?: RemoteRawMessage[];
-  /** B 侧 `SessionMessageService.listPage` 原样返回（与本地 HistoryResponse 同源字段）。 */
-  hasMore?: boolean;
-  [key: string]: unknown;
-}
-
-/**
- * 远程历史单条消息 → TimelineMessage。字段缺失/解析失败一律给默认值，
- * 绝不假设运行时形状与本地 historyMessageToTimeline 的输入一致。
- */
-function remoteMessageToTimeline(m: RemoteRawMessage): TimelineMessage {
-  let toolCalls: TimelineMessage["toolCalls"];
-  if (typeof m.toolCalls === "string" && m.toolCalls) {
-    try {
-      const parsed = JSON.parse(m.toolCalls) as Array<{
-        id?: string;
-        toolCallId?: string;
-        name?: string;
-        args?: unknown;
-      }>;
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        toolCalls = parsed.map((tc) => ({
-          toolCallId: tc.toolCallId ?? tc.id ?? "",
-          name: tc.name ?? "",
-          args: tc.args,
-          // 只读历史无「进行中」语义：一律按终态展示，避免误触发确认卡的
-          // 可编辑分支（ImSendConfirmCard 等只在 status==="running" 时可写）。
-          status: "ok" as const,
-        }));
-      }
-    } catch {
-      toolCalls = undefined;
-    }
-  }
-  let metadata: TimelineMessage["metadata"];
-  if (typeof m.metadata === "string" && m.metadata) {
-    try {
-      metadata = JSON.parse(m.metadata) as TimelineMessage["metadata"];
-    } catch {
-      metadata = undefined;
-    }
-  }
-  return {
-    id: String(m.id),
-    role: m.role === "user" || m.role === "assistant" ? m.role : "system",
-    content: typeof m.content === "string" ? m.content : "",
-    ...(m.reasoning ? { reasoning: m.reasoning, reasoningDurationMs: 0 } : {}),
-    ...(toolCalls ? { toolCalls } : {}),
-    ...(metadata ? { metadata } : {}),
-    feedback: null,
-  };
-}
-
-/**
- * history 单条消息 → TimelineMessage 映射：首屏拉取与 loadMoreHistory 翻页
- * 共用（曾经翻页只映射 id/role/content/reasoning，丢了 toolCalls——含
- * dispatch_subagent 嵌套卡认领用的 subSessionId——与 feedback，导致上翻加载
- * 出来的历史消息里工具卡/嵌套卡/反馈态全部消失）。
+ * history 单条消息 → TimelineMessage 映射：本地 REST 与跨设备（L3 device
+ * query）、首屏拉取与 loadMoreHistory 翻页，四条路径共用同一份（曾经翻页只
+ * 映射 id/role/content/reasoning，丢了 toolCalls——含 dispatch_subagent 嵌套卡
+ * 认领用的 subSessionId——与 feedback，导致上翻加载出来的历史消息里工具卡/
+ * 嵌套卡/反馈态全部消失）。
+ *
+ * 远程分支曾另有一份「防御式」映射（`remoteMessageToTimeline`）：B 侧当时直出
+ * 裸 ORM 行，前端只能自己解析 JSON 字符串、过滤 role="tool"、并把工具状态硬编码
+ * 成 "ok"（失败的工具于是在远端显示成成功、结果区永远空、subSessionId 丢失）。
+ * B 侧 `RemoteQueryInboundService` 现已与 REST 共用 `assembleHistoryMessages`
+ * 装配出真正的 `HistoryResponse`，那份补救随之删除，remote 与 local 收敛到这里。
  */
 function historyMessageToTimeline(m: HistoryMessage): TimelineMessage {
   return {
@@ -123,7 +55,10 @@ function historyMessageToTimeline(m: HistoryMessage): TimelineMessage {
     // 不显示动态秒数（实际生成时长信息没存）。reasoningStartedAt 不设。
     ...(m.reasoning ? { reasoning: m.reasoning, reasoningDurationMs: 0 } : {}),
     // 持久化的 tool calls：转 ToolCallView；progress 留空（流式过程没存）
-    ...(m.toolCalls && m.toolCalls.length > 0
+    // Array.isArray 守卫：跨设备场景对端设备可能是尚未升级的旧版 server-agent，
+    // 那种版本直出裸 ORM 行、toolCalls 是 JSON **字符串**——不守卫会在 .map 处
+    // 抛 TypeError 把整屏历史打没（宁可少渲染工具卡，也不能整页崩）。
+    ...(Array.isArray(m.toolCalls) && m.toolCalls.length > 0
       ? {
           toolCalls: m.toolCalls.map((tc) => ({
             toolCallId: tc.toolCallId,
@@ -398,7 +333,8 @@ export function settleErrorTimeline(
  *   transport.ts），hook 内部经 transport 路由。
  *
  * L3 remote 分支（`remoteDeviceId` 非空）：该 sessionId 是远程设备 B 上的会话。
- * - 首屏历史走 `transport.fetchHistory`（防御式映射 B 侧原始行），不走本地
+ * - 首屏历史走 `transport.fetchHistory`（B 侧与本地 REST 共用同一份装配，返回
+ *   真正的 `HistoryResponse`，映射与本地完全一致），不走本地
  *   `transport.fetchPending`（远程无该概念）。
  * - **session socket 订阅不变**——B 的运行帧经 A 侧 `RemoteRunService` 影子重发到
  *   本地 SESSION_WS_EVENTS 总线，A 的 SessionGateway 照常转发到 room=sessionId，
@@ -595,21 +531,19 @@ export function useSessionStream(
           }
         })
         .catch(() => {});
-      // L3 remote：首屏历史走 L2c fetchHistory（经 transport，防御式映射
-      // B 侧原始行），不查本地 fetchPending（远程无该概念）。不显式传 limit
-      // （与本地首屏一致，交由 B 端 listPage 默认值 50 兜底）；hasMore 读
-      // B 侧 listPage 原样返回的字段（与本地 HistoryResponse 同源），翻页见
-      // loadMoreHistory。
+      // L3 remote：首屏历史走 L2c fetchHistory（经 transport）。B 侧现与本地
+      // REST 共用 assembleHistoryMessages，回的是真正的 HistoryResponse（工具
+      // 状态/结果/subSessionId 齐全、role="tool" 行已在服务端过滤），故映射与
+      // 本地完全一致。不查本地 fetchPending（远程无该概念）；不显式传 limit
+      // （与本地首屏一致，交由 B 端 listPage 默认值 50 兜底）。inflight /
+      // sessionTotals / byMessage 跨设备刻意不传，见 HistoryResponseSchema 注释。
       transport
         .fetchHistory(sessionId)
         .then((res) => {
           if (cancelled) return;
-          const rawRes = res as unknown as RemoteRawHistory;
-          const raw = rawRes.messages ?? [];
-          const initial: TimelineMessage[] = raw
-            // role="tool" 行是工具执行结果的落库行，不是可展示的时间线消息
-            .filter((m) => m.role !== "tool")
-            .map(remoteMessageToTimeline);
+          const initial: TimelineMessage[] = res.messages.map(
+            historyMessageToTimeline,
+          );
           // 合并：历史快照打底，但保留 socket 已先到的消息（不被覆盖）
           apply((current) => {
             const initialIds = new Set(initial.map((m) => m.id));
@@ -617,9 +551,8 @@ export function useSessionStream(
             return [...initial, ...socketArrived];
           });
           oldestMessageIdRef.current = initial[0]?.id ?? null;
-          const hasMore = rawRes.hasMore ?? false;
-          hasMoreHistoryRef.current = hasMore;
-          setHasMoreHistory(hasMore);
+          hasMoreHistoryRef.current = res.hasMore;
+          setHasMoreHistory(res.hasMore);
         })
         .catch((err) => {
           if (cancelled) return;
@@ -1314,10 +1247,10 @@ export function useSessionStream(
    * 滚动到顶部触发：拉早于当前最旧消息的下一批 history。
    * - 锚定视口：prepend 前后 scrollTop 自动补偿，使用户当前看的消息不动
    * - 并发去重：loadingMoreRef 期间忽略重复触发
-   * - remote 与 local 共用 cursor 分页（B 侧 listPage 与本地同源实现，`before`
-   *   语义一致）；remote 行需走防御式 remoteMessageToTimeline + 过滤
-   *   role="tool"（B 侧原始行，非真正 HistoryMessage，与首屏一致），且响应
-   *   无 byMessage（B 侧 listPage 不带 usage 汇总），不调 onUsageBatch。
+   * - remote 与 local 共用 cursor 分页与映射（B 侧现与本地 REST 共用同一份
+   *   `assembleHistoryMessages`，`before` 语义与响应形状均同源），故不再有
+   *   remote 专属分支；remote 的 `byMessage` 恒为 `{}`（用量不跨设备传，见
+   *   `HistoryResponseSchema` 注释），onUsageBatch 合并空投影是无副作用的 no-op。
    */
   // biome-ignore lint/correctness/useExhaustiveDependencies: scrollContainerRef 是 RefObject，.current 故意不进依赖（与原实现一致）
   const loadMoreHistory = useCallback(async () => {
@@ -1332,36 +1265,19 @@ export function useSessionStream(
     const prevScrollTop = scroller?.scrollTop ?? 0;
     try {
       const res = await transport.fetchHistory(sessionId, { before: cursor });
-      let newHasMore: boolean;
-      if (remoteDeviceId) {
-        const rawRes = res as unknown as RemoteRawHistory;
-        const raw = rawRes.messages ?? [];
-        const newMessages: TimelineMessage[] = raw
-          .filter((m) => m.role !== "tool")
-          .map(remoteMessageToTimeline);
-        apply((prev) => {
-          const existingIds = new Set(prev.map((m) => m.id));
-          const fresh = newMessages.filter((m) => !existingIds.has(m.id));
-          return [...fresh, ...prev];
-        });
-        oldestMessageIdRef.current = raw[0]?.id ?? cursor;
-        newHasMore = rawRes.hasMore ?? false;
-      } else {
-        const newMessages: TimelineMessage[] = res.messages.map(
-          historyMessageToTimeline,
-        );
-        apply((prev) => {
-          // 去重：socket 抢先到的或本地已有的不重复 prepend
-          const existingIds = new Set(prev.map((m) => m.id));
-          const fresh = newMessages.filter((m) => !existingIds.has(m.id));
-          return [...fresh, ...prev];
-        });
-        callbacksRef.current.onUsageBatch?.(sessionId, res.byMessage);
-        oldestMessageIdRef.current = res.messages[0]?.id ?? cursor;
-        newHasMore = res.hasMore;
-      }
-      hasMoreHistoryRef.current = newHasMore;
-      setHasMoreHistory(newHasMore);
+      const newMessages: TimelineMessage[] = res.messages.map(
+        historyMessageToTimeline,
+      );
+      apply((prev) => {
+        // 去重：socket 抢先到的或本地已有的不重复 prepend
+        const existingIds = new Set(prev.map((m) => m.id));
+        const fresh = newMessages.filter((m) => !existingIds.has(m.id));
+        return [...fresh, ...prev];
+      });
+      callbacksRef.current.onUsageBatch?.(sessionId, res.byMessage);
+      oldestMessageIdRef.current = res.messages[0]?.id ?? cursor;
+      hasMoreHistoryRef.current = res.hasMore;
+      setHasMoreHistory(res.hasMore);
       // 锚定视口：等 DOM 完成 prepend 后补偿 scrollTop
       requestAnimationFrame(() => {
         if (!scroller) return;
@@ -1374,7 +1290,7 @@ export function useSessionStream(
     } finally {
       loadingMoreRef.current = false;
     }
-  }, [sessionId, apply, remoteDeviceId, transport]);
+  }, [sessionId, apply, transport]);
 
   /**
    * 确认/取消一次待发送的工具调用（im_send_message / drive 分享类 confirm 型

@@ -1,5 +1,6 @@
 import { AccountContextService } from "@meshbot/lib-agent";
 import type { DeviceQueryResponse } from "@meshbot/types";
+import type { HistoryResponse } from "@meshbot/types-agent";
 import { ForbiddenException, Injectable } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
 import { ImRelayClientService } from "../cloud/im-relay-client.service";
@@ -8,6 +9,7 @@ import {
   type ImRelayDeviceQueryRequestEvent,
 } from "../cloud/im-relay.events";
 import { RemoteArtifactService } from "./remote-artifact.service";
+import { assembleHistoryMessages } from "./session-history-assembler";
 import { SessionMessageService } from "./session-message.service";
 import { SessionService } from "./session.service";
 
@@ -78,10 +80,7 @@ export class RemoteQueryInboundService {
           });
         } else {
           await this.assertSessionOwnedByAgent(sessionId, localAgentId);
-          data = await this.messages.listPage(sessionId, {
-            before: forwarded.params.before,
-            limit: Math.min(Math.max(1, forwarded.params.limit ?? 50), 100),
-          });
+          data = await this.assembleHistory(sessionId, forwarded.params);
         }
         this.relay.emitDeviceQueryResponse(cloudUserId, {
           ...base,
@@ -96,6 +95,42 @@ export class RemoteQueryInboundService {
         reason: "error",
       });
     }
+  }
+
+  /**
+   * kind="history"：与本地 REST（`SessionController.history`）**共用同一份**
+   * {@link assembleHistoryMessages} 装配，回真正的 `HistoryResponse` 形状。
+   *
+   * 原实现直接 `return this.messages.listPage(...)` —— 裸 ORM 行（`toolCalls`/
+   * `metadata` 是未解析 JSON 字符串、混着 role="tool" 结果行、无 feedback），
+   * 完全绕开合并逻辑。A 侧前端只能防御式补救，代价是：工具状态硬编码成 "ok"
+   * （失败的工具在远端显示成成功）、工具结果永远空、dispatch_subagent 的
+   * subSessionId 丢失（刷新后嵌套卡认领不了）。
+   *
+   * 不带 `inflight` / `sessionTotals` / 非空 `byMessage`：契约已在
+   * `HistoryResponseSchema` 的 JSDoc 里显式声明能力边界（inflight 由观察通道
+   * 送更实时的那份，用量不跨设备暴露）。
+   */
+  private async assembleHistory(
+    sessionId: string,
+    params: { before?: string; limit?: number },
+  ): Promise<HistoryResponse> {
+    const page = await this.messages.listPage(sessionId, {
+      before: params.before,
+      limit: Math.min(Math.max(1, params.limit ?? 50), 100),
+    });
+    // 与 REST 同源：按 parent_tool_call_id 反查子会话，供嵌套卡认领。
+    const children = await this.sessions.listChildren(sessionId);
+    const childByToolCallId = new Map<string, string>();
+    for (const c of children) {
+      if (c.parentToolCallId) childByToolCallId.set(c.parentToolCallId, c.id);
+    }
+    const { messages, hasMore } = assembleHistoryMessages({
+      rows: page.messages,
+      hasMore: page.hasMore,
+      childByToolCallId,
+    });
+    return { messages, hasMore, byMessage: {} };
   }
 
   /**
