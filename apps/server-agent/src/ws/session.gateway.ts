@@ -26,8 +26,8 @@ import {
   type SessionTitleUpdatedEvent,
   type SessionTopic,
 } from "@meshbot/types-agent";
-import { UseFilters, UseGuards } from "@nestjs/common";
-import { OnEvent } from "@nestjs/event-emitter";
+import { Optional, UseFilters, UseGuards } from "@nestjs/common";
+import { EventEmitter2, OnEvent } from "@nestjs/event-emitter";
 import { JwtService } from "@nestjs/jwt";
 import {
   ConnectedSocket,
@@ -57,6 +57,9 @@ export class SessionGateway extends BaseWebSocketGateway {
   constructor(
     private readonly jwt: JwtService,
     private readonly runner: RunnerService,
+    // PROBE-TS 临时注入（云端工具卡永不收敛）——定位后连同用到它的埋点一起删除。
+    // @Optional 是为了不改既有 spec 的 new SessionGateway(jwt, runner) 两参调用。
+    @Optional() private readonly probeEmitter?: EventEmitter2,
   ) {
     super();
   }
@@ -179,7 +182,11 @@ export class SessionGateway extends BaseWebSocketGateway {
   onRunToolCallStart(payload: RunToolCallStartEvent): void {
     // PROBE-TS 临时排查埋点（云端工具卡永不收敛）——定位后整块删除
     console.warn(
-      `[PROBE-TS][bus] run.tool_call_start sid=${payload.sessionId} msg=${payload.messageId} tc=${payload.toolCallId}`,
+      `[PROBE-TS][bus] run.tool_call_start sid=${payload.sessionId} msg=${payload.messageId} tc=${payload.toolCallId} listeners{start=${this.probeEmitter?.listenerCount(
+        SESSION_WS_EVENTS.runToolCallStart,
+      )} argsDelta=${this.probeEmitter?.listenerCount(
+        SESSION_WS_EVENTS.runToolCallArgsDelta,
+      )} end=${this.probeEmitter?.listenerCount(SESSION_WS_EVENTS.runToolCallEnd)}}`,
     );
     this.server
       .to(payload.sessionId)

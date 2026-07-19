@@ -128,6 +128,23 @@ export class SessionFrameForwarder {
       this.emitter.on(event, handler);
       this.registered.push({ event, handler });
     }
+    // PROBE-TS 临时排查埋点（云端工具卡永不收敛）——定位后整块删除
+    console.warn(
+      `[PROBE-TS][fwd-start] sid=${this.sessionId} 注册 ${this.registered.length} 个事件；tool 四件套实际登记名=${JSON.stringify(
+        this.registered
+          .map((r) => r.event)
+          .filter((e) => String(e).includes("tool_call")),
+      )}；emitter 上各自 listenerCount=${JSON.stringify(
+        Object.fromEntries(
+          [
+            SESSION_WS_EVENTS.runToolCallStart,
+            SESSION_WS_EVENTS.runToolCallProgress,
+            SESSION_WS_EVENTS.runToolCallArgsDelta,
+            SESSION_WS_EVENTS.runToolCallEnd,
+          ].map((e) => [String(e), this.emitter.listenerCount(e)]),
+        ),
+      )}`,
+    );
   }
 
   /** 摘除本实例登记的全部监听器。幂等（未启动 / 已停止均安全）。 */
