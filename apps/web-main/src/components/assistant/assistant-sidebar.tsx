@@ -21,6 +21,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { computeAgentNodeExpansion } from "@/components/assistant/agent-node-expansion";
 import { useSidebarSlot } from "@/components/shell/sidebar-slot-context";
+import { useAgentLifecycleWatch } from "@/hooks/use-agent-lifecycle-watch";
 import { remoteSessionsQueryKey } from "@/hooks/use-remote-sessions";
 import { parseAgentAvatar } from "@/lib/agent-avatar";
 import { remoteQuery } from "@/lib/device-query";
@@ -237,6 +238,21 @@ export function AssistantSidebar() {
   });
   const sessionsByAgent = new Map(
     expandedIds.map((id, i) => [id, sessionQueries[i]]),
+  );
+
+  // Agent 级观察通道（T15b · 交付点 B 消费端）：对每个「已展开且宿主在线」
+  // 的 Agent 建一路 `watchAgent`，生命周期事件（created/deleted/renamed/
+  // status_changed）实时写进上面 `sessionQueries` 读的同一份 react-query
+  // 缓存（`remoteSessionsQueryKey`）——不重构 `useQueries` 这条初始加载 +
+  // 定期回源路径，只做增量镜像。`online` 判定复用上面已算好的
+  // `isAgentOnline`，离线 Agent 不会真的建 watch（避免白占云端路由）。
+  useAgentLifecycleWatch(
+    expandedIds.map((agentId) => ({
+      agentId,
+      online: isAgentOnline(
+        agentList.find((a) => a.id === agentId) ?? { deviceId: "" },
+      ),
+    })),
   );
 
   const activeSessionKey = activeSessionId
