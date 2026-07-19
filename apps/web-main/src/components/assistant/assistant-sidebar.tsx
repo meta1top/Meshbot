@@ -181,19 +181,27 @@ export function AssistantSidebar() {
 
   // Review M-5：Agent 删除后，其展开态 id 若不清理会永久留在 localStorage
   // （落盘集合只增不减）。按当前 Agent 全集求交集，把已经不存在的 id 从
-  // expanded 里摘掉并重新落盘。agents 还没加载完成（agentsPending）时提前
-  // 返回、不做任何裁剪——不能拿还没到位的 agentList（`agents ?? []` 兜底出的
-  // 空数组）当「当前 Agent 都不存在」，把刚从 localStorage 恢复回来的展开态
-  // 误删。写盘发生在 setState 之外，理由同下面 handleToggleAgent 的 M-3 注释。
+  // expanded 里摘掉并重新落盘。写盘发生在 setState 之外，理由同下面
+  // handleToggleAgent 的 M-3 注释。
+  //
+  // **守卫必须判 `agents` 本身，不能判 `agentsPending`**（复审 Important）：
+  // `isPending` 只在 `status==="pending"` 时为真，查询**出错**时它是 false 而
+  // `data` 仍是 undefined → `agentList` 被 `agents ?? []` 兜底成空数组 → 求交
+  // 集得空集 → 把刚从 localStorage 恢复的展开态整个覆写成 `[]`，**永久销毁**
+  // （之后重试成功也救不回，落盘数据已没了）。触发条件很日常：刷新时 server-main
+  // 不可达 / token 过期 / 断网，React Query 默认重试 3 次耗尽即转 error。组件在
+  // 错误态并不卸载（`if (!slot) return null` 在所有 hook 之后），effect 照跑。
+  // 判 `agents` 则加载中与出错两条路径都是 undefined，一律不裁剪——与 web-agent
+  // 侧的同名 effect 同构。
   useEffect(() => {
-    if (agentsPending) return;
+    if (!agents) return;
     const known = new Set(agentList.map((a) => a.id));
     const keep = [...expanded].filter((id) => known.has(id));
     if (keep.length === expanded.size) return;
     const next = new Set(keep);
     writeExpandedKeys(EXPANDED_STORAGE_KEY, next);
     setExpanded(next);
-  }, [agentsPending, agentList, expanded]);
+  }, [agents, agentList, expanded]);
   const expandedIds = [...expanded];
 
   // 展开态变化（开/合都触发）：更新 expanded + 落盘持久化。取代原先只在展开
