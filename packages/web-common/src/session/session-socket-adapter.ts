@@ -46,6 +46,17 @@ export function createSessionSocketAdapter(
     transport.subscribe({
       onEvent(event, payload) {
         const set = listeners.get(event);
+        // PROBE-TS 临时排查埋点（云端工具卡永不收敛）——定位后整块删除
+        if (event.startsWith("run.tool_call")) {
+          const p = payload as {
+            sessionId?: string;
+            messageId?: string;
+            toolCallId?: string;
+          };
+          console.warn(
+            `[PROBE-TS][adapter] ${event} listeners=${set?.size ?? 0} sid=${p?.sessionId} msg=${p?.messageId} tc=${p?.toolCallId}`,
+          );
+        }
         if (!set || set.size === 0) return;
         // 拷贝一份快照再遍历：listener 内部同步 off() 自身（如一次性监听）
         // 不应影响本次分发的其余 listener。

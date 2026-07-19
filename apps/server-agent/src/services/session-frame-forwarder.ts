@@ -142,6 +142,16 @@ export class SessionFrameForwarder {
 
   private handle(event: string, payload: unknown): void {
     const payloadSessionId = (payload as { sessionId?: unknown })?.sessionId;
+    // PROBE-TS 临时排查埋点（云端工具卡永不收敛）——定位后整块删除
+    if (event.startsWith("run.tool_call")) {
+      const p = payload as { messageId?: string; toolCallId?: string };
+      console.warn(
+        `[PROBE-TS][device] ${event} sid=${String(payloadSessionId)} allowed=${
+          typeof payloadSessionId === "string" &&
+          this.allowedSessions.has(payloadSessionId)
+        } msg=${p?.messageId} tc=${p?.toolCallId}`,
+      );
+    }
     if (
       typeof payloadSessionId !== "string" ||
       !this.allowedSessions.has(payloadSessionId)
