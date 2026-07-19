@@ -59,7 +59,10 @@ jest.mock("./im-socket", () => {
 });
 
 import { IM_WS_EVENTS } from "@meshbot/types";
-import { SESSION_WS_EVENTS } from "@meshbot/types-agent";
+import {
+  SESSION_LIFECYCLE_EVENTS,
+  SESSION_WS_EVENTS,
+} from "@meshbot/types-agent";
 import { getImSocket } from "./im-socket";
 import { createRemoteSessionTransport } from "./session-transport";
 
@@ -481,5 +484,86 @@ describe("web-main 远程 transport：T12 review 修复回归", () => {
       inflight: null,
     });
     expect(seen).toContainEqual(["watch.accepted", { sessionId: "s1" }]);
+  });
+});
+
+describe("web-main：Agent 级 watch", () => {
+  it("watchAgent 发出 agent.watch.start（scope=agent，无 sessionId）", () => {
+    const t = createRemoteSessionTransport("cloud-a1");
+    t.watchAgent!(() => {});
+    const [, body] = fakeSocket.emitted.find(
+      ([e]) => e === IM_WS_EVENTS.agentWatchStart,
+    )!;
+    expect(body).toMatchObject({ targetAgentId: "cloud-a1", scope: "agent" });
+    expect(body).not.toHaveProperty("sessionId");
+  });
+
+  it("生命周期镜像帧归一后回调（缺口 ② 的前端落点）", () => {
+    const t = createRemoteSessionTransport("cloud-a1");
+    const seen: unknown[] = [];
+    t.watchAgent!((e) => seen.push(e));
+    const watchId = watchIdOfLastStart();
+    fakeSocket.fire(IM_WS_EVENTS.agentWatchAccepted, {
+      watchId,
+      ok: true,
+      inflight: null,
+    });
+    fakeSocket.fire(IM_WS_EVENTS.agentRunFrame, {
+      watchId,
+      requesterDeviceId: "user:x",
+      seq: 1,
+      sessionId: "s9",
+      event: SESSION_LIFECYCLE_EVENTS.created,
+      payload: {
+        agentId: "local-a1",
+        session: {
+          id: "s9",
+          title: "远程建的",
+          status: "running",
+          pinned: false,
+          pinnedAt: null,
+          titleGenerated: false,
+          modelConfigId: null,
+          agentId: "local-a1",
+          createdAt: "2026-07-18T00:00:00.000Z",
+          updatedAt: "2026-07-18T00:00:00.000Z",
+        },
+      },
+    });
+    expect(seen).toEqual([
+      { type: "created", session: expect.objectContaining({ id: "s9" }) },
+    ]);
+  });
+
+  it("非生命周期帧不触发回调", () => {
+    const t = createRemoteSessionTransport("cloud-a1");
+    const seen: unknown[] = [];
+    t.watchAgent!((e) => seen.push(e));
+    const watchId = watchIdOfLastStart();
+    fakeSocket.fire(IM_WS_EVENTS.agentWatchAccepted, {
+      watchId,
+      ok: true,
+      inflight: null,
+    });
+    fakeSocket.fire(IM_WS_EVENTS.agentRunFrame, {
+      watchId,
+      requesterDeviceId: "user:x",
+      seq: 1,
+      sessionId: "s1",
+      event: SESSION_WS_EVENTS.runChunk,
+      payload: { sessionId: "s1" },
+    });
+    expect(seen).toEqual([]);
+  });
+
+  it("unwatch 释放 Agent 级通道", () => {
+    const t = createRemoteSessionTransport("cloud-a1");
+    const un = t.watchAgent!(() => {});
+    const watchId = watchIdOfLastStart();
+    un();
+    expect(fakeSocket.emitted).toContainEqual([
+      IM_WS_EVENTS.agentWatchStop,
+      { watchId },
+    ]);
   });
 });

@@ -40,6 +40,10 @@
     "./session/watch-inflight": {
       "types": "./src/session/watch-inflight.ts",
       "default": "./src/session/watch-inflight.ts"
+    },
+    "./session/session-list-events": {
+      "types": "./src/session/session-list-events.ts",
+      "default": "./src/session/session-list-events.ts"
     }
   },
   "scripts": {

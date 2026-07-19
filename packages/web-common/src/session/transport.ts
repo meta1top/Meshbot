@@ -3,6 +3,7 @@ import type {
   PendingResponse,
   SessionSummary,
 } from "@meshbot/types-agent";
+import type { SessionListEvent } from "./session-list-events";
 
 /** run 流事件（本机 session WS 事件与远程 AgentRunFrame 解包后的统一形态）。 */
 export interface SessionRunEvents {
@@ -95,6 +96,19 @@ export interface SessionTransport {
    * `transport.watchSession?.(sessionId)` 调用，缺失时安全跳过。
    */
   watchSession?: (sessionId: string) => () => void;
+  /**
+   * 开始观察该 Agent 的会话生命周期（Agent 级观察通道，spec D9「统一事件
+   * 契约」的前端接线点）。回调收到归一后的 {@link SessionListEvent}
+   * （created/deleted/renamed/status_changed），非生命周期帧（推理过程帧等）
+   * 已在实现层过滤掉，不会到达这里。返回 unwatch 函数（幂等，可安全重复
+   * 调用）。契约扩展（Task 15 · ⭐ 交付点 B）——远程 relay 实现（web-main）
+   * 用它建立与 `watchSession` 同族的 watchId 通道（scope="agent"），跨会话、
+   * 跨多轮 run 存活直到显式 unwatch。本机专属实现（web-agent local 分支）
+   * 要到 T19 才实现，可不实现——本机会话列表本身已经通过 `ws/events`
+   * 信封实时收生命周期事件，不需要一条独立的观察通道。消费方统一按
+   * `transport.watchAgent?.(cb)` 调用，缺失时安全跳过。
+   */
+  watchAgent?: (onEvent: (evt: SessionListEvent) => void) => () => void;
 }
 
 /**

@@ -20,6 +20,10 @@ import type {
 import { clientSnowflakeId } from "@meshbot/web-common";
 import { RemoteRunTracker } from "@meshbot/web-common/session/remote-run-tracker";
 import {
+  type SessionListEvent,
+  toSessionListEvent,
+} from "@meshbot/web-common/session/session-list-events";
+import {
   MulticastRunEvents,
   type SessionTransport,
 } from "@meshbot/web-common/session/transport";
@@ -113,7 +117,27 @@ export function createRemoteSessionTransport(
   const runEvents = new MulticastRunEvents();
 
   const onRunFrame = (frame: AgentRunFrame) => {
-    for (const { event, payload } of runs.handleFrame(frame)) {
+    // Agent 级观察通道（`watchAgent`，T15 · ⭐ 交付点 B）：帧承载的是会话
+    // 生命周期事件（created/deleted/renamed/status_changed），不是某个具体
+    // 会话的推理过程流——归一后直接调用 `watchAgent` 登记的回调，不进
+    // `runEvents`（run 流多播，消费方按 sessionId 过滤，生命周期事件没有
+    // 单一 sessionId 可挂靠，塞进去也不会被任何会话视图认领）。非生命周期
+    // 帧（理论上不该出现在 agent 级通道，纯防御）`toSessionListEvent` 返回
+    // null，原样丢弃，不触发回调。`activeWatches` 声明在本函数下方——
+    // `onRunFrame` 只在 socket 事件到达时才被调用，届时整段同步初始化早已
+    // 跑完，闭包读到的是完整登记表，不是 TDZ 问题。
+    const watchHandle = frame.watchId
+      ? activeWatches.get(frame.watchId)
+      : undefined;
+    const emitted = runs.handleFrame(frame);
+    if (watchHandle?.scope === "agent") {
+      for (const { event, payload } of emitted) {
+        const evt = toSessionListEvent(event, payload);
+        if (evt) watchHandle.onLifecycleEvent?.(evt);
+      }
+      return;
+    }
+    for (const { event, payload } of emitted) {
       runEvents.emit(event, payload);
     }
   };
@@ -138,6 +162,11 @@ export function createRemoteSessionTransport(
    * `sessionId`/`watchId` 字段，句柄对象本身的引用不变。
    */
   interface WatchHandle {
+    /** scope="session" 时为被观察的会话 id；scope="agent" 时恒为空串占位——
+     * Agent 级没有单一 sessionId 语义，这个空串只喂给
+     * `RemoteRunTracker.registerWatch`/`hasActiveStreamFor` 的 D6 抑制判定，
+     * 后者对 `""` 恒返回 false（天然不抑制，真实 stream 的 sessionId 不可能
+     * 是空串），语义上完全无害（T15 · ⭐ 交付点 B）。 */
     sessionId: string;
     /** 当前有效的 watchId；未发起过真正的 `agent.watch.start`（见下方
      * `deferredWatches`）时为空串。 */
@@ -145,6 +174,16 @@ export function createRemoteSessionTransport(
     /** `unwatch()` 是否已调用——幂等 + 防止 idle 自动重连「救活」一个用户
      * 已经不关心的会话（`onWatchAccepted` 据此短路悬空句柄）。 */
     stopped: boolean;
+    /** 观察范围：`session`（既有 D5 会话级 watch）| `agent`（T15 新增，会话
+     * 生命周期镜像）。决定 `onWatchAccepted`/`onRunFrame` 的分支行为——
+     * agent 级不合成 D7 inflight 快照（该续传语义只对单一会话成立），受理帧
+     * 也不进 `runEvents`（run 流多播），而是过 `toSessionListEvent` 归一后
+     * 直接调用 `onLifecycleEvent`。 */
+    scope: "session" | "agent";
+    /** 仅 `scope==="agent"` 时存在：生命周期事件回调（`watchAgent` 的入参）。
+     * `onRunFrame` 对非生命周期帧（推理过程帧等）不会调用它——`toSessionListEvent`
+     * 返回 null 时原样丢弃，不冒泡成任何事件。 */
+    onLifecycleEvent?: (evt: SessionListEvent) => void;
   }
 
   /** watchId → 该通道观察的句柄，仅**已受理**的通道（重连重 watch 与 unwatch 用）。 */
@@ -159,21 +198,26 @@ export function createRemoteSessionTransport(
   const deferredWatches = new Set<WatchHandle>();
 
   /**
-   * 发起一路 Session 级 watch（写入 `handle`，受理前先记 pending）。
+   * 发起一路 watch（Session 级或 Agent 级，写入 `handle`，受理前先记
+   * pending）。目标（会话 id / 无目标）与范围一律从 `handle` 上读，调用方
+   * 在构造/复用 `handle` 时已经把这些字段填好——`startWatch` 只负责「按
+   * handle 当前状态真正发起一次」，不关心是初次调用、断线重连（D5）还是
+   * idle 自动重连（Finding 5），三处调用方式完全一致（T15 · ⭐ 交付点 B：
+   * 从「只服务 session 级」扩成「session/agent 共用同一套发起/重连/回收
+   * 逻辑」，不新开一条平行路径）。
    *
    * 首连时机注意（Finding 3）：socket.io 的 `onconnect` 内部实现是先
    * `emitBuffered()` 再触发 `"connect"` 保留事件——若本函数在
    * `!socket.connected` 时仍然直接 `socket.emit`，包会被 socket.io 自己的
    * 发送缓冲区接住、在真正连上时**先于**我们的 `onReconnect` 监听器自动
    * flush 出去；`onReconnect` 随后又会把这条 pending 判定成「需要换新 id
-   * 重新发起的旧通道」再发一条——云端因此收到同一 sessionId 的两条
+   * 重新发起的旧通道」再发一条——云端因此收到同一目标的两条
    * `agent.watch.start`，一条永远等不到我们确认、要等满 5 分钟 idle 才回收，
    * 期间持续白白多扇一份帧。故未连接时不真正 `emit`，只登记进
    * `deferredWatches`，交给 `onReconnect`（首连也会触发一次 `"connect"`）
    * 统一在真正连接建立后发起。
    */
-  const startWatch = (sessionId: string, handle: WatchHandle): void => {
-    handle.sessionId = sessionId;
+  const startWatch = (handle: WatchHandle): void => {
     if (!socket.connected) {
       deferredWatches.add(handle);
       return;
@@ -181,12 +225,43 @@ export function createRemoteSessionTransport(
     const watchId = clientSnowflakeId();
     handle.watchId = watchId;
     pendingWatches.set(watchId, handle);
-    socket.emit(IM_WS_EVENTS.agentWatchStart, {
-      watchId,
-      targetAgentId: agentId,
-      scope: "session",
-      sessionId,
-    } satisfies AgentWatchStartInput);
+    // scope="agent" 不携带 sessionId 字段（不是置为 undefined——协议层
+    // `AgentWatchStartSchema` 对 scope="agent" 未要求也未使用它，多带一个
+    // 空字段没有意义；相应地 handle.sessionId 对 agent 级恒为占位空串，
+    // 见 `WatchHandle.sessionId` 文档）。
+    const body: AgentWatchStartInput =
+      handle.scope === "agent"
+        ? { watchId, targetAgentId: agentId, scope: "agent" }
+        : {
+            watchId,
+            targetAgentId: agentId,
+            scope: "session",
+            sessionId: handle.sessionId,
+          };
+    socket.emit(IM_WS_EVENTS.agentWatchStart, body);
+  };
+
+  /**
+   * 停掉一路 watch（`watchSession`/`watchAgent` 返回的 unwatch 闭包共用）。
+   * 幂等（`handle.stopped` 短路）；捕获的是 {@link WatchHandle} 对象本身、
+   * 不是某个 watchId 快照——`handle.watchId` 会在重连 / idle 自动重连时被
+   * `startWatch` 原地覆写，这里读的永远是「当前」值（T12 review Finding 2，
+   * `watchAgent` 复用同一份，不重新踩坑）。
+   */
+  const stopWatch = (handle: WatchHandle): void => {
+    if (handle.stopped) return;
+    handle.stopped = true;
+    deferredWatches.delete(handle);
+    activeWatches.delete(handle.watchId);
+    pendingWatches.delete(handle.watchId);
+    runs.releaseWatch(handle.watchId);
+    if (handle.watchId) {
+      // 尚未真正发起过（一直卡在 deferredWatches，从未连接成功就被
+      // unwatch）时 watchId 是空串，不必也不能发 stop。
+      socket.emit(IM_WS_EVENTS.agentWatchStop, {
+        watchId: handle.watchId,
+      } satisfies AgentWatchStopInput);
+    }
   };
 
   /**
@@ -227,7 +302,7 @@ export function createRemoteSessionTransport(
     reason: AgentWatchAccepted["reason"],
   ) => {
     if (reason === "idle") {
-      startWatch(handle.sessionId, handle);
+      startWatch(handle);
       return;
     }
     console.warn(`观察通道被拒（watchId=${handle.watchId}, reason=${reason}）`);
@@ -246,11 +321,24 @@ export function createRemoteSessionTransport(
         return;
       }
       activeWatches.set(accepted.watchId, pendingHandle);
+      // Agent 级没有单一 sessionId 语义——`registerWatch` 传占位空串（见
+      // `WatchHandle.sessionId` 文档），`RemoteRunTracker.hasActiveStreamFor`
+      // 因此对它恒返回 false，天然不抑制生命周期帧（T15 brief 明确的既有
+      // 行为，不需要额外分支）。
       runs.registerWatch(accepted.watchId, pendingHandle.sessionId);
-      emitInflightSnapshot(pendingHandle.sessionId, accepted.inflight);
-      runEvents.emit(WATCH_ACCEPTED_EVENT, {
-        sessionId: pendingHandle.sessionId,
-      } satisfies WatchAcceptedEvent);
+      // D7 inflight 续传快照 / `watch.accepted` 横幅信号都是 session 级观察
+      // 通道专属语义（前者要接到某条具体会话的正文流上、后者供某个会话视图
+      // 撤下自己的「无法实时观察」提示）——agent 级没有这两样东西可挂靠
+      // （`sessionId` 是占位空串，`accepted.inflight` 按 T14 设备侧实现恒为
+      // null），跳过而非无条件复用，避免把一个空 sessionId 的事件塞进
+      // `runEvents`（run 流多播，消费方按 sessionId 过滤，塞一条不会被任何
+      // 会话视图认领，纯属噪音）。
+      if (pendingHandle.scope === "session") {
+        emitInflightSnapshot(pendingHandle.sessionId, accepted.inflight);
+        runEvents.emit(WATCH_ACCEPTED_EVENT, {
+          sessionId: pendingHandle.sessionId,
+        } satisfies WatchAcceptedEvent);
+      }
       return;
     }
     // 回落：已受理的通道事后被拒（T12 review Finding 1）——宿主设备断线
@@ -286,15 +374,15 @@ export function createRemoteSessionTransport(
     runs.resetWatches();
     for (const handle of liveHandles) {
       if (handle.stopped) continue; // 防御：理论上 stopped 句柄不会残留在这两张表里
-      startWatch(handle.sessionId, handle);
+      startWatch(handle);
     }
-    // 连接建立前就调用过 watchSession 的句柄：此刻 socket 已连接，
+    // 连接建立前就调用过 watchSession/watchAgent 的句柄：此刻 socket 已连接，
     // startWatch 会走正常分支真正 emit + 登记 pending（Finding 3）。
     const deferred = [...deferredWatches];
     deferredWatches.clear();
     for (const handle of deferred) {
       if (handle.stopped) continue;
-      startWatch(handle.sessionId, handle);
+      startWatch(handle);
     }
   };
 
@@ -451,23 +539,38 @@ export function createRemoteSessionTransport(
      * 原地覆写，闭包读的永远是「当前」值（T12 review Finding 2）。
      */
     watchSession(sessionId: string) {
-      const handle: WatchHandle = { sessionId, watchId: "", stopped: false };
-      startWatch(sessionId, handle);
-      return () => {
-        if (handle.stopped) return;
-        handle.stopped = true;
-        deferredWatches.delete(handle);
-        activeWatches.delete(handle.watchId);
-        pendingWatches.delete(handle.watchId);
-        runs.releaseWatch(handle.watchId);
-        if (handle.watchId) {
-          // 尚未真正发起过（一直卡在 deferredWatches，从未连接成功就被
-          // unwatch）时 watchId 是空串，不必也不能发 stop。
-          socket.emit(IM_WS_EVENTS.agentWatchStop, {
-            watchId: handle.watchId,
-          } satisfies AgentWatchStopInput);
-        }
+      const handle: WatchHandle = {
+        sessionId,
+        watchId: "",
+        stopped: false,
+        scope: "session",
       };
+      startWatch(handle);
+      return () => stopWatch(handle);
+    },
+
+    /**
+     * 开始观察该 Agent 的会话生命周期（Agent 级 watch，T15 · ⭐ 交付点
+     * B——「A 远程建的会话，B 上实时出现」端到端可用的前端接线点）。与
+     * `watchSession` 共用同一套 `startWatch`/`stopWatch`/`onReconnect`/
+     * idle 自动重连逻辑，只是 `scope="agent"` 且没有单一 `sessionId`（占位
+     * 空串，见 `WatchHandle.sessionId` 文档）——`onRunFrame` 据此把受理帧
+     * 归一（`toSessionListEvent`）后直接调用 `onEvent`，不进 `runEvents`。
+     *
+     * 返回的 unwatch 闭包同样捕获 {@link WatchHandle} 对象本身（T12 review
+     * Finding 2 的稳定句柄模式），重连 / idle 自动重连换发新 watchId 后仍能
+     * 停掉「当前」通道。
+     */
+    watchAgent(onEvent: (evt: SessionListEvent) => void) {
+      const handle: WatchHandle = {
+        sessionId: "",
+        watchId: "",
+        stopped: false,
+        scope: "agent",
+        onLifecycleEvent: onEvent,
+      };
+      startWatch(handle);
+      return () => stopWatch(handle);
     },
 
     subscribe(events) {
