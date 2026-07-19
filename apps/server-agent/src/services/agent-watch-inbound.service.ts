@@ -8,6 +8,7 @@ import {
   type ImRelayAgentWatchEvent,
 } from "../cloud/im-relay.events";
 import { AgentService } from "./agent.service";
+import { AgentWatchMirrorService } from "./agent-watch-mirror.service";
 import { RunnerService } from "./runner.service";
 import { SessionService } from "./session.service";
 import { SessionWatchService } from "./session-watch.service";
@@ -48,6 +49,7 @@ export class AgentWatchInboundService {
 
   constructor(
     private readonly watches: SessionWatchService,
+    private readonly mirror: AgentWatchMirrorService,
     private readonly runner: RunnerService,
     private readonly agents: AgentService,
     private readonly sessions: SessionService,
@@ -62,8 +64,9 @@ export class AgentWatchInboundService {
     const { watchId, localAgentId, scope, sessionId, action } = forwarded;
 
     if (action === "stop") {
-      // 无条件注销：三种来源（显式 unwatch / 观察者断线 / 设备断线）都必须生效。
+      // 不区分 scope：stop 帧只带 watchId，两级各自对未知 id 幂等，都调一遍最简单可靠。
       this.watches.removeWatcher(watchId);
+      this.mirror.removeWatcher(watchId);
       return;
     }
 
@@ -83,8 +86,9 @@ export class AgentWatchInboundService {
           return;
         }
         if (scope === "agent") {
-          // Agent 级只订生命周期事件，不挂会话转发器、不带 inflight。
-          // 镜像器（Task 14）按云端 watchers 表决定是否镜像，设备侧无需登记。
+          // Agent 级只订生命周期事件，不挂会话转发器、不带 inflight，
+          // 登记到 AgentWatchMirrorService（按 agentId 判断有无观察者）。
+          this.mirror.addWatcher(cloudUserId, agent.id, watchId);
           this.relay.emitAgentWatchAccepted(cloudUserId, {
             watchId,
             ok: true,

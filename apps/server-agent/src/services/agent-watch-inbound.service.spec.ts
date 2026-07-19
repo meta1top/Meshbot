@@ -3,6 +3,7 @@ import { AgentWatchInboundService } from "./agent-watch-inbound.service";
 describe("AgentWatchInboundService", () => {
   const mk = () => {
     const watches = { addWatcher: jest.fn(), removeWatcher: jest.fn() };
+    const mirror = { addWatcher: jest.fn(), removeWatcher: jest.fn() };
     const runner = { getInflight: jest.fn().mockReturnValue(null) };
     const agents = { findOrNull: jest.fn() };
     const sessions = { findOrNull: jest.fn() };
@@ -10,13 +11,14 @@ describe("AgentWatchInboundService", () => {
     const account = { run: jest.fn((_: string, fn: () => unknown) => fn()) };
     const svc = new AgentWatchInboundService(
       watches as never,
+      mirror as never,
       runner as never,
       agents as never,
       sessions as never,
       relay as never,
       account as never,
     );
-    return { svc, watches, runner, agents, sessions, relay };
+    return { svc, watches, mirror, runner, agents, sessions, relay };
   };
 
   const startEvt = (over: Record<string, unknown> = {}) => ({
@@ -122,14 +124,15 @@ describe("AgentWatchInboundService", () => {
     });
   });
 
-  it("agent scope：不查会话、不带 inflight", async () => {
-    const { svc, agents, sessions, watches, relay } = mk();
+  it("agent scope：不查会话、不带 inflight，登记到 AgentWatchMirrorService", async () => {
+    const { svc, agents, sessions, watches, mirror, relay } = mk();
     agents.findOrNull.mockResolvedValue({ id: "a1", remoteEnabled: true });
     await svc.onAgentWatch(
       startEvt({ scope: "agent", sessionId: undefined }) as never,
     );
     expect(sessions.findOrNull).not.toHaveBeenCalled();
     expect(watches.addWatcher).not.toHaveBeenCalled(); // Agent 级不走 SessionWatchService
+    expect(mirror.addWatcher).toHaveBeenCalledWith("u1", "a1", "w1"); // 而是走 AgentWatchMirrorService
     expect(relay.emitAgentWatchAccepted).toHaveBeenCalledWith("u1", {
       watchId: "w1",
       ok: true,
@@ -137,10 +140,11 @@ describe("AgentWatchInboundService", () => {
     });
   });
 
-  it("action:stop → 注销观察者，不回受理包", async () => {
-    const { svc, watches, relay } = mk();
+  it("action:stop → 两级都注销观察者（不知道是哪级，各自对未知 id 幂等），不回受理包", async () => {
+    const { svc, watches, mirror, relay } = mk();
     await svc.onAgentWatch(startEvt({ action: "stop" }) as never);
     expect(watches.removeWatcher).toHaveBeenCalledWith("w1");
+    expect(mirror.removeWatcher).toHaveBeenCalledWith("w1");
     expect(relay.emitAgentWatchAccepted).not.toHaveBeenCalled();
   });
 
