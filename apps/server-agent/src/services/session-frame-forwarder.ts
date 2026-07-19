@@ -56,18 +56,6 @@ function stripToolCallEndContent(
   return rest;
 }
 
-/**
- * PROBE-TS 临时工具（云端工具卡永不收敛）——定位后整块删除。
- * 给 emitter 实例打一个稳定指纹，用来判定 gateway 与转发器拿到的是不是同一个。
- */
-export function probeEmitterId(emitter: unknown): string {
-  const holder = emitter as { __probeId?: string };
-  if (!holder.__probeId) {
-    holder.__probeId = Math.random().toString(36).slice(2, 8);
-  }
-  return holder.__probeId;
-}
-
 /** 转发出去的一帧（调用方据此组 `AgentRunFrame` 或 `AgentWatchFrame`）。 */
 export interface ForwardedFrame {
   seq: number;
@@ -136,36 +124,10 @@ export class SessionFrameForwarder {
     if (this.started) return;
     this.started = true;
     for (const event of FORWARDED_SESSION_EVENTS) {
-      const handler = (payload: unknown): void => {
-        // PROBE-TS 闭包层埋点：区分「监听器压根没被调用」与「被调用了但
-        // handle 内部提前返回」——定位后整块删除
-        if (String(event).startsWith("run.tool_call")) {
-          console.warn(
-            `[PROBE-TS][closure] ${event} 监听器被调用 sid=${this.sessionId}`,
-          );
-        }
-        this.handle(event, payload);
-      };
+      const handler = (payload: unknown): void => this.handle(event, payload);
       this.emitter.on(event, handler);
       this.registered.push({ event, handler });
     }
-    // PROBE-TS 临时排查埋点（云端工具卡永不收敛）——定位后整块删除
-    console.warn(
-      `[PROBE-TS][fwd-start] emitterId=${probeEmitterId(this.emitter)} sid=${this.sessionId} 注册 ${this.registered.length} 个事件；tool 四件套实际登记名=${JSON.stringify(
-        this.registered
-          .map((r) => r.event)
-          .filter((e) => String(e).includes("tool_call")),
-      )}；emitter 上各自 listenerCount=${JSON.stringify(
-        Object.fromEntries(
-          [
-            SESSION_WS_EVENTS.runToolCallStart,
-            SESSION_WS_EVENTS.runToolCallProgress,
-            SESSION_WS_EVENTS.runToolCallArgsDelta,
-            SESSION_WS_EVENTS.runToolCallEnd,
-          ].map((e) => [String(e), this.emitter.listenerCount(e)]),
-        ),
-      )}`,
-    );
   }
 
   /** 摘除本实例登记的全部监听器。幂等（未启动 / 已停止均安全）。 */
@@ -180,16 +142,6 @@ export class SessionFrameForwarder {
 
   private handle(event: string, payload: unknown): void {
     const payloadSessionId = (payload as { sessionId?: unknown })?.sessionId;
-    // PROBE-TS 临时排查埋点（云端工具卡永不收敛）——定位后整块删除
-    if (event.startsWith("run.tool_call")) {
-      const p = payload as { messageId?: string; toolCallId?: string };
-      console.warn(
-        `[PROBE-TS][device] ${event} sid=${String(payloadSessionId)} allowed=${
-          typeof payloadSessionId === "string" &&
-          this.allowedSessions.has(payloadSessionId)
-        } msg=${p?.messageId} tc=${p?.toolCallId}`,
-      );
-    }
     if (
       typeof payloadSessionId !== "string" ||
       !this.allowedSessions.has(payloadSessionId)

@@ -1020,10 +1020,6 @@ export function useSessionStream(
      * `args`/`name`）仍然合并：这正是 start 本身的价值，只是不能连带拖累 status。
      */
     const onToolStart = (e: RunToolCallStartEvent) => {
-      // PROBE-TS 临时排查埋点（云端工具卡永不收敛）——定位后整块删除
-      console.warn(
-        `[PROBE-TS][hook] onToolStart 到达 evSid=${e.sessionId} viewSid=${sessionId} match=${e.sessionId === sessionId} msg=${e.messageId} tc=${e.toolCallId}`,
-      );
       if (e.sessionId !== sessionId) return;
       apply((rawPrev) => {
         // 同 onToolArgsDelta：本轮首个工具事件到达即视为 LLM 已应答，清 loading 占位。
@@ -1104,10 +1100,6 @@ export function useSessionStream(
       // gateway 已剥 content；前端只用 resultPreview
       e: Omit<RunToolCallEndEvent, "content">,
     ) => {
-      // PROBE-TS 临时排查埋点（云端工具卡永不收敛）——定位后整块删除
-      console.warn(
-        `[PROBE-TS][hook] onToolEnd 到达 evSid=${e.sessionId} viewSid=${sessionId} match=${e.sessionId === sessionId} msg=${e.messageId} tc=${e.toolCallId} ok=${e.ok}`,
-      );
       if (e.sessionId !== sessionId) return;
       const status = e.ok ? ("ok" as const) : ("error" as const);
       apply((prev) => {
