@@ -88,16 +88,29 @@ function historyMessageToTimeline(m: HistoryMessage): TimelineMessage {
  *
  * 只补 streaming 态的块：已经 running/终态的块有权威 args 与结果，快照是「补历史」，
  * 不能把已推进的状态回退。
+ *
+ * `claimedElsewhere` 是**别的消息**上已存在的 toolCallId 集合，命中即整条跳过。
+ * 没有它就会漏掉一种跨消息的降级：本函数只看得见**单条**消息的 `existing`，
+ * 而 `onToolStart`/`onToolEnd` 在宿主消息缺失时会按事件自带的 messageId 建壳，
+ * 同一个 toolCallId 完全可能已经以 `ok` 态挂在另一条消息上——此处 `i === -1`
+ * 便会再 push 一个 `streaming` 幽灵块，于是同一次工具调用同时存在「已完成」和
+ * 「永远转圈」两张卡，且此后没有任何事件能收掉那张幽灵卡（start/end 都按
+ * toolCallId 定位，只会命中先建的那个）。
+ *
+ * 这是三个 `streaming` 产地里最后一个做该加固的：`onToolArgsDelta` 与
+ * `onToolStart` 已分别硬化过「不复活终态块」「不把终态打回 running」，语义在此对齐。
  */
 function mergeInflightToolCalls(
   existing: TimelineMessage["toolCalls"],
   snapshot: readonly InflightToolCall[],
+  claimedElsewhere?: ReadonlySet<string>,
 ): TimelineMessage["toolCalls"] {
   if (snapshot.length === 0) return existing;
   const list = existing ? [...existing] : [];
   for (const tc of snapshot) {
     const i = list.findIndex((t) => t.toolCallId === tc.toolCallId);
     if (i === -1) {
+      if (claimedElsewhere?.has(tc.toolCallId)) continue;
       list.push({
         toolCallId: tc.toolCallId,
         name: tc.name,
@@ -114,6 +127,19 @@ function mergeInflightToolCalls(
     };
   }
   return list;
+}
+
+/** 收集时间线上已出现的全部 toolCallId（可排除某条消息自身）。 */
+function collectToolCallIds(
+  messages: readonly TimelineMessage[],
+  exceptMessageId?: string,
+): ReadonlySet<string> {
+  const ids = new Set<string>();
+  for (const m of messages) {
+    if (m.id === exceptMessageId) continue;
+    for (const t of m.toolCalls ?? []) ids.add(t.toolCallId);
+  }
+  return ids;
 }
 
 /**
@@ -607,6 +633,7 @@ export function useSessionStream(
                       toolCalls: mergeInflightToolCalls(
                         undefined,
                         history.inflight.toolCalls,
+                        collectToolCallIds(initial),
                       ),
                     }
                   : {}),
@@ -824,7 +851,13 @@ export function useSessionStream(
                 ? { reasoningStartedAt: e.reasoningStartedAt }
                 : {}),
               ...(e.toolCalls.length > 0
-                ? { toolCalls: mergeInflightToolCalls(undefined, e.toolCalls) }
+                ? {
+                    toolCalls: mergeInflightToolCalls(
+                      undefined,
+                      e.toolCalls,
+                      collectToolCallIds(withoutLoading),
+                    ),
+                  }
                 : {}),
             },
           ];
@@ -839,7 +872,11 @@ export function useSessionStream(
           reasoning: e.reasoning || existing.reasoning,
           reasoningStartedAt:
             e.reasoningStartedAt ?? existing.reasoningStartedAt,
-          toolCalls: mergeInflightToolCalls(existing.toolCalls, e.toolCalls),
+          toolCalls: mergeInflightToolCalls(
+            existing.toolCalls,
+            e.toolCalls,
+            collectToolCallIds(withoutLoading, existing.id),
+          ),
         };
         return copy;
       });

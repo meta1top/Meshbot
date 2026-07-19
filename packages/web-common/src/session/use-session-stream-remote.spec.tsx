@@ -361,6 +361,35 @@ describe("useSessionStream 工具事件状态推进", () => {
     expect(allTools(result.current.messages)).toHaveLength(1); // 没有多出第二个块
   });
 
+  it("乱序 D：run.snapshot 不得为已挂在别的消息上的 toolCallId 再造一个 streaming 幽灵块", async () => {
+    const { socket, result } = await renderToolStream();
+
+    // end 先到，按事件自带的 messageId 建壳建块（msg-1，终态 ok）。
+    act(() => socket.fire(SESSION_WS_EVENTS.runToolCallEnd, toolEnd()));
+    expect(allTools(result.current.messages)[0]?.status).toBe("ok");
+
+    // 随后（重连 / idle 重新 watch）到达的 inflight 快照挂在**另一条**消息上，
+    // 且仍然带着这个 toolCallId。mergeInflightToolCalls 只看得见单条消息的
+    // toolCalls，若不排掉「别处已认领」的 id，就会 push 出第二个 streaming 块
+    // ——同一次工具调用同时显示「已完成」和「永远转圈」两张卡，且此后没有任何
+    // 事件能收掉幽灵卡（start/end 按 toolCallId 定位，只会命中先建的那个）。
+    act(() =>
+      socket.fire(SESSION_WS_EVENTS.runSnapshot, {
+        sessionId: SID,
+        messageId: "msg-2",
+        reasoning: "",
+        content: "",
+        reasoningStartedAt: null,
+        toolCalls: [{ toolCallId: "tc-1", name: "todo_write", argsText: "{" }],
+      }),
+    );
+
+    const tools = allTools(result.current.messages);
+    expect(tools).toHaveLength(1);
+    expect(tools[0]?.status).toBe("ok");
+    expect(tools.filter((t) => t.status === "streaming")).toEqual([]);
+  });
+
   it("幂等：重复 start / 重复 end 不产生第二个块，也不产生第二条消息壳", async () => {
     const { socket, result } = await renderToolStream();
 

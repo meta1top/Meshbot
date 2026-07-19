@@ -47,7 +47,17 @@ export function DriveShareCard({ tool, onConfirm }: DriveShareCardProps) {
     return (
       <div className="flex w-full items-center gap-2 rounded-[8px] border border-border bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground">
         <Check className="h-3 w-3" />
-        {terminalLabel(result)} · 共享给 {shareWith}（{permission}）
+        {terminalLabel(result)}
+        {/* args 缺失时**整段省略**，不能靠 `shareWith`/`permission` 的默认值兜底：
+            `permission` 默认成「查看者」会把实际授予「编辑者」的分享说成只读，
+            属于「貌似正常、内容是错的」——比缺一段信息危险得多。args 会缺是因为
+            `onToolEnd` 在宿主块不存在时按事件字段兜底建块，而 end 事件本身不带
+            args（同 todo_write 的空壳问题，见 tool-call-block.tsx 的 args 守卫）。 */}
+        {tool.args !== undefined ? (
+          <>
+            · 共享给 {shareWith}（{permission}）
+          </>
+        ) : null}
       </div>
     );
   }
