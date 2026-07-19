@@ -106,6 +106,9 @@ describe("AgentController", () => {
         return { id } as never;
       },
     };
+    // 与 AgentService 共用同一个假 emitter：进程内真实只有一个 EventEmitter2 单例
+    // （app.module 的 EventEmitterModule.forRoot() @Global 提供），这里保持同款。
+    emitter = { emit: jest.fn() };
     sessionService = new SessionService(
       ds.getRepository(Session),
       ds.getRepository(PendingMessage),
@@ -116,9 +119,9 @@ describe("AgentController", () => {
       fakeGraph as unknown as ThreadStateService,
       fakeSchedules as unknown as never,
       fakeModelConfigs as unknown as never,
+      emitter as unknown as EventEmitter2,
     );
     mcp = { teardownAgent: jest.fn().mockResolvedValue(undefined) };
-    emitter = { emit: jest.fn() };
     agentService = new AgentService(
       ds.getRepository(Agent),
       scopedFactory,

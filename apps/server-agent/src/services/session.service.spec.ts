@@ -5,7 +5,10 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { AccountContextService, ThreadStateService } from "@meshbot/lib-agent";
-import type { CreateSessionInput } from "@meshbot/types-agent";
+import {
+  SESSION_LIFECYCLE_EVENTS,
+  type CreateSessionInput,
+} from "@meshbot/types-agent";
 import { DataSource } from "typeorm";
 import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
 import { LlmCall } from "../entities/llm-call.entity";
@@ -48,6 +51,12 @@ describe("SessionService", () => {
    * 让既有单测无需逐一改写。隔离测试用 rawService + ctx.run 显式切账号。
    */
   let service: ProxiedSessionService;
+  /**
+   * 伪 EventEmitter2 收集的 [event, payload] 记录，供「生命周期事件」describe
+   * 断言发射点。真实 EventEmitter2 由 app.module 的 EventEmitterModule.forRoot()
+   * 全局提供，这里只需接口子集（.emit），不必拉起整个 Nest DI。
+   */
+  let emitted: Array<[string, unknown]>;
 
   /**
    * 造一条最小 session 行，仅供只关心「父会话必须存在」但不关心其余字段的
@@ -142,6 +151,12 @@ describe("SessionService", () => {
         return { id } as never;
       },
     };
+    emitted = [];
+    const fakeEmitter = {
+      emit: (event: string, payload: unknown) => {
+        emitted.push([event, payload]);
+      },
+    };
     rawService = new SessionService(
       ds.getRepository(Session),
       ds.getRepository(PendingMessage),
@@ -152,6 +167,7 @@ describe("SessionService", () => {
       fakeGraph as unknown as ThreadStateService,
       fakeSchedules as unknown as any,
       fakeModelConfigs as unknown as any,
+      fakeEmitter as unknown as any,
     );
     // 暴露给 deleteSession / regenerateAfter 测试用
     (
@@ -727,6 +743,95 @@ describe("SessionService", () => {
       expect(r).toBeNull();
       const s = await service.findSessionOrFail(sessionId);
       expect(s.title).toBe("user 改的");
+    });
+  });
+
+  describe("SessionService 生命周期事件", () => {
+    it("createSession → 发 session.created（携带 agentId 与完整 summary）", async () => {
+      const { session } = await service.createSession({
+        content: "你好",
+        agentId: "a1",
+      });
+      expect(emitted).toContainEqual([
+        SESSION_LIFECYCLE_EVENTS.created,
+        { agentId: "a1", session },
+      ]);
+    });
+
+    it("createSubSession 不发 created（子 Agent 会话不进侧栏）", async () => {
+      const parent = await service.createSession({ content: "父" });
+      // 只关心 createSubSession 本身是否发 created，parent 自己的 created 先清掉。
+      emitted.length = 0;
+      await service.createSubSession({
+        parentSessionId: parent.sessionId,
+        parentToolCallId: "t1",
+        task: "干活",
+      });
+      expect(
+        emitted.filter(([e]) => e === SESSION_LIFECYCLE_EVENTS.created),
+      ).toHaveLength(0);
+    });
+
+    it("deleteSession → 发 session.deleted（agentId 取自删除前查到的会话）", async () => {
+      const { sessionId } = await service.createSession({
+        content: "x",
+        agentId: "a1",
+      });
+      emitted.length = 0;
+      await service.deleteSession(sessionId);
+      expect(emitted).toContainEqual([
+        SESSION_LIFECYCLE_EVENTS.deleted,
+        { agentId: "a1", sessionId },
+      ]);
+    });
+
+    it("patch 改 title → 发 session.renamed", async () => {
+      const { sessionId } = await service.createSession({
+        content: "旧名",
+        agentId: "a1",
+      });
+      emitted.length = 0;
+      await service.patch(sessionId, { title: "新名" });
+      expect(emitted).toContainEqual([
+        SESSION_LIFECYCLE_EVENTS.renamed,
+        { agentId: "a1", sessionId, title: "新名" },
+      ]);
+    });
+
+    it("patch 只改 pinned → 不发 renamed（没改名）", async () => {
+      const { sessionId } = await service.createSession({
+        content: "旧名",
+        agentId: "a1",
+      });
+      emitted.length = 0;
+      await service.patch(sessionId, { pinned: true });
+      expect(
+        emitted.filter(([e]) => e === SESSION_LIFECYCLE_EVENTS.renamed),
+      ).toHaveLength(0);
+    });
+
+    it("patchIfNotGenerated 生效 → 发 renamed（LLM 自动生成标题路径）", async () => {
+      const { sessionId } = await service.createSession({
+        content: "旧名",
+        agentId: "a1",
+      });
+      emitted.length = 0;
+      await service.patchIfNotGenerated(sessionId, "生成的名");
+      expect(emitted).toContainEqual([
+        SESSION_LIFECYCLE_EVENTS.renamed,
+        { agentId: "a1", sessionId, title: "生成的名" },
+      ]);
+    });
+
+    it("patchIfNotGenerated 未生效（用户已手动改名）→ 不发 renamed", async () => {
+      const { sessionId } = await service.createSession({ content: "旧名" });
+      await service.patch(sessionId, { title: "用户改的" });
+      emitted.length = 0;
+      const r = await service.patchIfNotGenerated(sessionId, "被丢弃的名");
+      expect(r).toBeNull();
+      expect(
+        emitted.filter(([e]) => e === SESSION_LIFECYCLE_EVENTS.renamed),
+      ).toHaveLength(0);
     });
   });
 

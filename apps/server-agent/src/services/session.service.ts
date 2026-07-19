@@ -2,10 +2,13 @@ import { Transactional } from "@meshbot/common";
 import type {
   AppendMessageInput,
   CreateSessionInput,
+  SessionCreatedEvent,
+  SessionDeletedEvent,
+  SessionRenamedEvent,
   SessionStatus,
   SessionSummary,
 } from "@meshbot/types-agent";
-import { stripLlmuse } from "@meshbot/types-agent";
+import { SESSION_LIFECYCLE_EVENTS, stripLlmuse } from "@meshbot/types-agent";
 import { ThreadStateService } from "@meshbot/lib-agent";
 import {
   BadRequestException,
@@ -13,6 +16,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, Repository } from "typeorm";
 import { ScopedRepository } from "../account/scoped-repository";
@@ -70,6 +74,7 @@ export class SessionService {
     private readonly threadState: ThreadStateService,
     private readonly schedules: ScheduleService,
     private readonly modelConfigs: ModelConfigService,
+    private readonly emitter: EventEmitter2,
   ) {
     // 包裹 tx-aware 注入代理：作用域仓库的操作仍参与外层 @Transactional 边界
     this.sessionRepo = scopedFactory.create(rawSessionRepo);
@@ -88,7 +93,16 @@ export class SessionService {
   async createSession(
     input: CreateSessionInput & { agentId: string },
   ): Promise<{ sessionId: string; session: SessionSummary }> {
-    return this.createSessionInTx(input);
+    const created = await this.createSessionInTx(input);
+    // 生命周期事件（统一契约，spec §A）：本地端经 ws/events 消费，远程 Agent 级
+    // 观察者经 relay 镜像消费。发射点在 Service 而非 Controller——REST 建会话、
+    // 远程 run 入站建会话、定时任务建会话三条路径自动共享，不留静默洞。
+    // 放在事务方法**之外**：事务未提交就通知，观察者回查会看不到这条会话。
+    this.emitter.emit(SESSION_LIFECYCLE_EVENTS.created, {
+      agentId: input.agentId,
+      session: created.session,
+    } satisfies SessionCreatedEvent);
+    return created;
   }
 
   @Transactional()
@@ -537,6 +551,14 @@ export class SessionService {
     }
     await this.sessionRepo.update({ id: sessionId }, changes);
     const s = await this.findSessionOrFail(sessionId);
+    if (input.title !== undefined) {
+      // 单表 update，无事务边界；改名即读回已提交数据，可放心紧跟着通知。
+      this.emitter.emit(SESSION_LIFECYCLE_EVENTS.renamed, {
+        agentId: s.agentId,
+        sessionId,
+        title: s.title,
+      } satisfies SessionRenamedEvent);
+    }
     return toSummary(s);
   }
 
@@ -557,6 +579,12 @@ export class SessionService {
     );
     if (!res.affected) return null;
     const s = await this.findSessionOrFail(sessionId);
+    // 用户已手动改名（affected=0）时上面已提前 return，不会走到这里重复通知。
+    this.emitter.emit(SESSION_LIFECYCLE_EVENTS.renamed, {
+      agentId: s.agentId,
+      sessionId,
+      title: s.title,
+    } satisfies SessionRenamedEvent);
     return toSummary(s);
   }
 
@@ -569,10 +597,17 @@ export class SessionService {
    * 让 service 保持「纯数据层」。
    */
   async deleteSession(sessionId: string): Promise<void> {
-    await this.findSessionOrFail(sessionId);
+    const session = await this.findSessionOrFail(sessionId);
     await this.deleteSessionInTx(sessionId);
     await this.schedules.deleteBySession(sessionId);
     await this.checkpointer.deleteThread(sessionId);
+    // 删完才通知：先通知的话观察者可能在数据还在时就把行移除，然后被某个
+    // 并发的列表刷新又加回来（闪回）。agentId 取自删除前查到的会话（删完
+    // 这行数据已经没了，回查不到）。
+    this.emitter.emit(SESSION_LIFECYCLE_EVENTS.deleted, {
+      agentId: session.agentId,
+      sessionId,
+    } satisfies SessionDeletedEvent);
   }
 
   /**
