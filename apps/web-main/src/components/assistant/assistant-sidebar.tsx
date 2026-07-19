@@ -10,7 +10,9 @@ import {
 import {
   type NavGroup,
   type NavNode,
+  readExpandedKeys,
   SidebarHeader,
+  writeExpandedKeys,
 } from "@meshbot/web-common/shell";
 import { useQueries } from "@tanstack/react-query";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -34,6 +36,9 @@ import { useDevices } from "@/rest/devices";
 const SESSION_PREFIX = "session:";
 /** Agent 节点 key 前缀（`agent:<cloudAgentId>`）。 */
 const AGENT_PREFIX = "agent:";
+/** Agent 展开态持久化的 localStorage key（与 web-agent 分开：两端 Agent id
+ *  命名空间不同，云端 agent id 和本机 ag:/rag: 前缀不通用）。 */
+const EXPANDED_STORAGE_KEY = "meshbot.mainSidebarExpandedAgents";
 
 /**
  * 助手区侧栏：扁平 Agent 列表 → 展开该 Agent 的远程会话（数据装配层，实际树
@@ -41,8 +46,9 @@ const AGENT_PREFIX = "agent:";
  * web-agent 复用同一份交互逻辑）。
  *
  * 渲染进助手段的持久 layout（`(shell)/assistant/layout.tsx`），因此展开态
- * （`expanded` useState）与已加载会话（React Query 缓存）在 `/assistant` ↔
- * `/assistant/[agentId]` 间导航时不丢——不像旧的「点设备跳独立页」会 remount。
+ * （`expanded` useState，现已额外落 localStorage，刷新也不丢——真机验收缺陷）
+ * 与已加载会话（React Query 缓存）在 `/assistant` ↔ `/assistant/[agentId]`
+ * 间导航时不丢——不像旧的「点设备跳独立页」会 remount。
  *
  * 计划二 2c · Task 6：拍平侧栏 IA——删掉「按宿主设备分组 + 每设备取一个展示
  * Agent 做展示↔寻址换算」这一层（曾是 2b · T7 路由改 `[agentId]` 后的过渡期
@@ -64,10 +70,15 @@ const AGENT_PREFIX = "agent:";
  * - 展开在线 Agent → 并入 `expanded` → `useQueries` 按该 Agent id 懒加载会话
  *   内联铺开，多个 Agent 可同时展开；
  * - 路由携带 `agentId`（`/assistant/[agentId]`）时主动把它并入 `expanded`
- *   （懒加载其会话列表）；`expanded` 的初始值懒初始化时就带上首帧
- *   `routeAgentId`，确保 `defaultOpen` 在 NavItem 首次挂载时就能读到展开态——
- *   否则刷新 / 直达链接会因为 `SidebarNav` 的 `defaultOpen` 只读一次而被锁死
- *   在折叠态，看不到自动展开高亮；
+ *   （懒加载其会话列表）；`expanded` 是受控展开态的唯一权威——`NavNode.open`
+ *   直接读它，不再依赖 `SidebarNav` 内部只在 mount 时读一次的 `defaultOpen`
+ *   局部 state，`expanded` 事后变化（路由切换、localStorage 异步读回、用户
+ *   手动展开/收起）都会即时反映到树上，不存在「必须在首次挂载前就位」的
+ *   竞态；
+ * - `expanded` 额外落 localStorage（刷新 / 重新打开页面后手动展开过的 Agent
+ *   还在，真机验收缺陷）：初值是空集，mount 后的 effect 里读出来并入，避免
+ *   同步读 localStorage 当 `useState` 初值在 SSR 首屏与客户端 hydrate 之间
+ *   产生 mismatch；
  * - 点会话叶子 → `/assistant/[agentId]?session=<id>` 打开主区；
  * - Agent 行不出「新建会话」按钮（不注入 `onNewSession`）：新会话统一从
  *   `/assistant` 起手台发起（选 Agent + 写第一句），Agent 行只负责展开会话列表；
@@ -142,17 +153,25 @@ export function AssistantSidebar() {
   const isAgentOnline = (a: { deviceId: string }) =>
     onlineByDevice.get(a.deviceId) ?? false;
 
-  // 已展开 Agent id 集合。组件挂持久 layout，导航切会话不重置。懒初始化并入
-  // 首帧路由携带的 agentId（刷新 / 分享链接直达）——必须在 NavItem 首次挂载前
-  // 就位：NavItem 的展开态只在 mount 时读一次 defaultOpen
-  // （packages/web-common/src/shell/sidebar-nav.tsx），事后 setExpanded 已经
-  // 追不上，会导致目标 Agent 分支停在折叠态、activeSessionKey 匹配不到任何
-  // 已渲染节点，无从自动展开高亮。
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() =>
-    routeAgentId ? new Set([routeAgentId]) : new Set(),
-  );
-  // 持久 layout 内后续导航到另一 Agent（routeAgentId 变化但组件不 remount）
-  // 时同样要并入 expanded，才能展开新目标 Agent 分支。
+  // 已展开 Agent id 集合——受控展开态的唯一权威，同时驱动 useQueries 懒加载 +
+  // NavNode.open + localStorage 持久化。组件挂持久 layout，导航切会话不重置。
+  // 初值必须是空集：这是 SSR 应用，同步读 localStorage 当 useState 初值会让
+  // 服务端首屏渲染结果和客户端 hydrate 后的值对不上（hydration mismatch）；
+  // 受控展开态下这一拍延迟无害——localStorage/路由 agentId 在下面两个 effect
+  // 里并入后，重渲染即展开，不像过去 NavItem 局部 state 只在 mount 时读一次
+  // defaultOpen 那样必须赶在首次挂载前就位。
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+
+  // 从 localStorage 读入用户上次展开的 Agent 集合。
+  useEffect(() => {
+    const stored = readExpandedKeys(EXPANDED_STORAGE_KEY);
+    if (stored.size) setExpanded((prev) => new Set([...prev, ...stored]));
+  }, []);
+
+  // 路由携带的 agentId（首帧直达 / 持久 layout 内后续导航到另一 Agent，
+  // routeAgentId 变化但组件不 remount）自动并入 expanded——用户之后仍可
+  // 手动收起该 Agent（并入是一次性动作，不是持续钉住，见下面 handleToggleAgent
+  // 的用户诉求：不能让收起被自动展开逻辑立刻打回）。
   useEffect(() => {
     if (!routeAgentId) return;
     setExpanded((prev) =>
@@ -160,6 +179,23 @@ export function AssistantSidebar() {
     );
   }, [routeAgentId]);
   const expandedIds = [...expanded];
+
+  // 展开态变化（开/合都触发）：更新 expanded + 落盘持久化。取代原先只在展开
+  // 时触发一次、且不落盘的 onExpandDevice——onToggle 覆盖开合两个方向，这里
+  // 收敛成唯一入口，不再需要额外一个仅做「加入 expanded」的 onExpand 处理器。
+  const handleToggleAgent = (node: NavNode, open: boolean) => {
+    const id = node.key.startsWith(AGENT_PREFIX)
+      ? node.key.slice(AGENT_PREFIX.length)
+      : undefined;
+    if (!id) return;
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (open) next.add(id);
+      else next.delete(id);
+      writeExpandedKeys(EXPANDED_STORAGE_KEY, next);
+      return next;
+    });
+  };
 
   // 每个展开 Agent 并行拉会话（走 device-query 单例往返，正常秒回）。
   const sessionQueries = useQueries({
@@ -229,30 +265,26 @@ export function AssistantSidebar() {
     // 展开态/子节点开关/占位 chevron 抽成纯函数 computeAgentNodeExpansion
     // （同目录），离线强制不展开、不产出子节点、但仍要有占位 chevron 对齐
     // 左缘——见该函数顶部注释（Task 6 review Finding #1 + 真机验收 chevron
-    // 缺陷，与 web-agent 同构修法保持两端一致）。
-    const { defaultOpen, hasChildren, chevronPlaceholder } =
-      computeAgentNodeExpansion(
-        online,
-        expanded.has(a.id) || a.id === routeAgentId,
-      );
+    // 缺陷，与 web-agent 同构修法保持两端一致）。wantOpen 只看 expanded 集合
+    // 本身，不再 `|| a.id === routeAgentId`：routeAgentId 已经在上面的 effect
+    // 里并入 expanded 了，这里 OR 一个游离在 expanded 之外的条件，会让用户
+    // 手动收起「当前路由指向的 Agent」这个动作在下一次渲染被立刻打回——受控
+    // 展开态下 expanded 必须是 open 与否的单一事实来源，这正是另一条真机验收
+    // 缺陷明确禁止的写法（`open: expanded.has(k) || containsActiveSession`）。
+    const { open, hasChildren, chevronPlaceholder } = computeAgentNodeExpansion(
+      online,
+      expanded.has(a.id),
+    );
     return {
       key: `${AGENT_PREFIX}${a.id}`,
       label: a.name,
-      defaultOpen,
+      open,
       children: hasChildren ? sessionChildren(a.id) : [],
       chevronPlaceholder,
     };
   });
 
   const groups: NavGroup[] = [{ key: "agents", items }];
-
-  const handleExpandNode = (node: NavNode) => {
-    const id = node.key.startsWith(AGENT_PREFIX)
-      ? node.key.slice(AGENT_PREFIX.length)
-      : undefined;
-    if (!id) return;
-    setExpanded((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
-  };
 
   const labels: SessionTreeLabels = useMemo(
     () => ({ offline: tDevices("offline") }),
@@ -280,7 +312,7 @@ export function AssistantSidebar() {
             groups={groups}
             activeSessionKey={activeSessionKey}
             nodeInfo={(node) => metaByKey.get(node.key)}
-            onExpandDevice={handleExpandNode}
+            onToggle={handleToggleAgent}
             labels={labels}
           />
         )}

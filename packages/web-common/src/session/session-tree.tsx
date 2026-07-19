@@ -135,6 +135,13 @@ export interface SessionTreeProps {
   nodeInfo: (node: NavNode) => SessionTreeNodeInfo | undefined;
   /** 设备节点展开（用户点开，非 defaultOpen 触发）：懒加载该设备会话列表。 */
   onExpandDevice?: (node: NavNode) => void;
+  /**
+   * 展开态变化（透传 `SidebarNavProps.onToggle`）：开、合都会触发，区别于
+   * `onExpandDevice` 只在展开时触发一次。受控展开态场景（`NavNode.open`）下
+   * 调用方靠它更新自己持有的展开集合 + 落盘持久化；非受控场景可以不传，
+   * `SidebarNav` 内部局部 state 照常工作。
+   */
+  onToggle?: (node: NavNode, open: boolean) => void;
   /** 设备行内「新建会话」按钮点击（不传则该按钮不出现，如 web-agent 用全局
    *  头部「+」代替，不需要逐设备入口）。 */
   onNewSession?: (node: NavNode) => void;
@@ -161,6 +168,7 @@ export function SessionTree({
   loading,
   nodeInfo,
   onExpandDevice,
+  onToggle,
   onNewSession,
   onRenameSession,
   onDeleteSession,
@@ -223,6 +231,7 @@ export function SessionTree({
       groups={groups}
       activeKey={activeSessionKey}
       onExpand={onExpandDevice}
+      onToggle={onToggle}
       renderRow={renderRow}
     />
   );

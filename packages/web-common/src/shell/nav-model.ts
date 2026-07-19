@@ -22,6 +22,12 @@ export interface NavNode {
    * 调用方的灰化包裹之外，漏出未置灰、可 hover 的幽灵行。
    */
   chevronPlaceholder?: boolean;
+  /**
+   * 受控展开态。传了就以它为准（局部 state 不再参与），展开/收起完全由调用方
+   * 通过 `SidebarNavProps.onToggle` 驱动。不传则沿用 `defaultOpen` + 局部 state
+   * 的非受控行为（mount 时读一次），既有调用方零改动。
+   */
+  open?: boolean;
 }
 
 export interface NavGroup {

@@ -9,7 +9,9 @@ import {
 import {
   type NavGroup,
   type NavNode,
+  readExpandedKeys,
   SidebarHeader,
+  writeExpandedKeys,
 } from "@meshbot/web-common/shell";
 import { useAtomValue, useSetAtom } from "jotai";
 import { Plus, SquarePen } from "lucide-react";
@@ -44,6 +46,9 @@ const LOCAL_PREFIX = "s:";
 const AGENT_PREFIX = "ag:";
 /** 远程 Agent 节点 key 前缀（`rag:<cloudAgentId>`）。 */
 const REMOTE_AGENT_PREFIX = "rag:";
+/** Agent 展开态持久化的 localStorage key（与 web-main 分开：两端 Agent key
+ *  命名空间不同，`ag:`/`rag:` 前缀不通用）。 */
+const EXPANDED_STORAGE_KEY = "meshbot.sidebarExpandedAgents";
 
 /**
  * 助手二级侧栏：本机 Agent + 远程 Agent 同一扁平列表（本机在前、远程在后，
@@ -84,12 +89,60 @@ export function AssistantSidebar() {
     agentId: string | null;
   }>({ open: false, agentId: null });
 
+  // 本机 Agent 分组（agents 顺序决定分组顺序；running 脉冲点取自其中）。提前
+  // 到这里计算：下面「URL 指向的本机会话 → 反查所属 Agent」要用它，不依赖
+  // agentNodes 装配循环产出的 sessionChildren（那是渲染期产物）。
+  const agentGroups = groupSessionsByAgent(agents ?? [], localSessions);
+
+  // Agent 展开态：受控 + localStorage 持久化（真机验收缺陷——刷新后手动展开
+  // 的 Agent 全部塌回去，此前唯一权威是 NavItem 内部 useState，只在 mount
+  // 时读一次 defaultOpen）。初值必须是空集，不能同步读 localStorage 当初值：
+  // 受控态下这一拍延迟完全无害（下面 effect 里 union 进来，重渲染即展开），
+  // 而如果图省事把 localStorage 塞进 useState 初值，一旦这段代码将来挪去
+  // SSR 场景（web-main 是 SSR 应用）就会 hydration mismatch——两端统一按这个
+  // 更安全的写法来，不因为 web-agent 目前是纯 CSR 桌面壳就抄近路。
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    const stored = readExpandedKeys(EXPANDED_STORAGE_KEY);
+    if (stored.size) setExpanded((prev) => new Set([...prev, ...stored]));
+  }, []);
+
+  // URL 指向的 Agent key：远程 `rag:<id>`，本机会话反查其所属 Agent 拼
+  // `ag:<id>`——直接查 agentGroups，不依赖 sessionChildren 装配结果。
+  const urlLocalAgentId = urlSessionId
+    ? agentGroups.find((g) => g.sessions.some((s) => s.id === urlSessionId))
+        ?.agentId
+    : undefined;
+  const urlAgentKey = urlRemoteAgent
+    ? `${REMOTE_AGENT_PREFIX}${urlRemoteAgent}`
+    : urlLocalAgentId
+      ? `${AGENT_PREFIX}${urlLocalAgentId}`
+      : undefined;
+  // URL 指向的 Agent 自动并入展开集合——agent id 变化（切换会话/直达链接）时
+  // 重新触发，用户仍可在此之后手动收起（并入是一次性动作，不是持续钉住）。
+  useEffect(() => {
+    if (!urlAgentKey) return;
+    setExpanded((prev) =>
+      prev.has(urlAgentKey) ? prev : new Set(prev).add(urlAgentKey),
+    );
+  }, [urlAgentKey]);
+
+  const handleToggleAgent = useCallback((node: NavNode, open: boolean) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (open) next.add(node.key);
+      else next.delete(node.key);
+      writeExpandedKeys(EXPANDED_STORAGE_KEY, next);
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     void loadSidebar();
   }, [loadSidebar]);
 
-  // URL 指向的远程 Agent：主动拉会话列表（defaultOpen 只影响树的展开态，
-  // 不会走用户交互的 onExpand 回调，懒加载需在此显式触发）。
+  // URL 指向的远程 Agent：主动拉会话列表（受控展开态只决定树上是否画出子
+  // 节点，不会走用户交互的 onExpand 回调，懒加载需在此显式触发）。
   useEffect(() => {
     if (urlRemoteAgent) void loadRemoteSessions(urlRemoteAgent);
   }, [urlRemoteAgent, loadRemoteSessions]);
@@ -107,9 +160,7 @@ export function AssistantSidebar() {
   // 边装配树边登记每个 key 的渲染元数据（同一次 render 内，nodeInfo 回读复用）。
   const metaByKey = new Map<string, SessionTreeNodeInfo>();
 
-  // 本机 Agent → 会话。agents 顺序决定分组顺序；running 脉冲点取自
-  // groupSessionsByAgent（该 Agent 名下有 status==="running" 的会话）。
-  const agentGroups = groupSessionsByAgent(agents ?? [], localSessions);
+  // 本机 Agent → 会话（agentGroups 已在组件顶部提前算好）。
   const agentNodes: NavNode[] = (agents ?? []).map((a) => {
     const grp = agentGroups.find((g) => g.agentId === a.id);
     const { emoji, color } = parseAgentAvatar(a.avatar);
@@ -151,21 +202,17 @@ export function AssistantSidebar() {
       });
     }
 
-    // 祖先自动展开（SidebarNav：`node.defaultOpen ?? isNavNodeActive(...)`）：
-    // Agent 节点没有「全局当前」可比，defaultOpen 只看一件事——「含当前 URL
-    // 会话的那个 Agent 自动展开」，其余折叠。这个判定还依赖 sessionChildren
-    // 在 NavItem **首次挂载**时就是真实数据——`open` 状态只在 mount 时读一次
-    // defaultOpen，之后 sessionsStatus 变化不会重新计算，所以下面 SessionTree
-    // 的 `loading` 必须把 sessionsStatus 一并纳入（否则 Agent 节点会带着骨架
-    // 占位子节点抢先挂载，defaultOpen 判定到空 sessionChildren，永久错过这次
-    // 自动展开）。
-    const containsActiveSession = sessionChildren.some(
-      (c) => c.key === activeSessionKey,
-    );
+    // 展开态已提升为受控（组件顶部 expanded state + 两个 effect：localStorage
+    // 持久化 + URL 指向的 Agent 自动并入），不再靠 defaultOpen 在 NavItem
+    // **首次挂载**时读一次——这也是为什么下面 SessionTree 的 `loading` 仍要把
+    // sessionsStatus 纳入：不是为了凑 defaultOpen 的挂载时机（那个竞态受控化
+    // 之后已经不存在，open 变化随时触发重渲染），而是纯粹为了防闪烁——不然
+    // Agent 节点会先带着骨架占位子节点渲染一帧，sessionsStatus 到位后再整体
+    // 换成真实会话，肉眼可见一次跳动。
     return {
       key: `${AGENT_PREFIX}${a.id}`,
       label: a.name,
-      defaultOpen: containsActiveSession,
+      open: expanded.has(`${AGENT_PREFIX}${a.id}`),
       // Agent 行点击只做展开/收起（NavItem 默认行为），不设当前、不高亮——
       // 不传 SessionTree 的 onSelectAgent（该回调已从 web-common 移除）。
       children: sessionChildren,
@@ -227,10 +274,15 @@ export function AssistantSidebar() {
       deviceName: ra.deviceName,
       online: ra.deviceOnline,
     });
+    // 展开态同样受控（expanded.has）：即便某个 Agent key 曾在线时展开过、被
+    // 记进 expanded 集合，宿主转离线后 children 恒空数组，NavItem 的
+    // `hasChildren && open` 两者都要真才画子节点区块——hasChildren 已经是
+    // 假，open 是否为真不影响是否泄漏子行，无需在这里再对 expanded.has 结果
+    // 额外 && ra.deviceOnline 一次。
     return {
       key: `${REMOTE_AGENT_PREFIX}${ra.id}`,
       label: ra.name,
-      defaultOpen: ra.deviceOnline && ra.id === urlRemoteAgent,
+      open: expanded.has(`${REMOTE_AGENT_PREFIX}${ra.id}`),
       children: ra.deviceOnline ? buildRemoteChildren(ra.id) : [],
       chevronPlaceholder: !ra.deviceOnline,
     };
@@ -305,6 +357,7 @@ export function AssistantSidebar() {
           activeSessionKey={activeSessionKey}
           nodeInfo={(node) => metaByKey.get(node.key)}
           onExpandDevice={handleExpandNode}
+          onToggle={handleToggleAgent}
           onRenameSession={onRenameSession}
           onDeleteSession={onDeleteSession}
           onEditAgent={onEditAgent}

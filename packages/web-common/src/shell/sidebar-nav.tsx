@@ -25,9 +25,14 @@ function NavItem({
   props: SidebarNavProps;
 }) {
   const hasChildren = !!node.children?.length;
-  const [open, setOpen] = useState(
+  // 受控展开态：传了 node.open 就以它为准，局部 state 只在非受控场景下参与
+  // （见 NavNode.open 的 JSDoc）。useState 仍无条件调用——不能按 controlled
+  // 分支跳过，否则同一节点在受控/非受控间切换会踩 Hooks 调用顺序规则。
+  const controlled = node.open !== undefined;
+  const [localOpen, setLocalOpen] = useState(
     node.defaultOpen ?? isNavNodeActive(node, props.activeKey),
   );
+  const open = controlled ? node.open === true : localOpen;
   const defaults: SidebarRowProps = {
     icon: hasChildren ? (
       <ChevronDown
@@ -48,7 +53,9 @@ function NavItem({
     onClick: () => {
       if (hasChildren) {
         const next = !open;
-        setOpen(next);
+        // 受控时局部 state 不参与——下一次渲染的 open 完全来自调用方回传的
+        // node.open，这里 setLocalOpen 只会写一个没人读的死 state。
+        if (!controlled) setLocalOpen(next);
         props.onToggle?.(node, next);
         if (next) props.onExpand?.(node);
         return;
