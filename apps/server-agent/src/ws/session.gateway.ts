@@ -36,6 +36,7 @@ import {
   WebSocketGateway,
 } from "@nestjs/websockets";
 import type { Socket } from "socket.io";
+import { probeEmitterId } from "../services/session-frame-forwarder";
 import { RunnerService } from "../services/runner.service";
 import {
   REMOTE_SHADOW_FRAME_EVENT,
@@ -182,7 +183,7 @@ export class SessionGateway extends BaseWebSocketGateway {
   onRunToolCallStart(payload: RunToolCallStartEvent): void {
     // PROBE-TS 临时排查埋点（云端工具卡永不收敛）——定位后整块删除
     console.warn(
-      `[PROBE-TS][bus] run.tool_call_start sid=${payload.sessionId} msg=${payload.messageId} tc=${payload.toolCallId} listeners{start=${this.probeEmitter?.listenerCount(
+      `[PROBE-TS][bus] emitterId=${this.probeEmitter ? probeEmitterId(this.probeEmitter) : "none"} run.tool_call_start sid=${payload.sessionId} msg=${payload.messageId} tc=${payload.toolCallId} listeners{start=${this.probeEmitter?.listenerCount(
         SESSION_WS_EVENTS.runToolCallStart,
       )} argsDelta=${this.probeEmitter?.listenerCount(
         SESSION_WS_EVENTS.runToolCallArgsDelta,
