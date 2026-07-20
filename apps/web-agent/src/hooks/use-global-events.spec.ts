@@ -2,6 +2,7 @@
 jest.mock("@/atoms/im", () => ({}));
 jest.mock("@/atoms/schedule-activity", () => ({}));
 jest.mock("@/atoms/sessions", () => ({}));
+jest.mock("@/atoms/remote-sessions", () => ({}));
 jest.mock("@/atoms/devices", () => ({}));
 jest.mock("@/atoms/assistant-panel", () => ({}));
 jest.mock("@meshbot/web-common", () => ({ clearAccessToken: jest.fn() }));
@@ -10,7 +11,12 @@ jest.mock("@/rest/remote-agents", () => ({
 }));
 jest.mock("@/rest/agents", () => ({ agentsQueryKey: ["agents"] }));
 jest.mock("@/lib/events-socket", () => ({ getEventsSocket: jest.fn() }));
-jest.mock("jotai", () => ({ useSetAtom: jest.fn() }));
+// useSetAtom 默认返回一个空操作函数（而非 undefined）：本文件的 handlers 对象
+// 会把每个 useSetAtom(...) 的返回值直接当函数调用（如 onConnect 里新增的
+// reloadTrackedRemoteSessions()）——保持 undefined 会让任何触达这些调用路径
+// 的测试炸 `undefined is not a function`。各 atom 模块本身已被上面整体 mock 成
+// `{}`，测试无法也无需按具体 atom 区分返回值，只需保证「可调用」。
+jest.mock("jotai", () => ({ useSetAtom: jest.fn(() => jest.fn()) }));
 jest.mock("react", () => ({
   ...jest.requireActual("react"),
   useEffect: jest.fn(),
@@ -47,6 +53,7 @@ function makeHandlers() {
     onQuickAssistantRenamed: jest.fn(),
     onModelConfigUpdated: jest.fn(),
     onRemoteAgentsChanged: jest.fn(),
+    onRemoteAgentSessionEvent: jest.fn(),
     onAgentChanged: jest.fn(),
     onReauthRequired: jest.fn(),
   };
@@ -92,6 +99,50 @@ describe("dispatchGlobalEvent", () => {
     expect(h.onRemoteAgentsChanged).toHaveBeenCalled();
     // 失效信号：不误派给别的 handler
     expect(h.onModelConfigUpdated).not.toHaveBeenCalled();
+  });
+
+  it("dispatchGlobalEvent 分发 remote-agent.session_event 到 onRemoteAgentSessionEvent", () => {
+    const h = makeHandlers();
+    dispatchGlobalEvent(
+      {
+        type: REMOTE_AGENT_EVENTS.sessionEvent,
+        ts: 1,
+        payload: {
+          agentId: "cloud-a1",
+          event: SESSION_LIFECYCLE_EVENTS.created,
+          payload: { agentId: "local-a1", session: { id: "s9" } },
+        },
+      },
+      h,
+    );
+    expect(h.onRemoteAgentSessionEvent).toHaveBeenCalledWith({
+      agentId: "cloud-a1",
+      event: SESSION_LIFECYCLE_EVENTS.created,
+      payload: expect.anything(),
+    });
+    // 专属信封：不误派给本机会话生命周期的 handler（分流规则互斥，见
+    // REMOTE_AGENT_EVENTS.sessionEvent 的 JSDoc）
+    expect(h.onSessionListEvent).not.toHaveBeenCalled();
+  });
+
+  it("既有 3 个 handler 仍各自生效（不被覆盖）", () => {
+    const h = makeHandlers();
+    dispatchGlobalEvent(
+      {
+        type: SESSION_STATUS_EVENTS.changed,
+        ts: 1,
+        payload: { agentId: "a", sessionId: "s", status: "idle" },
+      },
+      h,
+    );
+    dispatchGlobalEvent(
+      { type: REMOTE_AGENT_EVENTS.registryChanged, ts: 1, payload: {} },
+      h,
+    );
+    dispatchGlobalEvent({ type: AGENT_EVENTS.changed, ts: 1, payload: {} }, h);
+    expect(h.onSessionStatusChanged).toHaveBeenCalled();
+    expect(h.onRemoteAgentsChanged).toHaveBeenCalled();
+    expect(h.onAgentChanged).toHaveBeenCalled();
   });
 
   it("agent.changed → onAgentChanged（无参失效信号）", () => {

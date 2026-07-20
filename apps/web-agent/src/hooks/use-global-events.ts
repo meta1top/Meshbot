@@ -14,6 +14,7 @@ import {
   QUICK_ASSISTANT_EVENTS,
   type QuickAssistantRenamedEvent,
   REMOTE_AGENT_EVENTS,
+  type RemoteAgentSessionEventPayload,
   SCHEDULE_EVENTS,
   type ScheduleFiredEvent,
   SESSION_LIFECYCLE_EVENTS,
@@ -37,6 +38,10 @@ import {
   setPresenceAtom,
   upsertConversationAtom,
 } from "@/atoms/im";
+import {
+  applyRemoteSessionListEventAtom,
+  reloadTrackedRemoteSessionsAtom,
+} from "@/atoms/remote-sessions";
 import { addScheduleActivityAtom } from "@/atoms/schedule-activity";
 import {
   applySessionListEventAtom,
@@ -65,6 +70,12 @@ export interface GlobalEventHandlers {
   onAgentChanged: () => void;
   onModelConfigUpdated: () => void;
   onRemoteAgentsChanged: () => void;
+  /**
+   * 远程 Agent 的会话生命周期镜像（Agent 级观察通道）。与
+   * `onSessionStatusChanged`（本机会话）分开：payload 里的 agentId 是**云端**
+   * Agent id，落到远程 Agent 视图的会话列表，不能混进本机列表。
+   */
+  onRemoteAgentSessionEvent: (p: RemoteAgentSessionEventPayload) => void;
   onReauthRequired: (p: { cloudUserId: string }) => void;
 }
 
@@ -117,6 +128,15 @@ export function dispatchGlobalEvent(
     case REMOTE_AGENT_EVENTS.registryChanged:
       h.onRemoteAgentsChanged();
       break;
+    // Agent 级观察通道（T19）：远程 Agent 的会话生命周期镜像，专属信封（不
+    // 复用本地 SESSION_LIFECYCLE_EVENTS.* ——那条总线的下游会把远程会话误插
+    // 进本机列表，见 REMOTE_AGENT_EVENTS.sessionEvent 的 JSDoc）。payload 原样
+    // 透传给 handler，归一/合并逻辑交给调用方（useGlobalEvents 的实现）。
+    case REMOTE_AGENT_EVENTS.sessionEvent:
+      h.onRemoteAgentSessionEvent(
+        env.payload as RemoteAgentSessionEventPayload,
+      );
+      break;
     case AUTH_WS_EVENTS.reauthRequired:
       h.onReauthRequired(env.payload as { cloudUserId: string });
       break;
@@ -150,6 +170,12 @@ export function useGlobalEvents(): void {
   const setQuickAssistantName = useSetAtom(quickAssistantNameAtom);
   const updateSessionStatus = useSetAtom(updateSessionStatusAtom);
   const applySessionListEventToStore = useSetAtom(applySessionListEventAtom);
+  const applyRemoteSessionListEvent = useSetAtom(
+    applyRemoteSessionListEventAtom,
+  );
+  const reloadTrackedRemoteSessions = useSetAtom(
+    reloadTrackedRemoteSessionsAtom,
+  );
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -183,6 +209,14 @@ export function useGlobalEvents(): void {
       //（侧栏与起手台共用同一份缓存，关掉开关的 Agent 立即消失）
       onRemoteAgentsChanged: () =>
         queryClient.invalidateQueries({ queryKey: remoteAgentsQueryKey }),
+      // Agent 级观察通道（T19）：远程 Agent 的会话生命周期镜像 → 归一
+      // （toSessionListEvent）后合并进该远程 Agent 的会话列表缓存
+      // （remoteSessionsAtom，按 agentId 隔离，不碰本机 sessionsAtom）。
+      // 归一失败（畸形帧，理论不该发生）返回 null，原样丢弃。
+      onRemoteAgentSessionEvent: (p) => {
+        const evt = toSessionListEvent(p.event, p.payload);
+        if (evt) applyRemoteSessionListEvent({ agentId: p.agentId, evt });
+      },
       onReauthRequired: () => handleReauthRequired(),
     };
     const onEvent = (env: GlobalEventEnvelope) =>
@@ -194,10 +228,15 @@ export function useGlobalEvents(): void {
     // 见 EventsGateway.onRemoteAgentsChanged 的 JSDoc）。幂等且便宜。
     // 本地 Agent 列表同理补拉：断线期间 `rename_agent` 工具或别的窗口改了名，
     // agent.changed 信封会丢，重连时重拉一次兜住。
+    // 远程会话列表同理补拉（T19）：断线期间 Agent 级观察通道的镜像帧会丢，
+    // 仅凭 onRemoteAgentSessionEvent 的增量合并补不回来——reloadTrackedRemoteSessionsAtom
+    // 只强制重拉当前已经加载过（map 里已有 key）的远程 Agent，不主动加载
+    // 用户从未展开过的。
     const onConnect = () => {
       queryClient.invalidateQueries({ queryKey: ["model-configs"] });
       queryClient.invalidateQueries({ queryKey: remoteAgentsQueryKey });
       queryClient.invalidateQueries({ queryKey: agentsQueryKey });
+      reloadTrackedRemoteSessions();
     };
     socket.on("event", onEvent);
     socket.on("connect", onConnect);
@@ -217,6 +256,8 @@ export function useGlobalEvents(): void {
     setQuickAssistantName,
     updateSessionStatus,
     applySessionListEventToStore,
+    applyRemoteSessionListEvent,
+    reloadTrackedRemoteSessions,
     queryClient,
   ]);
 }

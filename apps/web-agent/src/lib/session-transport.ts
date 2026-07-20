@@ -20,6 +20,7 @@ import {
   startRemoteRun,
   uploadRemoteArtifactToDrive,
 } from "@/rest/remote-agent-sessions";
+import { unwatchRemoteAgent, watchRemoteAgent } from "@/rest/remote-agents";
 import {
   appendMessage,
   confirmAnswers,
@@ -103,6 +104,54 @@ function bridgeSessionSocketEvents(events: SessionRunEvents): () => void {
   return () => {
     for (const [name, handler] of handlers) {
       socket.off(name, handler);
+    }
+  };
+}
+
+/**
+ * 建立一路对目标远程 Agent 的观察（Agent 级观察通道，T18/T19）：调 T18 的
+ * REST 端点拿 `watchId`，返回 unwatch 函数（幂等，DELETE 释放）。
+ *
+ * **只负责 watch 登记的生命周期，不负责事件投递**——真正的帧不经这条链路：
+ * - `scope="session"`（推理帧）：经服务端影子桥已进了本机 `ws/session` 房间，
+ *   `bridgeSessionSocketEvents` 订阅的既有 `RUN_EVENT_NAMES` 事件表直接收到，
+ *   不需要额外转发。
+ * - `scope="agent"`（会话生命周期镜像）：经专属信封 `REMOTE_AGENT_EVENTS.sessionEvent`
+ *   下发到 `ws/events` 总线，由 `use-global-events.ts` 的 `onRemoteAgentSessionEvent`
+ *   统一分发进 `remoteSessionsAtom`——与 web-main 的 `watchAgent(onEvent)`
+ *   不同，web-agent 只有一条常驻的全局事件总线（每个浏览器标签页一条），不需要
+ *   为每个 transport 实例单独建一条投递通道，故本函数忽略 `watchAgent` 的
+ *   `onEvent` 回调参数，只管注册/注销。
+ *
+ * REST 往返期间调用方就 unwatch（如挂载后立刻卸载/切换 sessionId）：`stopped`
+ * 标记短路，待 `watchId` 到手后立即补发 DELETE，不留悬挂通道等云端 idle 超时
+ * 回收。
+ */
+function startAgentWatch(
+  agentId: string,
+  scope: "agent" | "session",
+  sessionId?: string,
+): () => void {
+  let watchId: string | null = null;
+  let stopped = false;
+  watchRemoteAgent(agentId, scope, sessionId)
+    .then((res) => {
+      if (stopped) {
+        // 拿到 watchId 前调用方已经 unwatch 了——补发一次 DELETE，不留悬挂
+        // 通道（否则要等云端 idle 超时才会被动回收）。
+        unwatchRemoteAgent(agentId, res.watchId).catch(() => {});
+        return;
+      }
+      watchId = res.watchId;
+    })
+    .catch((e) => {
+      console.warn(`观察通道建立失败（agentId=${agentId} scope=${scope}）`, e);
+    });
+  return () => {
+    stopped = true;
+    if (watchId) {
+      unwatchRemoteAgent(agentId, watchId).catch(() => {});
+      watchId = null;
     }
   };
 }
@@ -292,6 +341,17 @@ export function createRemoteSessionTransport(
 
     subscribe(events) {
       return bridgeSessionSocketEvents(events);
+    },
+
+    watchSession(sessionId) {
+      return startAgentWatch(agentId, "session", sessionId);
+    },
+
+    // `onEvent` 有意不使用——见 `startAgentWatch` 文档：web-agent 的 Agent
+    // 级生命周期事件走全局事件总线（`use-global-events.ts`），不经这条
+    // per-transport-instance 回调路径。
+    watchAgent(_onEvent) {
+      return startAgentWatch(agentId, "agent");
     },
   };
 }
