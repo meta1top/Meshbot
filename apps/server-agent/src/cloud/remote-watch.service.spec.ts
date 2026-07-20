@@ -62,6 +62,21 @@ describe("RemoteWatchService（A 侧观察者代理）", () => {
     expect(svc.owns(watchId)).toBe(false);
   });
 
+  it("别的账号来停 → 既不上行也不删本地条目（云端 sameRequester 会拒，本地先删会让通道无声死掉）", () => {
+    const { svc, up } = mk();
+    const { watchId } = svc.startWatch("u1", "cloud-a1", "agent");
+    const before = up.length;
+    svc.stopWatch("u2", watchId);
+    expect(up.length).toBe(before); // 没有上行
+    expect(svc.owns(watchId)).toBe(true); // u1 的条目还在
+  });
+
+  it("停一个不存在的 watchId → 静默返回，不上行", () => {
+    const { svc, up } = mk();
+    svc.stopWatch("u1", "不存在的-watch");
+    expect(up).toEqual([]);
+  });
+
   it("session 级回流帧 → 重发 REMOTE_SHADOW_FRAME_EVENT（复用既有影子渲染）", () => {
     const { svc, emitter } = mk();
     const shadow: unknown[] = [];

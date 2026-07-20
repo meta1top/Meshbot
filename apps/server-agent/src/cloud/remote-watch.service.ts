@@ -96,8 +96,27 @@ export class RemoteWatchService implements OnModuleDestroy {
     return { watchId };
   }
 
-  /** 显式注销观察：经 relay 上行 `agent.watch.stop` 并解除本地登记。 */
+  /**
+   * 显式注销观察：经 relay 上行 `agent.watch.stop` 并解除本地登记。
+   *
+   * **必须先校验归属**（review 阻塞项）：不比对 `entry.cloudUserId` 就无条件
+   * 删本地条目的话，账号 u1 拿 u2 的 watchId 调这个端点会造成——云端因
+   * `sameRequester` 全等校验拒绝真正拆除（那条通道**还活着**，见
+   * `server-main/src/ws/im.gateway.ts` 的「泄漏防线 4」），而本地条目已经没了；
+   * 此后云端继续为该 watchId 扇帧，本地 `onFrame`/`onAccepted` 因查不到 entry
+   * 静默丢弃，u2 的浏览器那条通道**无声死掉**，连 `ok:false` 都收不到
+   * （本地压根没转发这次拒绝）。
+   *
+   * 这与 `RemoteRunService.sendControl` 的「转发即可、云端自己拒」不是一回事：
+   * 那个方法不碰任何本地状态，云端拒绝就没有副作用；而本方法**无论云端受不
+   * 受理都会先动本地状态**，所以本地必须自己先把好门。
+   *
+   * 归属不符按「查无此 watch」静默返回（与云端同语义），不抛错——避免把
+   * 「这个 watchId 存在但不属于你」这个事实回给调用方。
+   */
   stopWatch(cloudUserId: string, watchId: string): void {
+    const entry = this.watches.get(watchId);
+    if (!entry || entry.cloudUserId !== cloudUserId) return;
     this.relay.emitAgentWatchStop(cloudUserId, { watchId });
     this.watches.delete(watchId);
   }
