@@ -1,5 +1,12 @@
 import type { SessionSummary } from "@meshbot/types-agent";
-import { applySessionListEventToArray, patchSessionStatus } from "./sessions";
+import { createStore } from "jotai";
+import {
+  addSessionAtom,
+  applySessionListEventAtom,
+  applySessionListEventToArray,
+  patchSessionStatus,
+  sessionsAtom,
+} from "./sessions";
 
 function makeSession(
   id: string,
@@ -106,5 +113,37 @@ describe("applySessionListEventToArray", () => {
       title: "改了",
     });
     expect(arr[0].title).toBe("会话 a");
+  });
+});
+
+describe("addSessionAtom（真机缺陷：本地建会话侧栏出现两条）", () => {
+  it("同一会话经 ws 事件与 REST 响应两条路径先后到达 → 只有一条", () => {
+    const store = createStore();
+    const s = makeSession("s1", "running");
+    // ws 是常驻连接，`session.created` 常常先于 HTTP 响应到达浏览器
+    store.set(applySessionListEventAtom, { type: "created", session: s });
+    // 随后 REST 响应回来，调用方拿着同一条 summary 调 addSessionAtom
+    store.set(addSessionAtom, s);
+    expect(store.get(sessionsAtom).map((x) => x.id)).toEqual(["s1"]);
+  });
+
+  it("反序（REST 先、事件后）同样只有一条", () => {
+    const store = createStore();
+    const s = makeSession("s2", "running");
+    store.set(addSessionAtom, s);
+    store.set(applySessionListEventAtom, { type: "created", session: s });
+    expect(store.get(sessionsAtom).map((x) => x.id)).toEqual(["s2"]);
+  });
+
+  it("不同会话照常各插一条", () => {
+    const store = createStore();
+    store.set(addSessionAtom, makeSession("a", "idle"));
+    store.set(addSessionAtom, makeSession("b", "idle"));
+    expect(
+      store
+        .get(sessionsAtom)
+        .map((x) => x.id)
+        .sort(),
+    ).toEqual(["a", "b"]);
   });
 });

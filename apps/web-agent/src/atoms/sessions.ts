@@ -50,12 +50,31 @@ export const reloadSessionsAtom = atom(null, async (_get, set) => {
   }
 });
 
-/** 新建会话后插入：直接 push + sort（push 比 unshift 更直观，反正都排）。 */
+/**
+ * 新建会话后插入。**必须按 id 幂等**，不能盲 push。
+ *
+ * 真机验收缺陷：本地建会话时侧栏出现两条。原因是同一条会话现在有**两条**到达
+ * 路径——(1) REST `POST /api/sessions` 的响应，调用方拿到 summary 调本 atom；
+ * (2) 服务端 `SessionService.createSession` 发的 `session.created`，经
+ * `EventsGateway` → ws/events → `applySessionListEventAtom`。ws 是常驻连接，
+ * 事件很容易**先于** HTTP 响应到达浏览器：事件那条按 id 查重（`applySessionListEvent`
+ * 的 created 语义）不会插重，随后 REST 响应回来，旧实现的无条件 push 就插出了
+ * 第二条。云端（web-main）没有这个问题，因为它只有事件这一条路径。
+ *
+ * 修法是复用 `applySessionListEventToArray` 而不是就地补一个 `some(id)` 判断：
+ * 「一条会话进入列表」的合并语义只该有一份，两份实现迟早漂移，而漂移的那一半
+ * 是「列表和真实状态不一致」这类极难复现的 bug。
+ */
 export const addSessionAtom = atom(
   null,
   (get, set, summary: SessionSummary) => {
-    const arr = [...get(sessionsAtom), summary];
-    set(sessionsAtom, sortSessions(arr));
+    set(
+      sessionsAtom,
+      applySessionListEventToArray(get(sessionsAtom), {
+        type: "created",
+        session: summary,
+      }),
+    );
   },
 );
 
