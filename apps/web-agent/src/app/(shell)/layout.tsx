@@ -10,6 +10,7 @@ import {
 import { ArtifactSplitPane } from "@/components/artifact/artifact-split-pane";
 import { DragRegion } from "@/components/drag-region";
 import { QuickAssistantFab } from "@/components/im/quick-assistant-fab";
+import { GlobalAlertHost } from "@/components/shell/global-alert-host";
 import { SidebarSlotContext } from "@/components/shell/sidebar-slot-context";
 import { WorkspaceSidebar } from "@/components/shell/workspace-sidebar";
 import { useGlobalEvents } from "@/hooks/use-global-events";
@@ -70,6 +71,7 @@ function ShellInner({ children }: { children: ReactNode }) {
           <QuickAssistantFab />
         </div>
       </div>
+      <GlobalAlertHost />
     </main>
   );
 }

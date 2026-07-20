@@ -2,7 +2,9 @@
   "common": {
     "switchToLightTheme": "Switch to light theme",
     "switchToDarkTheme": "Switch to dark theme",
-    "close": "Close"
+    "close": "Close",
+    "alertTitle": "Notice",
+    "gotIt": "Got it"
   },
   "login": {
     "title": "Sign in",

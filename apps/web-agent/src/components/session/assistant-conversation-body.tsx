@@ -10,6 +10,7 @@ import { useTranslations } from "next-intl";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { previewArtifactAtom } from "@/atoms/assistant-panel";
 import { currentUserAtom } from "@/atoms/auth";
+import { globalAlertMessageAtom } from "@/atoms/global-alert";
 import { conversationsAtom } from "@/atoms/im";
 import {
   loadRemoteSessionsAtom,
@@ -83,6 +84,7 @@ export function AssistantConversationBody({
   const tChat = useTranslations("chatInput");
   const [draft, setDraft] = useState("");
   const chatInputRef = useRef<ChatInputHandle>(null);
+  const setGlobalAlertMessage = useSetAtom(globalAlertMessageAtom);
 
   // 输入框 placeholder：挂载后从同一组文案随机选一条（与首页一致，避免单调）
   // sync-locales 把数组 flatten 成 numeric-key 对象，toI18nList 兜底还原列表
@@ -227,7 +229,7 @@ export function AssistantConversationBody({
     if (accepted) return;
     setDraft(text);
     chatInputRef.current?.focus(text);
-    window.alert(t("cannotSendWhileRunning"));
+    setGlobalAlertMessage(t("cannotSendWhileRunning"));
   };
 
   /**
@@ -252,10 +254,10 @@ export function AssistantConversationBody({
       if (status === 404) {
         stream.apply((prev) => prev.filter((m) => m.id !== pendingId));
       } else if (status === 409) {
-        window.alert(t("cannotDeleteWhileProcessing"));
+        setGlobalAlertMessage(t("cannotDeleteWhileProcessing"));
       } else {
         console.error("删除 pending 失败", err);
-        window.alert(t("networkError"));
+        setGlobalAlertMessage(t("networkError"));
       }
     }
   };
@@ -285,10 +287,10 @@ export function AssistantConversationBody({
       if (status === 404) {
         stream.apply((prev) => prev.filter((m) => m.id !== pendingId));
       } else if (status === 409) {
-        window.alert(t("cannotEditWhileProcessing"));
+        setGlobalAlertMessage(t("cannotEditWhileProcessing"));
       } else {
         console.error("编辑 pending 失败", err);
-        window.alert(t("networkError"));
+        setGlobalAlertMessage(t("networkError"));
       }
     }
   };

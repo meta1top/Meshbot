@@ -2,7 +2,9 @@
   "common": {
     "switchToLightTheme": "切换到浅色",
     "switchToDarkTheme": "切换到深色",
-    "close": "关闭"
+    "close": "关闭",
+    "alertTitle": "提示",
+    "gotIt": "知道了"
   },
   "login": {
     "title": "登录",

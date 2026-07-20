@@ -34,6 +34,7 @@ import { useEffect, useRef } from "react";
 import { activeAssistantSessionAtom } from "@/atoms/active-session";
 import { quickAssistantNameAtom } from "@/atoms/assistant-panel";
 import { applyDevicePresenceAtom } from "@/atoms/devices";
+import { globalAlertMessageAtom } from "@/atoms/global-alert";
 import {
   applyIncomingMessageAtom,
   markConversationReadAtom,
@@ -170,6 +171,7 @@ export function useGlobalEvents(): void {
   const applyIncomingMessage = useSetAtom(applyIncomingMessageAtom);
   const setPresence = useSetAtom(setPresenceAtom);
   const applyDevicePresence = useSetAtom(applyDevicePresenceAtom);
+  const setGlobalAlertMessage = useSetAtom(globalAlertMessageAtom);
   const upsertConversation = useSetAtom(upsertConversationAtom);
   const removeConversation = useSetAtom(removeConversationAtom);
   const markConversationRead = useSetAtom(markConversationReadAtom);
@@ -234,7 +236,7 @@ export function useGlobalEvents(): void {
             selfDeletingIds: selfDeletingIdsRef.current,
           })
         ) {
-          window.alert(t("sessionDeletedElsewhere"));
+          setGlobalAlertMessage(t("sessionDeletedElsewhere"));
           router.push("/assistant");
         }
       },
@@ -268,7 +270,7 @@ export function useGlobalEvents(): void {
             active: activeSessionRef.current,
           })
         ) {
-          window.alert(t("sessionDeletedElsewhere"));
+          setGlobalAlertMessage(t("sessionDeletedElsewhere"));
           router.push("/assistant");
         }
       },
@@ -304,6 +306,7 @@ export function useGlobalEvents(): void {
     applyIncomingMessage,
     setPresence,
     applyDevicePresence,
+    setGlobalAlertMessage,
     upsertConversation,
     removeConversation,
     markConversationRead,

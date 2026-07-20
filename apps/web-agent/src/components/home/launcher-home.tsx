@@ -5,6 +5,7 @@ import { useSetAtom } from "jotai";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
+import { globalAlertMessageAtom } from "@/atoms/global-alert";
 import { addSessionAtom } from "@/atoms/sessions";
 import { ComposerActions } from "@/components/common/composer-actions";
 import { ModelSelect } from "@/components/common/model-select";
@@ -25,6 +26,7 @@ export function LauncherHome() {
   const tChat = useTranslations("chatInput");
   const router = useRouter();
   const addSession = useSetAtom(addSessionAtom);
+  const setGlobalAlertMessage = useSetAtom(globalAlertMessageAtom);
   const [draft, setDraft] = useState("");
   /** 起手台选中的模型配置 id；null = 默认（首个 enabled）。 */
   const [modelConfigId, setModelConfigId] = useState<string | null>(null);
@@ -112,7 +114,7 @@ export function LauncherHome() {
       // ChatInput 的 onSend 无条件清空编辑器，失败时不回填 + 不提示的话，
       // 用户打的字就凭空消失且零反馈（远程首轮要等满 10s 轮询才落到这里）。
       setDraft(text);
-      window.alert(
+      setGlobalAlertMessage(
         err instanceof Error && err.message === REMOTE_CREATE_TIMEOUT
           ? t("remoteCreateTimeout")
           : t("sendFailed"),
