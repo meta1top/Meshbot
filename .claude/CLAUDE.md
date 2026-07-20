@@ -114,6 +114,7 @@ packages/
 - 数据库列名 snake_case（项目配置 `SnakeNamingStrategy`）
 - 公开方法包含中文 JSDoc
 - 禁止在 `if` 前一行放置注释（Biome 格式化会破坏结构）
+- **禁用原生 `window.alert` / `confirm`**：一律走 `packages/design/src/components/ui/` 的 shadcn 组件（`alert-dialog.tsx` / `alert.tsx`），惯例见 `apps/web-agent/src/components/agent/agent-editor-sheet.tsx`。原生弹窗阻塞、样式不受控、在 Electron 壳里尤其突兀。hook 里无法直接渲染时用 atom 存提示态 + shell layout 挂宿主组件
 - 不新建产品需求 / PRD 文档；设计决策记在对话或 commit 中。superpowers 流程产物（brainstorm 设计 spec、实施 plan）可写入 `docs/superpowers/`，属流程附件、不算 PRD
 
 ## 开发工作流
@@ -123,6 +124,33 @@ packages/
 3. **编码** —— TDD 优先（先写失败的单测）
 4. **静态围栏** —— commit 前 `pnpm check`
 5. **commit** —— 中文提交信息，遵循 conventional commits 风格
+
+## 按风险分档投入（速度与质量平衡）
+
+不是所有改动都值得走完整的 review + 变异验证。**分档判据是「这个改动是否可能只坏一半」**
+——那类 bug 本地全对、远端全错，单测和 typecheck 都拦不住（真实案例：重复
+`EventEmitterModule.forRoot()` 导致两个 EventEmitter2，`@OnEvent` 两边都绑而运行时
+`.on()` 只绑一个，本地 UI 全正常、跨设备镜像永远收不到工具事件，查了四轮）。
+
+| 档 | 流程 | 适用 |
+|----|------|------|
+| **高** | 实施 → 独立 review → 变异验证 → 修 → 复审 | 跨设备协议 / wire format、并发与时序、seq 与去重、鉴权与归属校验、带生命周期的状态机 |
+| **中** | 实施 + 只对核心不变量做变异 + 抽查，不另派 reviewer | 单进程业务逻辑、前端 reducer、REST/DTO |
+| **低** | 直接做，测试 + 围栏过了就提交 | 文案 / i18n / 注释、纯样式布局、重命名挪文件、加兜底 label |
+
+小修**攒 3–5 个走一次 review**，不要一修一轮。用户的真机验收是质量体系的一环，
+不必全靠内部往返兜住。
+
+### 不因提速而放松的底线
+
+每条都对应本仓真实事故：
+
+1. **读完整输出，别信退出码** —— turbo / `tail` / `grep` 会掩盖真实失败
+2. **有未提交改动时绝不 `git checkout -- <文件>`** —— 会把未提交的修复一起还原
+3. **变异后先确认「变异真的落地」**（打印改动后内容）再看测试红绿 —— 正则没改到文件却当成"测试拦不住"
+4. **还原后读文件实际内容确认** —— `cd` 之后用相对路径 `cp`，还原会静默失败
+5. **改 DI / provider 必须真 boot**（`timeout 60 node dist/main.js`）—— typecheck / 单测 / 围栏全漏 DI 崩溃
+6. **机制不明时先埋点取证再改代码**；**交付某能力时必须自查「谁来调用它」** —— 后者是 plan 三次漏写调用方（能力建好却在 UI 上不可达）的根源
 
 ## 表归属
 
