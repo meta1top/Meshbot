@@ -76,13 +76,25 @@ export async function interruptRemoteRun(
 }
 
 /**
- * L3 Phase B：对远程 Agent（其宿主设备 B）上指定 streamId 的 confirm 型 HITL 卡片下发决策
- * （发送 / 取消，可带编辑后的 content），经 A 端点转发到 B 侧同一次 run。
+ * confirm/answer 的寻址：`streamId`（自己发起的 run）与 `watchId`（Task 16b：
+ * 观察者经 `watchSession` 登记的会话级观察通道，应答别人发起的 run 挂起的
+ * HITL 关卡）二选一——与后端 `RemoteConfirmSchema`/`RemoteAnswerSchema` 的
+ * refine 对齐，调用方（`session-transport.ts` 的 `resolveControlAddress`）
+ * 负责保证恰好传一个。
+ */
+export interface RemoteControlAddress {
+  streamId?: string;
+  watchId?: string;
+}
+
+/**
+ * L3 Phase B：对远程 Agent（其宿主设备 B）上指定 streamId/watchId 的 confirm 型
+ * HITL 卡片下发决策（发送 / 取消，可带编辑后的 content），经 A 端点转发到 B
+ * 侧同一次 run。
  */
 export async function confirmRemote(
   agentId: string,
-  body: {
-    streamId: string;
+  body: RemoteControlAddress & {
     sessionId: string;
     toolCallId: string;
     decision: "send" | "cancel";
@@ -97,13 +109,12 @@ export async function confirmRemote(
 }
 
 /**
- * L3 Phase B：对远程 Agent（其宿主设备 B）上指定 streamId 的 ask_question 型 HITL 卡片
- * 下发用户作答，经 A 端点转发到 B 侧同一次 run。
+ * L3 Phase B：对远程 Agent（其宿主设备 B）上指定 streamId/watchId 的 ask_question
+ * 型 HITL 卡片下发用户作答，经 A 端点转发到 B 侧同一次 run。
  */
 export async function answerRemote(
   agentId: string,
-  body: {
-    streamId: string;
+  body: RemoteControlAddress & {
     sessionId: string;
     toolCallId: string;
     answers: { selected: string[]; other?: string }[];

@@ -191,6 +191,18 @@ export function createRemoteSessionTransport(
   /** watchId → 句柄，**受理前**的通道（`watch_accepted` 到达前的窗口期）。 */
   const pendingWatches = new Map<string, WatchHandle>();
   /**
+   * sessionId → 该会话当前 session 级 watch 的句柄（Task 16b：`confirm`/
+   * `answer` 无 streamId 时回退取这里的 watchId，供观察者应答别人发起的
+   * run 挂起的 HITL 关卡）。只登记 `scope==="session"` 的句柄——`watchAgent`
+   * 没有单一 sessionId，且 Agent 级观察通道协议层禁止承载 HITL 控制帧。
+   *
+   * 必须存句柄对象本身、不能只存 watchId 字符串快照：`handle.watchId` 会在
+   * 重连 / idle 自动重连时被 `startWatch` 原地覆写（同一个对象引用），读取
+   * 方在此查表后还要再读一次 `handle.watchId` 拿「当前」值，不能在这里缓存
+   * 一份可能过期的字符串（T12 review Finding 2 同款教训，这里是它的新用法）。
+   */
+  const sessionWatchHandles = new Map<string, WatchHandle>();
+  /**
    * 尚未真正发起（`socket.connected===false` 时调用 `watchSession`）的句柄——
    * 真正的 `emit` 延后到下一次 `"connect"` 触发时统一发起（见 `startWatch`
    * 顶部注释 / T12 review Finding 3）。
@@ -394,6 +406,38 @@ export function createRemoteSessionTransport(
     params: DeviceQueryRequestInput["params"],
   ) => remoteQuery(agentId, kind, params);
 
+  /**
+   * `confirm`/`answer` 的寻址解析（Task 16b）：有 streamId（自己发起的 run）
+   * 优先用它，行为不变；没有 streamId 时回退该会话当前的 session 级
+   * watchId——观察者据此应答别人发起的 run 挂起的 HITL 关卡（T16 双寻址，
+   * 协议层 `AgentRunControlSchema` 已允许 streamId/watchId 二选一）。两者
+   * 都没有才抛错，**错误文案按场景区分**：
+   * - 从未对该 sessionId 发起过 `watchSession`（`sessionWatchHandles` 查无
+   *   记录）——多半是自己发起的 run 还没拿到 streamId（如刚创建会话，首帧
+   *   尚未回报），沿用原文案；
+   * - 已经发起过 `watchSession` 但 REST/socket 往返还没受理（`handle.watchId`
+   *   仍是初始空串，或 handle 已 `stopped`）——是「观察通道还没建好」，与
+   *   上面完全是两码事，共用一句话会让排查南辕北辙。
+   *
+   * 读的是 `handle.watchId`「当前」值，不是调用 `watchSession` 那一刻的常量
+   * ——`startWatch` 会在重连 / idle 自动重连时原地覆写同一个 handle 对象的
+   * 这个字段，这里每次都重新查表 + 重新读字段，天然不会捕获旧值。
+   */
+  const resolveControlAddress = (
+    streamId: string | null,
+    sessionId: string,
+  ): { streamId?: string; watchId?: string } => {
+    if (streamId) return { streamId };
+    const handle = sessionWatchHandles.get(sessionId);
+    if (!handle || handle.stopped) {
+      throw new Error("远程会话 streamId 未就绪，请稍候重试");
+    }
+    if (!handle.watchId) {
+      throw new Error("观察通道正在建立中，请稍候重试");
+    }
+    return { watchId: handle.watchId };
+  };
+
   const control = (body: AgentRunControlInput) =>
     socket.emit(IM_WS_EVENTS.agentRunControl, body);
 
@@ -441,6 +485,10 @@ export function createRemoteSessionTransport(
     },
 
     async interrupt(streamId, sessionId) {
+      // 中断**不**回退 watchId（T16 三处独立禁止：schema refine + 云端 +
+      // 设备侧）——打断是破坏性操作、无从仲裁，观察者不可中断别人发起的
+      // run，见协议 `AgentRunControlSchema` 的第二条 refine 与本文件顶部
+      // 契约层说明。保持原样：无 streamId 只 warn + no-op，不抛错。
       if (!streamId) {
         console.warn(
           "远程会话当前无可用 streamId，无法中断（可能是刷新/直接进入一个仍在跑的远程会话）",
@@ -456,11 +504,8 @@ export function createRemoteSessionTransport(
     },
 
     async confirm(streamId, sessionId, toolCallId, decision, content) {
-      if (!streamId) {
-        throw new Error("远程会话 streamId 未就绪，请稍候重试");
-      }
       control({
-        streamId,
+        ...resolveControlAddress(streamId, sessionId),
         targetAgentId: agentId,
         sessionId,
         kind: "confirm",
@@ -471,11 +516,8 @@ export function createRemoteSessionTransport(
     },
 
     async answer(streamId, sessionId, toolCallId, answers) {
-      if (!streamId) {
-        throw new Error("远程会话 streamId 未就绪，请稍候重试");
-      }
       control({
-        streamId,
+        ...resolveControlAddress(streamId, sessionId),
         targetAgentId: agentId,
         sessionId,
         kind: "answer",
@@ -545,8 +587,20 @@ export function createRemoteSessionTransport(
         stopped: false,
         scope: "session",
       };
+      // 登记进 sessionId → handle 索引（Task 16b），供 confirm/answer 回退
+      // 取「当前」watchId 用（见 resolveControlAddress）。同一 sessionId 若
+      // 被并发 watch 两次（如主视图 + IM dock 同时打开同一会话），后一次
+      // 覆盖前一次——unwatch 时只在自己仍是当前登记者时才摘除索引，避免
+      // 先卸载的一方误删后一次的登记（各自的 stopWatch 仍会正常执行，互不
+      // 影响真正的通道生命周期）。
+      sessionWatchHandles.set(sessionId, handle);
       startWatch(handle);
-      return () => stopWatch(handle);
+      return () => {
+        if (sessionWatchHandles.get(sessionId) === handle) {
+          sessionWatchHandles.delete(sessionId);
+        }
+        stopWatch(handle);
+      };
     },
 
     /**
@@ -602,6 +656,7 @@ export function createRemoteSessionTransport(
       activeWatches.clear();
       pendingWatches.clear();
       deferredWatches.clear();
+      sessionWatchHandles.clear();
       socket.off(IM_WS_EVENTS.agentWatchAccepted, onWatchAccepted);
       socket.off("connect", onReconnect);
       runs.reset();

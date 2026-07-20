@@ -159,7 +159,12 @@ export class RemoteAgentSessionController {
     return { ok: true };
   }
 
-  /** 远程会话：提交工具确认（im_send / drive_share / drive_create_share）。 */
+  /**
+   * 远程会话：提交工具确认（im_send / drive_share / drive_create_share）。
+   * `dto.streamId`/`dto.watchId` 二选一（Task 16b：观察者用 watchId 应答别人
+   * 发起的 run），原样透传给 `RemoteRunService.sendControl`——它接的
+   * `AgentRunControlInput` 本就是双寻址类型，不需要额外分支。
+   */
   @Post("remote-agents/:agentId/run/confirm")
   @ApiOperation({ summary: "远程工具确认" })
   confirm(
@@ -168,6 +173,7 @@ export class RemoteAgentSessionController {
   ): { ok: true } {
     this.remoteRun.sendControl(this.account.getOrThrow(), {
       streamId: dto.streamId,
+      watchId: dto.watchId,
       targetAgentId: agentId,
       sessionId: dto.sessionId,
       kind: "confirm",
@@ -178,7 +184,10 @@ export class RemoteAgentSessionController {
     return { ok: true };
   }
 
-  /** 远程会话：提交 ask_question 回答。 */
+  /**
+   * 远程会话：提交 ask_question 回答。`dto.streamId`/`dto.watchId` 二选一，
+   * 理由同 {@link RemoteAgentSessionController.confirm}。
+   */
   @Post("remote-agents/:agentId/run/answer")
   @ApiOperation({ summary: "远程提问回答" })
   answer(
@@ -187,6 +196,7 @@ export class RemoteAgentSessionController {
   ): { ok: true } {
     this.remoteRun.sendControl(this.account.getOrThrow(), {
       streamId: dto.streamId,
+      watchId: dto.watchId,
       targetAgentId: agentId,
       sessionId: dto.sessionId,
       kind: "answer",

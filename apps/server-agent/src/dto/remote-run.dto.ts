@@ -33,14 +33,29 @@ export class RemoteInterruptDto extends createI18nZodDto(
 ) {}
 export interface RemoteInterruptDto extends RemoteInterruptInput {}
 
-/** POST /remote-agents/:agentId/run/confirm 请求体：提交工具确认（im_send / drive_share / drive_create_share）。 */
-export const RemoteConfirmSchema = z.object({
-  streamId: z.string().min(1),
-  sessionId: z.string().min(1),
-  toolCallId: z.string().min(1),
-  decision: z.enum(["send", "cancel"]),
-  content: z.string().optional(),
-});
+/**
+ * POST /remote-agents/:agentId/run/confirm 请求体：提交工具确认（im_send /
+ * drive_share / drive_create_share）。
+ *
+ * `streamId`/`watchId` 二选一必填（Task 16b：观察者经本机 server-agent 代理
+ * 应答别人发起的 run 挂起的 HITL 关卡，本地没有 streamId，回退传 watchId——
+ * 即 `POST .../watch` 签发的 session 级观察通道 id）。镜像 relay 线路层
+ * `AgentRunControlSchema` 的双寻址约束（libs/types/src/im/im.schema.ts），
+ * 这里就地重复一份是因为本文件顶部注释已明确的理由：A 侧 HTTP 请求体是
+ * 独立定义，不直接复用那份线路层 schema。
+ */
+export const RemoteConfirmSchema = z
+  .object({
+    streamId: z.string().min(1).optional(),
+    watchId: z.string().min(1).optional(),
+    sessionId: z.string().min(1),
+    toolCallId: z.string().min(1),
+    decision: z.enum(["send", "cancel"]),
+    content: z.string().optional(),
+  })
+  .refine((v) => !!v.streamId !== !!v.watchId, {
+    message: "streamId 与 watchId 二选一必填",
+  });
 export type RemoteConfirmInput = z.infer<typeof RemoteConfirmSchema>;
 
 // biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
@@ -57,13 +72,22 @@ export const RemoteAnswerItemSchema = z.object({
   other: z.string().optional(),
 });
 
-/** POST /remote-agents/:agentId/run/answer 请求体：提交 ask_question 回答。 */
-export const RemoteAnswerSchema = z.object({
-  streamId: z.string().min(1),
-  sessionId: z.string().min(1),
-  toolCallId: z.string().min(1),
-  answers: z.array(RemoteAnswerItemSchema),
-});
+/**
+ * POST /remote-agents/:agentId/run/answer 请求体：提交 ask_question 回答。
+ *
+ * `streamId`/`watchId` 二选一必填（Task 16b，理由同 {@link RemoteConfirmSchema}）。
+ */
+export const RemoteAnswerSchema = z
+  .object({
+    streamId: z.string().min(1).optional(),
+    watchId: z.string().min(1).optional(),
+    sessionId: z.string().min(1),
+    toolCallId: z.string().min(1),
+    answers: z.array(RemoteAnswerItemSchema),
+  })
+  .refine((v) => !!v.streamId !== !!v.watchId, {
+    message: "streamId 与 watchId 二选一必填",
+  });
 export type RemoteAnswerInput = z.infer<typeof RemoteAnswerSchema>;
 
 // biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields

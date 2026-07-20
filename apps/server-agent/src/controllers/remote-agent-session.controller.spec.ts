@@ -71,6 +71,46 @@ describe("RemoteAgentSessionController（confirm/answer/runs）", () => {
     });
   });
 
+  it("run/confirm 带 watchId（无 streamId，Task 16b 观察者应答）→ sendControl 原样透传 watchId", () => {
+    const { controller, remoteRun } = makeController();
+    controller.confirm("agentB", {
+      watchId: "w1",
+      sessionId: "sess1",
+      toolCallId: "tc1",
+      decision: "cancel",
+    } as never);
+    expect(remoteRun.sendControl).toHaveBeenCalledWith("u1", {
+      streamId: undefined,
+      watchId: "w1",
+      targetAgentId: "agentB",
+      sessionId: "sess1",
+      kind: "confirm",
+      toolCallId: "tc1",
+      decision: "cancel",
+      content: undefined,
+    });
+  });
+
+  it("run/answer 带 watchId（无 streamId，Task 16b 观察者应答）→ sendControl 原样透传 watchId", () => {
+    const { controller, remoteRun } = makeController();
+    const answers = [{ selected: ["B"] }];
+    controller.answer("agentB", {
+      watchId: "w1",
+      sessionId: "sess1",
+      toolCallId: "tc1",
+      answers,
+    } as never);
+    expect(remoteRun.sendControl).toHaveBeenCalledWith("u1", {
+      streamId: undefined,
+      watchId: "w1",
+      targetAgentId: "agentB",
+      sessionId: "sess1",
+      kind: "answer",
+      toolCallId: "tc1",
+      answers,
+    });
+  });
+
   it("GET runs?streamId → findRunByStreamId", () => {
     const { controller, remoteRun } = makeController();
     (remoteRun.findRunByStreamId as jest.Mock).mockReturnValue({

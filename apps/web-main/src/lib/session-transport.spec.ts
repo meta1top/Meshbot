@@ -567,3 +567,160 @@ describe("web-main：Agent 级 watch", () => {
     ]);
   });
 });
+
+/**
+ * Task 16b：`confirm`/`answer` 无 streamId 时回退取该会话当前的 session 级
+ * watchId——T16 建完的观察者应答 HITL 协议链路此前在前端从来不可达（`confirm`/
+ * `answer` 一进门就因 streamId 缺失而抛错），这组用例验证回退真的接上了。
+ */
+describe("web-main 远程 transport：confirm/answer watchId 回退（Task 16b）", () => {
+  /** 取最近一次 `agent.run.control` 发出的帧。 */
+  function lastControlFrame(): Record<string, unknown> {
+    const frames = fakeSocket.emitted.filter(
+      ([e]) => e === IM_WS_EVENTS.agentRunControl,
+    );
+    const last = frames[frames.length - 1];
+    if (!last) throw new Error("未找到 agent.run.control 发出记录");
+    return last[1] as Record<string, unknown>;
+  }
+
+  it("观察者（无 streamId、有 session 级 watchId）调 confirm → 控制帧带 watchId、不带 streamId", async () => {
+    const t = createRemoteSessionTransport("cloud-a1");
+    t.watchSession!("s1");
+    const watchId = watchIdOfLastStart();
+
+    await t.confirm(null, "s1", "tc1", "send", "编辑后的内容");
+
+    const frame = lastControlFrame();
+    expect(frame).toMatchObject({
+      watchId,
+      targetAgentId: "cloud-a1",
+      sessionId: "s1",
+      kind: "confirm",
+      toolCallId: "tc1",
+      decision: "send",
+      content: "编辑后的内容",
+    });
+    expect(frame).not.toHaveProperty("streamId");
+  });
+
+  it("发起方（有 streamId）调 confirm → 控制帧带 streamId、不带 watchId（不能两个都带）", async () => {
+    const t = createRemoteSessionTransport("cloud-a1");
+    // 打开会话即 session-watch（spec D5），发起方视图同样会调用 watchSession——
+    // 必须验证「有 streamId 时优先用它」，而不是恰好没有 watchId 才凑巧成立。
+    t.watchSession!("s1");
+    watchIdOfLastStart();
+
+    await t.confirm("st1", "s1", "tc1", "send", undefined);
+
+    const frame = lastControlFrame();
+    expect(frame).toMatchObject({
+      streamId: "st1",
+      targetAgentId: "cloud-a1",
+      sessionId: "s1",
+      kind: "confirm",
+    });
+    expect(frame).not.toHaveProperty("watchId");
+  });
+
+  it("answer：观察者用 watchId，发起方用 streamId，二者互斥", async () => {
+    const t = createRemoteSessionTransport("cloud-a1");
+    t.watchSession!("s1");
+    const watchId = watchIdOfLastStart();
+    const answers = [{ selected: ["A"], other: "o" }];
+
+    await t.answer(null, "s1", "tc1", answers);
+    const observed = lastControlFrame();
+    expect(observed).toMatchObject({
+      watchId,
+      sessionId: "s1",
+      kind: "answer",
+      toolCallId: "tc1",
+      answers,
+    });
+    expect(observed).not.toHaveProperty("streamId");
+
+    await t.answer("st1", "s1", "tc1", answers);
+    const initiated = lastControlFrame();
+    expect(initiated).toMatchObject({ streamId: "st1", kind: "answer" });
+    expect(initiated).not.toHaveProperty("watchId");
+  });
+
+  it("两者都没有 → 抛错；从未 watch 过该会话（文案对应『自己发起的 run 还没就绪』）", async () => {
+    const t = createRemoteSessionTransport("cloud-a1");
+    await expect(t.confirm(null, "s1", "tc1", "send")).rejects.toThrow(
+      "远程会话 streamId 未就绪，请稍候重试",
+    );
+  });
+
+  it("两者都没有 → 抛错；已发起 watch 但通道还没建好（文案对应『观察通道还没建好』，与上一条不同）", async () => {
+    fakeSocket.connected = false; // 硬刷新直接进入会话，socket 还没连上——watchSession 只登记进 deferredWatches，watchId 仍是空串
+    const t = createRemoteSessionTransport("cloud-a1");
+    t.watchSession!("s1");
+
+    await expect(t.confirm(null, "s1", "tc1", "send")).rejects.toThrow(
+      "观察通道正在建立中，请稍候重试",
+    );
+  });
+
+  it("重连换新 watchId 后再作答 → 用的是新 watchId，不是重连前捕获的旧值", async () => {
+    const t = createRemoteSessionTransport("cloud-a1");
+    t.watchSession!("s1");
+    const w1 = watchIdOfLastStart();
+    fakeSocket.fire(IM_WS_EVENTS.agentWatchAccepted, {
+      watchId: w1,
+      ok: true,
+      inflight: null,
+    });
+
+    // 重连前先真的调用一次 confirm——探针：证明此刻确实读到 w1，避免「resolveControlAddress
+    // 只在重连后才第一次被调用」这种巧合让缓存类变异也能蒙混过关（本仓刚踩过
+    // 「变异在某场景下等价于原实现、测试没红」，见任务简报「已知的坑」）。
+    await t.confirm(null, "s1", "tc1", "send");
+    expect(lastControlFrame().watchId).toBe(w1);
+
+    fakeSocket.fire("connect"); // 断线重连：句柄原地换发新 watchId
+    const w2 = watchIdOfLastStart();
+    expect(w2).not.toBe(w1);
+
+    // 重连后再调一次：必须读到「当前」的 w2，而不是重连前那次调用可能缓存下的 w1。
+    await t.confirm(null, "s1", "tc1", "send");
+    const frame = lastControlFrame();
+    expect(frame.watchId).toBe(w2);
+    expect(frame.watchId).not.toBe(w1);
+  });
+
+  it("answer：重连换新 watchId 后再作答 → 用的是新 watchId", async () => {
+    const t = createRemoteSessionTransport("cloud-a1");
+    t.watchSession!("s1");
+    const w1 = watchIdOfLastStart();
+
+    // 重连前探针：证明此刻确实读到 w1（理由同上一条 confirm 用例）。
+    await t.answer(null, "s1", "tc1", [{ selected: ["A"] }]);
+    expect(lastControlFrame().watchId).toBe(w1);
+
+    fakeSocket.fire("connect");
+    const w2 = watchIdOfLastStart();
+    expect(w2).not.toBe(w1);
+
+    await t.answer(null, "s1", "tc1", [{ selected: ["A"] }]);
+    const frame = lastControlFrame();
+    expect(frame.watchId).toBe(w2);
+    expect(frame.watchId).not.toBe(w1);
+  });
+
+  it("interrupt 不回退 watchId：无 streamId 时仍是 warn + no-op，不发出带 watchId 的中断帧（T16 契约层三处独立禁止之一）", async () => {
+    const t = createRemoteSessionTransport("cloud-a1");
+    t.watchSession!("s1");
+    watchIdOfLastStart();
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+    await t.interrupt(null, "s1");
+
+    expect(
+      fakeSocket.emitted.filter(([e]) => e === IM_WS_EVENTS.agentRunControl),
+    ).toHaveLength(0);
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+});

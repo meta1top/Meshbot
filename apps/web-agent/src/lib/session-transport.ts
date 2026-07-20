@@ -131,6 +131,13 @@ function startAgentWatch(
   agentId: string,
   scope: "agent" | "session",
   sessionId?: string,
+  /**
+   * watchId 落地/释放时的回调（Task 16b：`createRemoteSessionTransport` 用它
+   * 把 session 级 watchId 同步进 `sessionWatchIds` 表，供 `confirm`/`answer`
+   * 回退取值）。REST 返回前为未调用（外层表里仍是初始登记的 `null`）；
+   * `unwatch()` 时若已经拿到过 watchId，回调一次 `null` 释放登记。
+   */
+  onWatchId?: (watchId: string | null) => void,
 ): () => void {
   let watchId: string | null = null;
   let stopped = false;
@@ -143,6 +150,7 @@ function startAgentWatch(
         return;
       }
       watchId = res.watchId;
+      onWatchId?.(watchId);
     })
     .catch((e) => {
       console.warn(`观察通道建立失败（agentId=${agentId} scope=${scope}）`, e);
@@ -152,6 +160,7 @@ function startAgentWatch(
     if (watchId) {
       unwatchRemoteAgent(agentId, watchId).catch(() => {});
       watchId = null;
+      onWatchId?.(null);
     }
   };
 }
@@ -263,6 +272,51 @@ export function createLocalSessionTransport(): SessionTransport {
 export function createRemoteSessionTransport(
   agentId: string,
 ): SessionTransport {
+  /** 单路 session 级观察通道的可变句柄——`watchId` 字段被 `onWatchId` 回调原地
+   * 覆写（REST 落地 / unwatch 释放），`resolveControlAddress` 每次现读这个
+   * 字段，天然拿到「当前」值。 */
+  interface SessionWatchEntry {
+    watchId: string | null;
+  }
+
+  /**
+   * sessionId → 当前 session 级观察通道的句柄（Task 16b）。`watchSession`
+   * 调用时先登记一个 `watchId:null` 的句柄（REST 往返未完成的窗口期），
+   * `startAgentWatch` 的 `onWatchId` 回调随后原地覆写该句柄的字段——
+   * `confirm`/`answer` 回退取 watchId 必须每次现查这张表 + 现读句柄字段，
+   * 不能捕获 `watchSession()` 调用瞬间的局部变量：REST 是异步的，观察者点
+   * 确认这一刻 watchId 可能还没落地。
+   *
+   * 与 web-main 不同，本端当前实现里 REST 签发的 watchId 在 relay 断线重连
+   * 时不换新（`RemoteWatchService.onRelayConnected` 原地复用同一个
+   * watchId 重新上行 `agent.watch.start`，见该文件），但仍然经句柄间接读取
+   * 「当前」值，不假设它这端不会变——保持与 web-main 同一读取纪律，避免
+   * 未来该端实现变化（如补齐 idle 自动重连换新 id）时又要重新踩一次 T12
+   * review Finding 2 的坑。
+   */
+  const sessionWatchEntries = new Map<string, SessionWatchEntry>();
+
+  /**
+   * `confirm`/`answer` 的寻址解析（Task 16b，逐字义同 web-main 同名函数）：
+   * 有 streamId 优先用它；没有则回退该会话当前的 session 级 watchId；都没有
+   * 才抛错，错误文案区分「从未发起过观察」与「观察通道正在建立中」两种
+   * 完全不同的排查线索。
+   */
+  const resolveControlAddress = (
+    streamId: string | null,
+    sessionId: string,
+  ): { streamId?: string; watchId?: string } => {
+    if (streamId) return { streamId };
+    const entry = sessionWatchEntries.get(sessionId);
+    if (!entry) {
+      throw new Error("远程会话 streamId 未就绪，请稍候重试");
+    }
+    if (!entry.watchId) {
+      throw new Error("观察通道正在建立中，请稍候重试");
+    }
+    return { watchId: entry.watchId };
+  };
+
   return {
     capabilities: { localRun: false },
 
@@ -280,6 +334,9 @@ export function createRemoteSessionTransport(
     },
 
     async interrupt(streamId, sessionId) {
+      // 中断**不**回退 watchId（T16 三处独立禁止，见 web-main 同名方法注释与
+      // 本文件顶部契约层说明）：打断是破坏性操作、无从仲裁，观察者不可中断
+      // 别人发起的 run。保持原样：无 streamId 只 warn + no-op，不抛错。
       if (!streamId) {
         console.warn(
           "远程会话当前无可用 streamId，无法中断（可能是刷新/直接进入一个仍在跑的远程会话）",
@@ -290,11 +347,8 @@ export function createRemoteSessionTransport(
     },
 
     async confirm(streamId, sessionId, toolCallId, decision, content) {
-      if (!streamId) {
-        throw new Error("远程会话 streamId 未就绪，请稍候重试");
-      }
       await confirmRemote(agentId, {
-        streamId,
+        ...resolveControlAddress(streamId, sessionId),
         sessionId,
         toolCallId,
         decision,
@@ -303,11 +357,8 @@ export function createRemoteSessionTransport(
     },
 
     async answer(streamId, sessionId, toolCallId, answers) {
-      if (!streamId) {
-        throw new Error("远程会话 streamId 未就绪，请稍候重试");
-      }
       await answerRemote(agentId, {
-        streamId,
+        ...resolveControlAddress(streamId, sessionId),
         sessionId,
         toolCallId,
         answers,
@@ -344,7 +395,24 @@ export function createRemoteSessionTransport(
     },
 
     watchSession(sessionId) {
-      return startAgentWatch(agentId, "session", sessionId);
+      // 登记进 sessionId → 句柄索引（Task 16b），供 confirm/answer 回退取
+      // 「当前」watchId 用。先占位 watchId:null（REST 往返完成前的窗口期），
+      // startAgentWatch 的 onWatchId 回调随后原地覆写这个句柄的字段。
+      const entry: SessionWatchEntry = { watchId: null };
+      sessionWatchEntries.set(sessionId, entry);
+      const stop = startAgentWatch(agentId, "session", sessionId, (watchId) => {
+        entry.watchId = watchId;
+      });
+      return () => {
+        // 同 sessionId 若被并发 watch 两次（如主视图 + IM dock 同时打开同一
+        // 会话），后一次覆盖前一次登记——只在自己仍是当前登记者时才摘除
+        // 索引，避免先卸载的一方误删后一次的登记；各自的 stop() 仍会正常
+        // 执行，互不影响真正的通道生命周期。
+        if (sessionWatchEntries.get(sessionId) === entry) {
+          sessionWatchEntries.delete(sessionId);
+        }
+        stop();
+      };
     },
 
     // `onEvent` 有意不使用——见 `startAgentWatch` 文档：web-agent 的 Agent
