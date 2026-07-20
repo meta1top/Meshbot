@@ -1,12 +1,24 @@
 import type { SessionSummary } from "@meshbot/types-agent";
 import { createStore } from "jotai";
+import { deleteSession as deleteSessionApi } from "@/rest/session";
 import {
   addSessionAtom,
   applySessionListEventAtom,
   applySessionListEventToArray,
+  deleteSessionAtom,
   patchSessionStatus,
+  SELF_DELETE_GRACE_MS,
+  selfDeletingSessionIdsAtom,
   sessionsAtom,
 } from "./sessions";
+
+// deleteSessionAtom 唯一的网络依赖，mock 掉避免真实 REST 调用；deleteSessionAtom
+// 自身测试需要控制它的 resolve 时机（模拟「回声先到 / 后到」两种顺序）。
+jest.mock("@/rest/session", () => ({
+  deleteSession: jest.fn(),
+  listSessions: jest.fn(),
+  patchSession: jest.fn(),
+}));
 
 function makeSession(
   id: string,
@@ -145,5 +157,86 @@ describe("addSessionAtom（真机缺陷：本地建会话侧栏出现两条）",
         .map((x) => x.id)
         .sort(),
     ).toEqual(["a", "b"]);
+  });
+});
+
+describe("deleteSessionAtom / selfDeletingSessionIdsAtom（真机验收缺陷：删除会话后主内容区不跟随）", () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    (deleteSessionApi as jest.Mock).mockReset();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it("发起删除时同步标记 selfDeletingSessionIdsAtom——先于网络 I/O 完成（happens-before ws 回声）", async () => {
+    const store = createStore();
+    store.set(sessionsAtom, [makeSession("s1", "idle")]);
+    let resolveDelete: () => void = () => {};
+    (deleteSessionApi as jest.Mock).mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveDelete = resolve;
+      }),
+    );
+
+    const pending = store.set(deleteSessionAtom, "s1");
+    // 网络请求尚未 resolve，标记必须已经同步写入（不能等 REST 响应回来才标记，
+    // 否则 ws 回声先到时会被误判成「别的设备删的」，见 selfDeletingSessionIdsAtom 文档）。
+    expect(store.get(selfDeletingSessionIdsAtom).has("s1")).toBe(true);
+
+    resolveDelete();
+    await pending;
+    expect(store.get(sessionsAtom)).toHaveLength(0);
+  });
+
+  it(`宽限期（SELF_DELETE_GRACE_MS=${SELF_DELETE_GRACE_MS}ms）后自动清除标记`, async () => {
+    const store = createStore();
+    store.set(sessionsAtom, [makeSession("s1", "idle")]);
+    (deleteSessionApi as jest.Mock).mockResolvedValue(undefined);
+
+    await store.set(deleteSessionAtom, "s1");
+    expect(store.get(selfDeletingSessionIdsAtom).has("s1")).toBe(true);
+
+    jest.advanceTimersByTime(SELF_DELETE_GRACE_MS);
+    expect(store.get(selfDeletingSessionIdsAtom).has("s1")).toBe(false);
+  });
+
+  it("宽限期未到 → 标记仍在（宽限期不是「立即清」）", async () => {
+    const store = createStore();
+    store.set(sessionsAtom, [makeSession("s1", "idle")]);
+    (deleteSessionApi as jest.Mock).mockResolvedValue(undefined);
+
+    await store.set(deleteSessionAtom, "s1");
+    jest.advanceTimersByTime(SELF_DELETE_GRACE_MS - 1);
+    expect(store.get(selfDeletingSessionIdsAtom).has("s1")).toBe(true);
+  });
+
+  it("标记/清除只影响自己这条 id，不动集合里已有的其他标记", async () => {
+    const store = createStore();
+    store.set(sessionsAtom, [
+      makeSession("s1", "idle"),
+      makeSession("s2", "idle"),
+    ]);
+    store.set(selfDeletingSessionIdsAtom, new Set(["s2"]));
+    (deleteSessionApi as jest.Mock).mockResolvedValue(undefined);
+
+    await store.set(deleteSessionAtom, "s1");
+    expect(store.get(selfDeletingSessionIdsAtom)).toEqual(
+      new Set(["s2", "s1"]),
+    );
+
+    jest.advanceTimersByTime(SELF_DELETE_GRACE_MS);
+    expect(store.get(selfDeletingSessionIdsAtom)).toEqual(new Set(["s2"]));
+  });
+
+  it("id 不在列表里 → no-op：不调用删除接口、不标记 selfDeletingSessionIdsAtom", async () => {
+    const store = createStore();
+    store.set(sessionsAtom, [makeSession("s1", "idle")]);
+
+    await store.set(deleteSessionAtom, "不存在的会话");
+
+    expect(deleteSessionApi).not.toHaveBeenCalled();
+    expect(store.get(selfDeletingSessionIdsAtom).size).toBe(0);
   });
 });

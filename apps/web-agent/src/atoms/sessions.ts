@@ -111,6 +111,30 @@ export const renameSessionAtom = atom(
 );
 
 /**
+ * 本设备正在主动删除中的会话 id 集合（短暂宽限期）。
+ *
+ * 用途：「当前打开的会话被删除 → 提示 + 跳转」这条逻辑（`use-global-events.ts`
+ * 的 `onSessionListEvent`）需要分清「我自己删的」和「别的设备删的」——本设备
+ * 发起删除时，服务端广播的 `session.deleted` 会经 `ws/events` **回声**给自己
+ * （与 commit 79f0bd3c 修过的 `session.created` 双写同一根因：ws 是常驻连接，
+ * 回声可能先于、也可能晚于 REST 响应到达，两种顺序在真实网络里都发生过，不能
+ * 靠时序假设）。不区分的话，用户自己点删除也会弹出一句「该会话已在别处被
+ * 删除」的误导提示。
+ *
+ * `deleteSessionAtom` 发起删除时把 id 记进来，`SELF_DELETE_GRACE_MS` 后自动
+ * 清除；用定时器而非「REST 响应后立即清」，正是因为回声既可能早到也可能晚到，
+ * 精确对齐 REST 时序不可靠，宽限几秒钟才能同时兜住两种顺序（本机 ws 回环延迟
+ * 通常个位数毫秒，3s 绰绰有余，且这段宽限期不阻塞任何用户操作，过度保守没有
+ * 代价）。
+ */
+export const selfDeletingSessionIdsAtom = atom<ReadonlySet<string>>(
+  new Set<string>(),
+);
+
+/** {@link selfDeletingSessionIdsAtom} 的宽限期时长（ms），抽成常量供单测复用。 */
+export const SELF_DELETE_GRACE_MS = 3000;
+
+/**
  * 删除：等接口成功再从 list 移除（不做乐观更新）。
  *
  * 原因：调用方 SessionListItem 持有 dialog 的 deleting state；若乐观先移除，
@@ -120,6 +144,20 @@ export const renameSessionAtom = atom(
  */
 export const deleteSessionAtom = atom(null, async (get, set, id: string) => {
   if (!get(sessionsAtom).some((s) => s.id === id)) return;
+  // 先标记「本设备正在删这条」（同步、先于任何网络 I/O），见
+  // selfDeletingSessionIdsAtom 文档——保证这个标记严格 happens-before 服务端
+  // 可能广播回来的 session.deleted 回声。
+  set(selfDeletingSessionIdsAtom, (prev: ReadonlySet<string>) =>
+    new Set(prev).add(id),
+  );
+  setTimeout(() => {
+    set(selfDeletingSessionIdsAtom, (prev: ReadonlySet<string>) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }, SELF_DELETE_GRACE_MS);
   await deleteSessionApi(id);
   set(
     sessionsAtom,

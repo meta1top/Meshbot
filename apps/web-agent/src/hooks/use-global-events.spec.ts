@@ -5,21 +5,41 @@ jest.mock("@/atoms/sessions", () => ({}));
 jest.mock("@/atoms/remote-sessions", () => ({}));
 jest.mock("@/atoms/devices", () => ({}));
 jest.mock("@/atoms/assistant-panel", () => ({}));
+// 缺陷 1 引入：本机/远程「当前打开会话被删除」判定需要读它（use-global-events.ts
+// 新增的 useAtomValue(activeAssistantSessionAtom) 调用点）。不桩会真的加载
+// 该模块——它在真实（未 mock 的）"jotai" 上调用 atom(null)，而 "jotai" 本身
+// 被下方整体替换掉，atom 会是 undefined，模块顶层求值直接抛错。
+jest.mock("@/atoms/active-session", () => ({}));
 jest.mock("@meshbot/web-common", () => ({ clearAccessToken: jest.fn() }));
 jest.mock("@/rest/remote-agents", () => ({
   remoteAgentsQueryKey: ["remote-agents"],
 }));
 jest.mock("@/rest/agents", () => ({ agentsQueryKey: ["agents"] }));
 jest.mock("@/lib/events-socket", () => ({ getEventsSocket: jest.fn() }));
+// 缺陷 1 引入：window.alert + router.push("/assistant")，node 测试环境本无
+// window/next-intl/next-navigation，同样需要桩掉（见下方三个 jest.mock）。
+jest.mock("next-intl", () => ({ useTranslations: jest.fn() }));
+jest.mock("next/navigation", () => ({ useRouter: jest.fn() }));
 // useSetAtom 默认返回一个空操作函数（而非 undefined）：本文件的 handlers 对象
 // 会把每个 useSetAtom(...) 的返回值直接当函数调用（如 onConnect 里新增的
 // reloadTrackedRemoteSessions()）——保持 undefined 会让任何触达这些调用路径
 // 的测试炸 `undefined is not a function`。各 atom 模块本身已被上面整体 mock 成
 // `{}`，测试无法也无需按具体 atom 区分返回值，只需保证「可调用」。
-jest.mock("jotai", () => ({ useSetAtom: jest.fn(() => jest.fn()) }));
+// useAtomValue 默认也桩成 jest.fn()（无默认返回值）：各测试按需
+// `mockReturnValueOnce` 两次，对应 use-global-events.ts 里
+// activeAssistantSessionAtom → selfDeletingSessionIdsAtom 的调用顺序
+// （mock 不认 atom 参数身份，只认调用顺序，够用且简单）。
+jest.mock("jotai", () => ({
+  useSetAtom: jest.fn(() => jest.fn()),
+  useAtomValue: jest.fn(),
+}));
 jest.mock("react", () => ({
   ...jest.requireActual("react"),
   useEffect: jest.fn(),
+  // 缺陷 1 引入的 activeSessionRef/selfDeletingIdsRef：真实 useRef 需要 React
+  // 渲染期的 hook dispatcher，renderHook 之外直接调用 useGlobalEvents() 拿不到
+  // （本文件历来的测试方式，不走 renderHook），桩成最简单的可变容器即可。
+  useRef: jest.fn((init: unknown) => ({ current: init })),
 }));
 jest.mock("@tanstack/react-query", () => ({ useQueryClient: jest.fn() }));
 
@@ -34,6 +54,9 @@ import {
   SESSION_STATUS_EVENTS,
 } from "@meshbot/types-agent";
 import { useQueryClient } from "@tanstack/react-query";
+import { useAtomValue } from "jotai";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useEffect } from "react";
 import { getEventsSocket } from "@/lib/events-socket";
 import { agentsQueryKey } from "@/rest/agents";
@@ -247,35 +270,63 @@ describe("dispatchGlobalEvent", () => {
 });
 
 /**
+ * 执行 hook 并跑其 useEffect，返回捕获到的 socket 监听表 + invalidate spy。
+ * 供下方两个 describe 块（远程 Agent 列表接线 / 缺陷 1 接线）共用。
+ *
+ * `opts.activeSession`/`opts.selfDeletingIds` 对应 use-global-events.ts 里
+ * 按顺序调用的两次 `useAtomValue`（activeAssistantSessionAtom →
+ * selfDeletingSessionIdsAtom，见该文件"缺陷 1"注释块），`mockReturnValueOnce`
+ * 链式配置——不认 atom 参数身份，只认调用顺序。
+ */
+function runHook(
+  connected = false,
+  opts?: {
+    activeSession?: { id: string; remoteAgentId: string | null } | null;
+    selfDeletingIds?: ReadonlySet<string>;
+  },
+) {
+  const listeners: Record<string, (arg?: unknown) => void> = {};
+  const socket = {
+    connected,
+    on: jest.fn((ev: string, fn: (arg?: unknown) => void) => {
+      listeners[ev] = fn;
+    }),
+    off: jest.fn(),
+  };
+  (getEventsSocket as jest.Mock).mockReturnValue(socket);
+  const invalidateQueries = jest.fn();
+  (useQueryClient as jest.Mock).mockReturnValue({ invalidateQueries });
+  const push = jest.fn();
+  (useRouter as jest.Mock).mockReturnValue({ push });
+  (useTranslations as jest.Mock).mockReturnValue((key: string) => key);
+  (useAtomValue as jest.Mock)
+    .mockReturnValueOnce(opts?.activeSession ?? null)
+    .mockReturnValueOnce(opts?.selfDeletingIds ?? new Set());
+  (useEffect as jest.Mock).mockImplementation((fn: () => void) => {
+    fn();
+  });
+
+  // react 的 useEffect 已被 mock 成同步执行，此处只是普通函数调用，无真实 React 渲染
+  // biome-ignore lint/correctness/useHookAtTopLevel: 单测非组件渲染环境，见上
+  useGlobalEvents();
+  return { listeners, invalidateQueries, socket, push };
+}
+
+/**
  * useGlobalEvents 的副作用接线：跑 useEffect 捕获到的回调，拿到真实注册的
  * socket 监听器，断言「收到注册表变更事件」与「socket 重连」两条路径都会
  * invalidate 远程 Agent 列表。
  */
 describe("useGlobalEvents 远程 Agent 列表接线", () => {
-  /** 执行 hook 并跑其 useEffect，返回捕获到的 socket 监听表 + invalidate spy。 */
-  function runHook(connected = false) {
-    const listeners: Record<string, (arg?: unknown) => void> = {};
-    const socket = {
-      connected,
-      on: jest.fn((ev: string, fn: (arg?: unknown) => void) => {
-        listeners[ev] = fn;
-      }),
-      off: jest.fn(),
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // testEnvironment 是 node（本文件历来如此），没有全局 window；缺陷 1 的
+    // 提示走 window.alert，按需补一个最小桩（这个 describe 块不触发它，但
+    // runHook 是共用的，统一在这里桩，避免两处重复）。
+    (globalThis as unknown as { window: { alert: jest.Mock } }).window = {
+      alert: jest.fn(),
     };
-    (getEventsSocket as jest.Mock).mockReturnValue(socket);
-    const invalidateQueries = jest.fn();
-    (useQueryClient as jest.Mock).mockReturnValue({ invalidateQueries });
-    (useEffect as jest.Mock).mockImplementation((fn: () => void) => {
-      fn();
-    });
-
-    // react 的 useEffect 已被 mock 成同步执行，此处只是普通函数调用，无真实 React 渲染
-    // biome-ignore lint/correctness/useHookAtTopLevel: 单测非组件渲染环境，见上
-    useGlobalEvents();
-    return { listeners, invalidateQueries, socket };
-  }
-
-  beforeEach(() => jest.clearAllMocks());
+  });
 
   it("收到 remote-agent.registry_changed → invalidate remoteAgentsQueryKey", () => {
     const { listeners, invalidateQueries } = runHook();
@@ -341,6 +392,174 @@ describe("useGlobalEvents 远程 Agent 列表接线", () => {
     });
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: ["model-configs"],
+    });
+  });
+});
+
+/**
+ * 缺陷 1（删除会话后主内容区不跟随）的接线测试：`isActiveSessionDeletedByEvent`
+ * 本身的判定逻辑已在 `session-deleted-elsewhere.spec.ts` 独立、详尽地覆盖
+ * （本机/远程 scope、自删宽限、agentId 不匹配等边界）；这里只验证
+ * `useGlobalEvents` 的两个事件 handler（`onSessionListEvent`/
+ * `onRemoteAgentSessionEvent`）确实把正确的 scope/active/selfDeletingIds 接
+ * 进了那个判定函数，并在命中时真的触发 `window.alert` + `router.push`——
+ * 即“本机路径”与“远程路径”都有测试真实走过 `useGlobalEvents` 的完整分发
+ * 链路，不是只测了被抽出来的纯函数。
+ */
+describe("useGlobalEvents 缺陷 1 接线：当前会话被删除 → alert + 跳回起手台", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // testEnvironment 是 node，没有全局 window；这里的断言直接读 window.alert，
+    // 必须每个 describe 块各自桩一次（beforeEach 不跨 describe 共享）。
+    (globalThis as unknown as { window: { alert: jest.Mock } }).window = {
+      alert: jest.fn(),
+    };
+  });
+
+  function alertMock(): jest.Mock {
+    return (globalThis as unknown as { window: { alert: jest.Mock } }).window
+      .alert;
+  }
+
+  describe("本机路径（sessionsAtom + SESSION_LIFECYCLE_EVENTS.deleted）", () => {
+    it("当前打开的本机会话被删除（非自删）→ alert + 跳回 /assistant", () => {
+      const { listeners, push } = runHook(false, {
+        activeSession: { id: "s1", remoteAgentId: null },
+      });
+
+      listeners.event?.({
+        type: SESSION_LIFECYCLE_EVENTS.deleted,
+        payload: { agentId: "a1", sessionId: "s1" },
+        ts: 1,
+      });
+
+      expect(alertMock()).toHaveBeenCalledTimes(1);
+      expect(push).toHaveBeenCalledWith("/assistant");
+    });
+
+    it("删除的不是当前打开的会话 → 不提示、不跳转", () => {
+      const { listeners, push } = runHook(false, {
+        activeSession: { id: "s1", remoteAgentId: null },
+      });
+
+      listeners.event?.({
+        type: SESSION_LIFECYCLE_EVENTS.deleted,
+        payload: { agentId: "a1", sessionId: "别的会话" },
+        ts: 1,
+      });
+
+      expect(alertMock()).not.toHaveBeenCalled();
+      expect(push).not.toHaveBeenCalled();
+    });
+
+    it("本设备自己删除（在宽限集合里）→ 不重复提示（ws 回声与自身操作不冲突）", () => {
+      const { listeners, push } = runHook(false, {
+        activeSession: { id: "s1", remoteAgentId: null },
+        selfDeletingIds: new Set(["s1"]),
+      });
+
+      listeners.event?.({
+        type: SESSION_LIFECYCLE_EVENTS.deleted,
+        payload: { agentId: "a1", sessionId: "s1" },
+        ts: 1,
+      });
+
+      expect(alertMock()).not.toHaveBeenCalled();
+      expect(push).not.toHaveBeenCalled();
+    });
+
+    it("session.created/renamed 事件（非 deleted）→ 不触发提示/跳转（只更新列表）", () => {
+      const { listeners, push } = runHook(false, {
+        activeSession: { id: "s1", remoteAgentId: null },
+      });
+
+      listeners.event?.({
+        type: SESSION_LIFECYCLE_EVENTS.renamed,
+        payload: { agentId: "a1", sessionId: "s1", title: "新标题" },
+        ts: 1,
+      });
+
+      expect(alertMock()).not.toHaveBeenCalled();
+      expect(push).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("远程路径（remoteSessionsAtom + REMOTE_AGENT_EVENTS.sessionEvent）", () => {
+    it("当前打开的远程会话被宿主设备删除 → alert + 跳回 /assistant", () => {
+      const { listeners, push } = runHook(false, {
+        activeSession: { id: "rs1", remoteAgentId: "cloud-a1" },
+      });
+
+      listeners.event?.({
+        type: REMOTE_AGENT_EVENTS.sessionEvent,
+        payload: {
+          agentId: "cloud-a1",
+          event: SESSION_LIFECYCLE_EVENTS.deleted,
+          payload: { agentId: "local-a1", sessionId: "rs1" },
+        },
+        ts: 1,
+      });
+
+      expect(alertMock()).toHaveBeenCalledTimes(1);
+      expect(push).toHaveBeenCalledWith("/assistant");
+    });
+
+    it("别的远程 Agent 的会话被删（agentId 不匹配当前打开的）→ 不误报", () => {
+      const { listeners, push } = runHook(false, {
+        activeSession: { id: "rs1", remoteAgentId: "cloud-a1" },
+      });
+
+      listeners.event?.({
+        type: REMOTE_AGENT_EVENTS.sessionEvent,
+        payload: {
+          agentId: "cloud-a2",
+          event: SESSION_LIFECYCLE_EVENTS.deleted,
+          payload: { agentId: "local-a1", sessionId: "rs1" },
+        },
+        ts: 1,
+      });
+
+      expect(alertMock()).not.toHaveBeenCalled();
+      expect(push).not.toHaveBeenCalled();
+    });
+
+    it("当前打开的其实是本机会话（remoteAgentId 为 null）→ 远程镜像事件不误报", () => {
+      const { listeners, push } = runHook(false, {
+        activeSession: { id: "s1", remoteAgentId: null },
+      });
+
+      listeners.event?.({
+        type: REMOTE_AGENT_EVENTS.sessionEvent,
+        payload: {
+          agentId: "cloud-a1",
+          event: SESSION_LIFECYCLE_EVENTS.deleted,
+          payload: { agentId: "local-a1", sessionId: "s1" },
+        },
+        ts: 1,
+      });
+
+      expect(alertMock()).not.toHaveBeenCalled();
+      expect(push).not.toHaveBeenCalled();
+    });
+
+    it("远程会话没有自删抑制：即使 sessionId 恰好落在本机 selfDeletingIds 里也照常提示", () => {
+      const { listeners, push } = runHook(false, {
+        activeSession: { id: "rs1", remoteAgentId: "cloud-a1" },
+        selfDeletingIds: new Set(["rs1"]),
+      });
+
+      listeners.event?.({
+        type: REMOTE_AGENT_EVENTS.sessionEvent,
+        payload: {
+          agentId: "cloud-a1",
+          event: SESSION_LIFECYCLE_EVENTS.deleted,
+          payload: { agentId: "local-a1", sessionId: "rs1" },
+        },
+        ts: 1,
+      });
+
+      expect(alertMock()).toHaveBeenCalledTimes(1);
+      expect(push).toHaveBeenCalledWith("/assistant");
     });
   });
 });

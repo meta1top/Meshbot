@@ -71,6 +71,11 @@ export function useArtifactBodyLabels(): ArtifactBodyLabels {
   return {
     loading: t("loading"),
     loadFailed: t("loadFailed"),
+    // 真机验收缺陷 3：四态文案分级（web-agent 提供这三个细分文案；notFound
+    // 态复用 loadFailed，见 web-common ArtifactBodyLabels 的字段注释）。
+    loadFailedNoSource: t("loadFailedNoSource"),
+    loadFailedRemoteRejected: t("loadFailedRemoteRejected"),
+    loadFailedRemoteUnreachable: t("loadFailedRemoteUnreachable"),
     unsupported: t("unsupported"),
     tooLarge: (sizeMb: string) => t("tooLarge", { size: sizeMb }),
     tooLargeHint: t("tooLargeHint"),
@@ -112,9 +117,16 @@ export function ArtifactBody({
 }) {
   const labels = useArtifactBodyLabels();
   const setPreviewArtifact = useSetAtom(previewArtifactAtom);
-  const transport = remote
-    ? createArtifactRemoteTransport(remote.deviceId)
-    : undefined;
+  // 按 deviceId 记忆化，理由同下方 fetchLocal 的 useMemo 注释：`transport`
+  // 同样进了 `useArtifactContent`（web-common）的 effect 依赖数组，父组件
+  // 重渲染若每次传新对象引用会触发重复拉取。有意只依赖 deviceId（而非整个
+  // remote 对象）——remote 是调用方每渲染新建的字面量，按对象引用做依赖会
+  // 让这个 useMemo 形同虚设；createArtifactRemoteTransport 本就只用 deviceId。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 有意只依赖 remote?.deviceId，理由见上
+  const transport = useMemo(
+    () => (remote ? createArtifactRemoteTransport(remote.deviceId) : undefined),
+    [remote?.deviceId],
+  );
   // 按 agentId 记忆化：`useArtifactContent`（web-common）把 fetchLocal 放进
   // effect 依赖数组，每渲染都传新函数引用会导致产物重复拉取/闪烁。
   const fetchLocal = useMemo(

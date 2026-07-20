@@ -292,6 +292,9 @@
       "presentFailed": "Presentation failed",
       "loading": "Loading…",
       "loadFailed": "Artifact no longer exists or has changed",
+      "loadFailedNoSource": "Couldn't determine where to load this artifact from. Please refresh and try again.",
+      "loadFailedRemoteRejected": "The other device declined this artifact request.",
+      "loadFailedRemoteUnreachable": "Couldn't reach the other device. Make sure it's online and try again.",
       "unsupported": "This file type can't be previewed, please download to view.",
       "tooLarge": "File is large ({size} MB), can't preview remotely",
       "tooLargeHint": "Upload to the org drive to preview it locally",
@@ -353,7 +356,8 @@
     "remoteLoadFailed": "Failed to load remote session",
     "remoteEmpty": "No sessions on this device",
     "editAgent": "Edit agent",
-    "newAgent": "New agent"
+    "newAgent": "New agent",
+    "sessionDeletedElsewhere": "This session was deleted from another device. You've been returned to start."
   },
   "messages": {
     "title": "Messages",

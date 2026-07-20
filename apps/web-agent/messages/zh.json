@@ -292,6 +292,9 @@
       "presentFailed": "呈现失败",
       "loading": "加载中…",
       "loadFailed": "产物已不存在或已变更",
+      "loadFailedNoSource": "无法确定该产物的来源，请刷新后重试",
+      "loadFailedRemoteRejected": "对方设备拒绝了这次产物访问请求",
+      "loadFailedRemoteUnreachable": "无法连接到对方设备，请确认对方设备在线后重试",
       "unsupported": "该类型不支持预览，请下载查看。",
       "tooLarge": "文件较大（{size} MB），无法直接远程预览",
       "tooLargeHint": "可上传到企业网盘后在本机预览",
@@ -353,7 +356,8 @@
     "remoteLoadFailed": "远程会话加载失败",
     "remoteEmpty": "该设备暂无会话",
     "editAgent": "编辑 Agent",
-    "newAgent": "新建 Agent"
+    "newAgent": "新建 Agent",
+    "sessionDeletedElsewhere": "该会话已在其他设备被删除，已为你返回起始页"
   },
   "messages": {
     "title": "消息",

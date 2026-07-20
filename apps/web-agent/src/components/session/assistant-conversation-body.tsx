@@ -127,6 +127,23 @@ export function AssistantConversationBody({
   const sessionAgentId = remoteAgentId
     ? undefined
     : (allSessions.find((s) => s.id === id)?.agentId ?? undefined);
+  // 产物预览的远程描述符（真机验收缺陷 3）：上提到本组件参数可用的最早位置
+  // ——`useAutoOpenArtifact`（下方紧接着调用）与 `onPreviewArtifact`
+  // （渲染 JSX 里）都要用同一份，原实现只在 JSX 附近定义，`useAutoOpenArtifact`
+  // 那条自动弹出路径因此漏传，产物预览打错了机器（详见该 hook 的 JSDoc）。
+  // 不经 useRemoteSession() context——本容器渲染在 RemoteSessionProvider 之外
+  // （见下方 JSX），此处取 context 值会拿到 null。
+  //
+  // 注意：字段名沿用 web-common 共享 prop 类型的 `deviceId`（未随本任务改
+  // 名）——该字段在 web-common/artifact-body.tsx 内部从未被真正读取用于寻址
+  // （只有 sessionId 驱动 transport.readArtifact/uploadArtifactToDrive），
+  // 但类型定义与 apps/web-main 的远程会话视图共享（那里 deviceId 是真实的
+  // 宿主设备 id，非本次 agentId 迁移范畴）。改名需要同步改 web-common 的
+  // 3 处类型声明 + web-main 2 处调用点，超出本任务范围，故只改传入的值（现取
+  // remoteAgentId），键名保持 deviceId——已在报告里记为 concern。
+  const artifactRemote = remoteAgentId
+    ? { deviceId: remoteAgentId, sessionId: id }
+    : null;
   // 经 transport 统一路由：本地 PATCH /api/sessions/:id，远程走 device query 通道
   // （本地 PATCH 对远程会话 id 会 404）——分支判断已下沉到 session-transport.ts。
   const handleModelChange = async (mid: string) => {
@@ -183,7 +200,14 @@ export function AssistantConversationBody({
   );
 
   // agent 产出 present_file 后自动打开右侧预览（多个产物弹第一个，正在看预览时不打扰）。
-  useAutoOpenArtifact(timelineMessages, stream.running, sessionAgentId);
+  // 真机验收缺陷 3：必须带上 artifactRemote，否则远程会话的产物预览会打错机器
+  // （详见 use-auto-open-artifact.ts 的 JSDoc）。
+  useAutoOpenArtifact(
+    timelineMessages,
+    stream.running,
+    sessionAgentId,
+    artifactRemote,
+  );
 
   const { stickToBottom, scrollToBottom, topSentinelRef } = useChatScroll({
     scrollContainerRef: scrollRef,
@@ -278,21 +302,6 @@ export function AssistantConversationBody({
   const setArtifact = useSetAtom(previewArtifactAtom);
   const tArtifact = useTranslations("session.artifact");
   const tCompaction = useTranslations("session.compaction");
-  // artifactRemote 直接用本组件已有的 remoteAgentId/id，不经
-  // useRemoteSession() context——本容器渲染在 RemoteSessionProvider 之外
-  // （见下方 JSX），此处取 context 值会拿到 null。
-  //
-  // 注意：字段名沿用 web-common 共享 prop 类型的 `deviceId`（未随本任务改
-  // 名）——该字段在 web-common/artifact-body.tsx 内部从未被真正读取用于寻址
-  // （只有 sessionId 驱动 transport.readArtifact/uploadArtifactToDrive），
-  // 但类型定义与 apps/web-main 的远程会话视图共享（那里 deviceId 是真实的
-  // 宿主设备 id，非本次 agentId 迁移范畴）。改名需要同步改 web-common 的
-  // 3 处类型声明 + web-main 2 处调用点，超出本任务（A2·web-agent）范围，故
-  // 只改传入的值（现取 remoteAgentId），键名保持 deviceId——已在报告里记为
-  // concern，供后续统一任务处理。
-  const artifactRemote = remoteAgentId
-    ? { deviceId: remoteAgentId, sessionId: id }
-    : null;
 
   const view = (
     <SessionConversationView
