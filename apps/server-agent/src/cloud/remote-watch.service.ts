@@ -20,6 +20,7 @@ import {
 } from "../ws/session-shadow.events";
 import { ImRelayClientService } from "./im-relay-client.service";
 import { IM_RELAY_EVENTS, type ImRelayConnectedEvent } from "./im-relay.events";
+import { RemoteRunService } from "./remote-run.service";
 
 /** 单条 watch 登记：所属账号 + 目标云端 Agent id + 观察粒度 + （session 级）被观察会话 id。 */
 interface WatchEntry {
@@ -63,6 +64,14 @@ export class RemoteWatchService implements OnModuleDestroy {
   constructor(
     private readonly relay: ImRelayClientService,
     private readonly emitter: EventEmitter2,
+    /**
+     * D6 重复投递抑制对账依赖（修复重复投递 Critical）：session 级观察帧与
+     * `RemoteRunService` 自己发起的 streamId 帧同源（B 侧两个转发器各自
+     * 镜像同一份 `SESSION_WS_EVENTS.*`），本实例若同时持有该会话的自发起
+     * stream，说明 `RemoteRunService.onFrame` 已经转发过一份，本服务必须
+     * 抑制，见下方 {@link onFrame}/{@link onAccepted} 内联注释。
+     */
+    private readonly remoteRun: RemoteRunService,
   ) {}
 
   /**
@@ -140,6 +149,25 @@ export class RemoteWatchService implements OnModuleDestroy {
     const entry = this.watches.get(frame.watchId);
     if (!entry) return;
     if (entry.scope === "session") {
+      // D6 重复投递抑制：B 侧同一 sessionId 上 per-run 转发器
+      // （RemoteRunInboundService）与常驻转发器（SessionWatchService）各自
+      // 独立订阅同一份本地 SESSION_WS_EVENTS.*、各自打包回发——本实例若同时
+      // 是这条会话的自发起方（RemoteRunService 有一条活跃 streamId 订阅），
+      // RemoteRunService.onFrame 早已转发过同一份内容一次，这里再转发就是
+      // 纯重复正文，直接丢弃不 emit。与 web-main RemoteRunTracker.handleFrame
+      // 的 D6 判定同源，但本服务不需要「先 push 进 FrameSequencer 记账再丢弃」
+      // 那道额外步骤——那是为了不冻结浏览器端按 seq 重排序的
+      // nextExpectedSeq；本服务从不消费 frame.seq 做重排序（A 到浏览器这段是
+      // 本机单连接 socket.io，天然有序，session.gateway.ts 的
+      // onRemoteShadowFrame 直通转发、无缓冲/无计数状态），故直接 return 不
+      // 存在同类通道卡死风险（已核实 packages/web-common/src/session/
+      // remote-run-tracker.ts:130-142 那段坑不适用于本文件）。
+      if (
+        entry.sessionId &&
+        this.remoteRun.hasActiveStreamFor(entry.targetAgentId, entry.sessionId)
+      ) {
+        return;
+      }
       this.emitter.emit(REMOTE_SHADOW_FRAME_EVENT, {
         event: frame.event,
         payload: frame.payload,
@@ -157,6 +185,14 @@ export class RemoteWatchService implements OnModuleDestroy {
    * relay 收到云端回流的 watch 受理回包：`ok:false` → 解除登记（不留悬挂，
    * 通道从未建立成功无需再发 unwatch）；`ok:true` 且 session 级时把
    * `inflight` 合成一条 `run.snapshot` 经影子桥补发（spec D7 中途续上）。
+   *
+   * **同根因第二症状（与 onFrame 的 D6 共用同一判定，逐字对齐 web-main T12
+   * review Finding 4）**：若本实例同时持有该会话的自发起 stream，说明 A 早已
+   * 经 `RemoteRunService` 实时收着这条会话的正文——`inflight` 是 B 侧
+   * `watch_accepted` 回包这一刻的快照，很可能已经落后于本地已累积的正文；
+   * `useSessionStream.onSnapshot` 对正文是 **SET 覆盖**而非累加，无条件补发
+   * 会把已经流到一半的正文回退一段。故同样先查 `hasActiveStreamFor` 再决定
+   * 是否合成/补发，命中则跳过（本实例已经有更新鲜的数据源，不需要这份快照）。
    */
   @OnEvent(IM_RELAY_EVENTS.agentWatchAcceptedInbound)
   onAccepted(accepted: AgentWatchAccepted): void {
@@ -166,6 +202,11 @@ export class RemoteWatchService implements OnModuleDestroy {
     }
     const entry = this.watches.get(accepted.watchId);
     if (!entry || entry.scope !== "session" || !entry.sessionId) return;
+    if (
+      this.remoteRun.hasActiveStreamFor(entry.targetAgentId, entry.sessionId)
+    ) {
+      return;
+    }
     const snapshot = RemoteWatchService.inflightToSnapshotEvent(
       entry.sessionId,
       accepted.inflight,

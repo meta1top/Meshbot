@@ -412,4 +412,45 @@ describe("RemoteRunService", () => {
       expect(svc.findRunBySession("dB", "no-sess")).toBeNull();
     });
   });
+
+  describe("hasActiveStreamFor（D6 抑制判定，供 RemoteWatchService 对账复用）", () => {
+    it("append 模式已登记 → true", () => {
+      const { svc } = make();
+      svc.startRun("u1", "dB", "append", "sess-1", "hi");
+      expect(svc.hasActiveStreamFor("dB", "sess-1")).toBe(true);
+    });
+
+    it("create 模式首帧回填 sessionId 前 → false，回填后 → true", () => {
+      const { svc } = make();
+      const { streamId } = svc.startRun("u1", "dB", "create", null, "hi");
+      expect(svc.hasActiveStreamFor("dB", "sess-9")).toBe(false);
+      svc.onFrame({
+        streamId,
+        sessionId: "sess-9",
+        seq: 0,
+        event: "run.started",
+        payload: { sessionId: "sess-9" },
+      } as any);
+      expect(svc.hasActiveStreamFor("dB", "sess-9")).toBe(true);
+    });
+
+    it("未知 (targetAgentId, sessionId) → false", () => {
+      const { svc } = make();
+      expect(svc.hasActiveStreamFor("dB", "no-sess")).toBe(false);
+    });
+
+    it("run 结束（onEnd）后 → false（对账不残留）", () => {
+      const { svc } = make();
+      const { streamId } = svc.startRun("u1", "dB", "append", "sess-1", "hi");
+      expect(svc.hasActiveStreamFor("dB", "sess-1")).toBe(true);
+      svc.onEnd({ streamId, requesterDeviceId: "d", reason: "done" } as any);
+      expect(svc.hasActiveStreamFor("dB", "sess-1")).toBe(false);
+    });
+
+    it("不同 targetAgentId 不串（key 必须包含 targetAgentId 维度）", () => {
+      const { svc } = make();
+      svc.startRun("u1", "dB", "append", "sess-1", "hi");
+      expect(svc.hasActiveStreamFor("dOther", "sess-1")).toBe(false);
+    });
+  });
 });

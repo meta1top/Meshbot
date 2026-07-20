@@ -138,6 +138,16 @@ function startAgentWatch(
    * `unwatch()` 时若已经拿到过 watchId，回调一次 `null` 释放登记。
    */
   onWatchId?: (watchId: string | null) => void,
+  /**
+   * REST 往返永久失败时的回调（Minor-1，T19b review）：修复前 `.catch` 只
+   * `console.warn`，不通知调用方——`sessionWatchEntries` 里的句柄永远停在
+   * `{watchId:null}`，`resolveControlAddress` 因此永远报「正在建立中，请稍候
+   * 重试」，而真相是这条通道**永远不会建立成功**，重试多少次都一样。回调后
+   * 调用方能把这个状态与「REST 还没回来」的正常等待窗口期区分开，给出准确
+   * 的第三种文案。`stopped` 之后（调用方已经主动 unwatch）不再回调——通道
+   * 已经是调用方主动放弃的，不需要再告知一次「失败」。
+   */
+  onFailed?: () => void,
 ): () => void {
   let watchId: string | null = null;
   let stopped = false;
@@ -154,6 +164,7 @@ function startAgentWatch(
     })
     .catch((e) => {
       console.warn(`观察通道建立失败（agentId=${agentId} scope=${scope}）`, e);
+      if (!stopped) onFailed?.();
     });
   return () => {
     stopped = true;
@@ -274,9 +285,12 @@ export function createRemoteSessionTransport(
 ): SessionTransport {
   /** 单路 session 级观察通道的可变句柄——`watchId` 字段被 `onWatchId` 回调原地
    * 覆写（REST 落地 / unwatch 释放），`resolveControlAddress` 每次现读这个
-   * 字段，天然拿到「当前」值。 */
+   * 字段，天然拿到「当前」值。`failed` 由 `onFailed` 回调原地置位（Minor-1，
+   * T19b review）：REST 往返永久失败（网络错误 / 云端拒绝）与「REST 还没
+   * 回来」是两种完全不同的排查线索——前者重试无意义，必须与后者区分文案。 */
   interface SessionWatchEntry {
     watchId: string | null;
+    failed: boolean;
   }
 
   /**
@@ -299,8 +313,10 @@ export function createRemoteSessionTransport(
   /**
    * `confirm`/`answer` 的寻址解析（Task 16b，逐字义同 web-main 同名函数）：
    * 有 streamId 优先用它；没有则回退该会话当前的 session 级 watchId；都没有
-   * 才抛错，错误文案区分「从未发起过观察」与「观察通道正在建立中」两种
-   * 完全不同的排查线索。
+   * 才抛错，错误文案区分三种完全不同的排查线索——「从未发起过观察」
+   * /「观察通道正在建立中（REST 往返尚未完成，正常等待窗口期，重试有意义）」
+   * /「观察通道建立失败（Minor-1，T19b review：REST 永久失败，重试无意义，
+   * 需引导用户刷新页面重新建立会话视图）」。
    */
   const resolveControlAddress = (
     streamId: string | null,
@@ -310,6 +326,9 @@ export function createRemoteSessionTransport(
     const entry = sessionWatchEntries.get(sessionId);
     if (!entry) {
       throw new Error("远程会话 streamId 未就绪，请稍候重试");
+    }
+    if (entry.failed) {
+      throw new Error("观察通道建立失败，请刷新页面重试");
     }
     if (!entry.watchId) {
       throw new Error("观察通道正在建立中，请稍候重试");
@@ -397,17 +416,38 @@ export function createRemoteSessionTransport(
     watchSession(sessionId) {
       // 登记进 sessionId → 句柄索引（Task 16b），供 confirm/answer 回退取
       // 「当前」watchId 用。先占位 watchId:null（REST 往返完成前的窗口期），
-      // startAgentWatch 的 onWatchId 回调随后原地覆写这个句柄的字段。
-      const entry: SessionWatchEntry = { watchId: null };
+      // startAgentWatch 的 onWatchId 回调随后原地覆写这个句柄的字段；
+      // onFailed 回调（Minor-1）原地置位 failed，供 resolveControlAddress
+      // 区分「还没回来」与「永远不会回来」两种状态。
+      const entry: SessionWatchEntry = { watchId: null, failed: false };
       sessionWatchEntries.set(sessionId, entry);
-      const stop = startAgentWatch(agentId, "session", sessionId, (watchId) => {
-        entry.watchId = watchId;
-      });
+      const stop = startAgentWatch(
+        agentId,
+        "session",
+        sessionId,
+        (watchId) => {
+          entry.watchId = watchId;
+        },
+        () => {
+          entry.failed = true;
+        },
+      );
       return () => {
         // 同 sessionId 若被并发 watch 两次（如主视图 + IM dock 同时打开同一
-        // 会话），后一次覆盖前一次登记——只在自己仍是当前登记者时才摘除
-        // 索引，避免先卸载的一方误删后一次的登记；各自的 stop() 仍会正常
-        // 执行，互不影响真正的通道生命周期。
+        // 会话），后一次覆盖前一次登记——`sessionWatchEntries` 的当前值已经
+        // 是后一次的 entry，本次 unwatch 只在自己仍是当前登记者时才摘除
+        // 索引；各自的 stop() 仍会正常执行，互不影响真正的通道生命周期。
+        //
+        // 注意（Minor-2，T19b review 如实澄清）：这个等值判断只保护了「先
+        // 挂后拆」的顺序（后一次覆盖登记后，先卸载的前一次不会误删它）；
+        // 反过来「后一次先卸载」时，它的 unwatch 会摘掉当前仍指向自己的
+        // 索引，而前一次（仍存活）的登记从此在表里彻底消失——不是没有这个
+        // 缺口，是**今天不可达**：`sessionWatchEntries` 由每个视图各自的
+        // `createRemoteSessionTransport()` 实例持有（`useMemo` per-view，
+        // 见 `assistant-conversation-body.tsx` 的 transport 构造处），不同
+        // 视图各自一张独立的表，同一 sessionId 不会在同一张表里被两次
+        // `watchSession` 并发登记。若未来改成跨视图共享单例 transport，这
+        // 里需要换成插入序 / 引用计数才能补上这个缺口。
         if (sessionWatchEntries.get(sessionId) === entry) {
           sessionWatchEntries.delete(sessionId);
         }

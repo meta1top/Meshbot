@@ -590,9 +590,20 @@ export function createRemoteSessionTransport(
       // 登记进 sessionId → handle 索引（Task 16b），供 confirm/answer 回退
       // 取「当前」watchId 用（见 resolveControlAddress）。同一 sessionId 若
       // 被并发 watch 两次（如主视图 + IM dock 同时打开同一会话），后一次
-      // 覆盖前一次——unwatch 时只在自己仍是当前登记者时才摘除索引，避免
-      // 先卸载的一方误删后一次的登记（各自的 stopWatch 仍会正常执行，互不
-      // 影响真正的通道生命周期）。
+      // 覆盖前一次登记——unwatch 时只在自己仍是当前登记者时才摘除索引，
+      // 这只保护了「先挂后拆」的顺序（后一次覆盖登记后，先卸载的前一次
+      // 不会误删它）；各自的 stopWatch 仍会正常执行，互不影响真正的通道
+      // 生命周期。
+      //
+      // 注意（Minor-2，T19b review 如实澄清，与 web-agent 同名文件同一处
+      // 同步修正）：反过来「后一次先卸载」时，它的 unwatch 会摘掉当前仍
+      // 指向自己的索引，而前一次（仍存活）的登记从此在表里彻底消失——不是
+      // 没有这个缺口，是**今天不可达**：`sessionWatchHandles` 由每个视图各
+      // 自的 `createRemoteSessionTransport()` 调用持有（见 `RemoteSessionView`
+      // 的 `useEffect` 构造处，一个视图一份 transport 实例），不同视图各自
+      // 一张独立的表，同一 sessionId 不会在同一张表里被两次 `watchSession`
+      // 并发登记。若未来改成跨视图共享单例 transport，这里需要换成插入序 /
+      // 引用计数才能补上这个缺口。
       sessionWatchHandles.set(sessionId, handle);
       startWatch(handle);
       return () => {

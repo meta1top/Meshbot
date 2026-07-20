@@ -18,7 +18,16 @@ export interface AgentLifecycleWatchTarget {
 
 /** 一路 watch 的运行期句柄：transport 实例 + unwatch 闭包，二者成对创建/
  * 释放——本 hook 每个 agentId 独占一个 transport 实例（不与任何 session
- * 级 watch 共享），`dispose()` 总是安全的。 */
+ * 级 watch 共享），`dispose()` 总是安全调用（可选链、缺失也不抛）。
+ *
+ * **Minor-3（T19b review 澄清）**：本端 `createRemoteSessionTransport`
+ * （`@/lib/session-transport.ts`）**未实现** `dispose`——三条调用点
+ * （下方 :93/:105/:121）里的 `dispose?.()` 在本仓永远是 no-op，不要读成
+ * 「确实释放了资源」。真正的释放全靠 `unwatch()`（REST DELETE 拆掉 REST
+ * 侧观察通道登记）；`dispose?.()` 只是为了与 `SessionTransport` 契约（以及
+ * web-main 的对应实现——那边真的会摘 socket 监听器，见
+ * `apps/web-main/src/lib/session-transport.ts:634`）保持调用形状一致，本端
+ * 调不调都不影响正确性。 */
 interface WatchEntry {
   transport: SessionTransport;
   unwatch: () => void;

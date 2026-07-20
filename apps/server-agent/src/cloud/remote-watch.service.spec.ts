@@ -9,7 +9,17 @@ import { REMOTE_SHADOW_FRAME_EVENT } from "../ws/session-shadow.events";
 import { RemoteWatchService } from "./remote-watch.service";
 
 describe("RemoteWatchService（A 侧观察者代理）", () => {
-  const mk = () => {
+  /**
+   * `remoteRun`：`RemoteRunService.hasActiveStreamFor` 的对账依赖（D6 抑制，
+   * 修复重复投递 Critical 用），默认 fake 恒返回 false（无自发起 stream），
+   * 与本文件其余既有用例的既定行为（从不抑制）保持一致；需要验证抑制路径的
+   * 用例显式传 `{ hasActiveStreamFor: jest.fn().mockReturnValue(true) }`。
+   */
+  const mk = (
+    remoteRun: { hasActiveStreamFor: jest.Mock } = {
+      hasActiveStreamFor: jest.fn().mockReturnValue(false),
+    },
+  ) => {
     const emitter = new EventEmitter2();
     const up: Array<[string, unknown]> = [];
     const relay = {
@@ -18,8 +28,12 @@ describe("RemoteWatchService（A 侧观察者代理）", () => {
       emitAgentWatchStop: (_u: string, p: unknown) =>
         up.push([IM_WS_EVENTS.agentWatchStop, p]),
     };
-    const svc = new RemoteWatchService(relay as never, emitter);
-    return { svc, emitter, up };
+    const svc = new RemoteWatchService(
+      relay as never,
+      emitter,
+      remoteRun as never,
+    );
+    return { svc, emitter, up, remoteRun };
   };
   const lifecyclePayload = {
     agentId: "远程本地id",
@@ -244,6 +258,109 @@ describe("RemoteWatchService（A 侧观察者代理）", () => {
     expect(up.filter(([e]) => e === IM_WS_EVENTS.agentWatchStart)).toHaveLength(
       1,
     );
+  });
+
+  describe("D6 重复投递抑制（与 RemoteRunService 活跃 stream 对账）", () => {
+    it("本实例同时持有该会话的自发起 stream → session 级回流帧被吃掉，不重发影子桥", () => {
+      const hasActiveStreamFor = jest.fn().mockReturnValue(true);
+      const { svc, emitter } = mk({ hasActiveStreamFor });
+      const shadow: unknown[] = [];
+      emitter.on(REMOTE_SHADOW_FRAME_EVENT, (p) => shadow.push(p));
+      const { watchId } = svc.startWatch("u1", "cloud-a1", "session", "s1");
+      svc.onFrame({
+        watchId,
+        requesterDeviceId: "d",
+        seq: 3,
+        sessionId: "s1",
+        event: SESSION_WS_EVENTS.runChunk,
+        payload: { sessionId: "s1", delta: "重复的一份" },
+      } as never);
+      expect(shadow).toEqual([]);
+      expect(hasActiveStreamFor).toHaveBeenCalledWith("cloud-a1", "s1");
+    });
+
+    it("无自发起 stream → 照常重发（既有行为不受影响）", () => {
+      const hasActiveStreamFor = jest.fn().mockReturnValue(false);
+      const { svc, emitter } = mk({ hasActiveStreamFor });
+      const shadow: unknown[] = [];
+      emitter.on(REMOTE_SHADOW_FRAME_EVENT, (p) => shadow.push(p));
+      const { watchId } = svc.startWatch("u1", "cloud-a1", "session", "s1");
+      svc.onFrame({
+        watchId,
+        requesterDeviceId: "d",
+        seq: 3,
+        sessionId: "s1",
+        event: SESSION_WS_EVENTS.runChunk,
+        payload: { sessionId: "s1", delta: "唯一一份" },
+      } as never);
+      expect(shadow).toEqual([
+        {
+          event: SESSION_WS_EVENTS.runChunk,
+          payload: { sessionId: "s1", delta: "唯一一份" },
+        },
+      ]);
+    });
+
+    it("scope=agent 不受这条抑制影响（D6 只管 session 级推理帧重复，agent 级生命周期镜像本就只有这一条通道）", () => {
+      const hasActiveStreamFor = jest.fn().mockReturnValue(true);
+      const { svc, emitter } = mk({ hasActiveStreamFor });
+      const envelopes: unknown[] = [];
+      emitter.on(REMOTE_AGENT_EVENTS.sessionEvent, (p) => envelopes.push(p));
+      const { watchId } = svc.startWatch("u1", "cloud-a1", "agent");
+      svc.onFrame({
+        watchId,
+        requesterDeviceId: "d",
+        seq: 1,
+        sessionId: "s9",
+        event: SESSION_LIFECYCLE_EVENTS.created,
+        payload: lifecyclePayload,
+      } as never);
+      expect(envelopes).toHaveLength(1);
+      expect(hasActiveStreamFor).not.toHaveBeenCalled();
+    });
+
+    it("watch_accepted{ok:true,inflight}：本实例同时持有该会话的自发起 stream → 不补发 run.snapshot（同根因第二症状：避免把已流式领先的正文回退覆盖，逐字对齐 web-main T12 Finding 4）", () => {
+      const hasActiveStreamFor = jest.fn().mockReturnValue(true);
+      const { svc, emitter } = mk({ hasActiveStreamFor });
+      const shadow: unknown[] = [];
+      emitter.on(REMOTE_SHADOW_FRAME_EVENT, (p) => shadow.push(p));
+      const { watchId } = svc.startWatch("u1", "cloud-a1", "session", "s1");
+      svc.onAccepted({
+        watchId,
+        ok: true,
+        inflight: {
+          messageId: "m1",
+          content: "半截",
+          reasoning: "",
+          reasoningStartedAt: null,
+          toolCalls: [],
+          status: "streaming",
+        },
+      } as never);
+      expect(shadow).toEqual([]);
+      expect(hasActiveStreamFor).toHaveBeenCalledWith("cloud-a1", "s1");
+    });
+
+    it("watch_accepted{ok:true,inflight}：无自发起 stream → 照常补发（既有行为不受影响）", () => {
+      const hasActiveStreamFor = jest.fn().mockReturnValue(false);
+      const { svc, emitter } = mk({ hasActiveStreamFor });
+      const shadow: Array<{ event: string; payload: unknown }> = [];
+      emitter.on(REMOTE_SHADOW_FRAME_EVENT, (p) => shadow.push(p as never));
+      const { watchId } = svc.startWatch("u1", "cloud-a1", "session", "s1");
+      svc.onAccepted({
+        watchId,
+        ok: true,
+        inflight: {
+          messageId: "m1",
+          content: "半截",
+          reasoning: "",
+          reasoningStartedAt: null,
+          toolCalls: [],
+          status: "streaming",
+        },
+      } as never);
+      expect(shadow).toHaveLength(1);
+    });
   });
 
   it("onModuleDestroy 清空全部登记", () => {

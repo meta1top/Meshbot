@@ -358,4 +358,20 @@ export class RemoteRunService implements OnModuleDestroy {
     const entry = this.streams.get(streamId);
     return entry ? { streamId, sessionId: entry.sessionId } : null;
   }
+
+  /**
+   * 该 (targetAgentId, sessionId) 当前是否有本实例自己发起的活跃远程 run
+   * （D6 抑制判定，供 `RemoteWatchService` 对账复用，逐字对齐 web-main
+   * `RemoteRunTracker.hasActiveStreamFor` 的判定语义）。
+   *
+   * 复用 `activeSessionRuns`（`findRunBySession` 同一份索引）：append 模式
+   * `startRun` 时立即占位，create 模式首帧回填 sessionId 时占位，run 结束
+   * （`onEnd`/idle 超时）经 `releaseSlot` 释放——与「是否仍在真实转发」严格同步，
+   * 不会在 run 已结束后误判为 true 继续压住 watch 通道。
+   */
+  hasActiveStreamFor(targetAgentId: string, sessionId: string): boolean {
+    return this.activeSessionRuns.has(
+      RemoteRunService.sessionKey(targetAgentId, sessionId),
+    );
+  }
 }
