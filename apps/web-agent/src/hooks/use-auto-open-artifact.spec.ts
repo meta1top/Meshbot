@@ -54,7 +54,9 @@ interface Props {
   messages: TimelineMessage[];
   running: boolean;
   agentId?: string;
-  remote?: { deviceId: string; sessionId: string } | null;
+  // 与 hook 签名一致：`remote` 必填（可为 null）。写成可选会让「调用点漏传」
+  // 这个真实 bug（缺陷 3 的根因）在类型层悄悄过关——本文件正是守门的地方。
+  remote: { deviceId: string; sessionId: string } | null;
 }
 
 function renderWithProps(initialProps: Props) {

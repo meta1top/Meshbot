@@ -30,8 +30,12 @@ import type { TimelineMessage } from "@/components/session/message-list";
 export function useAutoOpenArtifact(
   messages: TimelineMessage[],
   running: boolean,
-  agentId?: string,
-  remote?: { deviceId: string; sessionId: string } | null,
+  agentId: string | undefined,
+  // **必填（可为 null），不能写成 `remote?:`。** review 实测：写成可选时，把调用点
+  // 的第 4 个实参整个删掉——也就是原样复现缺陷 3 的那个 bug——165 个测试全绿、
+  // `tsc --noEmit` 也是 0。调用点没有任何测试覆盖，靠测试兜不住；改成必填后，
+  // 漏传直接是编译错误，类型系统替我们守住这条不变量。
+  remote: { deviceId: string; sessionId: string } | null,
 ): void {
   const setArtifact = useSetAtom(previewArtifactAtom);
   // 同一产物（toolCallId）只弹一次的去重集合，与 assistantPanelTypeAtom 无关。

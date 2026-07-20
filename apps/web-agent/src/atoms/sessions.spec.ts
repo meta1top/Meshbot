@@ -240,3 +240,48 @@ describe("deleteSessionAtom / selfDeletingSessionIdsAtom（真机验收缺陷：
     expect(store.get(selfDeletingSessionIdsAtom).size).toBe(0);
   });
 });
+
+describe("deleteSessionAtom 的自删宽限期锚点（review Important 3）", () => {
+  it("宽限计时从 REST 完成才开始 —— 慢删除（>宽限期）不会让自己的删除被当成他人删除", async () => {
+    jest.useFakeTimers();
+    try {
+      const store = createStore();
+      store.set(sessionsAtom, [makeSession("slow", "idle")]);
+      // 模拟一次比宽限期还慢的删除（SQLite 与正在跑的 run 抢锁，
+      // busy_timeout=5000 让 >3s 的写够得着）
+      let resolveDelete: (() => void) | undefined;
+      (deleteSessionApi as jest.Mock).mockImplementationOnce(
+        () =>
+          new Promise<void>((r) => {
+            resolveDelete = r;
+          }),
+      );
+      const p = store.set(deleteSessionAtom, "slow");
+
+      // 宽限期已过，但 REST 还没回来——标记必须仍在，否则回声一到就误报
+      jest.advanceTimersByTime(SELF_DELETE_GRACE_MS + 1000);
+      expect(store.get(selfDeletingSessionIdsAtom).has("slow")).toBe(true);
+
+      resolveDelete?.();
+      await p;
+      // REST 完成后才起计时，此刻仍在宽限期内
+      expect(store.get(selfDeletingSessionIdsAtom).has("slow")).toBe(true);
+      jest.advanceTimersByTime(SELF_DELETE_GRACE_MS + 1);
+      expect(store.get(selfDeletingSessionIdsAtom).has("slow")).toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("删除失败 → 标记立刻清掉（否则之后在别的设备真被删时收不到提示）", async () => {
+    const store = createStore();
+    store.set(sessionsAtom, [makeSession("boom", "idle")]);
+    (deleteSessionApi as jest.Mock).mockRejectedValueOnce(
+      new Error("网络炸了"),
+    );
+    await expect(store.set(deleteSessionAtom, "boom")).rejects.toThrow(
+      /网络炸了/,
+    );
+    expect(store.get(selfDeletingSessionIdsAtom).has("boom")).toBe(false);
+  });
+});

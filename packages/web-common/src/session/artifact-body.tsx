@@ -32,27 +32,42 @@ export type ArtifactLoadErrorKind =
   | "noSource"
   | "remoteRejected"
   | "remoteUnreachable"
-  | "notFound";
+  | "notFound"
+  /**
+   * 分不出来的失败（非 409、非 5xx 的显式响应，如 401/403/400——那是**本机这台
+   * 服务器**拒了请求，鉴权/校验问题，既不是「对端拒绝」也不是「对端不可达」）。
+   * 渲染成通用文案，宁可少说也不误导——本轮正是因为把「打错机器的 404」说成
+   * 「文件没了」，把排查方向带偏到对端整整一轮。
+   */
+  | "unknown";
 
 /**
- * 远程产物加载失败的错误分类：能拿到 HTTP status 就细分，拿不到（网络层
- * 失败，没有响应）一律归「不可达」。
+ * 远程产物加载失败的错误分类：**只有 409 判「对端拒绝」，5xx / 无响应判
+ * 「对端不可达」，其余显式状态判「分不出来」（渲染通用文案）。** 这条边界是 review 抓出来的：
+ * 原实现写的是「除 504 外任何 status → 拒绝」，而 `IM_NOT_CONNECTED` 是 **503**、
+ * 由**本机自己的 relay 断线**抛出（`im-relay-client.service.ts`），跟对端毫无关系。
+ * 结果是 A 自己掉线时显示「对方设备拒绝了这次产物访问请求」，用户跑去 B 查白名单
+ * ——这个分级本身就是为消除误诊而做的，却又发了一次误诊。任何 5xx 都是「我这边
+ * 或链路出了问题」，归不可达才诚实。
  *
- * 判据取自后端两个错误码的语义（`apps/server-agent/src/errors/agent.error-codes.ts`）：
- * `REMOTE_QUERY_TIMEOUT`（504，等不到对端响应）→ 不可达；
- * `REMOTE_QUERY_UNAVAILABLE`（409，对端已给出明确的失败结果——涵盖白名单/
- * 归属校验拒绝、对端离线上报、对端处理出错，后端目前未再细分这几种）→ 拒绝。
- * 这条边界不完美（409 也覆盖「对端离线」，语义上更接近"不可达"），但已是
- * 浏览器侧能拿到的最细粒度信号——要更精确需要后端把 `reason` 透传到 HTTP
- * 层，超出本次范围。
+ * 判据取自后端错误码语义（`apps/server-agent/src/errors/agent.error-codes.ts`）：
+ * - `REMOTE_QUERY_UNAVAILABLE`（409）：对端已给出明确失败结果——涵盖白名单/归属
+ *   校验拒绝、对端离线上报、对端处理出错，后端目前未再细分 → **拒绝**
+ * - `REMOTE_QUERY_TIMEOUT`（504）、`IM_NOT_CONNECTED`（503）、其余 5xx、无响应
+ *   → **不可达**
+ *
+ * 残留不完美：409 里混着「对端离线上报」，语义上更接近不可达。要再精确需要后端
+ * 把 `reason` 透传到 HTTP 层，超出本次范围——但那是「粗了一档」，不像 503 那样
+ * **指向错误的排查对象**。
  */
 export function classifyRemoteArtifactError(
   err: unknown,
-): "remoteRejected" | "remoteUnreachable" {
+): "remoteRejected" | "remoteUnreachable" | "unknown" {
   const status = (err as { response?: { status?: number } } | null | undefined)
     ?.response?.status;
-  if (status === undefined || status === 504) return "remoteUnreachable";
-  return "remoteRejected";
+  if (status === 409) return "remoteRejected";
+  if (status === undefined || status >= 500) return "remoteUnreachable";
+  return "unknown";
 }
 
 /** 按错误态选文案；未提供细分文案（如 web-main 暂未跟进）时回退通用 `loadFailed`。 */
@@ -61,6 +76,9 @@ export function resolveLoadFailedText(
   err: ArtifactLoadErrorKind,
 ): string {
   switch (err) {
+    // 分不出来的失败：只说「加载失败」，不猜是谁的问题。
+    case "unknown":
+      return labels.loadFailed;
     case "noSource":
       return labels.loadFailedNoSource ?? labels.loadFailed;
     case "remoteRejected":

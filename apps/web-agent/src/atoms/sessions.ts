@@ -150,19 +150,33 @@ export const deleteSessionAtom = atom(null, async (get, set, id: string) => {
   set(selfDeletingSessionIdsAtom, (prev: ReadonlySet<string>) =>
     new Set(prev).add(id),
   );
-  setTimeout(() => {
+  const clearMark = () => {
     set(selfDeletingSessionIdsAtom, (prev: ReadonlySet<string>) => {
       if (!prev.has(id)) return prev;
       const next = new Set(prev);
       next.delete(id);
       return next;
     });
-  }, SELF_DELETE_GRACE_MS);
-  await deleteSessionApi(id);
+  };
+  try {
+    await deleteSessionApi(id);
+  } catch (e) {
+    // 删除失败：标记必须立刻清掉，否则这个 id 会一直被当成「本设备正在删」，
+    // 之后若真的在别的设备被删，本机就收不到提示了。
+    clearMark();
+    throw e;
+  }
   set(
     sessionsAtom,
     get(sessionsAtom).filter((s) => s.id !== id),
   );
+  // **宽限计时锚在 REST 完成之后，不是点击那一刻**（review Important）。
+  // 锚在点击时的失败场景：SQLite 写与正在跑的 run 抢锁（DataSource 设了
+  // busy_timeout=5000，>3s 的写是够得着的，不是理论值）→ 宽限期 3s 先到期
+  // → 服务端的 session.deleted 回声 3.5s 才落地 → 标记已经没了 → 用户为
+  // **自己刚做的删除**吃一个「该会话已在其他设备被删除」的阻塞提示 + 一次跳转。
+  // 锚在 REST 完成之后，宽限期覆盖的才是「回声在路上」这段真正需要保护的窗口。
+  setTimeout(clearMark, SELF_DELETE_GRACE_MS);
 });
 
 /**
