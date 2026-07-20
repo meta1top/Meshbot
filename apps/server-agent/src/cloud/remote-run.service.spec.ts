@@ -149,6 +149,15 @@ describe("RemoteRunService", () => {
 
       expect(emitter.emit).not.toHaveBeenCalled();
     });
+
+    it("Task 18：带 watchId 的帧被忽略（即便 streamId 命中已登记订阅，也让给 RemoteWatchService 处理，防重复投递）", () => {
+      const { svc, emitter } = make();
+      const { streamId } = svc.startRun("u1", "dB", "create", null, "hi");
+
+      svc.onFrame(makeFrame({ streamId, watchId: "w1" }));
+
+      expect(emitter.emit).not.toHaveBeenCalled();
+    });
   });
 
   describe("onEnd", () => {

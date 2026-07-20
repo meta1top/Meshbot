@@ -10,6 +10,7 @@ import { CloudClientService } from "./cloud/cloud-client.service";
 import { ImRelayClientService } from "./cloud/im-relay-client.service";
 import { RemoteDeviceQueryService } from "./cloud/remote-device-query.service";
 import { RemoteRunService } from "./cloud/remote-run.service";
+import { RemoteWatchService } from "./cloud/remote-watch.service";
 import { AuthController } from "./controllers/auth.controller";
 import { CloudOrgController } from "./controllers/cloud-org.controller";
 import { DriveController } from "./controllers/drive.controller";
@@ -49,6 +50,7 @@ import { JWT_SECRET, JwtStrategy } from "./strategies/jwt.strategy";
     JwtStrategy,
     RemoteDeviceQueryService,
     RemoteRunService,
+    RemoteWatchService,
     {
       provide: CloudClientService,
       inject: [

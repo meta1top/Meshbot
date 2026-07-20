@@ -101,3 +101,27 @@ export class RemotePatchSessionModelDto extends createI18nZodDto(
 ) {}
 export interface RemotePatchSessionModelDto
   extends RemotePatchSessionModelInput {}
+
+/**
+ * POST /remote-agents/:agentId/watch 请求体（Task 18：web-agent 经本机
+ * server-agent 代理发起 Agent 级观察）。本地就地定义（不复用 `@meshbot/types`
+ * 的 `AgentWatchStartSchema`——那个还带 watchId/targetAgentId，此处 watchId 由
+ * 服务端生成、targetAgentId 是路径参数，两者都不在请求体里）。
+ */
+export const RemoteWatchStartSchema = z
+  .object({
+    scope: z.enum(["agent", "session"]),
+    /** scope="session" 时必填：被观察会话在目标设备上的 id。 */
+    sessionId: z.string().min(1).optional(),
+  })
+  .refine((v) => v.scope !== "session" || !!v.sessionId, {
+    message: "scope=session 必须携带 sessionId",
+    path: ["sessionId"],
+  });
+export type RemoteWatchStartInput = z.infer<typeof RemoteWatchStartSchema>;
+
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
+export class RemoteWatchStartDto extends createI18nZodDto(
+  RemoteWatchStartSchema,
+) {}
+export interface RemoteWatchStartDto extends RemoteWatchStartInput {}

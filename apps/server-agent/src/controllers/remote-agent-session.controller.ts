@@ -3,19 +3,28 @@ import type { HistoryResponse, SessionSummary } from "@meshbot/types-agent";
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
   Query,
 } from "@nestjs/common";
-import { ApiOperation } from "@nestjs/swagger";
+import {
+  ApiBody,
+  ApiCreatedResponse,
+  ApiNoContentResponse,
+  ApiOperation,
+} from "@nestjs/swagger";
 
 import { RemoteDeviceQueryService } from "../cloud/remote-device-query.service";
 import {
   RemoteRunService,
   type RemoteRunView,
 } from "../cloud/remote-run.service";
+import { RemoteWatchService } from "../cloud/remote-watch.service";
 import {
   RemoteAnswerDto,
   RemoteConfirmDto,
@@ -23,6 +32,7 @@ import {
   RemoteRunDto,
   RemoteRunsQueryDto,
   RemotePatchSessionModelDto,
+  RemoteWatchStartDto,
 } from "../dto/remote-run.dto";
 
 /**
@@ -37,6 +47,7 @@ export class RemoteAgentSessionController {
   constructor(
     private readonly query: RemoteDeviceQueryService,
     private readonly remoteRun: RemoteRunService,
+    private readonly remoteWatch: RemoteWatchService,
     private readonly account: AccountContextService,
   ) {}
 
@@ -194,5 +205,43 @@ export class RemoteAgentSessionController {
   ): RemoteRunView | null {
     if (query.streamId) return this.remoteRun.findRunByStreamId(query.streamId);
     return this.remoteRun.findRunBySession(agentId, query.sessionId as string);
+  }
+
+  /**
+   * Task 18：web-agent 浏览器不直连云端，经本机 server-agent 代理发起对目标
+   * 远程 Agent 的观察（`scope:"agent"` 订会话生命周期镜像 / `scope:"session"`
+   * 订推理帧）。RemoteWatchService 经 relay 上行 `agent.watch.start` 并登记
+   * watchId，回流帧按登记的 scope 分流下发（session → 影子桥；agent → 专属
+   * 信封 `REMOTE_AGENT_EVENTS.sessionEvent`，见该服务类注释的分流规则）。
+   */
+  @Post("remote-agents/:agentId/watch")
+  @ApiOperation({ summary: "发起对目标远程 Agent 的观察（web-agent 代理层）" })
+  @ApiBody({ type: RemoteWatchStartDto })
+  @ApiCreatedResponse({
+    description: "观察已登记，返回 watchId",
+    schema: { properties: { watchId: { type: "string" } } },
+  })
+  watch(
+    @Param("agentId") agentId: string,
+    @Body() dto: RemoteWatchStartDto,
+  ): { watchId: string } {
+    return this.remoteWatch.startWatch(
+      this.account.getOrThrow(),
+      agentId,
+      dto.scope,
+      dto.sessionId,
+    );
+  }
+
+  /** 显式注销对目标远程 Agent 的观察（离开视图 / 关闭会话），经 relay 上行 `agent.watch.stop`。 */
+  @Delete("remote-agents/:agentId/watch/:watchId")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: "注销对目标远程 Agent 的观察" })
+  @ApiNoContentResponse({ description: "已注销" })
+  unwatch(
+    @Param("agentId") _agentId: string,
+    @Param("watchId") watchId: string,
+  ): void {
+    this.remoteWatch.stopWatch(this.account.getOrThrow(), watchId);
   }
 }

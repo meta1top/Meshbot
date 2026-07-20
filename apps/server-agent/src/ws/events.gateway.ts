@@ -26,6 +26,7 @@ import {
   type ModelConfigUpdatedEvent,
   REMOTE_AGENT_EVENTS,
   type RemoteAgentRegistryChangedEvent,
+  type RemoteAgentSessionEventPayload,
   SCHEDULE_EVENTS,
   type ScheduleFiredEvent,
   SESSION_LIFECYCLE_EVENTS,
@@ -310,6 +311,22 @@ export class EventsGateway extends BaseWebSocketGateway {
     this.emitEnvelope(REMOTE_AGENT_EVENTS.registryChanged, {
       cloudUserId: payload.cloudUserId,
     } satisfies RemoteAgentRegistryChangedEvent);
+  }
+
+  /**
+   * 远程 Agent 的会话生命周期镜像 → 信封投递给所属账号浏览器（Agent 级观察
+   * 通道，修缺口 ②）。
+   *
+   * **专属信封而非复用本地 `session.created` 等事件名**：本地那条总线上挂着
+   * `AgentWatchMirrorService`（会把收到的事件当本机事件再镜像出去 → 回环）与
+   * 本网关的本地下发路径（浏览器会把远程会话插进**本机**列表）。故包进
+   * `remote-agent.session_event` 信封并携带**云端 agentId**，浏览器按 agentId
+   * 分流到对应远程 Agent 的视图——与 `REMOTE_SHADOW_FRAME_EVENT` 不复用原始
+   * `SESSION_WS_EVENTS.*` 名是同一个理由。
+   */
+  @OnEvent(REMOTE_AGENT_EVENTS.sessionEvent)
+  onRemoteAgentSessionEvent(payload: RemoteAgentSessionEventPayload): void {
+    this.emitEnvelope(REMOTE_AGENT_EVENTS.sessionEvent, payload);
   }
 
   /**

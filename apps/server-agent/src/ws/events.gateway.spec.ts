@@ -206,6 +206,23 @@ describe("EventsGateway 下行信封 + 账号路由", () => {
     expect(env.payload).toEqual(payload);
   });
 
+  it("remote-agent.session_event 本地事件包信封下发到 acct 房间（远程 Agent 会话生命周期镜像，Task 18）", () => {
+    const account = new AccountContextService();
+    const { gw, roomEmit, to, broadcastEmit } = makeGateway(account);
+    const payload = {
+      agentId: "cloud-a1",
+      event: SESSION_LIFECYCLE_EVENTS.created,
+      payload: { agentId: "远程本地id", session: { id: "s9" } },
+    };
+    account.run("U1", () => gw.onRemoteAgentSessionEvent(payload));
+    expect(to).toHaveBeenCalledWith("acct:U1");
+    const [eventName, env] = roomEmit.mock.calls[0];
+    expect(eventName).toBe("event");
+    expect(env.type).toBe(REMOTE_AGENT_EVENTS.sessionEvent);
+    expect(env.payload).toEqual(payload);
+    expect(broadcastEmit).not.toHaveBeenCalled();
+  });
+
   it("auth.reauth_required 本地事件 → 信封转发为 AUTH_WS_EVENTS.reauthRequired", () => {
     const account = new AccountContextService();
     const { gw, roomEmit, to } = makeGateway(account);

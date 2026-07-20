@@ -1,6 +1,7 @@
 import type { AccountContextService } from "@meshbot/lib-agent";
 import type { RemoteDeviceQueryService } from "../cloud/remote-device-query.service";
 import type { RemoteRunService } from "../cloud/remote-run.service";
+import type { RemoteWatchService } from "../cloud/remote-watch.service";
 import { RemoteAgentSessionController } from "./remote-agent-session.controller";
 
 /**
@@ -18,12 +19,14 @@ describe("RemoteAgentSessionController（confirm/answer/runs）", () => {
       findRunByStreamId: jest.fn(),
       findRunBySession: jest.fn(),
     } as unknown as RemoteRunService;
+    const remoteWatch = {} as RemoteWatchService;
     const account = {
       getOrThrow: () => "u1",
     } as AccountContextService;
     const controller = new RemoteAgentSessionController(
       query,
       remoteRun,
+      remoteWatch,
       account,
     );
     return { controller, remoteRun };
@@ -97,10 +100,12 @@ describe("RemoteAgentSessionController（confirm/answer/runs）", () => {
     const remoteRun = {
       startRun: jest.fn().mockReturnValue({ streamId: "st1" }),
     } as unknown as RemoteRunService;
+    const remoteWatch = {} as RemoteWatchService;
     const account = { getOrThrow: () => "u1" } as AccountContextService;
     const controller = new RemoteAgentSessionController(
       query,
       remoteRun,
+      remoteWatch,
       account,
     );
 
@@ -124,15 +129,64 @@ describe("RemoteAgentSessionController（confirm/answer/runs）", () => {
       query: jest.fn().mockResolvedValue([]),
     } as unknown as RemoteDeviceQueryService;
     const remoteRun = {} as RemoteRunService;
+    const remoteWatch = {} as RemoteWatchService;
     const account = { getOrThrow: () => "u1" } as AccountContextService;
     const controller = new RemoteAgentSessionController(
       query,
       remoteRun,
+      remoteWatch,
       account,
     );
 
     await controller.sessions("agentB");
 
     expect(query.query).toHaveBeenCalledWith("u1", "agentB", "sessions", {});
+  });
+
+  it("POST watch → startWatch 收到路径 agentId 作为 targetAgentId + 请求体 scope/sessionId（Task 18）", () => {
+    const query = {} as RemoteDeviceQueryService;
+    const remoteRun = {} as RemoteRunService;
+    const remoteWatch = {
+      startWatch: jest.fn().mockReturnValue({ watchId: "w1" }),
+    } as unknown as RemoteWatchService;
+    const account = { getOrThrow: () => "u1" } as AccountContextService;
+    const controller = new RemoteAgentSessionController(
+      query,
+      remoteRun,
+      remoteWatch,
+      account,
+    );
+
+    const result = controller.watch("agentB", {
+      scope: "session",
+      sessionId: "sess1",
+    } as never);
+
+    expect(remoteWatch.startWatch).toHaveBeenCalledWith(
+      "u1",
+      "agentB",
+      "session",
+      "sess1",
+    );
+    expect(result).toEqual({ watchId: "w1" });
+  });
+
+  it("DELETE watch/:watchId → stopWatch 收到 watchId（不依赖路径 agentId）", () => {
+    const query = {} as RemoteDeviceQueryService;
+    const remoteRun = {} as RemoteRunService;
+    const remoteWatch = {
+      stopWatch: jest.fn(),
+    } as unknown as RemoteWatchService;
+    const account = { getOrThrow: () => "u1" } as AccountContextService;
+    const controller = new RemoteAgentSessionController(
+      query,
+      remoteRun,
+      remoteWatch,
+      account,
+    );
+
+    controller.unwatch("agentB", "w1");
+
+    expect(remoteWatch.stopWatch).toHaveBeenCalledWith("u1", "w1");
   });
 });
