@@ -158,6 +158,21 @@ export function AssistantConversationBody({
     remoteInitialStreamId,
   );
 
+  // Session 级观察通道（T18/T19 · 消费端 T19b）：正在看一个「不是自己发起的」
+  // 远程会话时才需要——逐字对照 web-main 的
+  // `apps/web-main/src/components/assistant/remote-session-view.tsx:250-255`
+  // （已真机验收）。不建这路 watch，B 端常驻转发器要等满 5 分钟 idle 才拆——
+  // 能兜住，但白占资源，且这段窗口内本组件也收不到 B 端的实时镜像帧。
+  // `transport.watchSession` 内部已处理断线重连自动重 watch（T12
+  // onReconnect），本组件不需要感知 socket 连接状态；本地会话
+  // （remoteAgentId 为空）的 transport 是本机专属实现，不提供
+  // `watchSession`，`?.` 安全跳过。
+  useEffect(() => {
+    if (!remoteAgentId) return;
+    const unwatch = transport.watchSession?.(id);
+    return () => unwatch?.();
+  }, [transport, remoteAgentId, id]);
+
   const timelineMessages = useMemo(
     () => stream.messages.filter((m) => !m.pending),
     [stream.messages],

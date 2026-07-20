@@ -34,6 +34,7 @@ import {
 } from "@/atoms/sessions";
 import { loadSidebarAtom } from "@/atoms/sidebar";
 import { AgentEditorSheet } from "@/components/agent/agent-editor-sheet";
+import { useRemoteAgentLifecycleWatch } from "@/hooks/use-remote-agent-lifecycle-watch";
 import { parseAgentAvatar } from "@/lib/agent-avatar";
 import { groupSessionsByAgent } from "@/lib/group-sessions-by-agent";
 import { shouldShowSidebarSkeleton } from "@/lib/should-show-sidebar-skeleton";
@@ -167,6 +168,18 @@ export function AssistantSidebar() {
       if (ra?.deviceOnline) void loadRemoteSessions(agentId);
     }
   }, [expanded, remoteAgents, loadRemoteSessions]);
+
+  // Agent 级观察通道（T18/T19 · 消费端 T19b）：对每个「已展开 且 宿主在线」
+  // 的远程 Agent 建一路 `watchAgent`，让云端开始下发该 Agent 的会话生命周期
+  // 镜像事件——事件本身落进 `remoteSessionsAtom` 走的是另一条路径（全局事件
+  // 总线 `use-global-events.ts`），本调用只管 watch 的注册/注销生命周期，见
+  // `useRemoteAgentLifecycleWatch` 类文档。`targets` 是每次渲染新建的数组，
+  // 这是安全的——hook 内部按稳定字符串 key 驱动 effect，不直接依赖数组引用。
+  useRemoteAgentLifecycleWatch(
+    (remoteAgents ?? [])
+      .filter((ra) => expanded.has(`${REMOTE_AGENT_PREFIX}${ra.id}`))
+      .map((ra) => ({ agentId: ra.id, online: ra.deviceOnline })),
+  );
 
   // 展开态变化（开/合都触发）：更新 expanded + 落盘持久化。Review M-4：只有
   // Agent 节点（本机 `ag:`/远程 `rag:`）的展开态值得落盘，校验前缀，避免未来
