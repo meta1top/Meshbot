@@ -665,6 +665,7 @@ function RemoteSessionViewReady({
               onSend={(text) => void handleSend(text)}
               onInterrupt={stream.interrupt}
               isLoading={stream.running}
+              canInterrupt={stream.canInterrupt}
               placeholder={t("input.placeholder")}
               leadingActions={<ComposerActions />}
               trailingActions={
@@ -677,6 +678,7 @@ function RemoteSessionViewReady({
               labels={{
                 attachment: t("input.attachment"),
                 interrupt: t("input.stop"),
+                interruptUnavailable: t("input.stopUnavailable"),
               }}
             />
           )}

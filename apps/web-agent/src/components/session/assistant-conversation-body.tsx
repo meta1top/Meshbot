@@ -370,6 +370,7 @@ export function AssistantConversationBody({
           onSend={(text) => void handleSend(text)}
           onInterrupt={stream.interrupt}
           isLoading={stream.running}
+          canInterrupt={stream.canInterrupt}
           placeholder={inputPlaceholder}
           trailingActions={
             <ModelSelect value={sessionModelId} onChange={handleModelChange} />
@@ -393,6 +394,7 @@ export function AssistantConversationBody({
           labels={{
             attachment: tChat("attachment"),
             interrupt: tChat("interrupt"),
+            interruptUnavailable: tChat("interruptUnavailable"),
             send: tChat("send"),
             usage: {
               nextRequestLabel: t("usage.nextRequestLabel"),

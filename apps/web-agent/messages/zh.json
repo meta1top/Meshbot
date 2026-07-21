@@ -199,7 +199,8 @@
       "linkText": "链接文字",
       "bulletList": "无序列表",
       "numberedList": "有序列表"
-    }
+    },
+    "interruptUnavailable": "观察态下无法中断：这个 run 不是本端发起的"
   },
   "schedule": {
     "title": "计划任务",

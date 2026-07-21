@@ -68,7 +68,8 @@
     "offlineSessionsHint": "设备离线，无法加载会话列表",
     "remoteLoadFailed": "会话列表加载失败",
     "remoteEmpty": "该 Agent 暂无会话",
-    "empty": "还没有可用的 Agent"
+    "empty": "还没有可用的 Agent",
+    "watchFailed": "无法接收该 Agent 的实时更新（设备可能离线或无法远程访问）"
   },
   "session": {
     "assistantName": "助手",
@@ -102,7 +103,8 @@
       "placeholder": "输入你的任务或问题",
       "send": "发送",
       "stop": "中断",
-      "attachment": "添加附件"
+      "attachment": "添加附件",
+      "stopUnavailable": "观察态下无法中断：这个 run 不是本端发起的"
     },
     "compaction": {
       "bannerThreshold": "会话历史压缩中…",

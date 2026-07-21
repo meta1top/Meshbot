@@ -27,6 +27,7 @@ jest.mock("@tanstack/react-query", () => {
   };
 });
 
+import type { AgentWatchAccepted } from "@meshbot/types";
 import type { SessionSummary } from "@meshbot/types-agent";
 import type { SessionListEvent } from "@meshbot/web-common/session/session-list-events";
 import type { SessionTransport } from "@meshbot/web-common/session/transport";
@@ -39,12 +40,14 @@ import {
 import { remoteSessionsQueryKey } from "./use-remote-sessions";
 
 /** 一路假 transport 的可观测句柄：断言 watch/unwatch/dispose 调用次数，并
- * 主动 `emit` 一条生命周期事件模拟设备侧镜像帧到达。 */
+ * 主动 `emit` 一条生命周期事件模拟设备侧镜像帧到达；`emitError` 模拟
+ * `watchAgent` 的 `onError` 回调被 transport 触发（Bug 2 回归）。 */
 interface FakeHandle {
   watchCalls: number;
   unwatchCalls: number;
   disposeCalls: number;
   emit: (evt: SessionListEvent) => void;
+  emitError: (reason?: AgentWatchAccepted["reason"]) => void;
 }
 
 /** `SessionTransport` 里本 hook 不使用的方法一律桩成「调用即抛错」——本 hook
@@ -67,11 +70,15 @@ function makeFakeTransportFactory(opts?: { supportsWatchAgent?: boolean }) {
 
   const factory = (agentId: string): SessionTransport => {
     let listener: ((evt: SessionListEvent) => void) | null = null;
+    let errorListener:
+      | ((reason?: AgentWatchAccepted["reason"]) => void)
+      | null = null;
     const handle: FakeHandle = {
       watchCalls: 0,
       unwatchCalls: 0,
       disposeCalls: 0,
       emit: (evt) => listener?.(evt),
+      emitError: (reason) => errorListener?.(reason),
     };
     handles.set(agentId, handle);
 
@@ -98,9 +105,13 @@ function makeFakeTransportFactory(opts?: { supportsWatchAgent?: boolean }) {
 
     return {
       ...base,
-      watchAgent: (onEvent: (evt: SessionListEvent) => void) => {
+      watchAgent: (
+        onEvent: (evt: SessionListEvent) => void,
+        onError?: (reason?: AgentWatchAccepted["reason"]) => void,
+      ) => {
         handle.watchCalls += 1;
         listener = onEvent;
+        errorListener = onError ?? null;
         return () => {
           handle.unwatchCalls += 1;
         };
@@ -213,5 +224,70 @@ describe("useAgentLifecycleWatch", () => {
     expect(
       queryClient.getQueryData(remoteSessionsQueryKey("a2")),
     ).toBeUndefined();
+  });
+
+  /**
+   * Bug 2 回归：Agent 级 watch 被拒（cross_account/not_found/offline/...）
+   * 此前无处可去——`transport.watchAgent` 的调用方（本 hook）不接 onError，
+   * 拒绝信号在 transport 内部就被吞掉，侧栏「静默停止更新」而用户毫无感知。
+   * 现在 `watchAgent` 的第二个入参把拒绝原因带到这里，本 hook 据此在返回值
+   * 里暴露每个 agentId 当前的失败信号，供调用方（侧栏）渲染可见提示。
+   *
+   * 核心不变量（供变异验证）：若 `watchAgent(onEvent)` 调用时漏传第二个
+   * `onError` 参数（即拒绝信号不投递给调用方），`emitError` 触发时
+   * `errorListener` 恒为 `null`，`result.current` 永远拿不到这条失败——这组
+   * 用例断言的正是「拒绝信号确实到达了调用方暴露的返回值」，反过来漏接就会
+   * 直接变红。
+   */
+  it("watchAgent 被拒 → 失败信号出现在 hook 返回值里，调用方据此感知（Bug 2 修复）", () => {
+    const { factory, handles } = makeFakeTransportFactory();
+    const { result } = renderWithClient(
+      [{ agentId: "a1", online: true }],
+      factory,
+    );
+
+    expect(result.current.size).toBe(0);
+
+    act(() => {
+      handles.get("a1")?.emitError("cross_account");
+    });
+
+    expect(result.current.get("a1")).toEqual({ reason: "cross_account" });
+  });
+
+  it("Agent 从候选集合移除后，失败信号一并清掉（不留陈旧提示）", () => {
+    const { factory, handles } = makeFakeTransportFactory();
+    const { result, rerender } = renderWithClient(
+      [{ agentId: "a1", online: true }],
+      factory,
+    );
+
+    act(() => {
+      handles.get("a1")?.emitError("offline");
+    });
+    expect(result.current.has("a1")).toBe(true);
+
+    // 收起：targets 里不再包含 a1。
+    rerender({ targets: [] });
+
+    expect(result.current.has("a1")).toBe(false);
+  });
+
+  it("多个 Agent 各自独立的失败信号，不互相污染", () => {
+    const { factory, handles } = makeFakeTransportFactory();
+    const { result } = renderWithClient(
+      [
+        { agentId: "a1", online: true },
+        { agentId: "a2", online: true },
+      ],
+      factory,
+    );
+
+    act(() => {
+      handles.get("a1")?.emitError("not_found");
+    });
+
+    expect(result.current.get("a1")).toEqual({ reason: "not_found" });
+    expect(result.current.has("a2")).toBe(false);
   });
 });

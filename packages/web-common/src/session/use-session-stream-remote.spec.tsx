@@ -235,7 +235,7 @@ async function renderToolStream() {
     ),
   );
   await waitFor(() => expect(result.current.historyLoading).toBe(false));
-  return { socket, result };
+  return { socket, result, transport };
 }
 
 const argsDelta = (over: Record<string, unknown> = {}) => ({
@@ -445,5 +445,101 @@ describe("useSessionStream 工具事件状态推进", () => {
     expect(allTools(result.current.messages)).toHaveLength(1);
     expect(result.current.messages).toHaveLength(1);
     expect(allTools(result.current.messages)[0]?.status).toBe("ok");
+  });
+});
+
+/**
+ * Bug 1 回归：观察态（`remoteDeviceId` 非空但没有可路由的 streamId——这个
+ * run 不是本端发起的，本端只是挂了 session 级 watch）下点 Stop 此前会
+ * 乐观把 UI 结算成「已停止」，而 `transport.interrupt` 因 streamId 缺失恒是
+ * warn + no-op，从未真正打断——设备上那个 run 继续跑，后续帧到达时又把
+ * running 拨回 true，UI 撒了一次谎。
+ *
+ * 用 `makeFakeSocket()` 模拟「别人发起的 run」的帧到达（onChunk 等 handler
+ * 无条件 `setRunning(true)`，不依赖 streamId）复现观察态：本端从未调用
+ * `startRun`，`fetchActiveRun` reclaim 也查无活跃 run（真实观察者场景，
+ * `RemoteRunTracker`/`findRunBySession` 都不会认领一个不属于本端请求方的
+ * run），`remoteStreamIdRef` 因此始终为 null，但 `running` 仍会被帧拨成
+ * true。
+ */
+describe("useSessionStream remote 分支 interrupt 观察态（Bug 1）", () => {
+  it("观察态下点 Stop：不乐观置停、不调用 transport.interrupt（核心不变量）", async () => {
+    const { socket, result, transport } = await renderToolStream();
+    // fetchActiveRun 已经权威校正过：没有可 reclaim 的活跃 run（真观察者）。
+    expect(result.current.running).toBe(false);
+    expect(result.current.getStreamId()).toBeNull();
+
+    // 别人发起的 run 的帧到达（本端只是挂了 session 级 watch）。
+    act(() => {
+      socket.fire(SESSION_WS_EVENTS.runChunk, {
+        sessionId: SID,
+        messageId: "m-observed",
+        delta: "对端输出",
+      });
+    });
+    expect(result.current.running).toBe(true);
+    expect(result.current.getStreamId()).toBeNull();
+    expect(result.current.canInterrupt).toBe(false);
+
+    act(() => {
+      result.current.interrupt();
+    });
+
+    // 核心不变量：观察态下点 Stop 不能让 UI 撒谎——running 必须保持 true
+    // （不是被乐观拨回 false），且从未真正发出中断请求（transport.interrupt
+    // 一次都不该被调用，不同于「调用了但 streamId 是 null 的 no-op」）。
+    expect(result.current.running).toBe(true);
+    expect(transport.interrupt).not.toHaveBeenCalled();
+  });
+
+  it("发起方：send() 拿到的 streamId 与 running 同一拍落地，不会被误判成观察态", async () => {
+    const transport = makeTransport({
+      startRun: jest.fn().mockResolvedValue({ streamId: "s-mine" }),
+    });
+    const { result } = renderRemoteStream(transport, null);
+    await waitFor(() => expect(result.current.running).toBe(false));
+
+    await act(async () => {
+      await result.current.send("你好");
+    });
+
+    expect(result.current.running).toBe(true);
+    expect(result.current.getStreamId()).toBe("s-mine");
+    expect(result.current.canInterrupt).toBe(true);
+
+    act(() => {
+      result.current.interrupt();
+    });
+
+    // 发起方点 Stop：乐观结算正常发生，且真的路由到目标设备。
+    expect(result.current.running).toBe(false);
+    expect(transport.interrupt).toHaveBeenCalledWith("s-mine", SID);
+  });
+
+  it("刷新后 reclaim 成功（服务端仍有活跃 run）：streamId 回填与 running=true 同一拍完成，Stop 立即可用", async () => {
+    const transport = makeTransport({
+      fetchActiveRun: jest.fn().mockResolvedValue({ streamId: "live-stream" }),
+    });
+    const { result } = renderRemoteStream(transport, null);
+
+    await waitFor(() => expect(result.current.running).toBe(true));
+    expect(result.current.canInterrupt).toBe(true);
+
+    act(() => {
+      result.current.interrupt();
+    });
+    expect(result.current.running).toBe(false);
+    expect(transport.interrupt).toHaveBeenCalledWith("live-stream", SID);
+  });
+
+  it("本地分支（remoteDeviceId 为空）恒可中断，不受这套判定影响", async () => {
+    const transport = makeTransport({
+      fetchPending: jest.fn().mockResolvedValue({ pending: [] }),
+    });
+    const { result } = renderHook(() =>
+      useSessionStream("sess-1", scrollRef, transport, getSocket, noCallbacks),
+    );
+    expect(result.current.canInterrupt).toBe(true);
+    await waitFor(() => expect(result.current.historyLoading).toBe(false));
   });
 });

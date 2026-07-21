@@ -199,7 +199,8 @@
       "linkText": "text",
       "bulletList": "Bulleted list",
       "numberedList": "Numbered list"
-    }
+    },
+    "interruptUnavailable": "Cannot interrupt while observing: this run was not started from this device"
   },
   "schedule": {
     "title": "Scheduled tasks",

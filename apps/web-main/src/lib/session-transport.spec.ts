@@ -566,6 +566,84 @@ describe("web-main：Agent 级 watch", () => {
       { watchId },
     ]);
   });
+
+  /**
+   * Bug 2 回归：Agent 级 watch 被拒（`offline`/`cross_account`/`not_found`/
+   * `session_agent_mismatch`/`error`）此前直接复用 session 级那套
+   * `handleWatchRejected` → `runEvents.emit(WATCH_REJECTED_EVENT, {sessionId,
+   * reason})`——但 Agent 级没有单一 sessionId（`WatchHandle.sessionId` 是占位
+   * 空串），会话级消费者（`remote-session-view.tsx`）按真实 sessionId 过滤，
+   * 永远匹配不上这条占位事件，拒绝信号因此被静默吞掉：`watchAgent` 的调用方
+   * （`useAgentLifecycleWatch`）完全无从感知，侧栏表现为「静默停止更新」。
+   */
+  it("Bug 2：watchAgent 被拒 → 经 onError 回调通知调用方（不是只 console.warn）", () => {
+    const t = createRemoteSessionTransport("cloud-a1");
+    const errors: unknown[] = [];
+    t.watchAgent!(
+      () => {},
+      (reason) => errors.push(reason),
+    );
+    const watchId = watchIdOfLastStart();
+    fakeSocket.fire(IM_WS_EVENTS.agentWatchAccepted, {
+      watchId,
+      ok: false,
+      reason: "cross_account",
+    });
+    expect(errors).toEqual(["cross_account"]);
+  });
+
+  it("Bug 2：watchAgent 被拒不再误发到 subscribe() 的 watch.rejected 多播（sessionId 占位空串，session 级消费者按 sessionId 过滤永远收不到，纯噪音）", () => {
+    const t = createRemoteSessionTransport("cloud-a1");
+    const seen: Array<[string, unknown]> = [];
+    t.subscribe({ onEvent: (e, p) => seen.push([e, p]) });
+    t.watchAgent!(() => {});
+    const watchId = watchIdOfLastStart();
+    fakeSocket.fire(IM_WS_EVENTS.agentWatchAccepted, {
+      watchId,
+      ok: false,
+      reason: "offline",
+    });
+    expect(seen.filter(([e]) => e === "watch.rejected")).toHaveLength(0);
+  });
+
+  it("Bug 2：已受理的 Agent 级通道事后被拒（宿主设备断线）→ 同样经 onError 通知", () => {
+    const t = createRemoteSessionTransport("cloud-a1");
+    const errors: unknown[] = [];
+    t.watchAgent!(
+      () => {},
+      (reason) => errors.push(reason),
+    );
+    const watchId = watchIdOfLastStart();
+    fakeSocket.fire(IM_WS_EVENTS.agentWatchAccepted, {
+      watchId,
+      ok: true,
+      inflight: null,
+    });
+    fakeSocket.fire(IM_WS_EVENTS.agentWatchAccepted, {
+      watchId,
+      ok: false,
+      reason: "offline",
+    });
+    expect(errors).toEqual(["offline"]);
+  });
+
+  it("Bug 2：Agent 级 idle 拒绝仍然原地自动重新发起，不触发 onError（透明自愈）", () => {
+    const t = createRemoteSessionTransport("cloud-a1");
+    const errors: unknown[] = [];
+    t.watchAgent!(
+      () => {},
+      (reason) => errors.push(reason),
+    );
+    const firstId = watchIdOfLastStart();
+    fakeSocket.fire(IM_WS_EVENTS.agentWatchAccepted, {
+      watchId: firstId,
+      ok: false,
+      reason: "idle",
+    });
+    const secondId = watchIdOfLastStart();
+    expect(secondId).not.toBe(firstId);
+    expect(errors).toEqual([]);
+  });
 });
 
 /**

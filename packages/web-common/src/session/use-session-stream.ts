@@ -205,8 +205,23 @@ export interface SessionStream {
    * 「发起失败但已补一条 failed 气泡」的情形——那已经是可见反馈了）。
    */
   send: (msg: string) => Promise<boolean>;
-  /** 中断当前 run：本地经 WS，remote 经 relay 控制帧。 */
+  /**
+   * 中断当前 run：本地经 WS，remote 经 relay 控制帧。观察态（见
+   * {@link canInterrupt}）下调用是纯 no-op（只 console.warn，不产生任何状态
+   * 变更）——UI 层应优先靠 `canInterrupt` 禁用/隐藏触发点，这里是最后一道
+   * 防线，防止程序化调用仍然把界面撒谎成「已停止」。
+   */
   interrupt: () => void;
+  /**
+   * 停止按钮当前是否可用（Bug 1 修复）。本地分支（`remoteDeviceId` 为空）
+   * 恒为 `true`——本机中断走 sessionId 直接寻址，不依赖 streamId。remote
+   * 分支为 `true` 当且仅当当前持有一个可路由的 streamId（自己发起的
+   * run，或 `fetchActiveRun` reclaim 成功）；为 `false` 时即为「观察态」
+   * ——这个 run 不是本端发起的（如中途打开一个正在跑的远程会话，只挂了
+   * session 级 watch），点 `interrupt` 也无法真正路由到目标设备，UI 应据此
+   * 禁用/隐藏停止按钮，而不是让用户点了却看到一个撒谎的「已停止」。
+   */
+  canInterrupt: boolean;
   /** 上拉加载更早历史（含滚动锚定，需传 scrollContainerRef）。local/remote 均支持。 */
   loadMoreHistory: () => Promise<void>;
   /** 本地会话为 null；远程会话为目标设备 id，供 RemoteSessionProvider 使用。 */
@@ -1369,9 +1384,7 @@ export function useSessionStream(
 
   /**
    * Stop 按钮：本地经 socket 发中断信号；remote 经 relay 控制帧
-   * （`transport.interrupt`），路由靠 `remoteStreamIdRef` 当前记的 streamId
-   * ——若为 null（本页尚未发起过 run，如直接刷新进入一个仍在跑的远程会话）
-   * 则无法路由到 B，no-op（Phase A 已知限制）。
+   * （`transport.interrupt`），路由靠 `remoteStreamIdRef` 当前记的 streamId。
    *
    * 【Bug #4】点击当帧先乐观本地结算（`setRunning(false)` +
    * `settleInterruptedTimeline`），不等 `transport.interrupt` 的网络往返、
@@ -1382,14 +1395,38 @@ export function useSessionStream(
    * 结算天然幂等，不会有视觉跳变；万一实际并未真正打断（如 B 侧仍在继续跑），
    * 下一帧 onChunk/onReasoning/onSnapshot 会把 running 重新拨回 true，不会
    * 永久卡在错误的「已停」态。
+   *
+   * 【Bug 1】上面这份「万一没真正打断，下一帧会自愈」的兜底，前提是乐观
+   * 结算本身没有主动撒谎。remote 分支若当前没有可路由的 streamId（观察态：
+   * 本页只是挂了 session 级 watch，这个 run 不是本端发起的；或 Phase A 已知
+   * 限制——直接刷新进入一个仍在跑的远程会话），`transport.interrupt` 恒是
+   * warn + no-op，从来不会真的打断，此时若仍然乐观结算，就会制造一个「UI
+   * 显示已停止，设备上那个 run 其实还在继续跑」的持续矛盾态（后续帧到达时
+   * onChunk 等 handler 会把 running 拨回 true，观感上是打断按钮又诡异复活）
+   * ——比什么都不做更坏，因此这里直接跳过整段结算，不调用 transport。
+   *
+   * 判定「观察态」而不误伤「刚发起、streamId 还在路上」：本 hook 里
+   * `remoteStreamIdRef` 的每一次写入（挂载时回填 `remoteInitialStreamId` /
+   * `send()` 的远程续写分支拿到 `startRun` 返回的 streamId / `fetchActiveRun`
+   * reclaim 成功）都与 `setRunning(true)` 在同一处同步完成，不存在
+   * 「running 已经是 true、但 streamId 还没写入」的窗口——`running` 唯一能在
+   * streamId 缺失时被拨成 true 的路径是 onReasoning/onChunk/onSnapshot 收到
+   * 「别人发起的 run」的帧（本端只是观察者）。换言之，Stop 按钮此刻可见
+   * （`running===true`）且 `remoteStreamIdRef.current` 为空，只可能是真正的
+   * 观察态；自己刚发起的 run 这一刻要么 Stop 按钮还没出现（乐观 running 仍是
+   * false），要么 streamId 早已跟 running 一起落地。
    */
   const interrupt = useCallback(() => {
     if (!sessionId) return;
+    if (remoteDeviceId && !remoteStreamIdRef.current) {
+      console.warn(
+        "观察态下无法中断：这个 run 不是本端发起的，没有可路由的 streamId",
+      );
+      return;
+    }
     setRunning(false);
     apply((prev) => settleInterruptedTimeline(prev));
     if (remoteDeviceId) {
-      // streamId 为 null 时的 warn + no-op 已下沉到 transport.interrupt 内部
-      // （与本函数原有文案逐字一致，见 lib/session-transport.ts），此处不再重复判断。
       void transport
         .interrupt(remoteStreamIdRef.current, sessionId)
         .catch((err) => {
@@ -1507,6 +1544,10 @@ export function useSessionStream(
     apply,
     send,
     interrupt,
+    // 每次渲染现算，见 canInterrupt 文档：remoteStreamIdRef 的每次写入都与
+    // 一次 setRunning 同步发生，因此这里读到的值在实际会被消费的渲染帧里
+    // 总是新鲜的，不需要额外的 state 镜像。
+    canInterrupt: !remoteDeviceId || remoteStreamIdRef.current !== null,
     loadMoreHistory,
     remoteDeviceId: remoteDeviceId ?? null,
     getStreamId: () => remoteStreamIdRef.current,

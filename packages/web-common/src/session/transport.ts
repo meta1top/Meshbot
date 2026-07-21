@@ -1,3 +1,4 @@
+import type { AgentWatchAccepted } from "@meshbot/types";
 import type {
   HistoryResponse,
   PendingResponse,
@@ -107,8 +108,23 @@ export interface SessionTransport {
    * 要到 T19 才实现，可不实现——本机会话列表本身已经通过 `ws/events`
    * 信封实时收生命周期事件，不需要一条独立的观察通道。消费方统一按
    * `transport.watchAgent?.(cb)` 调用，缺失时安全跳过。
+   *
+   * `onError`（Bug 2 修复）：观察通道被拒绝（`offline`/`cross_account`/
+   * `not_found`/`session_agent_mismatch`/`error`；不含 `idle`——同 `reason`
+   * 字段整体语义，`idle` 会被实现层原地自动重新发起，透明自愈，不会冒泡到
+   * 这里）时的错误回调。Agent 级观察通道没有单一 `sessionId`，天然无法复用
+   * `watchSession` 那套按 sessionId 过滤的会话级拒绝横幅（web-main 实现
+   * 内部合成的 `WATCH_REJECTED_EVENT` 多播总线）——此前 web-main 的实现把
+   * 两种拒绝都塞进同一条总线，agent 级那份因 sessionId 是占位空串永远匹配
+   * 不上任何会话视图，等于静默丢弃（真机表现：侧栏收不到镜像事件也不报错，
+   * 用户以为对方没动静）。
+   * 可选：本机专属实现（web-agent local 分支）可不实现——不使用 `onEvent`
+   * 的同一个理由（全局事件总线），也没有需要单独告知调用方的错误通道。
    */
-  watchAgent?: (onEvent: (evt: SessionListEvent) => void) => () => void;
+  watchAgent?: (
+    onEvent: (evt: SessionListEvent) => void,
+    onError?: (reason?: AgentWatchAccepted["reason"]) => void,
+  ) => () => void;
 }
 
 /**

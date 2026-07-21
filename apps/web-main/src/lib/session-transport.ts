@@ -184,6 +184,13 @@ export function createRemoteSessionTransport(
      * `onRunFrame` 对非生命周期帧（推理过程帧等）不会调用它——`toSessionListEvent`
      * 返回 null 时原样丢弃，不冒泡成任何事件。 */
     onLifecycleEvent?: (evt: SessionListEvent) => void;
+    /** 仅 `scope==="agent"` 时存在：观察通道被拒绝时的错误回调（`watchAgent`
+     * 的可选第二个入参，Bug 2 修复）。session 级拒绝继续走既有
+     * `handleWatchRejected` → `WATCH_REJECTED_EVENT` 多播路径（不动这条已
+     * 验证过的路径），这个字段只服务 agent 级——它没有单一 sessionId 可
+     * 挂靠那条按 sessionId 过滤的总线，此前直接塞进去等于静默丢弃，见
+     * `SessionTransport.watchAgent` 契约文档。 */
+    onError?: (reason?: AgentWatchAccepted["reason"]) => void;
   }
 
   /** watchId → 该通道观察的句柄，仅**已受理**的通道（重连重 watch 与 unwatch 用）。 */
@@ -306,8 +313,13 @@ export function createRemoteSessionTransport(
    * 这条分支根本不会被走到。
    *
    * 其余 reason：真正的失败（设备离线 / 不可远程 / 会话不归属 / 跨账号 /
-   * 设备处理出错），合成 {@link WATCH_REJECTED_EVENT} 交给 `subscribe()`
-   * 消费者渲染可见提示（上一轮 review 明确指出「不能只 console.warn」）。
+   * 设备处理出错）。`scope==="session"` 合成 {@link WATCH_REJECTED_EVENT}
+   * 交给 `subscribe()` 消费者渲染可见提示（上一轮 review 明确指出「不能只
+   * console.warn」，这条路径不动）；`scope==="agent"` 没有单一 sessionId 可
+   * 挂靠那条按 sessionId 过滤的总线（塞进去 `sessionId` 只能是占位空串，
+   * 永远匹配不上任何会话视图，等于静默丢弃——Bug 2：`watchAgent` 的调用方
+   * `useAgentLifecycleWatch` 因此完全收不到拒绝信号，侧栏表现为「静默停止
+   * 更新」），改走 `handle.onError` 直接回调给 `watchAgent` 的调用方。
    */
   const handleWatchRejected = (
     handle: WatchHandle,
@@ -318,6 +330,10 @@ export function createRemoteSessionTransport(
       return;
     }
     console.warn(`观察通道被拒（watchId=${handle.watchId}, reason=${reason}）`);
+    if (handle.scope === "agent") {
+      handle.onError?.(reason);
+      return;
+    }
     runEvents.emit(WATCH_REJECTED_EVENT, {
       sessionId: handle.sessionId,
       reason,
@@ -626,13 +642,17 @@ export function createRemoteSessionTransport(
      * Finding 2 的稳定句柄模式），重连 / idle 自动重连换发新 watchId 后仍能
      * 停掉「当前」通道。
      */
-    watchAgent(onEvent: (evt: SessionListEvent) => void) {
+    watchAgent(
+      onEvent: (evt: SessionListEvent) => void,
+      onError?: (reason?: AgentWatchAccepted["reason"]) => void,
+    ) {
       const handle: WatchHandle = {
         sessionId: "",
         watchId: "",
         stopped: false,
         scope: "agent",
         onLifecycleEvent: onEvent,
+        onError,
       };
       startWatch(handle);
       return () => stopWatch(handle);

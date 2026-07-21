@@ -1,5 +1,6 @@
 "use client";
 
+import type { AgentWatchAccepted } from "@meshbot/types";
 import type { SessionSummary } from "@meshbot/types-agent";
 import {
   applySessionListEvent,
@@ -7,9 +8,20 @@ import {
 } from "@meshbot/web-common/session/session-list-events";
 import type { SessionTransport } from "@meshbot/web-common/session/transport";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createRemoteSessionTransport } from "../lib/session-transport";
 import { remoteSessionsQueryKey } from "./use-remote-sessions";
+
+/**
+ * 一路 Agent 级观察通道的失败信号（Bug 2 修复）：`transport.watchAgent` 的
+ * `onError` 回调把拒绝原因（`offline`/`cross_account`/`not_found`/
+ * `session_agent_mismatch`/`error`）带到这里，供调用方（侧栏）渲染可见提示
+ * ——修复前这类拒绝只在 transport 内部 `console.warn`，本 hook 完全无从
+ * 感知，侧栏表现为「静默停止更新」（用户以为对方没动静，实际是通道被拒）。
+ */
+export interface AgentWatchFailure {
+  reason?: AgentWatchAccepted["reason"];
+}
 
 /**
  * 需要建立 Agent 级观察通道的候选目标：调用方（侧栏）按「已展开」筛出的
@@ -56,15 +68,21 @@ interface WatchEntry {
  * @param transportFactory 测试注入点：默认 `createRemoteSessionTransport`
  *   （真实 socket）。单测传入假 transport，避免拉起真实 `getImSocket()`
  *   单例。
+ * @returns agentId → 该 Agent 当前观察通道的失败信号（Bug 2 修复）。空
+ *   Map 表示「暂无已知失败」——不代表通道一定健康，只是还没收到拒绝回执。
+ *   调用方（侧栏）据此渲染可见提示；不消费也不影响 watch 的注册/注销行为。
  */
 export function useAgentLifecycleWatch(
   targets: AgentLifecycleWatchTarget[],
   transportFactory: (
     agentId: string,
   ) => SessionTransport = createRemoteSessionTransport,
-): void {
+): ReadonlyMap<string, AgentWatchFailure> {
   const queryClient = useQueryClient();
   const entriesRef = useRef<Map<string, WatchEntry>>(new Map());
+  const [failures, setFailures] = useState<Map<string, AgentWatchFailure>>(
+    () => new Map(),
+  );
 
   const targetKey = targets
     .filter((t) => t.online)
@@ -77,12 +95,19 @@ export function useAgentLifecycleWatch(
     const entries = entriesRef.current;
 
     // 不再需要的（离线 / 收起 / 从列表消失）→ 立即 unwatch + dispose，
-    // 不等组件卸载（见上方文档）。
+    // 不等组件卸载（见上方文档）。一并清掉可能挂着的旧失败信号——否则用户
+    // 收起再重新展开同一个 Agent 时，还会看到上一轮早已过期的错误提示。
     for (const [agentId, entry] of entries) {
       if (wantOnline.has(agentId)) continue;
       entry.unwatch();
       entry.transport.dispose?.();
       entries.delete(agentId);
+      setFailures((prev) => {
+        if (!prev.has(agentId)) return prev;
+        const next = new Map(prev);
+        next.delete(agentId);
+        return next;
+      });
     }
 
     // 新增的 → 建 transport + watchAgent。
@@ -95,12 +120,24 @@ export function useAgentLifecycleWatch(
         transport.dispose?.();
         continue;
       }
-      const unwatch = transport.watchAgent((evt: SessionListEvent) => {
-        queryClient.setQueryData<SessionSummary[]>(
-          remoteSessionsQueryKey(agentId),
-          (old) => applySessionListEvent(old ?? [], evt),
-        );
-      });
+      const unwatch = transport.watchAgent(
+        (evt: SessionListEvent) => {
+          queryClient.setQueryData<SessionSummary[]>(
+            remoteSessionsQueryKey(agentId),
+            (old) => applySessionListEvent(old ?? [], evt),
+          );
+        },
+        (reason) => {
+          // 观察通道被拒（cross_account/not_found/offline/...）：Bug 2 修复
+          // 前这里没有任何回调可接，拒绝信号在 transport 内部就被吞掉，侧栏
+          // 无从得知、静默停止更新。
+          setFailures((prev) => {
+            const next = new Map(prev);
+            next.set(agentId, { reason });
+            return next;
+          });
+        },
+      );
       entries.set(agentId, { transport, unwatch });
     }
   }, [targetKey, queryClient, transportFactory]);
@@ -118,4 +155,6 @@ export function useAgentLifecycleWatch(
       entriesRef.current.clear();
     };
   }, []);
+
+  return failures;
 }

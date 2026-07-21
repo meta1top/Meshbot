@@ -246,7 +246,14 @@ export function AssistantSidebar() {
   // 缓存（`remoteSessionsQueryKey`）——不重构 `useQueries` 这条初始加载 +
   // 定期回源路径，只做增量镜像。`online` 判定复用上面已算好的
   // `isAgentOnline`，离线 Agent 不会真的建 watch（避免白占云端路由）。
-  useAgentLifecycleWatch(
+  //
+  // 返回值 `watchFailures`（Bug 2 修复）：该 watch 被拒（cross_account/
+  // not_found/offline/...）时，之前只在 transport 内部 console.warn，本组件
+  // 完全无从得知——树只是静默停止实时更新，用户会误以为「对方没动静」。
+  // 下面 `sessionChildren` 据此在对应 Agent 的子节点里插入一条可见提示，
+  // 复用已有的 `variant:"note"` 占位行样式（与 `remoteLoadFailed`/
+  // `remoteEmpty` 同款）。
+  const watchFailures = useAgentLifecycleWatch(
     expandedIds.map((agentId) => ({
       agentId,
       online: isAgentOnline(
@@ -263,32 +270,44 @@ export function AssistantSidebar() {
   const metaByKey = new Map<string, SessionTreeNodeInfo>();
 
   const sessionChildren = (agentId: string): NavNode[] => {
+    // 观察通道被拒的提示行：与下面加载态/空态/正常列表并列展示，不互斥
+    // ——即便会话列表本身（`sessionQueries`，定期回源）仍能看到历史快照，
+    // 用户也该知道「实时更新」这条通道已经断了。
+    const watchFailedNote: NavNode[] = [];
+    if (watchFailures.has(agentId)) {
+      const key = `ph:${agentId}:watchFailed`;
+      metaByKey.set(key, { kind: "placeholder", variant: "note" });
+      watchFailedNote.push({ key, label: t("watchFailed") });
+    }
     const q = sessionsByAgent.get(agentId);
     if (!q || q.isPending) {
       const key = `ph:${agentId}:load`;
       metaByKey.set(key, { kind: "placeholder", variant: "skeleton" });
-      return [{ key, label: "" }];
+      return [...watchFailedNote, { key, label: "" }];
     }
     if (q.isError) {
       const key = `ph:${agentId}:err`;
       metaByKey.set(key, { kind: "placeholder", variant: "note" });
-      return [{ key, label: t("remoteLoadFailed") }];
+      return [...watchFailedNote, { key, label: t("remoteLoadFailed") }];
     }
     const sessions = q.data ?? [];
     if (sessions.length === 0) {
       const key = `ph:${agentId}:empty`;
       metaByKey.set(key, { kind: "placeholder", variant: "note" });
-      return [{ key, label: t("remoteEmpty") }];
+      return [...watchFailedNote, { key, label: t("remoteEmpty") }];
     }
-    return sessions.map((s) => {
-      const key = `${SESSION_PREFIX}${s.id}`;
-      metaByKey.set(key, { kind: "session", title: s.title });
-      return {
-        key,
-        label: s.title,
-        onClick: () => router.push(`/assistant/${agentId}?session=${s.id}`),
-      };
-    });
+    return [
+      ...watchFailedNote,
+      ...sessions.map((s) => {
+        const key = `${SESSION_PREFIX}${s.id}`;
+        metaByKey.set(key, { kind: "session", title: s.title });
+        return {
+          key,
+          label: s.title,
+          onClick: () => router.push(`/assistant/${agentId}?session=${s.id}`),
+        };
+      }),
+    ];
   };
 
   const items: NavNode[] = agentList.map((a) => {

@@ -68,7 +68,8 @@
     "offlineSessionsHint": "Device is offline, sessions cannot be loaded",
     "remoteLoadFailed": "Failed to load sessions",
     "remoteEmpty": "No sessions for this Agent yet",
-    "empty": "No agents yet"
+    "empty": "No agents yet",
+    "watchFailed": "Unable to receive live updates for this Agent (the device may be offline or not remotely accessible)"
   },
   "loading": "",
   "validation": {
@@ -559,7 +560,8 @@
       "placeholder": "Type your task or question",
       "send": "Send",
       "stop": "Stop",
-      "attachment": "Add attachment"
+      "attachment": "Add attachment",
+      "stopUnavailable": "Cannot interrupt while observing: this run was not started from this device"
     },
     "compaction": {
       "bannerThreshold": "Compacting conversation history…",
