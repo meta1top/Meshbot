@@ -1,0 +1,188 @@
+/* 落地页专属样式作用域。仅本页使用，不得提升到 packages/design。 */
+.lp-root {
+  --lp-bg: #f2ece3;
+  --lp-panel: #faf7f2;
+  --lp-card: #ffffff;
+  --lp-line: #e6ded4;
+  --lp-edge: #d5c9b9;
+  --lp-fg: #241c15;
+  --lp-dim: #6b5d4f;
+  --lp-faint: #9a8b7b;
+  --lp-grid: rgba(210, 74, 13, 0.11);
+  --lp-glow: rgba(210, 74, 13, 0.1);
+  --lp-mesh: rgba(210, 74, 13, 0.32);
+  --lp-brand: #c04409;
+  --lp-brand-lt: #a83b07;
+  --lp-ok: #2f7d3a;
+  --lp-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  background: var(--lp-bg);
+  color: var(--lp-fg);
+}
+
+.dark .lp-root {
+  --lp-bg: oklch(0.135 0.008 55);
+  --lp-panel: oklch(0.175 0.009 55);
+  --lp-card: oklch(0.205 0.011 55);
+  --lp-line: oklch(0.245 0.009 55);
+  --lp-edge: oklch(0.29 0.011 55);
+  --lp-fg: oklch(0.96 0.005 55);
+  --lp-dim: oklch(0.7 0.012 55);
+  --lp-faint: oklch(0.55 0.011 55);
+  --lp-grid: rgba(232, 130, 63, 0.1);
+  --lp-glow: rgba(210, 74, 13, 0.13);
+  --lp-mesh: rgba(210, 74, 13, 0.34);
+  --lp-brand: #d24a0d;
+  --lp-brand-lt: #e8823f;
+  --lp-ok: #3fa34d;
+}
+
+.lp-dots {
+  background-image: radial-gradient(
+    circle,
+    var(--lp-grid) 1px,
+    transparent 1px
+  );
+  background-size: 23px 23px;
+}
+.lp-scan {
+  background-image: repeating-linear-gradient(
+    180deg,
+    var(--lp-grid) 0 1px,
+    transparent 1px 7px
+  );
+}
+.lp-glow-tl::after,
+.lp-glow-br::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.lp-glow-tl::after {
+  background: radial-gradient(
+    640px 300px at 12% 0%,
+    var(--lp-glow),
+    transparent 68%
+  );
+}
+.lp-glow-br::after {
+  background: radial-gradient(
+    560px 280px at 88% 100%,
+    var(--lp-glow),
+    transparent 68%
+  );
+}
+
+nav.lp-nav {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  background: color-mix(in srgb, var(--lp-bg) 86%, transparent);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--lp-line);
+}
+.lp-nav-in {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 13px 30px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.lp-mark {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 680;
+  font-size: 14.5px;
+  letter-spacing: -0.01em;
+}
+.lp-mark i {
+  width: 16px;
+  height: 16px;
+  background: var(--lp-brand);
+  border-radius: 3px;
+  display: block;
+}
+.lp-nav-l {
+  margin-left: 12px;
+  display: flex;
+  gap: 20px;
+  font-size: 13px;
+  color: var(--lp-dim);
+}
+.lp-nav-l a {
+  color: inherit;
+  text-decoration: none;
+}
+.lp-nav-l a:hover {
+  color: var(--lp-fg);
+}
+.lp-nav-r {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.lp-tgl {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--lp-edge);
+  background: transparent;
+  color: var(--lp-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 2px;
+  font-size: 13px;
+}
+.lp-tgl:hover {
+  color: var(--lp-fg);
+  border-color: var(--lp-brand);
+}
+
+.lp-btn {
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 8px 15px;
+  border-radius: 2px;
+  text-decoration: none;
+  display: inline-block;
+  white-space: nowrap;
+}
+.lp-btn-p {
+  background: var(--lp-brand);
+  color: #fff;
+}
+.lp-btn-g {
+  border: 1px solid var(--lp-edge);
+  color: var(--lp-fg);
+}
+.lp-btn-t {
+  color: var(--lp-dim);
+  font-weight: 500;
+}
+
+.lp-skel {
+  display: inline-block;
+  width: 52px;
+  height: 30px;
+  border: 1px solid var(--lp-edge);
+  border-radius: 2px;
+  opacity: 0.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-root *,
+  .lp-root *::before,
+  .lp-root *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  .lp-root .lp-fade {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}

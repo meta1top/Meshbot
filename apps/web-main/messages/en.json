@@ -1,4 +1,23 @@
 {
+  "landing": {
+    "nav": {
+      "features": "Features",
+      "docs": "Docs",
+      "github": "GitHub",
+      "login": "Sign in",
+      "enterApp": "Open app",
+      "start": "Get started",
+      "toggleTheme": "Toggle dark/light theme"
+    },
+    "hero": {
+      "eyebrow": "TEAM · AGENTS",
+      "titleTop": "One shared",
+      "titleAccent": "workspace",
+      "lead": "Your team collaborates here. Your agents work alongside them, each with its own persona, skills and memory. Conversations and memory stay on your machine.",
+      "download": "Download desktop",
+      "platforms": "macOS · Windows · Linux"
+    }
+  },
   "common": {
     "appTitle": "MeshBot Cloud",
     "switchToLightTheme": "Switch to light theme",
