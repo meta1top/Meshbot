@@ -55,7 +55,10 @@ import {
 import { getEventsSocket } from "@/lib/events-socket";
 import { isActiveSessionDeletedByEvent } from "@/lib/session-deleted-elsewhere";
 import { agentsQueryKey } from "@/rest/agents";
-import { remoteAgentsQueryKey } from "@/rest/remote-agents";
+import {
+  applyRemoteAgentPresence,
+  remoteAgentsQueryKey,
+} from "@/rest/remote-agents";
 
 /** 全局事件分发表：按信封 type 调对应 handler。纯函数，便于单测。 */
 export interface GlobalEventHandlers {
@@ -210,6 +213,7 @@ export function useGlobalEvents(): void {
       onPresence: (p) => {
         setPresence(p);
         applyDevicePresence(p);
+        applyRemoteAgentPresence(queryClient, p);
       },
       onConversationCreated: (p) => upsertConversation(p),
       onConversationRemoved: (p) => removeConversation(p.conversationId),
