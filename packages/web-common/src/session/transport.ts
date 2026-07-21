@@ -124,6 +124,19 @@ export interface SessionTransport {
   watchAgent?: (
     onEvent: (evt: SessionListEvent) => void,
     onError?: (reason?: AgentWatchAccepted["reason"]) => void,
+    /**
+     * 观察通道**真正注册成功**时回调一次（R2b）。调用方应在此刻补拉一次该
+     * Agent 的会话列表。
+     *
+     * 为什么必须是「注册成功之后」而不是「发起注册之后」：拉快照与注册 watch
+     * 是两条互不排序的往返，注册完成**之前**到达的镜像事件会被直接丢弃（设备
+     * 侧 `AgentWatchMirrorService` 先查 `hasWatcher`，无观察者就零成本短路，
+     * 不排队也不补发）。所以「快照已生成 → B 建了新会话 → watch 才注册完」这个
+     * 顺序下，那条会话既不在快照里也不在事件里，要等下一次重拉才出现。
+     * 在注册成功之后补拉，快照的时间点晚于注册，缺口才真正闭合；在注册**之前**
+     * 补拉只是把窗口挪了个位置，洞还在。
+     */
+    onReady?: () => void,
   ) => () => void;
 }
 

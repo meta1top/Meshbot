@@ -33,7 +33,6 @@ import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
 import { activeAssistantSessionAtom } from "@/atoms/active-session";
 import { quickAssistantNameAtom } from "@/atoms/assistant-panel";
-import { applyDevicePresenceAtom } from "@/atoms/devices";
 import { globalAlertMessageAtom } from "@/atoms/global-alert";
 import {
   applyIncomingMessageAtom,
@@ -173,7 +172,6 @@ export function useGlobalEvents(): void {
   const router = useRouter();
   const applyIncomingMessage = useSetAtom(applyIncomingMessageAtom);
   const setPresence = useSetAtom(setPresenceAtom);
-  const applyDevicePresence = useSetAtom(applyDevicePresenceAtom);
   const setGlobalAlertMessage = useSetAtom(globalAlertMessageAtom);
   const upsertConversation = useSetAtom(upsertConversationAtom);
   const removeConversation = useSetAtom(removeConversationAtom);
@@ -212,7 +210,6 @@ export function useGlobalEvents(): void {
       onMessage: (p) => applyIncomingMessage(p),
       onPresence: (p) => {
         setPresence(p);
-        applyDevicePresence(p);
         applyRemoteAgentPresence(queryClient, p);
       },
       onConversationCreated: (p) => upsertConversation(p),
@@ -309,7 +306,6 @@ export function useGlobalEvents(): void {
   }, [
     applyIncomingMessage,
     setPresence,
-    applyDevicePresence,
     setGlobalAlertMessage,
     upsertConversation,
     removeConversation,

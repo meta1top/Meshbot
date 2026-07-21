@@ -3,7 +3,6 @@ jest.mock("@/atoms/im", () => ({}));
 jest.mock("@/atoms/schedule-activity", () => ({}));
 jest.mock("@/atoms/sessions", () => ({}));
 jest.mock("@/atoms/remote-sessions", () => ({}));
-jest.mock("@/atoms/devices", () => ({}));
 jest.mock("@/atoms/assistant-panel", () => ({}));
 // 缺陷 1 引入：本机/远程「当前打开会话被删除」判定需要读它（use-global-events.ts
 // 新增的 useAtomValue(activeAssistantSessionAtom) 调用点）。不桩会真的加载

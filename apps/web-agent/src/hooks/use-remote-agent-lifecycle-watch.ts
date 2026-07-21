@@ -1,7 +1,9 @@
 "use client";
 
 import type { SessionTransport } from "@meshbot/web-common/session";
+import { useSetAtom } from "jotai";
 import { useEffect, useRef } from "react";
+import { loadRemoteSessionsAtom } from "@/atoms/remote-sessions";
 import { createRemoteSessionTransport } from "@/lib/session-transport";
 
 /**
@@ -83,6 +85,7 @@ export function useRemoteAgentLifecycleWatch(
   ) => SessionTransport = createRemoteSessionTransport,
 ): void {
   const entriesRef = useRef<Map<string, WatchEntry>>(new Map());
+  const loadRemoteSessions = useSetAtom(loadRemoteSessionsAtom);
 
   const targetKey = targets
     .filter((t) => t.online)
@@ -114,10 +117,16 @@ export function useRemoteAgentLifecycleWatch(
         transport.dispose?.();
         continue;
       }
-      const unwatch = transport.watchAgent(noop);
+      const unwatch = transport.watchAgent(noop, undefined, () => {
+        // 通道注册完成 → 强制补拉该 Agent 的会话列表（R2b）。注册**之前**到达
+        // 的镜像事件会被设备侧直接丢弃（`AgentWatchMirrorService` 先查
+        // `hasWatcher` 零成本短路，不排队也不补发），而拉快照与注册 watch 是
+        // 两条互不排序的往返，缺口只能靠「注册之后再拉一次」闭合。
+        void loadRemoteSessions(agentId, true);
+      });
       entries.set(agentId, { transport, unwatch });
     }
-  }, [targetKey, transportFactory]);
+  }, [targetKey, transportFactory, loadRemoteSessions]);
 
   // 组件真正卸载时兜底释放全部剩余通道。上面的 effect 只在 `targetKey`
   // 变化时做增量 diff（不返回 cleanup 函数），不会在 unmount 时自动触发

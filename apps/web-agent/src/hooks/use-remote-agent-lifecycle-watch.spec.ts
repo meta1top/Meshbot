@@ -4,7 +4,19 @@
 
 import type { SessionListEvent } from "@meshbot/web-common/session/session-list-events";
 import type { SessionTransport } from "@meshbot/web-common/session/transport";
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
+
+/** `useSetAtom(loadRemoteSessionsAtom)` 的替身：本文件只关心「有没有被调、
+ *  参数对不对」，不想真的跑 atom 的 REST 写逻辑。 */
+const loadRemoteSessionsMock = jest.fn();
+jest.mock("jotai", () => ({
+  // `atom` 也要桩：`@/atoms/remote-sessions` 在模块顶层调用真实 atom(...)，
+  // jotai 被整体替换后不桩会在模块加载阶段就抛「atom is not a function」
+  // （同 use-auto-open-artifact.spec.ts 的既有做法）。
+  atom: jest.fn((init: unknown) => ({ init })),
+  useSetAtom: () => loadRemoteSessionsMock,
+}));
+
 import {
   type AgentLifecycleWatchTarget,
   useRemoteAgentLifecycleWatch,
@@ -18,6 +30,8 @@ interface FakeHandle {
   unwatchCalls: number;
   disposeCalls: number;
   receivedCallback: ((evt: SessionListEvent) => void) | null;
+  /** 触发 transport 的 onReady（模拟观察通道注册成功）。 */
+  fireReady: (() => void) | null;
 }
 
 /** `SessionTransport` 里本 hook 不使用的方法一律桩成「调用即抛错」——本 hook
@@ -44,6 +58,7 @@ function makeFakeTransportFactory(opts?: { supportsWatchAgent?: boolean }) {
       unwatchCalls: 0,
       disposeCalls: 0,
       receivedCallback: null,
+      fireReady: null,
     };
     handles.set(agentId, handle);
 
@@ -70,9 +85,14 @@ function makeFakeTransportFactory(opts?: { supportsWatchAgent?: boolean }) {
 
     return {
       ...base,
-      watchAgent: (onEvent: (evt: SessionListEvent) => void) => {
+      watchAgent: (
+        onEvent: (evt: SessionListEvent) => void,
+        _onError?: unknown,
+        onReady?: () => void,
+      ) => {
         handle.watchCalls += 1;
         handle.receivedCallback = onEvent;
+        handle.fireReady = () => onReady?.();
         return () => {
           handle.unwatchCalls += 1;
         };
@@ -171,5 +191,23 @@ describe("useRemoteAgentLifecycleWatch", () => {
     unmount();
     expect(handles.get("a1")?.unwatchCalls).toBe(1);
     expect(handles.get("a1")?.disposeCalls).toBe(1);
+  });
+});
+
+describe("R2b：通道注册成功后补拉一次会话列表", () => {
+  it("onReady 触发 → 强制重拉该 Agent 的会话（关掉「注册前事件被丢弃」的缺口）", () => {
+    const { factory, handles } = makeFakeTransportFactory();
+    const loaded: Array<[string, boolean]> = [];
+    loadRemoteSessionsMock.mockImplementation(
+      (agentId: string, force: boolean) => {
+        loaded.push([agentId, force]);
+      },
+    );
+    renderWatch([{ agentId: "a1", online: true }], factory);
+    expect(loaded).toEqual([]); // 注册完成前不拉
+    act(() => {
+      handles.get("a1")?.fireReady?.();
+    });
+    expect(loaded).toEqual([["a1", true]]);
   });
 });

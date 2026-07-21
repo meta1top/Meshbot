@@ -137,6 +137,17 @@ export function useAgentLifecycleWatch(
             return next;
           });
         },
+        () => {
+          // 通道注册完成 → 补拉一次会话列表（R2b）。注册**之前**到达的镜像
+          // 事件会被设备侧直接丢弃（`AgentWatchMirrorService` 先查
+          // `hasWatcher`，无观察者就零成本短路，不排队也不补发），而拉快照与
+          // 注册 watch 是两条互不排序的往返——「快照已生成 → 对端建了新会话
+          // → watch 才注册完」这个顺序下那条会话两头都不在。注册后补拉的快照
+          // 时间点晚于注册，缺口才闭合。
+          void queryClient.invalidateQueries({
+            queryKey: remoteSessionsQueryKey(agentId),
+          });
+        },
       );
       entries.set(agentId, { transport, unwatch });
     }

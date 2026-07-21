@@ -191,6 +191,9 @@ export function createRemoteSessionTransport(
      * 挂靠那条按 sessionId 过滤的总线，此前直接塞进去等于静默丢弃，见
      * `SessionTransport.watchAgent` 契约文档。 */
     onError?: (reason?: AgentWatchAccepted["reason"]) => void;
+    /** agent scope 专用：受理成功（通道真正注册完）时回调一次，调用方据此补拉
+     *  会话列表，闭合 R2b 时序缺口（见 transport.ts 契约 onReady 说明）。 */
+    onReady?: () => void;
   }
 
   /** watchId → 该通道观察的句柄，仅**已受理**的通道（重连重 watch 与 unwatch 用）。 */
@@ -366,6 +369,11 @@ export function createRemoteSessionTransport(
         runEvents.emit(WATCH_ACCEPTED_EVENT, {
           sessionId: pendingHandle.sessionId,
         } satisfies WatchAcceptedEvent);
+      } else {
+        // agent scope：通道注册完成，通知调用方补拉一次列表（R2b）。
+        // 重连换发 watchId 后会再次走到这里，补拉也随之重来——正是想要的
+        // 语义（断线期间的事件同样丢在注册之前）。
+        pendingHandle.onReady?.();
       }
       return;
     }
@@ -645,6 +653,7 @@ export function createRemoteSessionTransport(
     watchAgent(
       onEvent: (evt: SessionListEvent) => void,
       onError?: (reason?: AgentWatchAccepted["reason"]) => void,
+      onReady?: () => void,
     ) {
       const handle: WatchHandle = {
         sessionId: "",
@@ -653,6 +662,7 @@ export function createRemoteSessionTransport(
         scope: "agent",
         onLifecycleEvent: onEvent,
         onError,
+        onReady,
       };
       startWatch(handle);
       return () => stopWatch(handle);

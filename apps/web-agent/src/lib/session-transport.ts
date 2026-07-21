@@ -458,8 +458,13 @@ export function createRemoteSessionTransport(
     // `onEvent` 有意不使用——见 `startAgentWatch` 文档：web-agent 的 Agent
     // 级生命周期事件走全局事件总线（`use-global-events.ts`），不经这条
     // per-transport-instance 回调路径。
-    watchAgent(_onEvent) {
-      return startAgentWatch(agentId, "agent");
+    watchAgent(_onEvent, _onError, onReady) {
+      // onWatchId 在 REST 返回、watchId 落地时触发 = 观察通道已注册成功。
+      // 调用方据此补拉一次会话列表，闭合 R2b 的时序缺口（见 transport.ts
+      // 契约里 onReady 的说明）。释放时回调 null，不当作 ready。
+      return startAgentWatch(agentId, "agent", undefined, (watchId) => {
+        if (watchId) onReady?.();
+      });
     },
   };
 }

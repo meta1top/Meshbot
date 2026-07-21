@@ -30,9 +30,10 @@ const DEVICE_PRESENCE_PREFIX = "device:";
  * 侧栏的在线态只能等下次重拉或**刷新页面**才更新（真机反馈）。
  *
  * presence 事件本来就已经转发到 web-agent 了（`events.gateway.ts` 的
- * `@OnEvent(IM_WS_EVENTS.presence)`），此前只喂给了 `deviceOnlineAtom`——而那个
- * atom 在 2c 拍平侧栏 IA 之后**已无任何读取方**，且它的前缀判据写的是 `agent:`
- * 而非 `device:`，双重失效。这里直接 patch 侧栏真正读的那份缓存。
+ * `@OnEvent(IM_WS_EVENTS.presence)`），此前只喂给了 `atoms/devices.ts`
+ * 里的 `deviceOnlineAtom`——那个 atom 在 2c 拍平侧栏 IA 之后**已无任何读取方**，
+ * 且它的前缀判据写的是 `agent:` 而非 `device:`，双重失效（该文件已整体删除）。
+ * 这里直接 patch 侧栏真正读的那份缓存。
  *
  * 只改命中 deviceId 的行、不整体替换：`updatedAt` 之类的字段不归 presence 管
  * （同 `applySessionListEvent` 的字段级归并原则）。列表尚未加载时是 no-op。
