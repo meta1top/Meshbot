@@ -115,6 +115,13 @@ export const renameSessionAtom = atom(
               ...s,
               title: updated.title,
               titleGenerated: updated.titleGenerated,
+              // `updatedAt` 也要取服务端的：`sortSessions` 按它降序排，而
+              // `repo.update` 会真实 bump 这一列。不取的话，改名后列表位置不动、
+              // **刷新之后突然跳到顶部**，看起来像列表自己乱了序（`sessionsAtom`
+              // 首屏之后从不重拉，本地这份会一直是旧值）。
+              // 回滚路径**不能**跟着回滚它：那次写入我们并没有改动它，回滚只该
+              // 还原自己改过的字段——这正是本函数改成字段级 patch 的初衷。
+              updatedAt: updated.updatedAt,
             }
           : s,
       );
