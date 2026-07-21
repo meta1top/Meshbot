@@ -1,3 +1,4 @@
+import { LandingHero } from "@/components/landing/landing-hero";
 import { LandingNav } from "@/components/landing/landing-nav";
 import "@/components/landing/landing.css";
 
@@ -6,6 +7,7 @@ export default function Home() {
   return (
     <div className="lp-root">
       <LandingNav />
+      <LandingHero />
     </div>
   );
 }

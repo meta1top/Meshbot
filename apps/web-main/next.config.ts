@@ -1,5 +1,10 @@
 import path from "node:path";
 import type { NextConfig } from "next";
+import createNextIntlPlugin from "next-intl/plugin";
+
+// Server Component（RSC）用 getTranslations 需要 next-intl 插件接入请求级配置
+// （src/i18n/request.ts）；客户端仍走 IntlProvider/NextIntlClientProvider，互不冲突。
+const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -26,4 +31,4 @@ const nextConfig: NextConfig = {
     : {},
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

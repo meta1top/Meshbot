@@ -174,6 +174,225 @@ nav.lp-nav {
   opacity: 0.45;
 }
 
+/* —— 页面级排版基座（跨 section 复用） —— */
+.lp-wrap {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 30px;
+}
+.lp-root .lp-lbl {
+  font-family: var(--lp-mono);
+  font-size: 10px;
+  letter-spacing: 0.19em;
+  text-transform: uppercase;
+  color: var(--lp-brand);
+  margin-bottom: 16px;
+}
+.lp-root h1 {
+  font-size: clamp(46px, 7.2vw, 92px);
+  line-height: 0.94;
+  font-weight: 800;
+  letter-spacing: -0.052em;
+  margin: 14px 0 22px;
+}
+.lp-root h1 em {
+  font-style: normal;
+  color: var(--lp-brand);
+}
+.lp-root .lp-pip {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--lp-ok);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--lp-ok) 70%, transparent);
+  flex-shrink: 0;
+}
+.lp-root .lp-pip-o {
+  background: var(--lp-brand);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--lp-brand) 70%, transparent);
+}
+.lp-root .lp-pip-off {
+  background: var(--lp-faint);
+  box-shadow: none;
+}
+
+/* —— HERO —— */
+.lp-hero {
+  padding: 76px 0 68px;
+  position: relative;
+  overflow: hidden;
+}
+.lp-hero-in {
+  position: relative;
+  z-index: 2;
+}
+.lp-lead {
+  font-size: 16.5px;
+  line-height: 1.72;
+  color: var(--lp-dim);
+  max-width: 540px;
+  margin-bottom: 28px;
+}
+.lp-cta {
+  display: flex;
+  gap: 11px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.lp-cta .lp-btn {
+  padding: 12px 22px;
+  font-size: 13.5px;
+}
+.lp-cta-note {
+  font-family: var(--lp-mono);
+  font-size: 11px;
+  color: var(--lp-faint);
+  margin-left: 5px;
+}
+
+/* —— 工作空间全景（三栏） —— */
+.lp-ws {
+  margin-top: 52px;
+  border: 1px solid var(--lp-edge);
+  background: var(--lp-panel);
+  display: grid;
+  grid-template-columns: 1fr 1.5fr 0.74fr;
+  position: relative;
+  box-shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.5);
+}
+.lp-ws-col {
+  padding: 14px;
+  border-right: 1px solid var(--lp-line);
+  min-height: 250px;
+}
+.lp-ws-col:last-child {
+  border-right: 0;
+}
+.lp-ws-h {
+  font-family: var(--lp-mono);
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--lp-faint);
+  margin-bottom: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.lp-msg {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 11px;
+}
+.lp-av {
+  width: 21px;
+  height: 21px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  font-size: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #fff;
+}
+.lp-msg-b {
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--lp-dim);
+}
+.lp-msg-n {
+  font-size: 10.5px;
+  font-weight: 650;
+  color: var(--lp-fg);
+  margin-bottom: 1px;
+}
+.lp-trow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--lp-line);
+  background: var(--lp-card);
+  margin-bottom: 5px;
+  font-size: 10.5px;
+  color: var(--lp-dim);
+}
+.lp-trow b {
+  color: var(--lp-fg);
+  font-weight: 600;
+}
+.lp-tk {
+  color: var(--lp-brand);
+  font-size: 9px;
+}
+.lp-art {
+  border: 1px solid color-mix(in srgb, var(--lp-brand) 50%, transparent);
+  background: color-mix(in srgb, var(--lp-brand) 7%, transparent);
+  padding: 8px 9px;
+  font-size: 10.5px;
+  margin-top: 7px;
+}
+.lp-agent-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--lp-line);
+  font-size: 11px;
+  color: var(--lp-dim);
+}
+.lp-agent-row:last-child {
+  border-bottom: 0;
+}
+.lp-agent-row b {
+  color: var(--lp-fg);
+  font-weight: 600;
+  font-size: 11.5px;
+}
+.lp-agent-row small {
+  display: block;
+  color: var(--lp-faint);
+  font-size: 9.5px;
+  margin-top: 1px;
+}
+
+/* —— 入场动效 —— */
+.lp-fade {
+  opacity: 0;
+  transform: translateY(6px);
+  animation: lp-fade-in 0.42s cubic-bezier(0.22, 0.9, 0.28, 1) forwards;
+}
+@keyframes lp-fade-in {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.lp-breathe {
+  animation: lp-breathe 3.4s ease-in-out infinite;
+}
+@keyframes lp-breathe {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 900px) {
+  .lp-ws {
+    grid-template-columns: 1fr;
+  }
+  .lp-ws-col {
+    border-right: 0;
+    border-bottom: 1px solid var(--lp-line);
+    min-height: auto;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .lp-root *,
   .lp-root *::before,
