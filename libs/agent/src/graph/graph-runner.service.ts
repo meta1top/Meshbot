@@ -8,14 +8,10 @@ import {
   HumanMessage,
   isAIMessageChunk,
   RemoveMessage,
-  SystemMessage,
 } from "@langchain/core/messages";
 import { Injectable } from "@nestjs/common";
-import { LLMUSE_GUIDE } from "../prompt/llmuse-guide";
-import { PromptService } from "../prompt/prompt.service";
 import { AccountGraphProvider } from "./account-graph.provider";
 import { ContextBuilder } from "./context-builder";
-import type { GraphState } from "./graph.builder";
 import { ModelResolver } from "./model-resolver.service";
 import { ThreadStateService } from "./thread-state.service";
 import type { AgentConfig, StreamChunk, ThreadId } from "./graph.types";
@@ -211,7 +207,6 @@ function resolveRecursionLimit(): number {
 @Injectable()
 export class GraphRunner {
   constructor(
-    private readonly promptService: PromptService,
     private readonly accountGraphProvider: AccountGraphProvider,
     private readonly modelResolver: ModelResolver,
     private readonly contextBuilder: ContextBuilder,
@@ -221,10 +216,10 @@ export class GraphRunner {
   /**
    * 创建会话，返回 thread id。
    *
-   * 仅生成 UUID；system prompt 在每次 streamMessage 时按需前置，
+   * 仅生成 UUID；人格 / 上下文消息在每次 streamMessage 时按需前置，
    * 不在此处写入 checkpointer（checkpointer.put 直写 API 易出错）。
-   * config 当前完全未使用（含 systemPrompt —— 系统提示统一由 PromptService 提供）；
-   * 保留入参便于后续接入 temperature / model。
+   * config 当前完全未使用（含 systemPrompt —— 人格统一由 ContextBuilder.buildPersonaMessage
+   * 从当前 Agent 的 systemPrompt 组装，每轮刷新）；保留入参便于后续接入 temperature / model。
    */
   async startSession(_config: AgentConfig): Promise<ThreadId> {
     const threadId = randomUUID();
@@ -245,7 +240,8 @@ export class GraphRunner {
    *
    * 每条入参构造一条带显式 id 的 HumanMessage（id = 调用方的 PendingMessage.id），
    * 让 checkpointer 里的 user 消息与 pending 表可对齐去重。
-   * system prompt 仅在首轮注入（无历史时），避免在 checkpointer 状态里重复累加。
+   * system:persona / system:ctx / system:skills 均以稳定 id **每轮**刷新推送，
+   * reducer 按 id 原地替换、不累积（详见 graph.builder.ts 的 mergeMessages）。
    * 透传 signal 支持中断。
    *
    * @param inputs 至少一条 —— 调用方保证非空批次。
@@ -266,27 +262,13 @@ export class GraphRunner {
     signal?: AbortSignal,
     opts?: { subAgent?: boolean },
   ): AsyncGenerator<StreamChunk> {
-    this.promptService.reloadIfChanged();
-    const systemPrompt = [
-      this.promptService.getPrompt("system"),
-      this.contextBuilder.buildMemorySection(),
-      LLMUSE_GUIDE,
-    ]
-      .filter(Boolean)
-      .join("\n\n");
     await this.threadState.sanitizeOrphanToolCalls(threadId);
-    const state = await this.pickGraph(opts).getState({
-      configurable: { thread_id: threadId },
-    });
-    const hasHistory =
-      Array.isArray((state.values as GraphState)?.messages) &&
-      (state.values as GraphState).messages.length > 0;
     const inputMessages: BaseMessage[] = [];
-    if (systemPrompt && !hasHistory) {
-      inputMessages.push(new SystemMessage(systemPrompt));
-    }
-    // system:ctx / system:skills 用稳定 id 每轮重发；reducer 按 id 原地更新
-    //（位置不变、不累积），无需先 RemoveMessage 再 Add。
+    // system:persona / system:ctx / system:skills 全部用稳定 id 每轮重发；
+    // reducer 按 id 原地更新（位置不变、不累积），无需先 RemoveMessage 再 Add。
+    // 人格必须每轮刷新：Agent 的 systemPrompt 随时可改，首轮写死会让老会话
+    // 永远带旧人格（静默错误）。
+    inputMessages.push(await this.contextBuilder.buildPersonaMessage());
     inputMessages.push(await this.contextBuilder.buildContextMessage(threadId));
     if (this.contextBuilder.hasSkills()) {
       inputMessages.push(this.contextBuilder.buildSkillsMessage());
@@ -332,6 +314,8 @@ export class GraphRunner {
       threadId,
       {
         messages: [
+          new RemoveMessage({ id: "system:persona" }),
+          await this.contextBuilder.buildPersonaMessage(),
           new RemoveMessage({ id: "system:ctx" }),
           await this.contextBuilder.buildContextMessage(threadId),
         ],
@@ -414,13 +398,32 @@ export class GraphRunner {
           toolCalls,
         };
       }
-      yield {
-        kind: "assistant_done",
-        messageId: currentSid,
-        content,
-        reasoning,
-        toolCalls: toolCalls.length > 0 ? toolCalls : null,
-      };
+      // 空轮短路：正文 / reasoning / tool_calls 三者皆空的一轮不发 assistant_done。
+      //
+      // 上面 updates 分支在 supervisor 节点出口就提前 flush 了真正的一轮并把
+      // currentAcc/currentId 清空（**但不清 currentSid**）；langgraph 随后仍会吐
+      // 一条只带 finish_reason/usage 的尾随 AIMessageChunk，它被当成「新一轮」
+      // 重新累积，于是流结束时的收尾 flush 又发一次 content=""、toolCalls=null 的
+      // assistant_done。RunnerService 照单 `recordAssistant()` 落库——messageId
+      // 还是同一个雪花（sid 未变），既在前端渲染成「头像+名字+空」的空消息行，
+      // 又有把这条消息的真实正文覆盖成空串的风险。
+      //
+      // 只挡 assistant_done，不挡下面的 usage：usage_metadata 恰恰就挂在这条
+      // 尾随 chunk 上，挡掉会丢整轮的 token 计量。usage 的 messageId 用同一个
+      // sid，指向前一次 flush 已经落库的那条 assistant，归属仍然正确。
+      //
+      // checkpointer 不变量不受影响：本函数只产出对外事件流，消息序列由
+      // supervisor 节点写入 state，与这里 yield 与否无关；空轮既无 tool_calls
+      // 也就不存在 tool_call/tool_result 配对被打断的问题。
+      if (content !== "" || reasoning !== "" || toolCalls.length > 0) {
+        yield {
+          kind: "assistant_done",
+          messageId: currentSid,
+          content,
+          reasoning,
+          toolCalls: toolCalls.length > 0 ? toolCalls : null,
+        };
+      }
       const extracted = extractUsage(currentAcc);
       if (extracted) {
         yield {

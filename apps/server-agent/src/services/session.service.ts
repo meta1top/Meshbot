@@ -2,10 +2,13 @@ import { Transactional } from "@meshbot/common";
 import type {
   AppendMessageInput,
   CreateSessionInput,
+  SessionCreatedEvent,
+  SessionDeletedEvent,
+  SessionRenamedEvent,
   SessionStatus,
   SessionSummary,
 } from "@meshbot/types-agent";
-import { stripLlmuse } from "@meshbot/types-agent";
+import { SESSION_LIFECYCLE_EVENTS, stripLlmuse } from "@meshbot/types-agent";
 import { ThreadStateService } from "@meshbot/lib-agent";
 import {
   BadRequestException,
@@ -13,6 +16,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, Repository } from "typeorm";
 import { ScopedRepository } from "../account/scoped-repository";
@@ -37,6 +41,7 @@ function toSummary(s: Session): SessionSummary {
     pinnedAt: s.pinnedAt ? s.pinnedAt.toISOString() : null,
     titleGenerated: s.titleGenerated,
     modelConfigId: s.modelConfigId ?? null,
+    agentId: s.agentId,
     createdAt: s.createdAt.toISOString(),
     updatedAt: s.updatedAt.toISOString(),
   };
@@ -69,6 +74,7 @@ export class SessionService {
     private readonly threadState: ThreadStateService,
     private readonly schedules: ScheduleService,
     private readonly modelConfigs: ModelConfigService,
+    private readonly emitter: EventEmitter2,
   ) {
     // 包裹 tx-aware 注入代理：作用域仓库的操作仍参与外层 @Transactional 边界
     this.sessionRepo = scopedFactory.create(rawSessionRepo);
@@ -79,21 +85,46 @@ export class SessionService {
   /**
    * 创建会话：建 Session(running) + 写首条 pending 消息。
    * 跨两表写入 —— 用 @Transactional 包裹的私有方法。
+   *
+   * `agentId` 必填：会话归属的 Agent 决定人格/技能/MCP/记忆/工作区如何解析，调用方
+   * （Controller / 远程 run 入站等）须自行给出真实来源，拿不到就调
+   * `AgentService.ensureDefault()`——本方法不做兜底，杜绝空字符串静默落库。
    */
   async createSession(
-    input: CreateSessionInput,
+    input: CreateSessionInput & { agentId: string },
   ): Promise<{ sessionId: string; session: SessionSummary }> {
-    return this.createSessionInTx(input);
+    const created = await this.createSessionInTx(input);
+    // 生命周期事件（统一契约，spec §A）：本地端经 ws/events 消费，远程 Agent 级
+    // 观察者经 relay 镜像消费。发射点在 Service 而非 Controller——REST 建会话与
+    // 远程 run 入站建会话两条路径自动共享，不留静默洞。（早先这里写的是「三条
+    // 路径，含定时任务建会话」，是错的：`ScheduleExecutor.fire()` 只对已存在
+    // 会话 appendMessage，全仓 `createSession` 调用点只有上述两处。）
+    // 放在事务方法**之外**：事务未提交就通知，观察者回查会看不到这条会话。
+    //
+    // kind="quick"（随手问临时会话）不发：`listAllSorted`/`listByAgentSorted`
+    // 都用 `kind='user'` 白名单过滤、不进侧栏，若照样 emit created，观察者
+    // （本地侧栏 sessionsAtom / 远程 Agent 会话列表）会用 applySessionListEvent
+    // 的「不认识就插入」语义把它凭空插进列表——与 kind="subagent"
+    // （`createSubSession` 走另一方法、从不 emit created）是同一类坑，这里补
+    // 上是因为 T13 设计统一事件契约时只排除了 subagent，漏看了 quick。
+    if (input.kind !== "quick") {
+      this.emitter.emit(SESSION_LIFECYCLE_EVENTS.created, {
+        agentId: input.agentId,
+        session: created.session,
+      } satisfies SessionCreatedEvent);
+    }
+    return created;
   }
 
   @Transactional()
   private async createSessionInTx(
-    input: CreateSessionInput,
+    input: CreateSessionInput & { agentId: string },
   ): Promise<{ sessionId: string; session: SessionSummary }> {
     const saved = (await this.sessionRepo.save({
       title: stripLlmuse(input.content).slice(0, TITLE_MAX),
       status: "running" as const,
       kind: input.kind ?? "user",
+      agentId: input.agentId,
       // 会话级模型选择：runner 每次 run 经 ModelRunContext 读此列做 override。
       modelConfigId: input.modelConfigId ?? null,
     })) as Session;
@@ -108,6 +139,9 @@ export class SessionService {
   /**
    * 建子 Agent 子会话：Session(kind:"subagent" + parent 关联, running) + 首条 pending(task)。
    * 跨两表写入，@Transactional 包裹。须在父 run 账号上下文内调用（作用域仓库自动盖 cloudUserId）。
+   *
+   * `agentId` 继承父会话——子 Agent 必须跑在同一个 Agent 的技能/工作区里，故不接受
+   * 调用方传入，而是读父会话落库值（父会话必然存在且已有合法 agentId）。
    */
   async createSubSession(input: {
     parentSessionId: string;
@@ -129,6 +163,7 @@ export class SessionService {
     background?: boolean;
     modelConfigId?: string | null;
   }): Promise<{ subSessionId: string }> {
+    const parent = await this.findSessionOrFail(input.parentSessionId);
     const title = (input.description ?? stripLlmuse(input.task)).slice(
       0,
       TITLE_MAX,
@@ -137,6 +172,7 @@ export class SessionService {
       title,
       status: "running" as const,
       kind: "subagent" as const,
+      agentId: parent.agentId,
       parentSessionId: input.parentSessionId,
       parentToolCallId: input.parentToolCallId,
       background: input.background ? 1 : 0,
@@ -211,6 +247,15 @@ export class SessionService {
   }
 
   /**
+   * 列出某 Agent 下的全部会话（不区分 kind）。供「删除 Agent」级联清理其全部
+   * 会话使用——`agents.agent_id` 无数据库外键（项目禁止外键约束），删 Agent
+   * 前必须先把归属它的会话一起清掉，否则会留下指向已删 Agent 的悬空引用。
+   */
+  findByAgentId(agentId: string): Promise<Session[]> {
+    return this.sessionRepo.find({ where: { agentId } });
+  }
+
+  /**
    * 列出某父会话派生的全部子会话（id + 认领用的 parentToolCallId）。
    * 供 history 组装嵌套卡关联：子 run 进行中工具结果未落库，前端刷新后唯有
    * 此路能把 dispatch 工具卡认领到子会话。
@@ -265,6 +310,26 @@ export class SessionService {
       select: { id: true, cloudUserId: true },
     });
     return row?.cloudUserId ?? null;
+  }
+
+  /**
+   * 按 session 反查其归属账号 + 归属 Agent（系统级，无账号上下文时用）。
+   * 与 {@link findOwner} 同款窄投影查询（同一张表、同一个 sessionId、同一次
+   * 索引查找），只多带一列 agentId——供 RunnerService 在建账号上下文的同时
+   * 一并拿到 agentId，喂给 `session.status_changed` 事件，省掉一次专门为
+   * agentId 而发的回查（见 setSessionStatus）。`findOwner` 本体不动，避免
+   * 影响它的另一个调用方 session-title.service.ts。
+   */
+  async findOwnerAndAgent(
+    sessionId: string,
+  ): Promise<{ cloudUserId: string; agentId: string } | null> {
+    // scope-check: allow-unscoped
+    const row = await this.sessionRepo.unscoped().findOne({
+      where: { id: sessionId },
+      select: { id: true, cloudUserId: true, agentId: true },
+    });
+    if (!row) return null;
+    return { cloudUserId: row.cloudUserId, agentId: row.agentId };
   }
 
   /** 取会话，不存在抛 404。 */
@@ -383,6 +448,22 @@ export class SessionService {
     return res.affected ?? 0;
   }
 
+  /**
+   * 启动时把遗留的 running 会话重置为 idle，返回受影响行数。
+   *
+   * 进程崩在 run 中间时 RunnerService 的 finally 没机会跑，status 会永久停在
+   * running，侧栏「运行中」绿点冷启动后仍亮着且永不熄灭。
+   */
+  async resetRunningToIdle(): Promise<number> {
+    // 启动时（RunnerService.onModuleInit）无账号上下文，作用域仓库会抛
+    // NO_ACCOUNT_CONTEXT；本地轨单进程假设下跨账号全量重置是正确语义，故走裸仓库。
+    // scope-check: allow-unscoped
+    const res = await this.sessionRepo
+      .unscoped()
+      .update({ status: "running" }, { status: "idle" });
+    return res.affected ?? 0;
+  }
+
   /** 更新会话 status（idle / running）。 */
   async setStatus(sessionId: string, status: SessionStatus): Promise<void> {
     await this.sessionRepo.update({ id: sessionId }, { status });
@@ -399,15 +480,41 @@ export class SessionService {
    * .andWhere()，否则会覆盖账号 where 条件导致账号隔离失效。
    */
   async listAllSorted(): Promise<SessionSummary[]> {
-    const rows = await this.sessionRepo
+    const rows = await this.sortedUserSessionsQb().getMany();
+    return rows.map(toSummary);
+  }
+
+  /**
+   * 列出**某个 Agent 名下**的普通会话（kind='user'），排序规则与
+   * {@link listAllSorted} 完全一致。
+   *
+   * 供跨设备查询通道（B 侧 `RemoteQueryInboundService`）使用：一设备多 Agent 下
+   * 远端点开的是「设备上的某个 Agent」，会话列表必须按该 Agent 收窄——否则远端
+   * 会看到同设备上别的 Agent 的会话（数据越界），点进去发消息又必然撞上远程 run
+   * 的会话归属门控，报错原因还完全对不上。
+   *
+   * fail-closed：agentId 为空串/undefined 时直接返空列表，绝不退化成「列出全部」。
+   */
+  async listByAgentSorted(agentId: string): Promise<SessionSummary[]> {
+    if (!agentId) return [];
+    const rows = await this.sortedUserSessionsQb()
+      .andWhere("s.agentId = :agentId", { agentId })
+      .getMany();
+    return rows.map(toSummary);
+  }
+
+  /**
+   * 「固定优先 / 固定组按 pinnedAt desc / 其余按 updatedAt desc」的 kind='user'
+   * 会话查询构造器，供 listAllSorted 与 listByAgentSorted 共用。
+   */
+  private sortedUserSessionsQb() {
+    return this.sessionRepo
       .scopedQueryBuilder("s")
       .andWhere("s.kind = :kind", { kind: "user" })
       .orderBy("CASE WHEN s.pinned_at IS NULL THEN 1 ELSE 0 END", "ASC")
       .addOrderBy("s.pinned_at", "DESC")
       .addOrderBy("s.updated_at", "DESC")
-      .addOrderBy("s.id", "DESC")
-      .getMany();
-    return rows.map(toSummary);
+      .addOrderBy("s.id", "DESC");
   }
 
   /** 列出随手问临时会话（kind="quick"），按更新时间倒序——供随手问面板「历史」。 */
@@ -421,13 +528,35 @@ export class SessionService {
     return rows.map(toSummary);
   }
 
-  /** 把随手问临时会话沉淀为侧栏会话（kind: quick→user）。 */
+  /**
+   * 把随手问临时会话沉淀为侧栏会话（kind: quick→user）。
+   *
+   * 提升成功后要发 `created`：`kind="quick"` 建会话时刻意**不发**（那类会话被
+   * 侧栏的 `kind='user'` 白名单挡着，发了会被 `applySessionListEvent` 的
+   * 「不认识就插入」语义凭空插进列表）。提升这一刻它才第一次成为侧栏成员，
+   * 对全部观察者（本机其他标签页的 `sessionsAtom`、云端 Agent 级观察者）而言
+   * 正是「之前不认识、现在该出现」——`created` 的插入语义完全适配，不需要
+   * 发明新事件类型。
+   *
+   * 不发的话，只有触发提升的那个标签页能看到（它自己改了本地状态），其余
+   * 观察者要等下次回源——这类只在多标签页/远程观察下才可见的不一致极难复现。
+   */
   async promoteToSidebar(sessionId: string): Promise<SessionSummary> {
-    await this.sessionRepo.update(
+    const res = await this.sessionRepo.update(
       { id: sessionId, kind: "quick" },
       { kind: "user" },
     );
     const s = await this.findSessionOrFail(sessionId);
+    // 仅在本次调用真的完成了 quick→user 转换时才发：重复调用（会话已是 user）
+    // 的 affected 为 0，此时再发会让观察者收到一条它已经有的会话——虽然
+    // `applySessionListEvent` 的 created 分支按 id 查重不会真的插重，但发一条
+    // 语义上不成立的事件会污染排查现场。同 patchIfNotGenerated 的既有做法。
+    if (res.affected) {
+      this.emitter.emit(SESSION_LIFECYCLE_EVENTS.created, {
+        agentId: s.agentId,
+        session: toSummary(s),
+      } satisfies SessionCreatedEvent);
+    }
     return toSummary(s);
   }
 
@@ -455,6 +584,14 @@ export class SessionService {
     }
     await this.sessionRepo.update({ id: sessionId }, changes);
     const s = await this.findSessionOrFail(sessionId);
+    if (input.title !== undefined) {
+      // 单表 update，无事务边界；改名即读回已提交数据，可放心紧跟着通知。
+      this.emitter.emit(SESSION_LIFECYCLE_EVENTS.renamed, {
+        agentId: s.agentId,
+        sessionId,
+        title: s.title,
+      } satisfies SessionRenamedEvent);
+    }
     return toSummary(s);
   }
 
@@ -475,6 +612,12 @@ export class SessionService {
     );
     if (!res.affected) return null;
     const s = await this.findSessionOrFail(sessionId);
+    // 用户已手动改名（affected=0）时上面已提前 return，不会走到这里重复通知。
+    this.emitter.emit(SESSION_LIFECYCLE_EVENTS.renamed, {
+      agentId: s.agentId,
+      sessionId,
+      title: s.title,
+    } satisfies SessionRenamedEvent);
     return toSummary(s);
   }
 
@@ -487,10 +630,43 @@ export class SessionService {
    * 让 service 保持「纯数据层」。
    */
   async deleteSession(sessionId: string): Promise<void> {
-    await this.findSessionOrFail(sessionId);
+    const agentId = await this.purgeSession(sessionId);
+    // 删完才通知：先通知的话观察者可能在数据还在时就把行移除，然后被某个
+    // 并发的列表刷新又加回来（闪回）。agentId 取自删除前查到的会话（删完
+    // 这行数据已经没了，回查不到）。
+    this.emitter.emit(SESSION_LIFECYCLE_EVENTS.deleted, {
+      agentId,
+      sessionId,
+    } satisfies SessionDeletedEvent);
+  }
+
+  /**
+   * 删除一个会话及其消息，**不发 `session.deleted`**——返回该会话的 agentId，
+   * 由调用方在合适的时机自行通知。供 `AgentService.removeInDb`（删 Agent 时
+   * 连同其全部会话一起清）调用。
+   *
+   * **为什么这条路径不能自己发事件**（review 抓出的架构缺口）：`removeInDb`
+   * 本身挂着 `@Transactional()`，而本仓的事务装饰器是 REQUIRED 传播语义——
+   * 嵌套调用只 join 外层事务、**不在本层提交**。所以从 `removeInDb` 内部调过来
+   * 时，`purgeSession` 返回并不代表数据已落盘：真正的 commit 要等 `removeInDb`
+   * 整个方法体（含循环之后的 `repo.delete({ id })`）跑完。此时若发通知，而外层
+   * 事务随后回滚，就会出现「观察者已把这些会话移除，数据库里它们其实还在」
+   * ——更糟的是 schedules / checkpointer 的删除是非事务性的，不会随回滚恢复，
+   * 于是会话「复活」但定时任务和 checkpointer 已经没了。
+   *
+   * 与 `deleteSession` 共用 {@link purgeSession}，不另起一套级联删除实现。
+   */
+  removeWithMessages(sessionId: string): Promise<string> {
+    return this.purgeSession(sessionId);
+  }
+
+  /** 级联删除的实际动作；返回被删会话的 agentId（供调用方组事件）。 */
+  private async purgeSession(sessionId: string): Promise<string> {
+    const session = await this.findSessionOrFail(sessionId);
     await this.deleteSessionInTx(sessionId);
     await this.schedules.deleteBySession(sessionId);
     await this.checkpointer.deleteThread(sessionId);
+    return session.agentId;
   }
 
   @Transactional()

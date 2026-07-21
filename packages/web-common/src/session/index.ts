@@ -86,6 +86,11 @@ export {
   type SessionLauncherLabels,
   type SessionLauncherProps,
 } from "./session-launcher";
+export {
+  applySessionListEvent,
+  type SessionListEvent,
+  toSessionListEvent,
+} from "./session-list-events";
 export { createSessionSocketAdapter } from "./session-socket-adapter";
 export {
   SessionTree,
@@ -140,3 +145,4 @@ export {
   UserMessageActions,
   type UserMessageActionsProps,
 } from "./user-message-actions";
+export { inflightToSnapshotEvent } from "./watch-inflight";

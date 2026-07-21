@@ -1,10 +1,14 @@
-import { AccountContextService, ModelRunContext } from "@meshbot/lib-agent";
+import {
+  AccountContextService,
+  AgentContextService,
+  ModelRunContext,
+} from "@meshbot/lib-agent";
 import { EventEmitter2 } from "@nestjs/event-emitter";
-import { SESSION_WS_EVENTS } from "@meshbot/types-agent";
+import { SESSION_STATUS_EVENTS, SESSION_WS_EVENTS } from "@meshbot/types-agent";
 import type { PendingMessage } from "../entities/pending-message.entity";
 import { RunnerService } from "./runner.service";
 
-/** 测试默认 session 属主：runner 会按 findOwner 反查后建该账号上下文。 */
+/** 测试默认 session 属主：runner 会按 findOwnerAndAgent 反查后建该账号上下文。 */
 const OWNER = "u1";
 
 /** 内存版 SessionService 替身。 */
@@ -15,17 +19,26 @@ function fakeSessionService() {
   let claimFailedCalls = 0;
   return {
     store,
-    /** 反查归属账号：测试里全部 session 归 OWNER。 */
-    async findOwner(_sessionId: string): Promise<string | null> {
-      return OWNER;
+    /**
+     * 反查归属账号 + 归属 Agent：测试里全部 session 归 OWNER、agentId 默认
+     * "agent-1"（与下面 findOrNull 的默认 agentId 保持一致）。
+     */
+    async findOwnerAndAgent(
+      _sessionId: string,
+    ): Promise<{ cloudUserId: string; agentId: string } | null> {
+      return { cloudUserId: OWNER, agentId: "agent-1" };
     },
-    /** 按 id 查 session：测试默认都是主 Agent 会话（kind: "user"），非子 Agent。 */
+    /**
+     * 按 id 查 session：测试默认都是主 Agent 会话（kind: "user"），非子 Agent，
+     * agentId 默认 "agent-1"（Task 2 保证 sessions.agent_id NOT NULL）。
+     */
     async findOrNull(sessionId: string): Promise<{
       id: string;
       kind: "user" | "subagent";
+      agentId: string;
       modelConfigId?: string | null;
-    }> {
-      return { id: sessionId, kind: "user" };
+    } | null> {
+      return { id: sessionId, kind: "user", agentId: "agent-1" };
     },
     get claimPendingCalls() {
       return claimPendingCalls;
@@ -59,6 +72,12 @@ function fakeSessionService() {
       return rows;
     },
     async setStatus() {},
+    async rollbackProcessingToPending() {
+      return 0;
+    },
+    async resetRunningToIdle() {
+      return 0;
+    },
     enqueue(sessionId: string, content: string) {
       store.push({
         id: `m${seq++}`,
@@ -177,6 +196,42 @@ function fakeModelConfig() {
   };
 }
 
+/**
+ * AgentService 替身：默认 agent 无 defaultModelConfigId（三级优先级测试里按需覆盖）；
+ * ensureDefault 供 session.agentId 缺失时兜底（正常路径不会走到，Task 2 已保证 NOT NULL）。
+ */
+function fakeAgentService(defaultModelConfigId: string | null = null) {
+  return {
+    async findOrNull(id: string) {
+      return { id, defaultModelConfigId };
+    },
+    async ensureDefault() {
+      return { id: "agent-default", defaultModelConfigId };
+    },
+  };
+}
+
+/**
+ * McpService 替身：ensureAgent/acquire/release 只记调用，不真连 MCP。
+ * 供验证 RunnerService 是否按「ensureAgent → acquire → try/finally release」
+ * 顺序接线（Task 6）。
+ */
+function fakeMcpService() {
+  const calls: string[] = [];
+  return {
+    calls,
+    async ensureAgent(cloudUserId: string, agentId: string) {
+      calls.push(`ensure:${cloudUserId}:${agentId}`);
+    },
+    acquire(cloudUserId: string, agentId: string) {
+      calls.push(`acquire:${cloudUserId}:${agentId}`);
+    },
+    release(cloudUserId: string, agentId: string) {
+      calls.push(`release:${cloudUserId}:${agentId}`);
+    },
+  };
+}
+
 /** LlmCallService 替身（带 getLastBySession）。 */
 function fakeLlmCallServiceWithLast(lastInput: number) {
   return {
@@ -210,11 +265,18 @@ describe("RunnerService", () => {
       fakeModelConfig() as never,
       new AccountContextService(),
       new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.kickAndWait("s1");
     expect(
       events
-        .filter((e) => e.name !== SESSION_WS_EVENTS.runUsage)
+        .filter(
+          (e) =>
+            e.name !== SESSION_WS_EVENTS.runUsage &&
+            e.name !== SESSION_STATUS_EVENTS.changed,
+        )
         .map((e) => e.name),
     ).toEqual(["run.chunk", "run.chunk", "run.done"]);
     expect(sess.store.every((m) => m.status === "processed")).toBe(true);
@@ -240,6 +302,9 @@ describe("RunnerService", () => {
       fakeModelConfig() as never,
       new AccountContextService(),
       new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.kickAndWait("s1");
     expect(sess.store).toHaveLength(2);
@@ -261,6 +326,9 @@ describe("RunnerService", () => {
       fakeModelConfig() as never,
       new AccountContextService(),
       new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     // 第一轮：消费 first，循环排空退出
     await runner.kickAndWait("s1");
@@ -290,6 +358,9 @@ describe("RunnerService", () => {
       fakeModelConfig() as never,
       new AccountContextService(),
       new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.kickAndWait("s1");
     expect(errs).toHaveLength(1);
@@ -314,6 +385,9 @@ describe("RunnerService", () => {
       fakeModelConfig() as never,
       new AccountContextService(),
       new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.kickRetryAndWait("s1");
     expect(sess.store[0].status).toBe("processed");
@@ -336,6 +410,9 @@ describe("RunnerService", () => {
       fakeModelConfig() as never,
       new AccountContextService(),
       new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     emitter.on("run.chunk", () => {
       snapshotDuringRun = runner.getInflight("s1");
@@ -399,6 +476,9 @@ describe("RunnerService", () => {
       fakeModelConfig() as never,
       new AccountContextService(),
       new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     const runPromise = runner.kickAndWait("s1");
     await reached;
@@ -463,6 +543,9 @@ describe("RunnerService", () => {
       fakeModelConfig() as never,
       new AccountContextService(),
       new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     const runPromise = runner.kickAndWait("s1");
     await reached;
@@ -506,6 +589,9 @@ describe("RunnerService", () => {
       fakeModelConfig() as never,
       new AccountContextService(),
       new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     emitter.on("run.chunk", () => runner.interrupt("s1"));
     await runner.kickAndWait("s1");
@@ -534,9 +620,100 @@ describe("RunnerService", () => {
       fakeModelConfig() as never,
       new AccountContextService(),
       new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.onModuleInit();
     expect(rolledBack).toBe(3);
+  });
+
+  it("onModuleInit：把遗留 running 会话重置为 idle（崩溃后绿点不残留）", async () => {
+    const sess = fakeSessionService();
+    let reset = 0;
+    const sessWithReset = {
+      ...sess,
+      async resetRunningToIdle() {
+        reset = 2;
+        return 2;
+      },
+    };
+    const runner = new RunnerService(
+      sessWithReset as never,
+      fakeGraphRunner() as never,
+      new EventEmitter2(),
+      fakeLlmCallService() as never,
+      fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
+      new AccountContextService(),
+      new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      fakeMcpService() as never,
+    );
+    await runner.onModuleInit();
+    expect(reset).toBe(2);
+  });
+
+  it("run 起止各 emit 一次 session.status_changed（侧栏绿点点亮/熄灭）", async () => {
+    const sess = fakeSessionService();
+    const emitter = new EventEmitter2();
+    const statusEvents: unknown[] = [];
+    emitter.on(SESSION_STATUS_EVENTS.changed, (p) => statusEvents.push(p));
+    sess.enqueue("s1", "hi");
+    const runner = new RunnerService(
+      sess as never,
+      fakeGraphRunner() as never,
+      emitter,
+      fakeLlmCallService() as never,
+      fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
+      new AccountContextService(),
+      new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      fakeMcpService() as never,
+    );
+    await runner.kickAndWait("s1");
+    expect(statusEvents).toEqual([
+      { agentId: "agent-1", sessionId: "s1", status: "running" },
+      { agentId: "agent-1", sessionId: "s1", status: "idle" },
+    ]);
+  });
+
+  it("会话在 run 收尾前被删除（deleteSession 与消费循环收尾竞态）：setSessionStatus 仍照常 emit idle 且不抛错——agentId 由 kickAndWait 起步时 findOwnerAndAgent 预先捕获，不再回查已删的 session 行", async () => {
+    const sess = fakeSessionService();
+    const emitter = new EventEmitter2();
+    const statusEvents: unknown[] = [];
+    emitter.on(SESSION_STATUS_EVENTS.changed, (p) => statusEvents.push(p));
+    sess.enqueue("s1", "hi");
+    // 模拟 deleteSession 在消费循环跑起来之后把 session 行删掉：
+    // findOrNull（consumeRunStream 内读 session 用）从此查不到该行；
+    // findOwnerAndAgent 早已在 kickAndWait 起步时把 agentId 取走，不受影响。
+    sess.findOrNull = async (_sessionId: string) => null;
+    const runner = new RunnerService(
+      sess as never,
+      fakeGraphRunner() as never,
+      emitter,
+      fakeLlmCallService() as never,
+      fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
+      new AccountContextService(),
+      new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      fakeMcpService() as never,
+    );
+    await expect(runner.kickAndWait("s1")).resolves.toBeUndefined();
+    // running / idle 两次都照常 emit，agentId 仍是 kick 起步时捕获的 "agent-1"
+    // （不是 undefined、不是抛错中断），侧栏绿点不会因为会话已删而卡死在亮着。
+    expect(statusEvents).toEqual([
+      { agentId: "agent-1", sessionId: "s1", status: "running" },
+      { agentId: "agent-1", sessionId: "s1", status: "idle" },
+    ]);
   });
 
   it("收到 usage 事件 → 落库 + emit run.usage", async () => {
@@ -556,6 +733,9 @@ describe("RunnerService", () => {
       fakeModelConfig() as never,
       new AccountContextService(),
       new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.kickAndWait("s1");
     expect(llmCalls.records).toHaveLength(1);
@@ -591,6 +771,9 @@ describe("RunnerService", () => {
       fakeModelConfig() as never,
       new AccountContextService(),
       new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.kickResumeAndWait("s1");
     expect(events).toContain("run.done");
@@ -599,7 +782,7 @@ describe("RunnerService", () => {
     expect(sess.claimFailedCalls).toBe(0);
   });
 
-  it("kick：run 全程跑在 session 属主的账号上下文里（按 findOwner 反查建上下文）", async () => {
+  it("kick：run 全程跑在 session 属主的账号上下文里（按 findOwnerAndAgent 反查建上下文）", async () => {
     const account = new AccountContextService();
     const sess = fakeSessionService();
     // claimPending 调用时刻应已处于属主 OWNER 上下文（消费循环包在 account.run 内）。
@@ -622,6 +805,9 @@ describe("RunnerService", () => {
       fakeModelConfig() as never,
       account,
       new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     // 入口处（account.run 之外）无上下文，证明上下文是 runner 显式建的而非外泄。
     expect(account.get()).toBeNull();
@@ -634,10 +820,10 @@ describe("RunnerService", () => {
     expect(sess.store.every((m) => m.status === "processed")).toBe(true);
   });
 
-  it("kick：findOwner 返回 null（找不到属主）→ 跳过，不进消费循环", async () => {
+  it("kick：findOwnerAndAgent 返回 null（找不到属主）→ 跳过，不进消费循环", async () => {
     const account = new AccountContextService();
     const sess = fakeSessionService();
-    sess.findOwner = async () => null;
+    sess.findOwnerAndAgent = async () => null;
     let claimed = false;
     sess.claimPending = async (..._args: unknown[]) => {
       claimed = true;
@@ -653,6 +839,9 @@ describe("RunnerService", () => {
       fakeModelConfig() as never,
       account,
       new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.kickAndWait("orphan");
     expect(claimed).toBe(false);
@@ -663,6 +852,7 @@ describe("RunnerService", () => {
     sess.findOrNull = async (sessionId: string) => ({
       id: sessionId,
       kind: "subagent" as const,
+      agentId: "agent-1",
       modelConfigId: "mc-9",
     });
     const runCtx = new ModelRunContext();
@@ -691,9 +881,305 @@ describe("RunnerService", () => {
       fakeModelConfig() as never,
       new AccountContextService(),
       runCtx,
+      new AgentContextService(),
+      fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.kickAndWait("s1");
     expect(seen).toEqual(["mc-9"]);
+  });
+
+  it("run 期间 ALS 里是该会话绑定的 agentId", async () => {
+    const sess = fakeSessionService();
+    sess.findOrNull = async (sessionId: string) => ({
+      id: sessionId,
+      kind: "user" as const,
+      agentId: "agent-42",
+      modelConfigId: null,
+    });
+    const agentCtx = new AgentContextService();
+    const seen: (string | null)[] = [];
+    const graph = {
+      async *streamMessage() {
+        seen.push(agentCtx.get());
+        yield {
+          kind: "assistant_done",
+          messageId: "m1",
+          content: "hi",
+          reasoning: "",
+          toolCalls: null,
+        };
+      },
+    };
+    sess.enqueue("s1", "hi");
+    const runner = new RunnerService(
+      sess as never,
+      graph as never,
+      new EventEmitter2(),
+      fakeLlmCallService() as never,
+      fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
+      new AccountContextService(),
+      new ModelRunContext(),
+      agentCtx,
+      fakeAgentService() as never,
+      fakeMcpService() as never,
+    );
+    // 入口处（run 之外）无上下文，证明上下文是 runner 显式建的而非外泄。
+    expect(agentCtx.get()).toBeNull();
+    await runner.kickAndWait("s1");
+    expect(seen).toEqual(["agent-42"]);
+    // 退出后上下文不残留。
+    expect(agentCtx.get()).toBeNull();
+  });
+
+  it("模型三级优先级：会话覆盖 > agent 默认 > 都没有则传 null", async () => {
+    const overrides: (string | null)[] = [];
+    /** ModelRunContext 替身：只记录传入的覆盖 id，不需要真做 ALS。 */
+    const modelRunCtx = {
+      run(id: string | null, fn: () => unknown) {
+        overrides.push(id);
+        return fn();
+      },
+    };
+
+    const graph = {
+      async *streamMessage() {
+        yield {
+          kind: "assistant_done",
+          messageId: "m1",
+          content: "hi",
+          reasoning: "",
+          toolCalls: null,
+        };
+      },
+    };
+
+    // 情形 1：session.modelConfigId 为 null，agent.defaultModelConfigId = "m-agent"
+    // → 期望三级优先级取 agent 默认值。
+    const sess1 = fakeSessionService();
+    sess1.findOrNull = async (sessionId: string) => ({
+      id: sessionId,
+      kind: "user" as const,
+      agentId: "agent-1",
+      modelConfigId: null,
+    });
+    sess1.enqueue("s1", "hi");
+    const runner1 = new RunnerService(
+      sess1 as never,
+      graph as never,
+      new EventEmitter2(),
+      fakeLlmCallService() as never,
+      fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
+      new AccountContextService(),
+      modelRunCtx as never,
+      new AgentContextService(),
+      fakeAgentService("m-agent") as never,
+      fakeMcpService() as never,
+    );
+    await runner1.kickAndWait("s1");
+
+    // 情形 2：session.modelConfigId = "m-session" → 会话覆盖优先于 agent 默认值。
+    const sess2 = fakeSessionService();
+    sess2.findOrNull = async (sessionId: string) => ({
+      id: sessionId,
+      kind: "user" as const,
+      agentId: "agent-1",
+      modelConfigId: "m-session",
+    });
+    sess2.enqueue("s2", "hi");
+    const runner2 = new RunnerService(
+      sess2 as never,
+      graph as never,
+      new EventEmitter2(),
+      fakeLlmCallService() as never,
+      fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
+      new AccountContextService(),
+      modelRunCtx as never,
+      new AgentContextService(),
+      fakeAgentService("m-agent") as never,
+      fakeMcpService() as never,
+    );
+    await runner2.kickAndWait("s2");
+
+    // 情形 3：session.modelConfigId 与 agent.defaultModelConfigId 都没有 → 传 null。
+    const sess3 = fakeSessionService();
+    sess3.findOrNull = async (sessionId: string) => ({
+      id: sessionId,
+      kind: "user" as const,
+      agentId: "agent-1",
+      modelConfigId: null,
+    });
+    sess3.enqueue("s3", "hi");
+    const runner3 = new RunnerService(
+      sess3 as never,
+      graph as never,
+      new EventEmitter2(),
+      fakeLlmCallService() as never,
+      fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
+      new AccountContextService(),
+      modelRunCtx as never,
+      new AgentContextService(),
+      fakeAgentService(null) as never,
+      fakeMcpService() as never,
+    );
+    await runner3.kickAndWait("s3");
+
+    expect(overrides).toEqual(["m-agent", "m-session", null]);
+  });
+
+  it("session.modelConfigId 为空字符串时降级到 agent 默认值（复现缺陷 1：?? 挡不住空串）", async () => {
+    const overrides: (string | null)[] = [];
+    const modelRunCtx = {
+      run(id: string | null, fn: () => unknown) {
+        overrides.push(id);
+        return fn();
+      },
+    };
+    const graph = {
+      async *streamMessage() {
+        yield {
+          kind: "assistant_done",
+          messageId: "m1",
+          content: "hi",
+          reasoning: "",
+          toolCalls: null,
+        };
+      },
+    };
+    const sess = fakeSessionService();
+    sess.findOrNull = async (sessionId: string) => ({
+      id: sessionId,
+      kind: "user" as const,
+      agentId: "agent-1",
+      modelConfigId: "",
+    });
+    sess.enqueue("s1", "hi");
+    const runner = new RunnerService(
+      sess as never,
+      graph as never,
+      new EventEmitter2(),
+      fakeLlmCallService() as never,
+      fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
+      new AccountContextService(),
+      modelRunCtx as never,
+      new AgentContextService(),
+      fakeAgentService("m-agent") as never,
+      fakeMcpService() as never,
+    );
+    await runner.kickAndWait("s1");
+    // 期望：空串会话覆盖被当作"未覆盖"，降级到 agent 默认值 "m-agent"。
+    // 修复前 `session?.modelConfigId ?? agent?.defaultModelConfigId ?? null`
+    // 会把 "" 原样传下去，这里会拿到 ""。
+    expect(overrides).toEqual(["m-agent"]);
+  });
+
+  it("session.agentId 为空字符串时走 ensureDefault 兜底，不把空串压进 ALS（复现缺陷 2）", async () => {
+    const agentCtx = new AgentContextService();
+    const seen: (string | null)[] = [];
+    const graph = {
+      async *streamMessage() {
+        // 直接读 ALS 里的 agentId：修复前会是 ""（被压进 ALS 的空串），
+        // 修复后应是 fakeAgentService().ensureDefault() 返回的 "agent-default"。
+        seen.push(agentCtx.get());
+        yield {
+          kind: "assistant_done",
+          messageId: "m1",
+          content: "hi",
+          reasoning: "",
+          toolCalls: null,
+        };
+      },
+    };
+    const sess = fakeSessionService();
+    sess.findOrNull = async (sessionId: string) => ({
+      id: sessionId,
+      kind: "user" as const,
+      agentId: "",
+      modelConfigId: null,
+    });
+    sess.enqueue("s1", "hi");
+    const runner = new RunnerService(
+      sess as never,
+      graph as never,
+      new EventEmitter2(),
+      fakeLlmCallService() as never,
+      fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
+      new AccountContextService(),
+      new ModelRunContext(),
+      agentCtx,
+      fakeAgentService() as never,
+      fakeMcpService() as never,
+    );
+    await runner.kickAndWait("s1");
+    expect(seen).toEqual(["agent-default"]);
+  });
+
+  it("MCP 接线：正常 run 按 ensureAgent → acquire → release 顺序调用（Task 6）", async () => {
+    const sess = fakeSessionService();
+    const mcp = fakeMcpService();
+    sess.enqueue("s1", "hi");
+    const runner = new RunnerService(
+      sess as never,
+      fakeGraphRunner() as never,
+      new EventEmitter2(),
+      fakeLlmCallService() as never,
+      fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
+      new AccountContextService(),
+      new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      mcp as never,
+    );
+    await runner.kickAndWait("s1");
+    // session 固定 agentId="agent-1"（fakeSessionService.findOrNull），owner=OWNER="u1"。
+    expect(mcp.calls).toEqual([
+      "ensure:u1:agent-1",
+      "acquire:u1:agent-1",
+      "release:u1:agent-1",
+    ]);
+  });
+
+  it("MCP 接线：run 抛错时 release 仍在 finally 里被调用，不泄漏引用计数（Task 6 致命细节）", async () => {
+    const sess = fakeSessionService();
+    const mcp = fakeMcpService();
+    sess.enqueue("s1", "hi");
+    const runner = new RunnerService(
+      sess as never,
+      fakeGraphRunner({ throwErr: true }) as never,
+      new EventEmitter2(),
+      fakeLlmCallService() as never,
+      fakeSessionMessageService() as never,
+      fakeCompactor() as never,
+      fakeModelConfig() as never,
+      new AccountContextService(),
+      new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      mcp as never,
+    );
+    await runner.kickAndWait("s1");
+    // streamMessage 抛错（非 ctx_exceeded）：consumeRunStreamInCtx 向外抛，
+    // release 必须仍被 finally 调用，否则该 Agent 的 refCount 永久泄漏，
+    // sweepIdle 永远跳过、MCP 子进程永远回收不掉。
+    expect(mcp.calls).toEqual([
+      "ensure:u1:agent-1",
+      "acquire:u1:agent-1",
+      "release:u1:agent-1",
+    ]);
   });
 });
 
@@ -764,6 +1250,9 @@ describe("RunnerService context compaction integration", () => {
       fakeModelConfig() as never,
       new AccountContextService(),
       new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.kickAndWait("s1");
     expect(compactor.compactCalls).toHaveLength(1);
@@ -788,6 +1277,9 @@ describe("RunnerService context compaction integration", () => {
       fakeModelConfig() as never,
       new AccountContextService(),
       new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.kickAndWait("s1");
     expect(compactor.compactCalls).toHaveLength(0);
@@ -817,6 +1309,9 @@ describe("RunnerService context compaction integration", () => {
       fakeModelConfig() as never,
       new AccountContextService(),
       new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.kickAndWait("s1");
     expect(streamSpy).not.toHaveBeenCalled();
@@ -842,6 +1337,9 @@ describe("RunnerService context compaction integration", () => {
       fakeModelConfig() as never,
       new AccountContextService(),
       new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.kickAndWait("s1");
     expect(compactor.compactCalls).toHaveLength(1);
@@ -870,6 +1368,9 @@ describe("RunnerService context compaction integration", () => {
       fakeModelConfig() as never,
       new AccountContextService(),
       new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.kickAndWait("s1");
     expect(compactor.compactCalls).toHaveLength(0); // 兜底未触发
@@ -899,6 +1400,9 @@ describe("RunnerService context compaction integration", () => {
       fakeModelConfig() as never,
       new AccountContextService(),
       new ModelRunContext(),
+      new AgentContextService(),
+      fakeAgentService() as never,
+      fakeMcpService() as never,
     );
     await runner.kickAndWait("s1");
     // 兜底压缩被调一次（force=true, ctx-exceeded）

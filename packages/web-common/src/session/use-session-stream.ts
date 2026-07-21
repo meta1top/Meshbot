@@ -7,6 +7,7 @@ import {
   type RunChunkEvent,
   type RunDoneEvent,
   type RunErrorEvent,
+  type RunHitlSettledEvent,
   type RunHumanEvent,
   type RunInterruptedEvent,
   type RunReasoningChunkEvent,
@@ -34,85 +35,17 @@ import type { TimelineMessage } from "./timeline";
 import type { SessionTransport } from "./transport";
 
 /**
- * B 侧 `RemoteRunInboundService`/`RemoteQueryInboundService` 直出
- * `SessionMessageService.listPage()` 的原始 SessionMessage 行，并非真正的
- * HistoryMessage：toolCalls / metadata 是未解析的 JSON 字符串，无 feedback
- * 字段，且可能混入 role="tool" 行。A 侧 controller 把它 `as` 成 HistoryResponse
- * 只是编译期类型糊弄，运行时字段对不上，这里必须防御式映射（原在
- * assistant/page.tsx 的 RemoteSessionView，随只读→可交互升级一并挪到这里，
- * 供 useSessionStream 的 remote 分支直接复用）。
- */
-interface RemoteRawMessage {
-  id: string;
-  role: string;
-  content: string;
-  reasoning?: string | null;
-  /** JSON 字符串，形如 `[{id,name,args}]`（LangChain AIMessage.tool_calls 原始形状）。 */
-  toolCalls?: string | null;
-  /** JSON 字符串（session_message.metadata 原始列）；压缩占位行携带 kind="compaction"。 */
-  metadata?: string | null;
-  [key: string]: unknown;
-}
-
-interface RemoteRawHistory {
-  messages?: RemoteRawMessage[];
-  /** B 侧 `SessionMessageService.listPage` 原样返回（与本地 HistoryResponse 同源字段）。 */
-  hasMore?: boolean;
-  [key: string]: unknown;
-}
-
-/**
- * 远程历史单条消息 → TimelineMessage。字段缺失/解析失败一律给默认值，
- * 绝不假设运行时形状与本地 historyMessageToTimeline 的输入一致。
- */
-function remoteMessageToTimeline(m: RemoteRawMessage): TimelineMessage {
-  let toolCalls: TimelineMessage["toolCalls"];
-  if (typeof m.toolCalls === "string" && m.toolCalls) {
-    try {
-      const parsed = JSON.parse(m.toolCalls) as Array<{
-        id?: string;
-        toolCallId?: string;
-        name?: string;
-        args?: unknown;
-      }>;
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        toolCalls = parsed.map((tc) => ({
-          toolCallId: tc.toolCallId ?? tc.id ?? "",
-          name: tc.name ?? "",
-          args: tc.args,
-          // 只读历史无「进行中」语义：一律按终态展示，避免误触发确认卡的
-          // 可编辑分支（ImSendConfirmCard 等只在 status==="running" 时可写）。
-          status: "ok" as const,
-        }));
-      }
-    } catch {
-      toolCalls = undefined;
-    }
-  }
-  let metadata: TimelineMessage["metadata"];
-  if (typeof m.metadata === "string" && m.metadata) {
-    try {
-      metadata = JSON.parse(m.metadata) as TimelineMessage["metadata"];
-    } catch {
-      metadata = undefined;
-    }
-  }
-  return {
-    id: String(m.id),
-    role: m.role === "user" || m.role === "assistant" ? m.role : "system",
-    content: typeof m.content === "string" ? m.content : "",
-    ...(m.reasoning ? { reasoning: m.reasoning, reasoningDurationMs: 0 } : {}),
-    ...(toolCalls ? { toolCalls } : {}),
-    ...(metadata ? { metadata } : {}),
-    feedback: null,
-  };
-}
-
-/**
- * history 单条消息 → TimelineMessage 映射：首屏拉取与 loadMoreHistory 翻页
- * 共用（曾经翻页只映射 id/role/content/reasoning，丢了 toolCalls——含
- * dispatch_subagent 嵌套卡认领用的 subSessionId——与 feedback，导致上翻加载
- * 出来的历史消息里工具卡/嵌套卡/反馈态全部消失）。
+ * history 单条消息 → TimelineMessage 映射：本地 REST 与跨设备（L3 device
+ * query）、首屏拉取与 loadMoreHistory 翻页，四条路径共用同一份（曾经翻页只
+ * 映射 id/role/content/reasoning，丢了 toolCalls——含 dispatch_subagent 嵌套卡
+ * 认领用的 subSessionId——与 feedback，导致上翻加载出来的历史消息里工具卡/
+ * 嵌套卡/反馈态全部消失）。
+ *
+ * 远程分支曾另有一份「防御式」映射（`remoteMessageToTimeline`）：B 侧当时直出
+ * 裸 ORM 行，前端只能自己解析 JSON 字符串、过滤 role="tool"、并把工具状态硬编码
+ * 成 "ok"（失败的工具于是在远端显示成成功、结果区永远空、subSessionId 丢失）。
+ * B 侧 `RemoteQueryInboundService` 现已与 REST 共用 `assembleHistoryMessages`
+ * 装配出真正的 `HistoryResponse`，那份补救随之删除，remote 与 local 收敛到这里。
  */
 function historyMessageToTimeline(m: HistoryMessage): TimelineMessage {
   return {
@@ -123,7 +56,10 @@ function historyMessageToTimeline(m: HistoryMessage): TimelineMessage {
     // 不显示动态秒数（实际生成时长信息没存）。reasoningStartedAt 不设。
     ...(m.reasoning ? { reasoning: m.reasoning, reasoningDurationMs: 0 } : {}),
     // 持久化的 tool calls：转 ToolCallView；progress 留空（流式过程没存）
-    ...(m.toolCalls && m.toolCalls.length > 0
+    // Array.isArray 守卫：跨设备场景对端设备可能是尚未升级的旧版 server-agent，
+    // 那种版本直出裸 ORM 行、toolCalls 是 JSON **字符串**——不守卫会在 .map 处
+    // 抛 TypeError 把整屏历史打没（宁可少渲染工具卡，也不能整页崩）。
+    ...(Array.isArray(m.toolCalls) && m.toolCalls.length > 0
       ? {
           toolCalls: m.toolCalls.map((tc) => ({
             toolCallId: tc.toolCallId,
@@ -135,6 +71,11 @@ function historyMessageToTimeline(m: HistoryMessage): TimelineMessage {
           })),
         }
       : {}),
+    // 结构化 metadata（压缩占位行携带 kind="compaction"）：曾经这里连 metadata
+    // 这个键都不映射（回归——旧的 remoteMessageToTimeline 会解析并带上）。丢了它
+    // 之后 message-list.tsx 的 `!(role==="system" && metadata?.kind!=="compaction")`
+    // 过滤会把 role="system" 的压缩占位行整条丢弃，「已压缩 N 条消息」分隔条消失。
+    ...(m.metadata ? { metadata: m.metadata } : {}),
     feedback: m.feedback ?? null,
   };
 }
@@ -148,16 +89,29 @@ function historyMessageToTimeline(m: HistoryMessage): TimelineMessage {
  *
  * 只补 streaming 态的块：已经 running/终态的块有权威 args 与结果，快照是「补历史」，
  * 不能把已推进的状态回退。
+ *
+ * `claimedElsewhere` 是**别的消息**上已存在的 toolCallId 集合，命中即整条跳过。
+ * 没有它就会漏掉一种跨消息的降级：本函数只看得见**单条**消息的 `existing`，
+ * 而 `onToolStart`/`onToolEnd` 在宿主消息缺失时会按事件自带的 messageId 建壳，
+ * 同一个 toolCallId 完全可能已经以 `ok` 态挂在另一条消息上——此处 `i === -1`
+ * 便会再 push 一个 `streaming` 幽灵块，于是同一次工具调用同时存在「已完成」和
+ * 「永远转圈」两张卡，且此后没有任何事件能收掉那张幽灵卡（start/end 都按
+ * toolCallId 定位，只会命中先建的那个）。
+ *
+ * 这是三个 `streaming` 产地里最后一个做该加固的：`onToolArgsDelta` 与
+ * `onToolStart` 已分别硬化过「不复活终态块」「不把终态打回 running」，语义在此对齐。
  */
 function mergeInflightToolCalls(
   existing: TimelineMessage["toolCalls"],
   snapshot: readonly InflightToolCall[],
+  claimedElsewhere?: ReadonlySet<string>,
 ): TimelineMessage["toolCalls"] {
   if (snapshot.length === 0) return existing;
   const list = existing ? [...existing] : [];
   for (const tc of snapshot) {
     const i = list.findIndex((t) => t.toolCallId === tc.toolCallId);
     if (i === -1) {
+      if (claimedElsewhere?.has(tc.toolCallId)) continue;
       list.push({
         toolCallId: tc.toolCallId,
         name: tc.name,
@@ -174,6 +128,19 @@ function mergeInflightToolCalls(
     };
   }
   return list;
+}
+
+/** 收集时间线上已出现的全部 toolCallId（可排除某条消息自身）。 */
+function collectToolCallIds(
+  messages: readonly TimelineMessage[],
+  exceptMessageId?: string,
+): ReadonlySet<string> {
+  const ids = new Set<string>();
+  for (const m of messages) {
+    if (m.id === exceptMessageId) continue;
+    for (const t of m.toolCalls ?? []) ids.add(t.toolCallId);
+  }
+  return ids;
 }
 
 /**
@@ -228,10 +195,33 @@ export interface SessionStream {
   historyError: boolean;
   /** 单一消息写入口（同步 ref+state），供视图做局部变更（pending 删/改、重生成截断）。 */
   apply: (next: (prev: TimelineMessage[]) => TimelineMessage[]) => void;
-  /** 发送一条消息：本地乐观插 pending user 气泡 + append；remote 走远程 run 隧道。 */
-  send: (msg: string) => Promise<void>;
-  /** 中断当前 run：本地经 WS，remote 经 relay 控制帧。 */
+  /**
+   * 发送一条消息：本地乐观插 pending user 气泡 + append；remote 走远程 run 隧道。
+   *
+   * 返回 `false` 表示**本条输入被拒绝、没有任何留痕**（当前唯一来源：remote
+   * 分支 `running=true` 的 I3 守卫）——调用方**必须**据此给用户可见反馈并把
+   * 文本回填输入框：`ChatInput.onSend` 是无条件清空编辑器的，静默 return 会
+   * 让用户打的字凭空消失且零提示（原 bug）。返回 `true` 表示已受理（含
+   * 「发起失败但已补一条 failed 气泡」的情形——那已经是可见反馈了）。
+   */
+  send: (msg: string) => Promise<boolean>;
+  /**
+   * 中断当前 run：本地经 WS，remote 经 relay 控制帧。观察态（见
+   * {@link canInterrupt}）下调用是纯 no-op（只 console.warn，不产生任何状态
+   * 变更）——UI 层应优先靠 `canInterrupt` 禁用/隐藏触发点，这里是最后一道
+   * 防线，防止程序化调用仍然把界面撒谎成「已停止」。
+   */
   interrupt: () => void;
+  /**
+   * 停止按钮当前是否可用（Bug 1 修复）。本地分支（`remoteDeviceId` 为空）
+   * 恒为 `true`——本机中断走 sessionId 直接寻址，不依赖 streamId。remote
+   * 分支为 `true` 当且仅当当前持有一个可路由的 streamId（自己发起的
+   * run，或 `fetchActiveRun` reclaim 成功）；为 `false` 时即为「观察态」
+   * ——这个 run 不是本端发起的（如中途打开一个正在跑的远程会话，只挂了
+   * session 级 watch），点 `interrupt` 也无法真正路由到目标设备，UI 应据此
+   * 禁用/隐藏停止按钮，而不是让用户点了却看到一个撒谎的「已停止」。
+   */
+  canInterrupt: boolean;
   /** 上拉加载更早历史（含滚动锚定，需传 scrollContainerRef）。local/remote 均支持。 */
   loadMoreHistory: () => Promise<void>;
   /** 本地会话为 null；远程会话为目标设备 id，供 RemoteSessionProvider 使用。 */
@@ -254,6 +244,126 @@ export interface SessionStream {
 }
 
 /**
+ * 把所有未终态（streaming/running）的工具块置为 error 终态。
+ * 中断/失败后 tool_call_end 永远不会到达，不收尾这些块会永久转圈。
+ *
+ * 模块级纯函数（原内嵌在 hook 的订阅 effect 闭包里）：提到外面既能被
+ * `settleInterruptedTimeline` 复用，也能脱离 React 直接单测。
+ */
+function settleUnfinishedToolCalls(list: TimelineMessage[]): TimelineMessage[] {
+  return list.map((m) =>
+    m.toolCalls?.some((t) => t.status === "streaming" || t.status === "running")
+      ? {
+          ...m,
+          toolCalls: m.toolCalls.map((t) =>
+            t.status === "streaming" || t.status === "running"
+              ? { ...t, status: "error" as const, argsText: undefined }
+              : t,
+          ),
+        }
+      : m,
+  );
+}
+
+/**
+ * 结算「被中断/被拒绝」的时间线快照（Bug #4 命门）：清 streaming 标记、
+ * 锁定尚未结束的 reasoning 计时（`reasoningDurationMs = now - reasoningStartedAt`）、
+ * 把未终态工具块收尾为 error。
+ *
+ * 点「打断」与后端 `run.interrupted` 事件共用同一份结算逻辑，天然幂等——
+ * 字段已经锁定的消息不会被二次覆盖，所以：
+ * - 乐观本地打断（`interrupt()` 点击当帧调用，不传 `targetMessageId`）：
+ *   立即让「思考中 Xs」计时器停摆、打断按钮消失，不等 WS 往返。
+ * - 后端确认到达（`onInterrupted`，传 `e.messageId`）：按原语义只清该条消息的
+ *   `streaming`，但这次补充锁 reasoning 计时——这正是原 bug 所在：`onInterrupted`
+ *   只清了 `streaming`，从未锁过 `reasoningDurationMs`，导致 `ReasoningBlock`
+ *   的 `isThinking`（`durationMs === undefined && startedAt !== undefined`）
+ *   哪怕 run 已经结束仍判 true，计时器永远不停。
+ *
+ * `targetMessageId` 省略时对任意仍在 streaming 的消息生效（单会话同时只有
+ * 一条消息在跑，乐观路径不知道具体 messageId 也能正确结算）。
+ */
+export function settleInterruptedTimeline(
+  messages: TimelineMessage[],
+  targetMessageId?: string,
+): TimelineMessage[] {
+  const now = Date.now();
+  const settled = messages.map((m) => {
+    const clearStreaming =
+      m.streaming === true &&
+      (targetMessageId === undefined || m.id === targetMessageId);
+    const lockDuration =
+      m.reasoningStartedAt !== undefined && m.reasoningDurationMs === undefined;
+    if (!clearStreaming && !lockDuration) return m;
+    return {
+      ...m,
+      ...(clearStreaming ? { streaming: false } : {}),
+      ...(lockDuration
+        ? { reasoningDurationMs: now - (m.reasoningStartedAt as number) }
+        : {}),
+    };
+  });
+  return settleUnfinishedToolCalls(settled);
+}
+
+/**
+ * `run.error` 事件的时间线结算（Bug #13 核心，抽成纯函数脱离 socket/ref 单测）。
+ *
+ * 常规部分与原实现等价：按 `pendingIds`/`messageId` 标记失败气泡 + 清对应
+ * loading 占位 + 收尾未终态工具块；新增 `event.reason` 透传到 `errorReason`，
+ * 供渲染层区分「远程二次门控拒绝」等结构化原因走专属文案（见 message-list.tsx）。
+ *
+ * `strandedSend` 非空时（远程续写的用户输入在 `run.human` 落地前就被拒绝，
+ * 从未在 timeline 出现过——`use-session-stream.ts` 的 `remotePendingSendRef`
+ * 判定）追加一条本地失败气泡，`id` 由调用方生成好传入（保持本函数纯粹，
+ * 不内部调用 `clientSnowflakeId`），不让用户输入凭空消失。
+ */
+export function settleErrorTimeline(
+  messages: TimelineMessage[],
+  event: {
+    messageId: string | null;
+    pendingIds: readonly string[];
+    error: string;
+    reason?: string;
+  },
+  strandedSend: { id: string; content: string } | null,
+): TimelineMessage[] {
+  const failedIds = new Set<string>(event.pendingIds);
+  if (event.messageId) failedIds.add(event.messageId);
+  const loadingIdsToDrop = new Set<string>();
+  for (const id of failedIds) loadingIdsToDrop.add(`loading-${id}`);
+  const errorText = event.error.slice(0, 200);
+  const next = messages
+    .filter((m) => !loadingIdsToDrop.has(m.id))
+    .map((m) =>
+      failedIds.has(m.id)
+        ? {
+            ...m,
+            failed: true,
+            pending: false,
+            streaming: false,
+            errorText,
+            ...(event.reason ? { errorReason: event.reason } : {}),
+          }
+        : m,
+    );
+  const withStranded = strandedSend
+    ? [
+        ...next,
+        {
+          id: strandedSend.id,
+          role: "user" as const,
+          content: strandedSend.content,
+          failed: true,
+          errorText,
+          ...(event.reason ? { errorReason: event.reason } : {}),
+        },
+      ]
+    : next;
+  return settleUnfinishedToolCalls(withStranded);
+}
+
+/**
  * 会话流式状态 hook：拉历史 + 订阅 SESSION_WS 事件 → 维护 TimelineMessage 列表、
  * running、compaction、历史分页，并暴露 send/interrupt/loadMoreHistory 与 apply。
  * sessionId 为 null 时惰性 inert（不请求不订阅），可安全挂载。
@@ -270,7 +380,8 @@ export interface SessionStream {
  *   transport.ts），hook 内部经 transport 路由。
  *
  * L3 remote 分支（`remoteDeviceId` 非空）：该 sessionId 是远程设备 B 上的会话。
- * - 首屏历史走 `transport.fetchHistory`（防御式映射 B 侧原始行），不走本地
+ * - 首屏历史走 `transport.fetchHistory`（B 侧与本地 REST 共用同一份装配，返回
+ *   真正的 `HistoryResponse`，映射与本地完全一致），不走本地
  *   `transport.fetchPending`（远程无该概念）。
  * - **session socket 订阅不变**——B 的运行帧经 A 侧 `RemoteRunService` 影子重发到
  *   本地 SESSION_WS_EVENTS 总线，A 的 SessionGateway 照常转发到 room=sessionId，
@@ -303,6 +414,24 @@ export function useSessionStream(
   const [historyError, setHistoryError] = useState(false);
   /** remote 分支当前有效的 streamId（供 interrupt 路由用），见上方 hook 注释。 */
   const remoteStreamIdRef = useRef<string | null>(null);
+  /**
+   * 切会话时那次异步 `fetchActiveRun` 的 running 校正是否已作废。服务端快照拍
+   * 于请求发出的时刻，响应到达前本会话若已有更新的权威事实（收到终止帧
+   * done/interrupted/error，或本端刚发起了一次新 run），就不能再按那份过期快照
+   * 校正 running——拨回 true 会没有终止帧来清（又一次永久卡死），拨回 false 则
+   * 会误清掉刚起的 run。每次切会话在同一个 effect 里重置为 false。
+   */
+  const remoteRunProbeStaleRef = useRef(false);
+  /**
+   * remote 续写「刚发出去、还没等到 run.human 落地」的暂存内容（Bug #13）。
+   * `send()` 的 remote 分支不做本地乐观占位（见该函数注释），真实 user 气泡
+   * 完全交给 `onHuman`；但 B 侧二次门控等预检拒绝发生在 run.human 之前，
+   * 前端对这条消息一无所知——这个 ref 就是唯一留存，供 `onError` 在判定
+   * 「这条消息终究没有落地」时补一条本地失败气泡。`onHuman`/`onInterrupted`
+   * 触发时清空（要么真落地了，要么本轮已经结束不再需要）。同一时刻至多一条
+   * 未落地的远程续写（`send()` 内已有 `running` 守卫防并发），单值足够。
+   */
+  const remotePendingSendRef = useRef<{ content: string } | null>(null);
   /** 压缩进行中标记。null = 未压缩；string = 压缩原因（用于 banner 文案）。 */
   const [compacting, setCompacting] = useState<
     null | "threshold" | "ctx-exceeded"
@@ -402,7 +531,8 @@ export function useSessionStream(
     setMessages([]);
     // remote 且带初始 streamId（起手台 create 刚发起、首轮尚在跑）→ 乐观置 running；
     // 否则（本地 / 直接进入远程会话未带 streamId）与原行为一致先置 false，
-    // 后续本地分支按 history.inflight 校正，remote 分支按实时帧校正。
+    // 后续本地分支按 history.inflight 校正，remote 分支按下方 fetchActiveRun
+    // 的服务端权威结果校正（乐观值只是首帧观感，不是最终事实）。
     setRunning(!!(remoteDeviceId && remoteInitialStreamId));
     oldestMessageIdRef.current = null;
     hasMoreHistoryRef.current = true;
@@ -411,39 +541,56 @@ export function useSessionStream(
     remoteStreamIdRef.current = remoteDeviceId
       ? (remoteInitialStreamId ?? null)
       : null;
+    // 切会话：上一个会话的「未落地远程续写」暂存不该带进新会话。
+    remotePendingSendRef.current = null;
     callbacksRef.current.onUsageReset?.(sessionId);
     let cancelled = false;
     setHistoryLoading(true);
 
     if (remoteDeviceId) {
-      // reclaim：刷新页面 / 直接进入远程会话时 remoteStreamIdRef 没有初值
-      // （非起手台 create 场景），靠 transport.fetchActiveRun 按 sessionId 查回
-      // B 侧当前活跃 run 的 streamId，回填后 confirm/interrupt 才可路由。查无 /
-      // 失败只吞掉——不影响历史渲染，用户仍能看会话，只是深层 HITL 卡片暂不可点。
-      if (remoteStreamIdRef.current == null) {
-        transport
-          .fetchActiveRun(sessionId)
-          .then((run) => {
-            if (cancelled) return;
-            if (run) remoteStreamIdRef.current = run.streamId;
-          })
-          .catch(() => {});
-      }
-      // L3 remote：首屏历史走 L2c fetchHistory（经 transport，防御式映射
-      // B 侧原始行），不查本地 fetchPending（远程无该概念）。不显式传 limit
-      // （与本地首屏一致，交由 B 端 listPage 默认值 50 兜底）；hasMore 读
-      // B 侧 listPage 原样返回的字段（与本地 HistoryResponse 同源），翻页见
-      // loadMoreHistory。
+      // reclaim + running 校正：**无条件**查一次 transport.fetchActiveRun。
+      //
+      // 原实现被 `remoteStreamIdRef.current == null` 门住，恰好在「URL 带
+      // streamId」时跳过——而那正是最需要校正的场景：`?streamId=` 是一次性
+      // 交接参数，刷新/后退/书签重进时它是陈旧值（那条流早已终止，网关的
+      // agentRunRoutes 已删、本 transport 的 RemoteRunTracker 也从未 register
+      // 过它），上面的乐观 setRunning(true) 于是永远等不到 done/error/interrupted
+      // → running 永久卡 true → 停止按钮常亮 + send() 的 I3 守卫吞掉一切输入。
+      // 现在按服务端权威结果校正：run==null（run 已结束，findRunBySession 返回
+      // null）→ 清 streamId + running=false；run!=null → 回填 streamId +
+      // running=true（真在跑，刷新后也能接上 HITL 路由与停止按钮）。
+      //
+      // 竞态守卫 remoteRunProbeStaleRef：请求在途期间若已收到本会话的终止帧，
+      // 说明服务端快照已过期，不再把 running 拨回 true（否则又是一次永久卡死）。
+      // 失败（如 web-main 远程实现如实抛「协议不支持 reclaim」）只吞掉，保持
+      // 原有乐观值——不影响历史渲染。
+      remoteRunProbeStaleRef.current = false;
+      transport
+        .fetchActiveRun(sessionId)
+        .then((run) => {
+          if (cancelled || remoteRunProbeStaleRef.current) return;
+          if (run) {
+            remoteStreamIdRef.current = run.streamId;
+            setRunning(true);
+          } else {
+            remoteStreamIdRef.current = null;
+            setRunning(false);
+          }
+        })
+        .catch(() => {});
+      // L3 remote：首屏历史走 L2c fetchHistory（经 transport）。B 侧现与本地
+      // REST 共用 assembleHistoryMessages，回的是真正的 HistoryResponse（工具
+      // 状态/结果/subSessionId 齐全、role="tool" 行已在服务端过滤），故映射与
+      // 本地完全一致。不查本地 fetchPending（远程无该概念）；不显式传 limit
+      // （与本地首屏一致，交由 B 端 listPage 默认值 50 兜底）。inflight /
+      // sessionTotals / byMessage 跨设备刻意不传，见 HistoryResponseSchema 注释。
       transport
         .fetchHistory(sessionId)
         .then((res) => {
           if (cancelled) return;
-          const rawRes = res as unknown as RemoteRawHistory;
-          const raw = rawRes.messages ?? [];
-          const initial: TimelineMessage[] = raw
-            // role="tool" 行是工具执行结果的落库行，不是可展示的时间线消息
-            .filter((m) => m.role !== "tool")
-            .map(remoteMessageToTimeline);
+          const initial: TimelineMessage[] = res.messages.map(
+            historyMessageToTimeline,
+          );
           // 合并：历史快照打底，但保留 socket 已先到的消息（不被覆盖）
           apply((current) => {
             const initialIds = new Set(initial.map((m) => m.id));
@@ -451,9 +598,8 @@ export function useSessionStream(
             return [...initial, ...socketArrived];
           });
           oldestMessageIdRef.current = initial[0]?.id ?? null;
-          const hasMore = rawRes.hasMore ?? false;
-          hasMoreHistoryRef.current = hasMore;
-          setHasMoreHistory(hasMore);
+          hasMoreHistoryRef.current = res.hasMore;
+          setHasMoreHistory(res.hasMore);
         })
         .catch((err) => {
           if (cancelled) return;
@@ -503,6 +649,7 @@ export function useSessionStream(
                       toolCalls: mergeInflightToolCalls(
                         undefined,
                         history.inflight.toolCalls,
+                        collectToolCallIds(initial),
                       ),
                     }
                   : {}),
@@ -595,6 +742,9 @@ export function useSessionStream(
 
     const onHuman = (e: RunHumanEvent) => {
       if (e.sessionId !== sessionId) return;
+      // 消息真正落地了：remote 续写暂存的「未落地」标记不再需要（Bug #13，
+      // 见 remotePendingSendRef 声明处注释）。
+      remotePendingSendRef.current = null;
       migrateHumanToTimeline(e.messageId, e.content);
     };
     const onReasoning = (e: RunReasoningChunkEvent) => {
@@ -717,7 +867,13 @@ export function useSessionStream(
                 ? { reasoningStartedAt: e.reasoningStartedAt }
                 : {}),
               ...(e.toolCalls.length > 0
-                ? { toolCalls: mergeInflightToolCalls(undefined, e.toolCalls) }
+                ? {
+                    toolCalls: mergeInflightToolCalls(
+                      undefined,
+                      e.toolCalls,
+                      collectToolCallIds(withoutLoading),
+                    ),
+                  }
                 : {}),
             },
           ];
@@ -732,13 +888,18 @@ export function useSessionStream(
           reasoning: e.reasoning || existing.reasoning,
           reasoningStartedAt:
             e.reasoningStartedAt ?? existing.reasoningStartedAt,
-          toolCalls: mergeInflightToolCalls(existing.toolCalls, e.toolCalls),
+          toolCalls: mergeInflightToolCalls(
+            existing.toolCalls,
+            e.toolCalls,
+            collectToolCallIds(withoutLoading, existing.id),
+          ),
         };
         return copy;
       });
     };
     const onDone = (e: RunDoneEvent) => {
       if (e.sessionId !== sessionId) return;
+      remoteRunProbeStaleRef.current = true;
       setRunning(false);
       apply((prev) =>
         prev.map((m) =>
@@ -748,70 +909,32 @@ export function useSessionStream(
         ),
       );
     };
-    /**
-     * 把所有未终态（streaming/running）的工具块置为 error 终态。
-     * 中断/失败后 tool_call_end 永远不会到达，不收尾这些块会永久转圈。
-     */
-    const settleUnfinishedToolCalls = (
-      list: TimelineMessage[],
-    ): TimelineMessage[] =>
-      list.map((m) =>
-        m.toolCalls?.some(
-          (t) => t.status === "streaming" || t.status === "running",
-        )
-          ? {
-              ...m,
-              toolCalls: m.toolCalls.map((t) =>
-                t.status === "streaming" || t.status === "running"
-                  ? { ...t, status: "error" as const, argsText: undefined }
-                  : t,
-              ),
-            }
-          : m,
-      );
-
     const onInterrupted = (e: RunInterruptedEvent) => {
       if (e.sessionId !== sessionId) return;
+      remoteRunProbeStaleRef.current = true;
       setRunning(false);
-      apply((prev) =>
-        settleUnfinishedToolCalls(
-          prev.map((m) =>
-            m.id === e.messageId ? { ...m, streaming: false } : m,
-          ),
-        ),
-      );
+      // 该会话本轮如果真正跑起来过，run.human 早已落地，remote 续写的
+      // 乐观占位没有留存的必要——清掉，避免和下一次 send() 的暂存串台。
+      remotePendingSendRef.current = null;
+      apply((prev) => settleInterruptedTimeline(prev, e.messageId));
     };
     const onError = (e: RunErrorEvent) => {
       if (e.sessionId !== sessionId) return;
+      remoteRunProbeStaleRef.current = true;
       setRunning(false);
-      // 不再追加错误气泡：把对应气泡标记 failed，由其上挂载重试按钮
-      // pendingIds 覆盖「流前出错」场景（messageId 为 null 时仍能标记用户气泡）
-      const failedIds = new Set<string>(e.pendingIds);
-      if (e.messageId) {
-        failedIds.add(e.messageId);
-      }
-      // 清掉失败那条 user 对应的 loading 占位（id 形如 loading-<messageId>）；
-      // 其它 run 的 loading 不动。
-      const loadingIdsToDrop = new Set<string>();
-      for (const id of failedIds) loadingIdsToDrop.add(`loading-${id}`);
-      apply((prev) =>
-        settleUnfinishedToolCalls(
-          prev
-            .filter((m) => !loadingIdsToDrop.has(m.id))
-            .map((m) =>
-              failedIds.has(m.id)
-                ? {
-                    ...m,
-                    failed: true,
-                    pending: false,
-                    streaming: false,
-                    // 错误原因随气泡展示；截断防止超长堆栈撑爆消息流
-                    errorText: e.error.slice(0, 200),
-                  }
-                : m,
-            ),
-        ),
-      );
+      // 【Bug #13】远程二次门控等预检拒绝（reason="agent_not_remotable"）发生在
+      // B 侧建会话/回 run.human 之前——这条 user 消息从未在 timeline 里出现过。
+      // remotePendingSendRef 是 send() 时暂存的「刚发出去、还没等到 run.human
+      // 落地」的内容：仍非空说明这条消息至今没有真正落地，交给
+      // settleErrorTimeline 补一条本地失败气泡，不让用户输入凭空消失。
+      const strandedSend = remotePendingSendRef.current
+        ? {
+            id: clientSnowflakeId(),
+            content: remotePendingSendRef.current.content,
+          }
+        : null;
+      remotePendingSendRef.current = null;
+      apply((prev) => settleErrorTimeline(prev, e, strandedSend));
     };
     const onUsage = (e: RunUsageEvent) => {
       if (e.sessionId !== sessionId) return;
@@ -822,11 +945,21 @@ export function useSessionStream(
     const onTitleUpdatedEvent = (e: SessionTitleUpdatedEvent) => {
       callbacksRef.current.onTitleUpdated?.(e.sessionId, e.title);
     };
+    /**
+     * LLM 正在逐 token 生成某个 tool_call 的参数 JSON。
+     *
+     * 定位顺序是**先按 toolCallId 全时间线找、再按 messageId 落位**，不能反过来：
+     * 该块可能已经被 start/end 建在别的消息上（乱序到达 / 重连补发 / provider
+     * 的 messageId 与 args 流不一致）。原实现只在 `e.messageId` 那条消息内部找，
+     * 找不到就 push 一个 `status:"streaming"` 的新块——同一个 toolCallId 于是
+     * 在时间线上出现两份，其中一份是永远转圈的 streaming 幽灵，且因
+     * `status === "streaming"` 会让 todo_write / ask_question / present_file 等
+     * 卡片分支全部退化成通用 JSON 块。这里改为命中既有块就**只 append argsText**，
+     * 绝不回写 status（终态块不会被打回 streaming）。
+     */
     const onToolArgsDelta = (e: RunToolCallArgsDeltaEvent) => {
       if (e.sessionId !== sessionId) return;
-      // 按 toolCallId 把 args 增量合并到「同一个工具块」（像 chunk 按 messageId
-      // 合并到消息）：流式 args → running → 完成 是同一个块的状态推进，不再先建
-      // 独立预览块再整批清空。个别 provider 流里不带 id → 跳过预览，等 onToolStart。
+      // 个别 provider 流里不带 id → 跳过预览，等 onToolStart。
       const toolCallId = e.toolCallId;
       if (!toolCallId) return;
       apply((rawPrev) => {
@@ -834,24 +967,33 @@ export function useSessionStream(
         // reasoning，空 delta 不发 chunk），loading 占位无人清 → 「…」悬置在工具块
         // 上方。本轮首个工具事件到达即视为 LLM 已应答，清掉占位。
         const prev = rawPrev.filter((m) => !m.loading);
-        const merge = (m: TimelineMessage): TimelineMessage => {
-          const list = m.toolCalls ? [...m.toolCalls] : [];
-          const i = list.findIndex((t) => t.toolCallId === toolCallId);
-          if (i === -1) {
-            list.push({
-              toolCallId,
-              name: e.name ?? "",
-              status: "streaming",
-              argsText: e.delta,
-            });
-          } else {
-            list[i] = {
-              ...list[i],
-              name: e.name ?? list[i].name,
-              argsText: (list[i].argsText ?? "") + e.delta,
-            };
-          }
-          return { ...m, toolCalls: list };
+        // 1) 全时间线找同 toolCallId 的既有块：只累加 argsText，status 原样保留。
+        const ownerIdx = prev.findIndex((m) =>
+          m.toolCalls?.some((t) => t.toolCallId === toolCallId),
+        );
+        if (ownerIdx !== -1) {
+          const copy = [...prev];
+          const owner = copy[ownerIdx];
+          copy[ownerIdx] = {
+            ...owner,
+            toolCalls: (owner.toolCalls ?? []).map((t) =>
+              t.toolCallId === toolCallId
+                ? {
+                    ...t,
+                    name: e.name ?? t.name,
+                    argsText: (t.argsText ?? "") + e.delta,
+                  }
+                : t,
+            ),
+          };
+          return copy;
+        }
+        // 2) 确实是新块：挂到 e.messageId 那条消息上。
+        const fresh = {
+          toolCallId,
+          name: e.name ?? "",
+          status: "streaming" as const,
+          argsText: e.delta,
         };
         const idx = prev.findIndex((m) => m.id === e.messageId);
         // 中间决策轮可能无 content/reasoning：不存在则建一个无正文的 assistant 壳，
@@ -859,57 +1001,91 @@ export function useSessionStream(
         if (idx === -1) {
           return [
             ...prev,
-            merge({ id: e.messageId, role: "assistant", content: "" }),
+            {
+              id: e.messageId,
+              role: "assistant" as const,
+              content: "",
+              toolCalls: [fresh],
+            },
           ];
         }
         const copy = [...prev];
-        copy[idx] = merge(copy[idx]);
+        copy[idx] = {
+          ...copy[idx],
+          toolCalls: [...(copy[idx].toolCalls ?? []), fresh],
+        };
         return copy;
       });
     };
+    /**
+     * 工具开始执行：填权威 args、升级 running、清流式文本。
+     *
+     * 宿主消息不存在时**建壳**（与 onToolArgsDelta 同款写法）。原实现是
+     * `prev.map(m => m.id !== e.messageId ? m : ...)`——只改不建，宿主消息不在
+     * 时间线上（args 流不带 id 的 provider 直达 start、乱序到达、跨设备观察通道
+     * 中途接入没有前序帧）就把整个事件**静默吞掉**，那个工具块要么根本不出现、
+     * 要么永远停在 args_delta 建出的 streaming 态转圈。原注释声称本函数处理
+     * 「本轮首个工具事件」，但 map-only 的结构做不到，注释与实现不符，一并修正。
+     *
+     * **不得下调已终态（ok/error）块的 status**——与 onToolArgsDelta 的硬化对称：
+     * `onToolEnd` 兜底会建出终态块（见该 handler 注释），这意味着「块已是终态」
+     * 现在是一个真实存在的前提，而不再是「start 必然先于 end 到达」的假设。
+     * 迟到/重放的 start（乱序、relay 补发、重连补发截断成只重放 start）命中一个
+     * 已经 ok/error 的块时，若无条件 `status: "running"` 覆盖，会把已完成的卡片
+     * 打回转圈态，且此后再无 end 事件能救它——永久转圈。status 之外的字段（权威
+     * `args`/`name`）仍然合并：这正是 start 本身的价值，只是不能连带拖累 status。
+     */
     const onToolStart = (e: RunToolCallStartEvent) => {
       if (e.sessionId !== sessionId) return;
-      // 同 onToolArgsDelta：args 流不带 id 的 provider 跳过预览直达 start，
-      // 这里是该路径下本轮的首个工具事件，同样要清 loading 占位。
-      apply((prev) =>
-        prev
-          .filter((m) => !m.loading)
-          .map((m) => {
-            if (m.id !== e.messageId) return m;
-            // tool_call 开始 = 本轮 LLM 文本已收尾。
-            // 1) 锁住 reasoningDurationMs，否则「思考中 Xs」会一直跳到本轮 LLM 结束才能切回「已思考」。
-            // 2) 清 streaming 标记，否则中间决策轮（content 已停 + tool_call 进行中）
-            //    气泡尾部的闪烁光标永不熄灭 —— runDone 要等整轮跑完才发。
-            const lockDuration =
-              m.reasoningStartedAt !== undefined &&
-              m.reasoningDurationMs === undefined
-                ? { reasoningDurationMs: Date.now() - m.reasoningStartedAt }
-                : {};
-            // 合并到流式阶段已建的同一块（按 toolCallId 命中）：升级 running、填权威
-            // args、清流式文本。命不中（无流式预览 / 重复 start）则新建/覆盖。
-            // 按 toolCallId 命中 = 幂等：重复 start 不会再 push 出重复块。
-            const list = m.toolCalls ? [...m.toolCalls] : [];
-            const i = list.findIndex((t) => t.toolCallId === e.toolCallId);
-            const next = {
-              toolCallId: e.toolCallId,
-              name: e.name,
-              args: e.args,
-              status: "running" as const,
-              argsText: undefined,
-            };
-            if (i === -1) {
-              list.push(next);
-            } else {
-              list[i] = { ...list[i], ...next };
-            }
-            return {
-              ...m,
-              ...lockDuration,
-              streaming: false,
-              toolCalls: list,
-            };
-          }),
-      );
+      apply((rawPrev) => {
+        // 同 onToolArgsDelta：本轮首个工具事件到达即视为 LLM 已应答，清 loading 占位。
+        const prev = rawPrev.filter((m) => !m.loading);
+        const upgrade = (m: TimelineMessage): TimelineMessage => {
+          // tool_call 开始 = 本轮 LLM 文本已收尾。
+          // 1) 锁住 reasoningDurationMs，否则「思考中 Xs」会一直跳到本轮 LLM 结束才能切回「已思考」。
+          // 2) 清 streaming 标记，否则中间决策轮（content 已停 + tool_call 进行中）
+          //    气泡尾部的闪烁光标永不熄灭 —— runDone 要等整轮跑完才发。
+          const lockDuration =
+            m.reasoningStartedAt !== undefined &&
+            m.reasoningDurationMs === undefined
+              ? { reasoningDurationMs: Date.now() - m.reasoningStartedAt }
+              : {};
+          // 合并到流式阶段已建的同一块（按 toolCallId 命中）：升级 running、填权威
+          // args、清流式文本。命不中（无流式预览 / 重复 start）则新建/覆盖。
+          // 按 toolCallId 命中 = 幂等：重复 start 不会再 push 出重复块。
+          const list = m.toolCalls ? [...m.toolCalls] : [];
+          const i = list.findIndex((t) => t.toolCallId === e.toolCallId);
+          // 已是终态（ok/error）则不下调回 running——迟到/重放的 start 只补权威
+          // args，不复活转圈态。见上方 handler 注释。
+          const alreadySettled =
+            i !== -1 && (list[i].status === "ok" || list[i].status === "error");
+          const next = {
+            toolCallId: e.toolCallId,
+            name: e.name,
+            args: e.args,
+            status: alreadySettled ? list[i].status : ("running" as const),
+            argsText: undefined,
+          };
+          if (i === -1) {
+            list.push(next);
+          } else {
+            list[i] = { ...list[i], ...next };
+          }
+          return { ...m, ...lockDuration, streaming: false, toolCalls: list };
+        };
+        const idx = prev.findIndex((m) => m.id === e.messageId);
+        // 建壳幂等：壳的 id 就是 e.messageId，重复 start 第二次会命中上面的
+        // findIndex 走覆盖分支，不会建出第二条消息，也不会建出第二个块。
+        if (idx === -1) {
+          return [
+            ...prev,
+            upgrade({ id: e.messageId, role: "assistant", content: "" }),
+          ];
+        }
+        const copy = [...prev];
+        copy[idx] = upgrade(copy[idx]);
+        return copy;
+      });
     };
     const onToolProgress = (e: RunToolCallProgressEvent) => {
       if (e.sessionId !== sessionId) return;
@@ -928,10 +1104,73 @@ export function useSessionStream(
         ),
       );
     };
+    /**
+     * 工具执行结束：按 toolCallId 全局找到块并置终态。
+     *
+     * 找不到块时**兜底建壳建块**并直接置终态，而不是像原实现那样静默丢弃——end
+     * 事件自带 `messageId`/`toolCallId`/`name`/`ok`/`resultPreview`，字段足够渲染
+     * 一张完整的终态卡。丢掉它的代价是：前序 start 若因任何原因没落到时间线上，
+     * 这个工具就永远没有终态、卡片永久转圈（且没有任何后续事件能救它）。
+     */
     const onToolEnd = (
       // gateway 已剥 content；前端只用 resultPreview
       e: Omit<RunToolCallEndEvent, "content">,
     ) => {
+      if (e.sessionId !== sessionId) return;
+      const status = e.ok ? ("ok" as const) : ("error" as const);
+      apply((prev) => {
+        const ownerIdx = prev.findIndex((m) =>
+          m.toolCalls?.some((t) => t.toolCallId === e.toolCallId),
+        );
+        // 幂等：重复 end 走这条命中分支，重复写同样的终态，不产生新块。
+        if (ownerIdx !== -1) {
+          const copy = [...prev];
+          const owner = copy[ownerIdx];
+          copy[ownerIdx] = {
+            ...owner,
+            toolCalls: (owner.toolCalls ?? []).map((t) =>
+              t.toolCallId === e.toolCallId
+                ? { ...t, status, result: e.resultPreview }
+                : t,
+            ),
+          };
+          return copy;
+        }
+        const settled = {
+          toolCallId: e.toolCallId,
+          name: e.name,
+          status,
+          result: e.resultPreview,
+        };
+        const idx = prev.findIndex((m) => m.id === e.messageId);
+        if (idx !== -1) {
+          const copy = [...prev];
+          copy[idx] = {
+            ...copy[idx],
+            toolCalls: [...(copy[idx].toolCalls ?? []), settled],
+          };
+          return copy;
+        }
+        // 宿主消息也不在：建壳。此路径下本轮 LLM 已应答完毕，loading 占位一并清掉。
+        return [
+          ...prev.filter((m) => !m.loading),
+          {
+            id: e.messageId,
+            role: "assistant" as const,
+            content: "",
+            toolCalls: [settled],
+          },
+        ];
+      });
+    };
+    /**
+     * HITL 关卡广播帧（Task 17）：某个挂起的 confirm/ask_question 已被应答
+     * （可能是本机、远程发起方或另一个观察者），按 toolCallId 全时间线找到
+     * 对应卡片标记 `hitlSettledBy`——卡片据此立即禁用交互，不必等真正的工具
+     * 执行结果（`run.tool_call_end`）才收尾，也不让「先到先得」的输家继续
+     * 对着一张已经无效的卡片反复点击。
+     */
+    const onHitlSettled = (e: RunHitlSettledEvent) => {
       if (e.sessionId !== sessionId) return;
       apply((prev) =>
         prev.map((m) =>
@@ -940,11 +1179,7 @@ export function useSessionStream(
                 ...m,
                 toolCalls: m.toolCalls.map((t) =>
                   t.toolCallId === e.toolCallId
-                    ? {
-                        ...t,
-                        status: e.ok ? ("ok" as const) : ("error" as const),
-                        result: e.resultPreview,
-                      }
+                    ? { ...t, hitlSettledBy: e.by }
                     : t,
                 ),
               }
@@ -991,6 +1226,7 @@ export function useSessionStream(
     socket.on(SESSION_WS_EVENTS.runToolCallEnd, onToolEnd);
     socket.on(SESSION_WS_EVENTS.runSubagentSpawned, onSubagentSpawned);
     socket.on(SESSION_WS_EVENTS.runSubagentSettled, onSubagentSettled);
+    socket.on(SESSION_WS_EVENTS.runHitlSettled, onHitlSettled);
 
     // === Compaction 三事件 —— banner 状态 + 完成后触发 history 重新拉取 ===
     const onCompactionStart = (payload: {
@@ -1042,6 +1278,7 @@ export function useSessionStream(
       socket.off(SESSION_WS_EVENTS.runToolCallEnd, onToolEnd);
       socket.off(SESSION_WS_EVENTS.runSubagentSpawned, onSubagentSpawned);
       socket.off(SESSION_WS_EVENTS.runSubagentSettled, onSubagentSettled);
+      socket.off(SESSION_WS_EVENTS.runHitlSettled, onHitlSettled);
       socket.off(SESSION_WS_EVENTS.runCompactionStart, onCompactionStart);
       socket.off(SESSION_WS_EVENTS.runCompactionDone, onCompactionDone);
       socket.off(SESSION_WS_EVENTS.runCompactionError, onCompactionError);
@@ -1067,8 +1304,8 @@ export function useSessionStream(
    * loading 占位 + 迁出 pending 区到聊天区末尾，全部交给 onHuman 处理。
    */
   const send = useCallback(
-    async (msg: string) => {
-      if (!sessionId) return;
+    async (msg: string): Promise<boolean> => {
+      if (!sessionId) return false;
       if (remoteDeviceId) {
         // I3 守卫：该远程会话已有活跃 run（running=true，含首轮 create 场景）时
         // 不再发起第二个 append——避免 B 侧同 sessionId 注册两套监听器导致
@@ -1077,8 +1314,10 @@ export function useSessionStream(
         // server 侧 RemoteRunService.startRun 对同 (device,session) 也有 409
         // 兜底拒绝，这里提前短路只是省一次网络往返、给更快反馈。
         if (running) {
+          // 返回 false 而非静默 return：调用方据此提示 + 回填输入框，
+          // 否则 ChatInput 已经清空了编辑器，用户输入凭空消失（见 SessionStream.send）。
           console.warn("远程会话仍有 run 在进行中，请等待完成后再发送");
-          return;
+          return false;
         }
         // L3 remote 续写：不做本地乐观占位——B 侧 appendMessage 自己生成
         // messageId（randomUUID，与本地无法对齐），乐观插入的话，等真正的
@@ -1093,7 +1332,15 @@ export function useSessionStream(
             content: msg,
           });
           remoteStreamIdRef.current = streamId;
+          // 本端刚起了一轮新 run：切会话那次 fetchActiveRun 的快照已过期，
+          // 不能再让它把 running/streamId 拨回去（见该 ref 注释）。
+          remoteRunProbeStaleRef.current = true;
           setRunning(true);
+          // 暂存本轮内容（Bug #13）：streamId 已经拿到、A 本地已接受，但 B
+          // 侧是否真的接受（二次门控）要等异步的 run.human/agentRunEnd 才知道。
+          // 在此之前，这是这条用户输入唯一的留存——onHuman 落地后清空，
+          // onError/onInterrupted 收尾时若仍非空，据此补一条失败气泡。
+          remotePendingSendRef.current = { content: msg };
         } catch (err) {
           console.error("远程续写失败", err);
           // ChatInput onSend 后同步清空编辑器（不看成败），relay 抖动/超时时
@@ -1111,7 +1358,7 @@ export function useSessionStream(
             },
           ]);
         }
-        return;
+        return true;
       }
       const messageId = clientSnowflakeId();
       apply((prev) => [
@@ -1130,21 +1377,56 @@ export function useSessionStream(
       } catch (err) {
         console.error("追加消息失败", err);
       }
+      return true;
     },
     [sessionId, apply, remoteDeviceId, running, transport],
   );
 
   /**
    * Stop 按钮：本地经 socket 发中断信号；remote 经 relay 控制帧
-   * （`transport.interrupt`），路由靠 `remoteStreamIdRef` 当前记的 streamId
-   * ——若为 null（本页尚未发起过 run，如直接刷新进入一个仍在跑的远程会话）
-   * 则无法路由到 B，no-op（Phase A 已知限制）。
+   * （`transport.interrupt`），路由靠 `remoteStreamIdRef` 当前记的 streamId。
+   *
+   * 【Bug #4】点击当帧先乐观本地结算（`setRunning(false)` +
+   * `settleInterruptedTimeline`），不等 `transport.interrupt` 的网络往返、
+   * 更不等后端 `run.interrupted` 事件——否则「思考中 Xs」计时器与打断按钮
+   * 会在用户点完之后继续转好一截（甚至在 `onInterrupted` 从未补锁
+   * `reasoningDurationMs` 的旧实现里永远转下去，即原 bug）。后端确认到达时
+   * `onInterrupted`/`onError` 仍会再跑一次同一份结算逻辑对齐最终态——两次
+   * 结算天然幂等，不会有视觉跳变；万一实际并未真正打断（如 B 侧仍在继续跑），
+   * 下一帧 onChunk/onReasoning/onSnapshot 会把 running 重新拨回 true，不会
+   * 永久卡在错误的「已停」态。
+   *
+   * 【Bug 1】上面这份「万一没真正打断，下一帧会自愈」的兜底，前提是乐观
+   * 结算本身没有主动撒谎。remote 分支若当前没有可路由的 streamId（观察态：
+   * 本页只是挂了 session 级 watch，这个 run 不是本端发起的；或 Phase A 已知
+   * 限制——直接刷新进入一个仍在跑的远程会话），`transport.interrupt` 恒是
+   * warn + no-op，从来不会真的打断，此时若仍然乐观结算，就会制造一个「UI
+   * 显示已停止，设备上那个 run 其实还在继续跑」的持续矛盾态（后续帧到达时
+   * onChunk 等 handler 会把 running 拨回 true，观感上是打断按钮又诡异复活）
+   * ——比什么都不做更坏，因此这里直接跳过整段结算，不调用 transport。
+   *
+   * 判定「观察态」而不误伤「刚发起、streamId 还在路上」：本 hook 里
+   * `remoteStreamIdRef` 的每一次写入（挂载时回填 `remoteInitialStreamId` /
+   * `send()` 的远程续写分支拿到 `startRun` 返回的 streamId / `fetchActiveRun`
+   * reclaim 成功）都与 `setRunning(true)` 在同一处同步完成，不存在
+   * 「running 已经是 true、但 streamId 还没写入」的窗口——`running` 唯一能在
+   * streamId 缺失时被拨成 true 的路径是 onReasoning/onChunk/onSnapshot 收到
+   * 「别人发起的 run」的帧（本端只是观察者）。换言之，Stop 按钮此刻可见
+   * （`running===true`）且 `remoteStreamIdRef.current` 为空，只可能是真正的
+   * 观察态；自己刚发起的 run 这一刻要么 Stop 按钮还没出现（乐观 running 仍是
+   * false），要么 streamId 早已跟 running 一起落地。
    */
   const interrupt = useCallback(() => {
     if (!sessionId) return;
+    if (remoteDeviceId && !remoteStreamIdRef.current) {
+      console.warn(
+        "观察态下无法中断：这个 run 不是本端发起的，没有可路由的 streamId",
+      );
+      return;
+    }
+    setRunning(false);
+    apply((prev) => settleInterruptedTimeline(prev));
     if (remoteDeviceId) {
-      // streamId 为 null 时的 warn + no-op 已下沉到 transport.interrupt 内部
-      // （与本函数原有文案逐字一致，见 lib/session-transport.ts），此处不再重复判断。
       void transport
         .interrupt(remoteStreamIdRef.current, sessionId)
         .catch((err) => {
@@ -1153,16 +1435,16 @@ export function useSessionStream(
       return;
     }
     void transport.interrupt(null, sessionId);
-  }, [sessionId, remoteDeviceId, transport]);
+  }, [sessionId, remoteDeviceId, transport, apply]);
 
   /**
    * 滚动到顶部触发：拉早于当前最旧消息的下一批 history。
    * - 锚定视口：prepend 前后 scrollTop 自动补偿，使用户当前看的消息不动
    * - 并发去重：loadingMoreRef 期间忽略重复触发
-   * - remote 与 local 共用 cursor 分页（B 侧 listPage 与本地同源实现，`before`
-   *   语义一致）；remote 行需走防御式 remoteMessageToTimeline + 过滤
-   *   role="tool"（B 侧原始行，非真正 HistoryMessage，与首屏一致），且响应
-   *   无 byMessage（B 侧 listPage 不带 usage 汇总），不调 onUsageBatch。
+   * - remote 与 local 共用 cursor 分页与映射（B 侧现与本地 REST 共用同一份
+   *   `assembleHistoryMessages`，`before` 语义与响应形状均同源），故不再有
+   *   remote 专属分支；remote 的 `byMessage` 恒为 `{}`（用量不跨设备传，见
+   *   `HistoryResponseSchema` 注释），onUsageBatch 合并空投影是无副作用的 no-op。
    */
   // biome-ignore lint/correctness/useExhaustiveDependencies: scrollContainerRef 是 RefObject，.current 故意不进依赖（与原实现一致）
   const loadMoreHistory = useCallback(async () => {
@@ -1177,36 +1459,19 @@ export function useSessionStream(
     const prevScrollTop = scroller?.scrollTop ?? 0;
     try {
       const res = await transport.fetchHistory(sessionId, { before: cursor });
-      let newHasMore: boolean;
-      if (remoteDeviceId) {
-        const rawRes = res as unknown as RemoteRawHistory;
-        const raw = rawRes.messages ?? [];
-        const newMessages: TimelineMessage[] = raw
-          .filter((m) => m.role !== "tool")
-          .map(remoteMessageToTimeline);
-        apply((prev) => {
-          const existingIds = new Set(prev.map((m) => m.id));
-          const fresh = newMessages.filter((m) => !existingIds.has(m.id));
-          return [...fresh, ...prev];
-        });
-        oldestMessageIdRef.current = raw[0]?.id ?? cursor;
-        newHasMore = rawRes.hasMore ?? false;
-      } else {
-        const newMessages: TimelineMessage[] = res.messages.map(
-          historyMessageToTimeline,
-        );
-        apply((prev) => {
-          // 去重：socket 抢先到的或本地已有的不重复 prepend
-          const existingIds = new Set(prev.map((m) => m.id));
-          const fresh = newMessages.filter((m) => !existingIds.has(m.id));
-          return [...fresh, ...prev];
-        });
-        callbacksRef.current.onUsageBatch?.(sessionId, res.byMessage);
-        oldestMessageIdRef.current = res.messages[0]?.id ?? cursor;
-        newHasMore = res.hasMore;
-      }
-      hasMoreHistoryRef.current = newHasMore;
-      setHasMoreHistory(newHasMore);
+      const newMessages: TimelineMessage[] = res.messages.map(
+        historyMessageToTimeline,
+      );
+      apply((prev) => {
+        // 去重：socket 抢先到的或本地已有的不重复 prepend
+        const existingIds = new Set(prev.map((m) => m.id));
+        const fresh = newMessages.filter((m) => !existingIds.has(m.id));
+        return [...fresh, ...prev];
+      });
+      callbacksRef.current.onUsageBatch?.(sessionId, res.byMessage);
+      oldestMessageIdRef.current = res.messages[0]?.id ?? cursor;
+      hasMoreHistoryRef.current = res.hasMore;
+      setHasMoreHistory(res.hasMore);
       // 锚定视口：等 DOM 完成 prepend 后补偿 scrollTop
       requestAnimationFrame(() => {
         if (!scroller) return;
@@ -1219,7 +1484,7 @@ export function useSessionStream(
     } finally {
       loadingMoreRef.current = false;
     }
-  }, [sessionId, apply, remoteDeviceId, transport]);
+  }, [sessionId, apply, transport]);
 
   /**
    * 确认/取消一次待发送的工具调用（im_send_message / drive 分享类 confirm 型
@@ -1279,6 +1544,10 @@ export function useSessionStream(
     apply,
     send,
     interrupt,
+    // 每次渲染现算，见 canInterrupt 文档：remoteStreamIdRef 的每次写入都与
+    // 一次 setRunning 同步发生，因此这里读到的值在实际会被消费的渲染帧里
+    // 总是新鲜的，不需要额外的 state 镜像。
+    canInterrupt: !remoteDeviceId || remoteStreamIdRef.current !== null,
     loadMoreHistory,
     remoteDeviceId: remoteDeviceId ?? null,
     getStreamId: () => remoteStreamIdRef.current,

@@ -6,6 +6,7 @@ import {
 import { Injectable, Logger } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { ImRelayClientService } from "../cloud/im-relay-client.service";
+import { AgentService } from "../services/agent.service";
 import { ACCOUNT_EVENTS } from "./account.events";
 
 /**
@@ -23,6 +24,7 @@ export class AccountRuntimeRegistry {
     private readonly prompt: PromptService,
     private readonly relay: ImRelayClientService,
     private readonly emitter: EventEmitter2,
+    private readonly agents: AgentService,
   ) {}
 
   /** 该账号运行时是否在线。 */
@@ -32,12 +34,14 @@ export class AccountRuntimeRegistry {
 
   /**
    * 构建某账号运行时（幂等：已存在先 teardown）。
-   * MCP init 在该账号上下文内（文件 getter 依赖 ALS）。
+   *
+   * MCP 已改为按 Agent 懒加载（Task 6）：不再在登录时预热任何 Agent 的 MCP，
+   * 首次使用该 Agent（RunnerService 建流前）才由 `McpService.ensureAgent` 拉起。
    */
   async createRuntime(cloudUserId: string): Promise<void> {
     await this.teardownRuntime(cloudUserId);
     await this.ctx.run(cloudUserId, async () => {
-      await this.mcp.initAccount(cloudUserId);
+      await this.agents.ensureDefault();
     });
     await this.relay.connect(cloudUserId);
     this.live.add(cloudUserId);

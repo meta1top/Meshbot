@@ -12,6 +12,7 @@ import { Membership } from "./entities/membership.entity";
 import { Message } from "./entities/message.entity";
 import { Organization } from "./entities/organization.entity";
 import { OrgModelConfig } from "./entities/org-model-config.entity";
+import { CloudAgent } from "./entities/cloud-agent.entity";
 import { CloudNode } from "./entities/cloud-node.entity";
 import { CloudNodeGrant } from "./entities/cloud-node-grant.entity";
 import { CloudShareLink } from "./entities/cloud-share-link.entity";
@@ -32,6 +33,7 @@ import { OrgService } from "./services/org.service";
 import { OrgModelConfigService } from "./services/org-model-config.service";
 import { CloudNodeService } from "./services/cloud-node.service";
 import { CloudNodeGrantService } from "./services/cloud-node-grant.service";
+import { CloudAgentService } from "./services/cloud-agent.service";
 import { CloudDriveService } from "./services/cloud-drive.service";
 import { CloudShareLinkService } from "./services/cloud-share-link.service";
 import { PresenceService } from "./services/presence.service";
@@ -52,7 +54,7 @@ import { SECURITY_CONFIG } from "./tokens";
  * Conversation+ConversationMember→ConversationService / Message→MessageService /
  * SkillPackage+SkillVersion→SkillPackageService（SkillMarketService 编排）/
  * CloudNode→CloudNodeService / CloudNodeGrant→CloudNodeGrantService /
- * CloudShareLink→CloudShareLinkService。
+ * CloudShareLink→CloudShareLinkService / CloudAgent→CloudAgentService。
  *
  * `forRoot(invitation, security)` 注入邀请配置切片（过期天数）与加密配置切片
  * （对称密钥，供 `SecretCryptoService` 使用），分别由 server-main 的
@@ -97,6 +99,7 @@ export class MainModule {
           DeviceAuthRequest,
           EmailVerification,
           OrgModelConfig,
+          CloudAgent,
         ]),
       ],
       providers: [
@@ -119,6 +122,7 @@ export class MainModule {
         CloudDriveService,
         CloudShareLinkService,
         SecretCryptoService,
+        CloudAgentService,
         { provide: INVITATION_CONFIG, useValue: invitation },
         { provide: SECURITY_CONFIG, useValue: security },
       ],
@@ -142,6 +146,7 @@ export class MainModule {
         CloudDriveService,
         CloudShareLinkService,
         SecretCryptoService,
+        CloudAgentService,
       ],
     };
   }

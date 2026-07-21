@@ -13,4 +13,20 @@ describe("artifactRawUrl", () => {
       "/api/artifacts/raw?path=a.md&download=1",
     );
   });
+
+  it("agentId 选项（Task 12：多 Agent workspace 隔离）", () => {
+    expect(artifactRawUrl("a.md", { agentId: "agent-1" })).toBe(
+      "/api/artifacts/raw?path=a.md&agentId=agent-1",
+    );
+  });
+
+  it("agentId + download 可同时传", () => {
+    expect(artifactRawUrl("a.md", { agentId: "agent-1", download: true })).toBe(
+      "/api/artifacts/raw?path=a.md&agentId=agent-1&download=1",
+    );
+  });
+
+  it("未传 agentId 时不带该查询参数（兜底走后端默认 Agent）", () => {
+    expect(artifactRawUrl("a.md")).toBe("/api/artifacts/raw?path=a.md");
+  });
 });

@@ -20,6 +20,12 @@ export const SessionSummarySchema = z.object({
   titleGenerated: z.boolean(),
   /** 会话绑定的模型配置 id；null = 走账号默认（首个 enabled）。 */
   modelConfigId: z.string().nullable(),
+  /**
+   * 会话归属的 Agent id（Task 12 结转自 Task 10）。前端据此按当前选中 Agent
+   * 过滤侧栏会话列表、给产物预览 URL 附带正确的 agentId，避免多 Agent 场景下
+   * 会话/产物串到别的 Agent。
+   */
+  agentId: z.string(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -40,8 +46,14 @@ export const SessionPatchSchema = z
   .object({
     title: z.string().min(1).max(200).optional(),
     pinned: z.boolean().optional(),
-    /** 切换会话模型（下一条消息生效）；须为当前账号存在的 ModelConfig id。 */
-    modelConfigId: z.string().optional(),
+    /**
+     * 切换会话模型（下一条消息生效）；须为当前账号存在的 ModelConfig id。
+     * `.min(1)`——同 `CreateSessionSchema.agentId` 的陷阱：`??` 只挡 null/undefined，
+     * 空字符串会原样通过、在 runner 的三级优先级里被误判为「已覆盖」，静默吞掉
+     * Agent 默认模型这一级。当前无「传值清除覆盖」语义（只能不传字段），故加
+     * `.min(1)` 不影响既有行为。
+     */
+    modelConfigId: z.string().min(1).optional(),
   })
   .refine(
     (d) =>
@@ -72,8 +84,18 @@ export const CreateSessionSchema = z.object({
   content: z.string().min(1),
   /** "quick" = 随手问临时会话（不进侧栏）；缺省 "user"。 */
   kind: z.enum(["user", "quick"]).optional(),
-  /** 会话使用的模型配置 id；缺省走账号默认（首个 enabled）。 */
-  modelConfigId: z.string().optional(),
+  /**
+   * 会话使用的模型配置 id；缺省走三级优先级（会话覆盖 > Agent 默认 > 账号启用首行）。
+   * `.min(1)` 与 `agentId` 同款陷阱——`??` 只认 null/undefined，空串会绕过三级优先级
+   * 原样落库，被误判为「已覆盖」，静默吞掉 Agent 默认模型这一级。
+   */
+  modelConfigId: z.string().min(1).optional(),
+  /**
+   * 会话归属的 Agent id；缺省由 Controller 兜底取账号默认 Agent（ensureDefault）。
+   * `.min(1)` 与同 schema 的 `content` 一致——挡住空字符串（`??` 只认 null/undefined，
+   * 空串会绕过 Controller 兜底原样落库），Controller 侧还会再校验一层存在性/归属。
+   */
+  agentId: z.string().min(1).optional(),
 });
 export type CreateSessionInput = z.infer<typeof CreateSessionSchema>;
 
@@ -247,11 +269,22 @@ export type HistoryQuery = z.infer<typeof HistoryQuerySchema>;
  * cursor 分页：messages 按 createdAt asc，hasMore 表示老消息是否还有。
  * 仅首次（before 未传）返 inflight + sessionTotals；翻页时不返。byMessage
  * 始终是本批 messages 对应的 LLM usage 投影，前端合并到 atom。
+ *
+ * 【跨设备（L3 device query kind="history"）的能力边界——显式声明，不让调用方猜】
+ * 宿主设备 B 回给发起方 A 的 history 与本地 REST 同形（同一个
+ * `assembleHistoryMessages` 装配），但三个字段**刻意不跨设备传**：
+ * - `inflight`：不传（`undefined`）。远程「当前正在跑什么」由观察通道自己送——
+ *   `agent.watch.accepted` 携带 inflight，A 侧合成 `run.snapshot` 注入时间线，
+ *   比 history 快照更实时；history 再传一份只会与之打架（SET 覆盖语义会把
+ *   已累积的正文回退）。**不要**把 `undefined` 读成「远程没有活跃 run」。
+ * - `sessionTotals`：不传。token 用量属设备本地计费明细，不跨设备暴露。
+ * - `byMessage`：远程恒为 `{}`（空投影），同上。
  */
 export const HistoryResponseSchema = z.object({
   messages: z.array(HistoryMessageSchema),
   hasMore: z.boolean(),
-  inflight: InflightSnapshotSchema.nullable(),
+  /** 本地 REST 恒有（首页为快照、翻页为 null）；跨设备 history 不传，见上方说明。 */
+  inflight: InflightSnapshotSchema.nullable().optional(),
   sessionTotals: SessionTotalsSchema.optional(),
   byMessage: z.record(z.string(), MessageUsageSchema),
 });
@@ -344,6 +377,14 @@ export const RunErrorEventSchema = z.object({
   /** 出错批次的用户 PendingMessage id —— 流前出错（messageId 为 null）时供前端定位失败气泡。 */
   pendingIds: z.array(z.string()),
   error: z.string(),
+  /**
+   * 结构化拒绝原因（可选）：目前仅 L3 远程 run 二次门控等「预检拒绝」场景
+   * 由 A 侧 `RemoteRunService` 补发的影子 run.error 帧携带（如
+   * `"agent_not_remotable"`，透传自 `AgentRunEnd.reason`），供前端走专属
+   * 文案分支而非展示 `error` 原始文本；本地 run 的 run.error 不设该字段，
+   * 前端应把「未设置」当作既有行为（展示 `error`）的兜底。
+   */
+  reason: z.string().optional(),
 });
 export type RunErrorEvent = z.infer<typeof RunErrorEventSchema>;
 
@@ -522,6 +563,23 @@ export type SessionTitleUpdatedEvent = z.infer<
   typeof SessionTitleUpdatedEventSchema
 >;
 
+/**
+ * socket: run.hitl_settled —— HITL 关卡广播帧（Agent 级观察通道 D3，Task 17）。
+ *
+ * `ConfirmationService.resolve` 首次成功解锁某个挂起的 confirm/ask_question
+ * 关卡时广播一次：告诉所有在看这张卡片的端——本地 ws/session 房间、per-run
+ * 发起方、全部观察者——「已被应答，收起这张卡」，包括没抢到的那个观察者
+ * （否则它的 UI 会一直挂着一张已经无效的确认卡，甚至把自己被丢弃的决定当成
+ * 已生效）。晚到的 resolve（先到先得已判负）不广播，避免重复帧造成 UI 抖动。
+ */
+export const RunHitlSettledEventSchema = z.object({
+  sessionId: z.string(),
+  toolCallId: z.string(),
+  /** 应答来源：本机浏览器 / 远程发起方 / 观察者。前端可据此提示「已由其他端应答」。 */
+  by: z.enum(["local", "remote", "observer"]),
+});
+export type RunHitlSettledEvent = z.infer<typeof RunHitlSettledEventSchema>;
+
 /** WS namespace 与事件名常量。 */
 export const SESSION_WS_NAMESPACE = "ws/session";
 export const SESSION_WS_EVENTS = {
@@ -547,4 +605,5 @@ export const SESSION_WS_EVENTS = {
   runCompactionError: "run.compaction_error",
   runSubagentSpawned: "run.subagent_spawned",
   runSubagentSettled: "run.subagent_settled",
+  runHitlSettled: "run.hitl_settled",
 } as const;

@@ -2,11 +2,12 @@
 import { ArtifactSplitPane as SharedArtifactSplitPane } from "@meshbot/web-common/session";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useTranslations } from "next-intl";
+import { useMemo } from "react";
 import { previewArtifactAtom } from "@/atoms/assistant-panel";
 import { getFileUrl } from "@/rest/drive";
 import {
   createArtifactRemoteTransport,
-  fetchLocalArtifact,
+  createFetchLocalArtifact,
   renderArtifactPdf,
   useArtifactBodyLabels,
 } from "./artifact-body";
@@ -22,9 +23,23 @@ export function ArtifactSplitPane() {
   const bodyLabels = useArtifactBodyLabels();
   const artifact = useAtomValue(previewArtifactAtom);
   const setPreviewArtifact = useSetAtom(previewArtifactAtom);
-  const transport = artifact?.remote
-    ? createArtifactRemoteTransport(artifact.remote.deviceId)
-    : undefined;
+  // 按 deviceId 记忆化，避免每渲染传新函数引用触发 shared 组件的重复拉取
+  // （同下方 fetchLocal 的 useMemo 注释；transport 同样进了
+  // web-common/artifact-body.tsx 的 effect 依赖数组）。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 有意只依赖 artifact?.remote?.deviceId，createArtifactRemoteTransport 只用这一个字段
+  const transport = useMemo(
+    () =>
+      artifact?.remote
+        ? createArtifactRemoteTransport(artifact.remote.deviceId)
+        : undefined,
+    [artifact?.remote?.deviceId],
+  );
+  // 按 agentId 记忆化，避免每渲染传新函数引用触发 shared 组件的重复拉取
+  // （同 artifact-body.tsx 的 fetchLocal useMemo 注释）。
+  const fetchLocal = useMemo(
+    () => createFetchLocalArtifact(artifact?.agentId),
+    [artifact?.agentId],
+  );
 
   return (
     <SharedArtifactSplitPane
@@ -37,7 +52,7 @@ export function ArtifactSplitPane() {
         close: t("artifactClose"),
         body: bodyLabels,
       }}
-      fetchLocal={fetchLocalArtifact}
+      fetchLocal={fetchLocal}
       transport={transport}
       renderPdf={renderArtifactPdf}
       onUploadedToDrive={async (up) => {

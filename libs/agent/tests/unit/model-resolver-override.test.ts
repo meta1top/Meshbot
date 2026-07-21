@@ -1,41 +1,78 @@
-import Database from "better-sqlite3";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { AccountContextService } from "../../src/account/account-context.service";
-import { MeshbotConfigService } from "../../src/config/meshbot-config.service";
-import { ModelRunContext } from "../../src/graph/model-run-context";
+import type { ActiveModelConfig } from "../../src/config/model-config.reader";
+import type { ModelConfigReadPort } from "../../src/graph/model-config-read.port";
 import { ModelResolver } from "../../src/graph/model-resolver.service";
+import { ModelRunContext } from "../../src/graph/model-run-context";
+
+/**
+ * Critical C-1 修复后的回归：ModelResolver 不再直读 sqlite，改经
+ * MODEL_CONFIG_READ_PORT 解析。这里用一个按账号+id 建模的 fake port 模拟
+ * ModelConfigService 合并视图（本地 + 云端）的行为，覆盖：
+ * - 无覆盖时解析账号 enabled 配置
+ * - 覆盖 id 优先，且可用未 enabled 的配置（resolveById 不过滤 enabled，同
+ *   ModelConfigService.findByIdOrName）
+ * - 覆盖 id 查不到时回退账号 enabled 配置
+ */
+
+interface FakeRow {
+  id: string;
+  acct: string;
+  enabled: boolean;
+  cfg: ActiveModelConfig;
+}
+
+function makeFakePort(
+  account: AccountContextService,
+  rows: FakeRow[],
+): ModelConfigReadPort {
+  return {
+    async resolveActive() {
+      const acct = account.get();
+      return rows.find((r) => r.acct === acct && r.enabled)?.cfg ?? null;
+    },
+    async resolveById(id: string) {
+      const acct = account.get();
+      return rows.find((r) => r.id === id && r.acct === acct)?.cfg ?? null;
+    },
+  };
+}
+
+const ROWS: FakeRow[] = [
+  {
+    id: "mc-default",
+    acct: "u1",
+    enabled: true,
+    cfg: {
+      providerType: "openai",
+      model: "gpt-a",
+      name: "默认",
+      apiKey: "k",
+      baseUrl: "",
+      isCloudModel: false,
+    },
+  },
+  {
+    id: "mc-alt",
+    acct: "u1",
+    enabled: false,
+    cfg: {
+      providerType: "openai-compatible",
+      model: "ds-b",
+      name: "备用",
+      apiKey: "k",
+      baseUrl: "",
+      isCloudModel: false,
+    },
+  },
+];
 
 describe("ModelResolver 覆盖解析", () => {
-  let dir: string;
-  let dbPath: string;
-  beforeAll(() => {
-    dir = mkdtempSync(join(tmpdir(), "mrc-"));
-    dbPath = join(dir, "agent.db");
-    const db = new Database(dbPath);
-    db.exec(`CREATE TABLE model_configs (
-      id TEXT PRIMARY KEY, cloud_user_id TEXT, provider_type TEXT, name TEXT,
-      model TEXT, api_key TEXT, base_url TEXT DEFAULT '', enabled INTEGER,
-      created_at TEXT DEFAULT (datetime('now'))
-    )`);
-    db.prepare(
-      `INSERT INTO model_configs (id, cloud_user_id, provider_type, name, model, api_key, enabled)
-       VALUES ('mc-default','u1','openai','默认','gpt-a','k',1),
-              ('mc-alt','u1','openai-compatible','备用','ds-b','k',0)`,
-    ).run();
-    db.close();
-  });
-  afterAll(() => rmSync(dir, { recursive: true, force: true }));
-
   function make() {
     const account = new AccountContextService();
-    const config = {
-      getDatabasePath: () => dbPath,
-    } as unknown as MeshbotConfigService;
     const runCtx = new ModelRunContext();
-    const resolver = new ModelResolver(config, account, runCtx);
+    const modelConfigPort = makeFakePort(account, ROWS);
+    const resolver = new ModelResolver(account, runCtx, modelConfigPort);
     return { account, runCtx, resolver };
   }
 

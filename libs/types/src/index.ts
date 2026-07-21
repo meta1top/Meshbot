@@ -43,6 +43,7 @@ export {
   AgentRunControlSchema,
   type AgentRunEnd,
   type AgentRunFrame,
+  AgentRunFrameSchema,
   type AgentRunStartForwarded,
   type AgentRunStartInput,
   AgentRunStartSchema,
@@ -68,6 +69,20 @@ export {
   ImSendSchema,
   type PresenceState,
 } from "./im/im.schema";
+export {
+  type AgentWatchAccepted,
+  AgentWatchAcceptedSchema,
+  type AgentWatchForwarded,
+  AgentWatchForwardedSchema,
+  type AgentWatchFrame,
+  AgentWatchFrameSchema,
+  type AgentWatchStartInput,
+  AgentWatchStartSchema,
+  type AgentWatchStopInput,
+  AgentWatchStopSchema,
+  type WatchScope,
+  WatchScopeSchema,
+} from "./im/watch.schema";
 export type {
   AgentModelConfig,
   OrgModelConfigInput,

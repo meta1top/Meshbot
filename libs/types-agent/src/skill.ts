@@ -33,6 +33,8 @@ export const InstallSkillSchema = z.object({
   source: z.enum(["system", "github", "clawhub"]),
   ref: z.string().min(1),
   version: z.string().optional(),
+  /** 目标 Agent id；未传时 Controller 兜底取当前账号默认 Agent。 */
+  agentId: z.string().optional(),
 });
 export type InstallSkillInput = z.infer<typeof InstallSkillSchema>;
 
@@ -44,5 +46,7 @@ export const PublishLocalSkillSchema = z.object({
   displayName: z.string().min(1),
   version: z.string().min(1),
   changelog: z.string().optional(),
+  /** 技能所在的 Agent id；未传时 Controller 兜底取当前账号默认 Agent。 */
+  agentId: z.string().optional(),
 });
 export type PublishLocalSkillInput = z.infer<typeof PublishLocalSkillSchema>;

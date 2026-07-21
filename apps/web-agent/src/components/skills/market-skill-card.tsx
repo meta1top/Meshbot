@@ -12,6 +12,8 @@ import { installSkill } from "@/rest/skills";
 interface Props {
   skill: MarketSkillSummary;
   source: SkillInstallSource;
+  /** 当前选中 Agent id（Task 12：安装目标，落到对应 Agent 的 skills 目录）。 */
+  agentId?: string;
   onInstalled: () => void;
 }
 
@@ -19,7 +21,12 @@ interface Props {
  * 市场技能卡片：展示 displayName/description/author/latestVersion/downloads；
  * 「安装」按钮调 installSkill，安装中 loading，成功回调 onInstalled + 内联提示。
  */
-export function MarketSkillCard({ skill, source, onInstalled }: Props) {
+export function MarketSkillCard({
+  skill,
+  source,
+  agentId,
+  onInstalled,
+}: Props) {
   const t = useTranslations("skills");
   const [busy, setBusy] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -34,6 +41,7 @@ export function MarketSkillCard({ skill, source, onInstalled }: Props) {
         source,
         ref: skill.slug,
         version: skill.latestVersion,
+        agentId,
       });
       setSuccessMsg(t("installSuccess", { name: skill.displayName }));
       onInstalled();

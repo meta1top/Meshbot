@@ -209,3 +209,42 @@ describe("MulticastRunEvents", () => {
     expect(order).toEqual(["self", "other", "other"]);
   });
 });
+
+describe("FrameSequencer primeOnFirst（观察者中途接入）", () => {
+  it("默认从 seq 1 起（既有行为不变）", () => {
+    const s = new FrameSequencer();
+    expect(s.push({ seq: 47, event: "a", payload: 1 })).toEqual([]);
+    expect(s.push({ seq: 1, event: "b", payload: 2 })).toEqual([
+      { event: "b", payload: 2 },
+    ]);
+  });
+
+  it("primeOnFirst：首帧 seq 即基准，立即吐出", () => {
+    const s = new FrameSequencer({ primeOnFirst: true });
+    expect(s.push({ seq: 47, event: "a", payload: 1 })).toEqual([
+      { event: "a", payload: 1 },
+    ]);
+    expect(s.push({ seq: 48, event: "b", payload: 2 })).toEqual([
+      { event: "b", payload: 2 },
+    ]);
+  });
+
+  it("primeOnFirst：定基准后仍能重排乱序帧", () => {
+    const s = new FrameSequencer({ primeOnFirst: true });
+    s.push({ seq: 10, event: "a", payload: 1 });
+    expect(s.push({ seq: 12, event: "c", payload: 3 })).toEqual([]);
+    expect(s.push({ seq: 11, event: "b", payload: 2 })).toEqual([
+      { event: "b", payload: 2 },
+      { event: "c", payload: 3 },
+    ]);
+  });
+
+  it("primeOnFirst：reset 后可重新定基准", () => {
+    const s = new FrameSequencer({ primeOnFirst: true });
+    s.push({ seq: 10, event: "a", payload: 1 });
+    s.reset();
+    expect(s.push({ seq: 99, event: "z", payload: 9 })).toEqual([
+      { event: "z", payload: 9 },
+    ]);
+  });
+});

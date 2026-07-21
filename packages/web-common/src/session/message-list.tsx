@@ -13,6 +13,7 @@ import {
 import { CompactionRow } from "./compaction-row";
 import { MarkdownContent } from "./markdown-content";
 import type { ModelConfigLike } from "./model-name";
+import { isReasoningThinking } from "./reasoning-thinking";
 import type { TimelineMessage, ToolCallView } from "./timeline";
 import { ToolCallBlock, type ToolCallBlockLabels } from "./tool-call-block";
 import { UserMessageActions } from "./user-message-actions";
@@ -32,6 +33,36 @@ export interface MessageListLabels {
   reasoningProcess: string;
   /** 压缩占位行标题，转发给 CompactionRow。 */
   compactionRowTitle: (count: number) => string;
+  /**
+   * 远程二次门控拒绝的专属文案（Bug #13）：`m.errorReason === "agent_not_remotable"`
+   * 时展示这条，而不是展示 `errorText` 里未经翻译的原始兜底文本。
+   *
+   * 语义边界：这条 reason **只**表示「目标 Agent 不存在，或它没开启远程访问」
+   * 两种事实（文案须同时覆盖，别说死「未开启远程访问」）。会话归属不匹配是
+   * 另一条独立 reason，见 {@link runErrorSessionAgentMismatch}。
+   */
+  runErrorAgentNotRemotable: string;
+  /**
+   * 远程 run 预检拒绝——会话归属不匹配——的专属文案：
+   * `m.errorReason === "session_agent_mismatch"` 时展示。
+   *
+   * 与 `agent_not_remotable` 的区别：Agent 本身**是**可远程的，只是这次 append
+   * 的会话不归它（或该 sessionId 在目标设备上查无）。此前两者共用一条 reason，
+   * 前端一律显示「该 Agent 未开启远程访问」，把排查带得完全偏了。
+   */
+  runErrorSessionAgentMismatch: string;
+  /**
+   * 远程 run 预检拒绝——目标设备离线——的专属文案（原 bug #13 残留）：
+   * `m.errorReason === "offline"` 时展示这条，而不是 `errorText` 里
+   * `RemoteRunService.describePreflightRejection` 生成的硬编码中文兜底
+   * （「目标设备已离线，本次消息未发送」，对非中文用户不友好）。
+   *
+   * `errorReason` 目前只有三个稳定取值会走到这里——`"agent_not_remotable"`、
+   * `"session_agent_mismatch"` 与 `"offline"`——均来自 A 侧 `RemoteRunService` 对 L3 远程 run 预检拒绝
+   * 的结构化标注；其余情形（本地 run 失败、idle 超时等）不设 `reason`，
+   * 继续走 `errorText` 兜底展示原始文本。
+   */
+  runErrorOffline: string;
 }
 
 export interface MessageListProps {
@@ -159,6 +190,22 @@ export function MessageList({
         .filter(
           (m) => !(m.role === "system" && m.metadata?.kind !== "compaction"),
         )
+        // 全空 assistant 行不渲染（否则是「头像 + 粗体名字 + 空白」的幽灵行）。
+        // 根因已在后端修掉（`GraphRunner.flushRound` 的空轮短路：不再为只带
+        // finish_reason/usage 的尾随 chunk 发 assistant_done），这里是兜底——
+        // 修复前已经落库的历史空行仍会从 history 拉回来，只有前端能挡。
+        // 「决策轮」（只有 reasoning/toolCalls、正文为空）不受影响：下面 reasoning
+        // 块与工具块各自独立渲染，条件里都算「非空」。
+        .filter(
+          (m) =>
+            m.role !== "assistant" ||
+            !!m.content ||
+            !!m.reasoning ||
+            (m.toolCalls?.length ?? 0) > 0 ||
+            m.loading === true ||
+            m.streaming === true ||
+            m.failed === true,
+        )
         .map((m) => {
           // 压缩占位行：role=system + metadata.kind="compaction"
           if (m.role === "system" && m.metadata?.kind === "compaction") {
@@ -228,10 +275,16 @@ export function MessageList({
                     )}
                   </div>
                 )}
-                {m.failed && m.errorText && (
+                {m.failed && (m.errorText || m.errorReason) && (
                   <div className="text-xs text-destructive/80">
                     {labels.runErrorPrefix}
-                    {m.errorText}
+                    {m.errorReason === "agent_not_remotable"
+                      ? labels.runErrorAgentNotRemotable
+                      : m.errorReason === "session_agent_mismatch"
+                        ? labels.runErrorSessionAgentMismatch
+                        : m.errorReason === "offline"
+                          ? labels.runErrorOffline
+                          : m.errorText}
                   </div>
                 )}
                 {m.role === "assistant" &&
@@ -322,9 +375,9 @@ function ReasoningBlock({
   durationMs?: number;
   /**
    * 父 message 是否在流式中（来自 inflight push 或 ws onChunk 标记）。
-   * 为 true 时强制走「思考中」分支 + 默认展开，无视 durationMs ——
-   * 刷新落在 reasoning 流式中时 durationMs=0 会被误判为「已思考」，
-   * 此 prop 是首要语义信号。
+   * 仅在 durationMs 缺失时作为「思考中」的兜底信号（刷新落在 reasoning 流式中
+   * 时只有 reasoningStartedAt、没有 durationMs）；durationMs 已锁定则以其为准。
+   * 判据详见 isReasoningThinking。
    */
   streaming?: boolean;
   labels: Pick<
@@ -332,8 +385,7 @@ function ReasoningBlock({
     "reasoningThinking" | "reasoningThought" | "reasoningProcess"
   >;
 }) {
-  const isThinking =
-    streaming === true || (durationMs === undefined && startedAt !== undefined);
+  const isThinking = isReasoningThinking({ startedAt, durationMs, streaming });
   // 思考中默认展开；思考一结束自动收起。用户点击切换会覆盖这个默认，
   // 但 isThinking 再变化时会再次同步（下一次新的推理流又会展开）。
   const [open, setOpen] = useState(isThinking);

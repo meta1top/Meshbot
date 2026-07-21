@@ -11,11 +11,21 @@
  * drive-file-icon.tsx），本文件保持零 web-common 依赖。
  */
 
-/** 构造产物 serving URL（相对，同源）。 */
+/**
+ * 构造产物 serving URL（相对，同源）。
+ *
+ * `agentId`（Task 12）：多 Agent 下产物按 `agents/<agentId>/` workspace 隔离，
+ * 不传时后端兜底解析到账号默认 Agent——非默认 Agent 会话里的产物会因此去
+ * 错的 workspace 找导致 404。调用方应传该产物所属**会话**的 agentId（而非
+ * 当前导航条选中的 agentId：用户可能正在查看会话历史但已把导航条切到别的
+ * Agent，此时用当前选中值会拼错 URL）。
+ */
 export function artifactRawUrl(
   filePath: string,
-  opts?: { download?: boolean },
+  opts?: { download?: boolean; agentId?: string },
 ): string {
-  const base = `/api/artifacts/raw?path=${encodeURIComponent(filePath)}`;
-  return opts?.download ? `${base}&download=1` : base;
+  let url = `/api/artifacts/raw?path=${encodeURIComponent(filePath)}`;
+  if (opts?.agentId) url += `&agentId=${encodeURIComponent(opts.agentId)}`;
+  if (opts?.download) url += "&download=1";
+  return url;
 }

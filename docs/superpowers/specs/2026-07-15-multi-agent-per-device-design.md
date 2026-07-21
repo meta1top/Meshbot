@@ -98,6 +98,8 @@ DDL 走 `ddl-migration` 技能那套：纯 SQL 文件、幂等（`IF NOT EXISTS`
 
 `MeshbotConfigService` 的账号级 getter（memory / skills / mcp.json / workspace）改成从 ALS 取 `agentId`，拼 `agents/<agentId>/...`。
 
+**这一步是杠杆点**：`SkillService`、`MemoryService`、bash/文件工具的 cwd **全都只通过这些 getter 拿路径**，所以改完 getter 之后它们**零改动自动按 agent 隔离**。真正还要单独动的只有 `McpService`（它自己维护 `perAccount` Map）与 `ToolRegistry`（自己维护 `accountEntries` Map）。
+
 `PromptService` 不再负责人格（人格进了 DB），只保留 session-title / next-action-suggestions 两个模板，仍是账号级。
 
 ### 3.4 MCP：按 agent 隔离进程池 + 懒加载
@@ -114,9 +116,13 @@ DDL 走 `ddl-migration` 技能那套：纯 SQL 文件、幂等（`IF NOT EXISTS`
 
 图里绑的是惰性 provider，`ToolRegistry.asLangChainBindable()` 每轮重新求值（`libs/agent/src/graph/supervisor.node.ts:33`）。加 agent 维度只需在 `accountEntries` 的 key 上带 `agentId`，**图一行不改**。
 
-### 3.6 图缓存 key
+### 3.6 图缓存：**不用改**（写计划时读代码推翻的原判断）
 
-`AccountGraphProvider` 的两个 Map（`graphsByAccount` / `subGraphsByAccount`）key 从 `cloudUserId` 变成 `${cloudUserId}:${agentId}`，subagent 变体同理。**checkpointer 仍按账号取**（见 2.3）。
+初版设计说要把 `AccountGraphProvider` 的两个 Map key 扩成 `${cloudUserId}:${agentId}`。读完代码后确认**这是多余的**：
+
+`buildSupervisorGraph` 注入的是 `checkpointer`（账号级）、`modelResolver.provider()`（惰性闭包）、`registry`（对象，`asLangChainBindable()` 每轮从 ALS 现读）、`emitter`、`resolveMessageId` —— **没有一个是 agent 相关的常量**。工具集与模型都在每轮求值时从 ALS 解析（`graph.builder.ts:106`、`supervisor.node.ts:33`）。
+
+所以只要 `ToolRegistry` 与 `ModelResolver` 认 ALS 里的 `agentId`，**同一张图天然就为不同 agent 绑定不同工具集**。`AccountGraphProvider` 一行都不用改。
 
 ### 3.7 模型解析优先级
 
@@ -174,6 +180,8 @@ B 侧 `RemoteRunInboundService`（`apps/server-agent/src/services/remote-run-inb
 ---
 
 ## 5. 本地 UI（web-agent）
+
+> **⚠️ 2026-07-15 修订**：本节描述的「最左图标条 + 主侧栏」是**计划一交付的临时形态**，不是最终 IA。用户 review 后确定的目标模型见 **§10 计划二 IA 愿景**——图标条会被「Agent→会话嵌套列表」取代，设备降级为会话头部元数据。计划一保留图标条仅为让多 Agent 可切换、可测试。
 
 **最左 agent 图标导航条**（约 56px）：圆形头像（emoji + 背景色）、运行中脉冲点、hover 出名字、底部 `+` 新建、当前选中高亮。
 
@@ -240,13 +248,34 @@ B 侧 `RemoteRunInboundService`（`apps/server-agent/src/services/remote-run-inb
 
 ---
 
-## 9. 关键文件清单
+## 9. 计划二 IA 愿景（Agent 为主体的统一导航 + 云端注册）
+
+> 2026-07-15 用户 review 计划一实机布局后确定。计划二不只是「云端注册」，而是把整个导航 IA 从「设备为主」翻成「Agent 为主」。这里记下目标模型，计划二启动时据此写 spec。
+
+**问题诊断**：计划一在最左加了「Agent 图标条」（本机概念），但既有侧栏的主轴是「设备→会话树」（远程 L2/L3 概念）。于是「先选 Agent、中间一堆设备」——两条正交轴前后叠放、里外拧反。本质：Agent 属于设备内部，设备才是外层容器，但当前把 Agent 摆在了设备外层，且 Agent 选择只对「本机」节点生效，对其他设备节点无意义（远程侧还没有 Agent 维度）。
+
+**目标模型：Agent 为主体，设备为元数据**
+
+- **助手侧栏 = Agent→会话 嵌套列表**：列出所有可见 Agent，每个展开是它的会话。取代当前的「设备→会话树」，也取代计划一的「图标条」（图标条移除，两者是同一个改动）。
+- **设备信息降级为元数据**：Agent 所属的宿主设备，显示在对话上方的标题栏 / 详情区，不再是导航层级。
+- **只能创建本机 Agent**：Agent 创建始终针对当前设备。
+- **远程 Agent 按需出现**：同账号的其他设备上、开启了「远程访问」（`remote_enabled`）的 Agent，才会出现在当前设备的 Agent 列表里（带宿主设备徽章）。这依赖计划二的云端注册——各设备把 `remote_enabled` 的 Agent 元数据注册到云端，当前设备才能拉到「同账号其他设备有哪些远程 Agent」。
+
+**两端同构**：web-main 的起手台 / 侧栏也从「设备列表」变成「Agent 列表（每个标注宿主设备）」，与 web-agent 一致。这与 §4.5 已述的方向合并。
+
+**迁移路径**：
+- 计划一（已交付）：本机多 Agent，临时用图标条 + 保留设备树。
+- 计划二：① 云端注册（`remote_enabled` Agent 元数据推送到云端，全量对账）；② 云端寻址从 deviceId 改 agentId；③ **本机侧栏重构**成 Agent→会话嵌套列表，移除图标条，设备移到会话头部；④ 远程设备节点被「远程 Agent（带设备徽章）」取代；⑤ web-main 同构。①②④⑤ 依赖云端，③ 纯本地但与①②④绑在一次重构里做，避免中间态别扭布局。
+
+---
+
+## 10. 关键文件清单
 
 **本地轨**
 
 ```
 libs/agent/src/graph/graph-runner.service.ts        人格注入（3.2 核心改造点）
-libs/agent/src/graph/account-graph.provider.ts      图缓存 key / checkpointer 不变量
+libs/agent/src/graph/account-graph.provider.ts      不改（checkpointer 账号级不变量的持有者）
 libs/agent/src/graph/graph.builder.ts               reducer 原地替换机制
 libs/agent/src/graph/context-builder.ts             system:ctx / system:skills 组装
 libs/agent/src/graph/model-resolver.service.ts      模型解析三级优先级

@@ -1,7 +1,12 @@
 {
   "common": {
     "switchToLightTheme": "切换到浅色",
-    "switchToDarkTheme": "切换到深色"
+    "switchToDarkTheme": "切换到深色",
+    "close": "关闭",
+    "alertTitle": "提示",
+    "gotIt": "知道了",
+    "cancel": "取消",
+    "confirm": "确认"
   },
   "login": {
     "title": "登录",
@@ -39,10 +44,60 @@
     }
   },
   "modelSetupGate": {
-    "title": "组织还没有可用的模型配置",
-    "description": "请组织管理员在云端配置模型后，回到本地刷新即可继续使用。",
+    "title": "还没有可用的模型",
+    "description": "新建一个本地模型即可使用，也可以在云端组织中配置。",
+    "configureLocal": "新建本地模型",
+    "configureLocalDescription": "填写供应商与 API Key，保存后立即可用。",
     "configureInCloud": "在云端配置",
-    "refresh": "刷新"
+    "refresh": "刷新",
+    "createFailed": "创建失败，请重试"
+  },
+  "modelForm": {
+    "provider": "供应商",
+    "selectProvider": "请选择供应商",
+    "name": "名称",
+    "namePlaceholder": "留空按供应商与模型自动生成",
+    "model": "模型",
+    "modelPlaceholder": "例如：gpt-4o",
+    "apiKey": "API Key",
+    "apiKeyPlaceholder": "sk-...",
+    "apiKeyEditHint": "留空表示不更改当前密钥",
+    "baseUrl": "API 地址",
+    "baseUrlPlaceholder": "留空使用供应商默认地址",
+    "contextWindow": "上下文窗口（可选）",
+    "contextWindowPlaceholder": "留空按模型自动解析",
+    "contextWindowPositive": "上下文窗口必须是正整数",
+    "submit": "保存",
+    "saving": "保存中...",
+    "cancel": "取消"
+  },
+  "modelSettings": {
+    "title": "模型",
+    "newLocalModel": "新建本地模型",
+    "editTitle": "编辑本地模型",
+    "formDescription": "本地模型仅保存在这台设备上，云端组织成员不可见。",
+    "badgeLocal": "本地",
+    "badgeCloud": "云端",
+    "edit": "编辑",
+    "delete": "删除",
+    "enable": "已启用",
+    "disable": "已停用",
+    "cloudReadonlyHint": "云端组织下发，只读；编辑请前往云端组织设置",
+    "empty": "还没有模型配置，新建一个本地模型开始使用",
+    "colName": "名称",
+    "colProvider": "供应商",
+    "colModel": "模型",
+    "colSource": "来源",
+    "colStatus": "状态",
+    "loading": "加载中...",
+    "loadFailed": "加载模型配置失败",
+    "saveFailed": "保存失败，请重试",
+    "deleteFailed": "删除失败，请重试",
+    "toggleFailed": "切换启用状态失败，请重试",
+    "deleteConfirmTitle": "删除该模型配置？",
+    "deleteConfirmDescription": "删除后无法恢复，使用该配置的 Agent 将无法继续调用该模型。",
+    "dismiss": "关闭",
+    "cancel": "取消"
   },
   "assistantDock": {
     "title": "随手问",
@@ -125,6 +180,7 @@
     "comingSoon": "即将上线",
     "agentLocal": "本地",
     "agentComingSoon": "其他设备即将支持",
+    "hostOffline": "{device}（离线）",
     "workspaceDefault": "默认工作区",
     "modelSelect": "选择模型"
   },
@@ -143,7 +199,8 @@
       "linkText": "链接文字",
       "bulletList": "无序列表",
       "numberedList": "有序列表"
-    }
+    },
+    "interruptUnavailable": "观察态下无法中断：这个 run 不是本端发起的"
   },
   "schedule": {
     "title": "计划任务",
@@ -187,6 +244,7 @@
     "deletePending": "删除",
     "cannotDeleteWhileProcessing": "消息已开始处理，无法删除",
     "cannotEditWhileProcessing": "消息已开始处理，无法编辑",
+    "cannotSendWhileRunning": "当前会话仍在生成回复，请等待完成或先点停止，再发送新消息",
     "networkError": "网络错误，请重试",
     "confirmOverwriteDraft": "覆盖当前输入框内容？",
     "reasoningProcess": "思考过程",
@@ -239,6 +297,9 @@
       "presentFailed": "呈现失败",
       "loading": "加载中…",
       "loadFailed": "产物已不存在或已变更",
+      "loadFailedNoSource": "无法确定该产物的来源，请刷新后重试",
+      "loadFailedRemoteRejected": "对方设备拒绝了这次产物访问请求",
+      "loadFailedRemoteUnreachable": "无法连接到对方设备，请确认对方设备在线后重试",
       "unsupported": "该类型不支持预览，请下载查看。",
       "tooLarge": "文件较大（{size} MB），无法直接远程预览",
       "tooLargeHint": "可上传到企业网盘后在本机预览",
@@ -248,7 +309,11 @@
       "previewTitle": "产物预览",
       "imageAlt": "产物"
     },
-    "runErrorPrefix": "运行失败："
+    "runErrorPrefix": "运行失败：",
+    "runErrorAgentNotRemotable": "该 Agent 不可远程访问（不存在或未开启远程），本次消息未发送",
+    "runErrorSessionAgentMismatch": "该会话不属于所选 Agent，本次消息未发送",
+    "runErrorOffline": "目标设备已离线，本次消息未发送",
+    "hitlSettledElsewhere": "已由其他端应答"
   },
   "newMessage": {
     "title": "新消息",
@@ -280,6 +345,7 @@
   "settingsSidebar": {
     "title": "设置",
     "usage": "使用情况",
+    "models": "模型",
     "scheduled": "定时任务"
   },
   "assistantSidebar": {
@@ -293,7 +359,10 @@
     "devicesLoadFailed": "设备列表加载失败",
     "remoteSessionTitle": "远程会话",
     "remoteLoadFailed": "远程会话加载失败",
-    "remoteEmpty": "该设备暂无会话"
+    "remoteEmpty": "该设备暂无会话",
+    "editAgent": "编辑 Agent",
+    "newAgent": "新建 Agent",
+    "sessionDeletedElsewhere": "该会话已在其他设备被删除，已为你返回起始页"
   },
   "messages": {
     "title": "消息",
@@ -332,6 +401,8 @@
     "copy": "复制"
   },
   "home": {
+    "remoteCreateTimeout": "远程会话未在预期时间内创建。请确认目标 Agent 已开启远程访问，且所在设备在线，然后重试。",
+    "sendFailed": "发送失败，请重试",
     "title": "接下来做什么？",
     "slogan": "你的工作副驾",
     "titles": {
@@ -528,10 +599,10 @@
   "skills": {
     "title": "技能",
     "loading": "加载中…",
-    "installed": "已安装",
     "installedTitle": "已安装技能",
+    "installedTitleFor": "{name} 的技能",
     "installedEmpty": "暂未安装任何技能",
-    "viewInstalled": "查看全部",
+    "agentsSectionTitle": "Agent",
     "market": "市场来源",
     "sourceOurMarket": "MeshBot",
     "sourceGithub": "GitHub",
@@ -642,5 +713,58 @@
     "shareLinkExpire30": "30 天",
     "shareLinkExpireNever": "永久",
     "shareLinkPasswordPlaceholder": "设置访问密码（可选）"
+  },
+  "agent": {
+    "railLabel": "Agent 导航",
+    "newAgent": "新建 Agent",
+    "editAgent": "编辑 {name}",
+    "editor": {
+      "createTitle": "新建 Agent",
+      "editTitle": "编辑 Agent",
+      "createDescription": "配置一个新的 Agent 人格：名字、头像、说明与系统提示词。",
+      "editDescription": "修改人格后，该 Agent 的既有会话下一轮回复即生效。",
+      "duplicateFromLabel": "从现有 Agent 复制",
+      "duplicateFromPlaceholder": "选择要复制配置的 Agent",
+      "duplicating": "复制中…",
+      "duplicateFailed": "复制失败，请重试",
+      "loadingAgent": "正在加载 Agent 信息…",
+      "agentNotFound": "该 Agent 已被删除或不存在",
+      "fieldName": "名字",
+      "fieldNamePlaceholder": "给这个 Agent 起个名字",
+      "fieldAvatar": "头像",
+      "avatarEmojiOption": "选择头像表情 {emoji}",
+      "avatarEmojiCustomPlaceholder": "自定义",
+      "avatarEmojiCustomLabel": "自定义头像表情",
+      "avatarColorOption": "选择头像背景色 {color}",
+      "fieldDescription": "描述",
+      "fieldDescriptionPlaceholder": "一句话说明这个 Agent 是做什么的（可选）",
+      "fieldSystemPrompt": "系统提示词",
+      "fieldSystemPromptPlaceholder": "定义这个 Agent 的人格、语气与行为准则……",
+      "fieldDefaultModel": "默认模型",
+      "fieldDefaultModelPlaceholder": "选择默认模型",
+      "fieldDefaultModelFollowAccount": "跟随账号默认",
+      "fieldRemoteEnabled": "允许远程",
+      "fieldRemoteEnabledHint": "打开后，你在其他设备或网页上可以远程调度这个 Agent",
+      "save": "保存",
+      "saving": "保存中…",
+      "saveFailed": "保存失败，请重试",
+      "cancel": "取消",
+      "delete": "删除",
+      "deleting": "删除中…",
+      "deleteFailed": "删除失败，请重试",
+      "deleteDisabledHint": "至少保留一个 Agent，无法删除最后一个",
+      "deleteConfirmTitle": "确认删除这个 Agent？",
+      "deleteConfirmDescription": "会同时删除该 Agent 的全部会话、记忆与工作区文件，不可恢复。",
+      "deleteConfirm": "确认删除",
+      "mcpTitle": "MCP 服务器配置",
+      "mcpDescription": "编辑该 Agent 的 mcp.json，保存后下次对话生效。",
+      "mcpLoadFailed": "加载 MCP 配置失败，请重试",
+      "mcpPlaceholder": "粘贴 mcp.json 内容，如 Claude Desktop / Claude Code 的 mcpServers 配置",
+      "mcpJsonInvalid": "JSON 格式错误：{detail}",
+      "mcpSave": "保存 MCP 配置",
+      "mcpSaving": "保存中…",
+      "mcpSaveSuccess": "已保存",
+      "mcpSaveFailed": "保存失败，请重试"
+    }
   }
 }

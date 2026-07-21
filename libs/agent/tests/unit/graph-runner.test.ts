@@ -8,6 +8,7 @@ import { EventEmitter2 } from "@nestjs/event-emitter";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { AccountContextService } from "../../src/account/account-context.service";
+import { AgentContextService } from "../../src/account/agent-context.service";
 import { MeshbotConfigService } from "../../src/config/meshbot-config.service";
 import { AccountGraphProvider } from "../../src/graph/account-graph.provider";
 import { ContextBuilder } from "../../src/graph/context-builder.js";
@@ -28,7 +29,10 @@ function makeTestServices(testDir: string): {
   promptService: PromptService;
 } {
   const ctx = new AccountContextService();
-  const configService = new MeshbotConfigService(ctx);
+  const configService = new MeshbotConfigService(
+    ctx,
+    new AgentContextService(),
+  );
   (configService as unknown as Record<string, string>).meshbotDir = testDir;
   const promptService = new PromptService(configService, ctx);
   return { ctx, configService, promptService };
@@ -49,12 +53,15 @@ function makeServices(opts: {
     new ToolRegistry(
       { getProviders: () => [] } as never,
       new AccountContextService(),
+      new AgentContextService(),
     );
   const eventEmitter = opts.eventEmitter ?? new EventEmitter2();
   const modelResolver = new ModelResolver(
-    opts.configService,
     opts.account,
     new ModelRunContext(),
+    // 测试全程走 overrideProvider（下方），resolveModel() 不会被调用，
+    // 这里给个不会命中的占位端口即可。
+    { resolveActive: async () => null, resolveById: async () => null },
     () => Promise.resolve(opts.fakeModel as never),
     { providerType: "fake", model: "fake-model" },
   );
@@ -74,7 +81,6 @@ function makeServices(opts: {
   );
   const threadState = new ThreadStateService(accountGraphProvider);
   const graphRunner = new GraphRunner(
-    opts.promptService,
     accountGraphProvider,
     modelResolver,
     contextBuilder,
@@ -297,6 +303,7 @@ describe("GraphRunner", () => {
     const toolRegistry2 = new ToolRegistry(
       fakeDisc as never,
       new AccountContextService(),
+      new AgentContextService(),
     );
     toolRegistry2.onModuleInit();
     // echoTool 是纯对象（无 @Tool() 装饰器），onModuleInit 扫不到，需手动注册
@@ -381,6 +388,7 @@ describe("GraphRunner", () => {
     const toolRegistry3 = new ToolRegistry(
       { getProviders: () => [] } as never,
       new AccountContextService(),
+      new AgentContextService(),
     );
     const { graphRunner: gr3 } = makeServices({
       configService: cfg3,
@@ -428,12 +436,16 @@ describe("GraphRunner system:ctx 刷新不累积", () => {
 
   it("连续两次 streamMessage 后 state 里 id===system:ctx 的消息恰好 1 条", async () => {
     const ctx = new AccountContextService();
-    const configService = new MeshbotConfigService(ctx);
+    const configService = new MeshbotConfigService(
+      ctx,
+      new AgentContextService(),
+    );
     (configService as unknown as Record<string, string>).meshbotDir = testDir;
     const promptService = new PromptService(configService, ctx);
     const toolRegistry = new ToolRegistry(
       { getProviders: () => [] } as never,
       new AccountContextService(),
+      new AgentContextService(),
     );
 
     // 使用能正确驱动 messages 流的 BaseChatModel 子类
@@ -521,6 +533,208 @@ describe("GraphRunner system:ctx 刷新不累积", () => {
       typeof ctxMsgs[0].content === "string" ? ctxMsgs[0].content : "";
     expect(ctxContent).toContain("sessionId:");
     expect(ctxContent).toContain("cloudUserId:");
+  });
+});
+
+// ─── system:persona 每轮刷新 ────────────────────────────────────────────────
+//
+// 背景（Task 7，全案最容易踩的坑）：人格若只在首轮注入 checkpointer，之后永不
+// 刷新——多 Agent 下用户改了 Agent 的 systemPrompt 或换了 Agent，旧会话仍带旧
+// 人格，且静默不报错。同时人格靠稳定 id "system:persona" + mergeMessages
+// reducer「同 id 原地替换」防止在 checkpointer 里越攒越多；如果这个 id 被写
+// 错（大小写 / 拼写），reducer 不会命中替换，新旧两条人格消息会同时留在
+// checkpointer 里、一起进 LLM context——静默故障。
+//
+// 两个用例都真实跑两轮（不替换 pickGraph、不 mock stream），直接读
+// checkpointer 的 getState() 快照断言，跟上面 system:ctx 的验证方式一致：
+// 只看最终 state 才能同时抓住「累积成两条」和「内容没刷新成最新」两类回归。
+
+describe("GraphRunner system:persona 每轮刷新", () => {
+  let testDir: string;
+
+  beforeEach(() => {
+    testDir = mkdtempSync(path.join(tmpdir(), "meshbot-persona-refresh-test-"));
+    mkdirSync(path.join(testDir, "prompt"), { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(testDir, { recursive: true, force: true });
+  });
+
+  it("连续两轮 streamMessage 后 checkpointer 里 system:persona 恰好 1 条（不累积）", async () => {
+    const ctx = new AccountContextService();
+    const configService = new MeshbotConfigService(
+      ctx,
+      new AgentContextService(),
+    );
+    (configService as unknown as Record<string, string>).meshbotDir = testDir;
+    const promptService = new PromptService(configService, ctx);
+    const toolRegistry = new ToolRegistry(
+      { getProviders: () => [] } as never,
+      new AccountContextService(),
+      new AgentContextService(),
+    );
+
+    class SimpleModel extends (
+      await import("@langchain/core/language_models/chat_models")
+    ).BaseChatModel {
+      private callCount = 0;
+      _llmType() {
+        return "simple-fake";
+      }
+      async _generate(): Promise<never> {
+        throw new Error("不应走 _generate");
+      }
+      async *_streamResponseChunks(): AsyncGenerator<ChatGenerationChunk> {
+        this.callCount += 1;
+        const msgId = `msg-persona-${this.callCount}`;
+        yield new ChatGenerationChunk({
+          message: new AIMessageChunk({ id: msgId, content: "ok" }),
+          text: "ok",
+        });
+      }
+    }
+
+    const fakePort: RuntimeContextPort = {
+      resolve: async () => ({
+        displayName: null,
+        language: null,
+        timezone: null,
+        agentName: "M",
+        agentSystemPrompt: "初始人格",
+      }),
+    };
+
+    const { graphRunner: gr, threadState: ts } = makeServices({
+      configService,
+      promptService,
+      account: ctx,
+      fakeModel: new SimpleModel({}),
+      toolRegistry,
+      runtimeContext: fakePort,
+    });
+
+    const threadId = await gr.startSession({ model: "fake" });
+
+    // 第一轮：真实跑一次，建立 checkpointer 历史
+    await ctx.run(TEST_ACCOUNT, async () => {
+      for await (const _ of gr.streamMessage(threadId, [
+        { id: "pm-1", content: "hi" },
+      ])) {
+        // 消费完
+      }
+    });
+
+    // 第二轮：仍然真实跑（不替换 pickGraph），systemPrompt 未变——验证即便内容
+    // 相同，reducer 也是原地替换而不是每轮多攒一条
+    await ctx.run(TEST_ACCOUNT, async () => {
+      for await (const _ of gr.streamMessage(threadId, [
+        { id: "pm-2", content: "hello" },
+      ])) {
+        // 消费完
+      }
+    });
+
+    // 直接从 checkpointer 读最终 state 快照，而非拦截 stream 的中间 input——
+    // 只有读最终 state 才能同时抓住「累积成两条」这类回归
+    const snapshot = await ctx.run(TEST_ACCOUNT, () =>
+      ts.getMessagesSnapshot(threadId),
+    );
+    const personaMsgs = snapshot.filter((m) => m.id === "system:persona");
+    expect(personaMsgs.length).toBe(1);
+    expect(String(personaMsgs[0].content)).toContain("初始人格");
+  });
+
+  it("改了 Agent 的 systemPrompt，checkpointer 里的 system:persona 仍恰好 1 条且内容是新人格", async () => {
+    const ctx = new AccountContextService();
+    const configService = new MeshbotConfigService(
+      ctx,
+      new AgentContextService(),
+    );
+    (configService as unknown as Record<string, string>).meshbotDir = testDir;
+    const promptService = new PromptService(configService, ctx);
+    const toolRegistry = new ToolRegistry(
+      { getProviders: () => [] } as never,
+      new AccountContextService(),
+      new AgentContextService(),
+    );
+
+    class SimpleModel extends (
+      await import("@langchain/core/language_models/chat_models")
+    ).BaseChatModel {
+      private callCount = 0;
+      _llmType() {
+        return "simple-fake";
+      }
+      async _generate(): Promise<never> {
+        throw new Error("不应走 _generate");
+      }
+      async *_streamResponseChunks(): AsyncGenerator<ChatGenerationChunk> {
+        this.callCount += 1;
+        const msgId = `msg-persona-b-${this.callCount}`;
+        yield new ChatGenerationChunk({
+          message: new AIMessageChunk({ id: msgId, content: "ok" }),
+          text: "ok",
+        });
+      }
+    }
+
+    // 可变 RuntimeContextPort：模拟两轮之间用户改了 Agent 的 systemPrompt
+    let currentPrompt = "初始人格";
+    const mutablePort: RuntimeContextPort = {
+      resolve: async () => ({
+        displayName: null,
+        language: null,
+        timezone: null,
+        agentName: "M",
+        agentSystemPrompt: currentPrompt,
+      }),
+    };
+
+    const { graphRunner: gr, threadState: ts } = makeServices({
+      configService,
+      promptService,
+      account: ctx,
+      fakeModel: new SimpleModel({}),
+      toolRegistry,
+      runtimeContext: mutablePort,
+    });
+
+    const threadId = await gr.startSession({ model: "fake" });
+
+    // 第一轮：真实跑一次，把「初始人格」写进 checkpointer 历史
+    await ctx.run(TEST_ACCOUNT, async () => {
+      for await (const _ of gr.streamMessage(threadId, [
+        { id: "pm-1", content: "hi" },
+      ])) {
+        // 消费完
+      }
+    });
+
+    currentPrompt = "全新人格";
+
+    // 第二轮：仍然真实跑（不替换 pickGraph），走真实的 StateGraph /
+    // checkpointer / mergeMessages reducer
+    await ctx.run(TEST_ACCOUNT, async () => {
+      for await (const _ of gr.streamMessage(threadId, [
+        { id: "pm-2", content: "hello" },
+      ])) {
+        // 消费完
+      }
+    });
+
+    // 直接读 checkpointer 最终 state 快照断言：
+    // 1) system:persona 恰好 1 条——证明 reducer 原地替换、没有把旧的一条也
+    //    留下攒成两条（id 写错时会退化成两条不同 id 的消息，这里就会不等于 1）
+    // 2) 内容是第二轮的新人格、且不含第一轮的旧人格
+    const snapshot = await ctx.run(TEST_ACCOUNT, () =>
+      ts.getMessagesSnapshot(threadId),
+    );
+    const personaMsgs = snapshot.filter((m) => m.id === "system:persona");
+    expect(personaMsgs.length).toBe(1);
+    const personaContent = String(personaMsgs[0].content);
+    expect(personaContent).toContain("全新人格");
+    expect(personaContent).not.toContain("初始人格");
   });
 });
 

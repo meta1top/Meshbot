@@ -12,10 +12,30 @@ import type { TimelineMessage } from "@/components/session/message-list";
  * - 同时只弹**第一个**新产物；同一产物（toolCallId 唯一）不会重复弹出。
  *
  * seen 累积跨会话无妨：toolCallId 全局唯一，历史产物一旦记入 seen 就不会再弹。
+ *
+ * `agentId`（Task 12）：自动弹出的产物走本机 `path` 源，须带上该会话的
+ * agentId 才能拼出正确的 workspace 相对 URL（见 `PreviewArtifact.agentId`
+ * 注释），否则多 Agent 下非默认 Agent 的产物会 404。
+ *
+ * `remote`（真机验收缺陷 3）：远程会话必须传入该会话的对端设备描述符。原实现
+ * 漏传 `remote`，`setArtifact` 恒走 `{path, agentId}` 本机分支——产物预览请求
+ * 打在本机自己的 server-agent 上，本机 workspace 没有对端产出的文件，404 后被
+ * `artifact-body.tsx` 归一成「产物已不存在或已变更」，把排查方向带偏到远端
+ * 白名单上。这条自动弹出路径此前一直没被走到（`running` 在远程会话上恒为
+ * false，直到 T18/T19 观察通道接上才第一次点亮），是条真实存在但从未暴露过
+ * 的死代码。与 `assistant-conversation-body.tsx` 的 `onPreviewArtifact`
+ * （`agentId: target.remote ? undefined : sessionAgentId`）保持同一份
+ * 「remote 优先、二选一互斥」语义，不重复发明。
  */
 export function useAutoOpenArtifact(
   messages: TimelineMessage[],
   running: boolean,
+  agentId: string | undefined,
+  // **必填（可为 null），不能写成 `remote?:`。** review 实测：写成可选时，把调用点
+  // 的第 4 个实参整个删掉——也就是原样复现缺陷 3 的那个 bug——165 个测试全绿、
+  // `tsc --noEmit` 也是 0。调用点没有任何测试覆盖，靠测试兜不住；改成必填后，
+  // 漏传直接是编译错误，类型系统替我们守住这条不变量。
+  remote: { deviceId: string; sessionId: string } | null,
 ): void {
   const setArtifact = useSetAtom(previewArtifactAtom);
   // 同一产物（toolCallId）只弹一次的去重集合，与 assistantPanelTypeAtom 无关。
@@ -48,6 +68,10 @@ export function useAutoOpenArtifact(
       return;
     }
     const first = fresh[0];
-    setArtifact({ path: first.path, title: first.title });
-  }, [messages, running, setArtifact]);
+    setArtifact(
+      remote
+        ? { path: first.path, title: first.title, remote }
+        : { path: first.path, title: first.title, agentId },
+    );
+  }, [messages, running, setArtifact, agentId, remote]);
 }

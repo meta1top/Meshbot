@@ -9,6 +9,7 @@ import {
   RunCompactionDoneEventSchema,
   RunCompactionErrorEventSchema,
   RunCompactionStartEventSchema,
+  RunHitlSettledEventSchema,
   RunUsageEventSchema,
   SESSION_WS_EVENTS,
   SessionDeleteResponseSchema,
@@ -30,6 +31,36 @@ describe("session schemas", () => {
 
   it("CreateSessionSchema 拒绝空 content", () => {
     expect(() => CreateSessionSchema.parse({ content: "" })).toThrow();
+  });
+
+  it("CreateSessionSchema 接受非空 agentId", () => {
+    expect(
+      CreateSessionSchema.parse({ content: "hello", agentId: "agent-1" }),
+    ).toEqual({ content: "hello", agentId: "agent-1" });
+  });
+
+  it("CreateSessionSchema 拒绝空字符串 agentId（防止绕过兜底落库空串）", () => {
+    expect(() =>
+      CreateSessionSchema.parse({ content: "hello", agentId: "" }),
+    ).toThrow();
+  });
+
+  it("CreateSessionSchema 未传 agentId 时省略该字段（走 Controller 兜底）", () => {
+    expect(CreateSessionSchema.parse({ content: "hello" })).toEqual({
+      content: "hello",
+    });
+  });
+
+  it("CreateSessionSchema 接受非空 modelConfigId", () => {
+    expect(
+      CreateSessionSchema.parse({ content: "hello", modelConfigId: "mc-1" }),
+    ).toEqual({ content: "hello", modelConfigId: "mc-1" });
+  });
+
+  it("CreateSessionSchema 拒绝空字符串 modelConfigId（防止绕过三级优先级落库空串，缺陷 1）", () => {
+    expect(() =>
+      CreateSessionSchema.parse({ content: "hello", modelConfigId: "" }),
+    ).toThrow();
   });
 
   it("SessionStatus 枚举包含 idle / running", () => {
@@ -137,6 +168,7 @@ describe("session schemas — sidebar list", () => {
       pinnedAt: null,
       titleGenerated: false,
       modelConfigId: null,
+      agentId: "agent-1",
       createdAt: "2026-05-24T00:00:00.000Z",
       updatedAt: "2026-05-24T00:00:00.000Z",
     });
@@ -159,6 +191,16 @@ describe("session schemas — sidebar list", () => {
     ).toThrow();
   });
 
+  it("SessionPatchSchema 接受非空 modelConfigId", () => {
+    expect(
+      SessionPatchSchema.parse({ modelConfigId: "mc-1" }).modelConfigId,
+    ).toBe("mc-1");
+  });
+
+  it("SessionPatchSchema 拒绝空字符串 modelConfigId（防止绕过三级优先级落库空串，缺陷 1）", () => {
+    expect(() => SessionPatchSchema.parse({ modelConfigId: "" })).toThrow();
+  });
+
   it("SessionListResponseSchema 是 sessions 数组", () => {
     const ok = SessionListResponseSchema.parse({ sessions: [] });
     expect(ok.sessions).toEqual([]);
@@ -175,6 +217,7 @@ describe("session schemas — sidebar list", () => {
         pinnedAt: null,
         titleGenerated: false,
         modelConfigId: null,
+        agentId: "agent-1",
         createdAt: "2026-05-24T00:00:00.000Z",
         updatedAt: "2026-05-24T00:00:00.000Z",
       },
@@ -202,6 +245,7 @@ describe("session schemas — title generation", () => {
       pinnedAt: null,
       titleGenerated: true,
       modelConfigId: null,
+      agentId: "agent-1",
       createdAt: "2026-05-24T00:00:00.000Z",
       updatedAt: "2026-05-24T00:00:00.000Z",
     });
@@ -216,6 +260,38 @@ describe("session schemas — title generation", () => {
         status: "idle",
         pinned: false,
         pinnedAt: null,
+        createdAt: "2026-05-24T00:00:00.000Z",
+        updatedAt: "2026-05-24T00:00:00.000Z",
+      }),
+    ).toThrow();
+  });
+
+  it("SessionSummarySchema 含必填 agentId 字段（Task 12：前端按 agent 过滤会话列表用）", () => {
+    const ok = SessionSummarySchema.parse({
+      id: "s1",
+      title: "hi",
+      status: "idle",
+      pinned: false,
+      pinnedAt: null,
+      titleGenerated: true,
+      modelConfigId: null,
+      agentId: "agent-9",
+      createdAt: "2026-05-24T00:00:00.000Z",
+      updatedAt: "2026-05-24T00:00:00.000Z",
+    });
+    expect(ok.agentId).toBe("agent-9");
+  });
+
+  it("SessionSummarySchema 缺 agentId 直接 reject", () => {
+    expect(() =>
+      SessionSummarySchema.parse({
+        id: "s1",
+        title: "hi",
+        status: "idle",
+        pinned: false,
+        pinnedAt: null,
+        titleGenerated: true,
+        modelConfigId: null,
         createdAt: "2026-05-24T00:00:00.000Z",
         updatedAt: "2026-05-24T00:00:00.000Z",
       }),
@@ -288,5 +364,26 @@ describe("Context compaction WS events", () => {
       lastInputTokens: 100,
     });
     expect(t.lastInputTokens).toBe(100);
+  });
+});
+
+describe("HITL 关卡广播帧（run.hitl_settled，Task 17）", () => {
+  it("RunHitlSettledEventSchema 校验 sessionId/toolCallId/by", () => {
+    const payload = { sessionId: "s1", toolCallId: "t1", by: "observer" };
+    expect(RunHitlSettledEventSchema.parse(payload)).toEqual(payload);
+  });
+
+  it("RunHitlSettledEventSchema 的 by 只接受 local/remote/observer", () => {
+    expect(() =>
+      RunHitlSettledEventSchema.parse({
+        sessionId: "s1",
+        toolCallId: "t1",
+        by: "bogus",
+      }),
+    ).toThrow();
+  });
+
+  it("SESSION_WS_EVENTS.runHitlSettled 常量存在", () => {
+    expect(SESSION_WS_EVENTS.runHitlSettled).toBe("run.hitl_settled");
   });
 });

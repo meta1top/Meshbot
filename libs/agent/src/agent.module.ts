@@ -1,7 +1,7 @@
 import { Module } from "@nestjs/common";
 import { DiscoveryModule } from "@nestjs/core";
-import { EventEmitterModule } from "@nestjs/event-emitter";
 import { AccountContextModule } from "./account/account-context.module";
+import { AgentContextModule } from "./account/agent-context.module";
 import { MeshbotConfigModule } from "./config/meshbot-config.module";
 import { AccountGraphProvider } from "./graph/account-graph.provider";
 import { ContextBuilder } from "./graph/context-builder";
@@ -34,7 +34,7 @@ import { ScheduleListTool } from "./tools/builtins/schedule-list.tool";
 import { SkillInstallTool } from "./tools/builtins/skill-install.tool";
 import { SkillListTool } from "./tools/builtins/skill-list.tool";
 import { SkillLoadTool } from "./tools/builtins/skill-load.tool";
-import { RenameQuickAssistantTool } from "./tools/builtins/rename-quick-assistant.tool";
+import { RenameAgentTool } from "./tools/builtins/rename-agent.tool";
 import { ImUnreadOverviewTool } from "./tools/builtins/im-unread-overview.tool";
 import { ImReadConversationTool } from "./tools/builtins/im-read-conversation.tool";
 import { ImListMembersTool } from "./tools/builtins/im-list-members.tool";
@@ -53,15 +53,31 @@ import { SkillUninstallTool } from "./tools/builtins/skill-uninstall.tool";
 import { DispatchSubagentTool } from "./tools/builtins/dispatch-subagent.tool";
 
 @Module({
-  // EventEmitterModule.forRoot() 在 app 层（apps/server-agent app.module）也调；
-  // NestJS 对同一个 module 类的重复 forRoot 调用做去重，最终全局只有一个
-  // EventEmitter2 实例。本处仍然 import 是为了 libs/agent 的独立集成测试
-  // （tests/integration/agent.module.test.ts）能解析 GraphRunner 的依赖。
+  // **这里绝不能再 import `EventEmitterModule.forRoot()`。**
+  //
+  // 曾经这么写过，并配了一句「NestJS 对重复 forRoot 去重，全局只有一个
+  // EventEmitter2」——那句话是错的：`forRoot()` 每次返回一个**新的**
+  // DynamicModule 对象，NestJS 按动态模块身份去重，app 层调一次 + 这里调一次
+  // ＝ 两个模块实例 ＝ **两个 EventEmitter2**。
+  //
+  // 它造成的故障极其难查，因为「一半功能是好的」：`@OnEvent` 由每个
+  // EventEmitterModule 实例各自用 DiscoveryService 扫全部 provider 绑定，
+  // 所以装饰器监听在**两个**实例上都注册（SessionGateway 照常转发到本地房间，
+  // 本地 UI 全对）；而运行时 `emitter.on()`（SessionFrameForwarder 跨设备镜像）
+  // 只挂在注入的那一个上。于是：RunnerService 发的 run.tool_call_args_delta
+  // 走实例 A，转发器收得到；图执行（tools.node.ts）经 AccountGraphProvider 发的
+  // run.tool_call_start / run.tool_call_end 走实例 B，转发器**永远收不到** ——
+  // 表现为「云端观察端工具卡永远转圈、todo/present_file 特化卡不渲染，而本地
+  // 一切正常」，排查了整整四轮才靠埋点钉死。
+  //
+  // 唯一持有方是 app 层（`apps/server-agent/src/app.module.ts`），`forRoot()` 是
+  // @Global 的，本模块的 provider 直接注入即可。libs/agent 的独立集成测试自己
+  // import 一份（见 tests/integration/agent.module.test.ts）。
   imports: [
     AccountContextModule,
+    AgentContextModule,
     DiscoveryModule,
     MeshbotConfigModule,
-    EventEmitterModule.forRoot(),
   ],
   providers: [
     ToolRegistry,
@@ -85,7 +101,7 @@ import { DispatchSubagentTool } from "./tools/builtins/dispatch-subagent.tool";
     SkillUninstallTool,
     SkillSearchMarketTool,
     SkillPublishTool,
-    RenameQuickAssistantTool,
+    RenameAgentTool,
     ImUnreadOverviewTool,
     ImReadConversationTool,
     ImListMembersTool,

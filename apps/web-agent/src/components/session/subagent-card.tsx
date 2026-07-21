@@ -86,7 +86,18 @@ function SubagentGlyph({ status }: { status: string }) {
  *   终态的卡无起点、不显示。
  * - 收起只隐藏展开体 DOM，不卸载流；卸载时 hook 自清理。
  */
-export function SubagentCard({ tool }: { tool: ToolCallView }) {
+export function SubagentCard({
+  tool,
+  agentId,
+}: {
+  tool: ToolCallView;
+  /**
+   * 父会话的 agentId（Task 12）：子会话继承父会话的真实 agentId（Task 2
+   * 保证），故原样透传给内部嵌套 `MessageList` 供产物预览拼 URL 用——不
+   * 让下层退化去读导航条当前选中的 agentId。
+   */
+  agentId?: string;
+}) {
   const t = useTranslations("session.subagent");
   const subSessionId = resolveSubSessionId(tool);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -98,16 +109,16 @@ export function SubagentCard({ tool }: { tool: ToolCallView }) {
   const transport = useMemo(
     () =>
       remote
-        ? createRemoteSessionTransport(remote.remoteDeviceId)
+        ? createRemoteSessionTransport(remote.remoteAgentId)
         : createLocalSessionTransport(),
     [remote],
   );
-  // remoteDeviceId 驱动 hook 的 remote 语义分支（历史走设备查询/不调本机 fetchPending）
+  // remoteAgentId 驱动 hook 的 remote 语义分支（历史走设备查询/不调本机 fetchPending）
   const sub = useSessionStream(
     subSessionId,
     scrollRef,
     transport,
-    remote?.remoteDeviceId ?? null,
+    remote?.remoteAgentId ?? null,
   );
   const [collapse, setCollapse] = useState<SubagentCollapse>({
     mode: "manual",
@@ -293,6 +304,7 @@ export function SubagentCard({ tool }: { tool: ToolCallView }) {
               onRegenerateOptimisticCut={() => {}}
               onConfirm={sub.confirm}
               onAnswer={sub.answer}
+              agentId={agentId}
             />
           </div>
           <div className="flex items-center gap-2 border-t border-border px-3 py-1 text-[11px] tabular-nums text-muted-foreground/60">

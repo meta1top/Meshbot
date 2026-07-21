@@ -137,6 +137,14 @@ app.on("activate", async () => {
     // 但重建窗口链路仍可能抛错，需捕获避免 UnhandledPromiseRejection。
     try {
       const agentUrl = await getAgentUrl();
+      // **await 之后必须重新判一次**：启动期点 dock 时，`whenReady` 那条也在等
+      // 同一个 `startAgentRuntime()` Promise（改成复用在途启动之后，两条会同时
+      // resolve）。不重判就会各建一个窗口，后建的还会覆盖 `mainWindow` 引用，
+      // 先建的那个成为再也管不到的孤儿窗。
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.show();
+        return;
+      }
       mainWindow = createWindow(agentUrl);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

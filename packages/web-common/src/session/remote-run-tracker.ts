@@ -10,26 +10,37 @@ interface StreamEntry {
   receivedFrame: boolean;
 }
 
+interface WatchEntry {
+  sessionId: string;
+  sequencer: FrameSequencer;
+}
+
 /** `AgentRunEnd.reason` → 合成 `run.error` 事件的错误文案（仅在该流从未收到过任何过程帧时使用）。 */
 const END_REASON_TEXT: Record<AgentRunEnd["reason"], string> = {
   offline: "对端设备离线，运行未能开始",
   error: "远程运行未能建立",
   interrupted: "远程运行已中断",
   done: "远程运行已结束",
+  agent_not_remotable: "目标 Agent 不可远程访问（不存在或未开启远程）",
+  session_agent_mismatch: "该会话不属于所选 Agent",
 };
 
 /**
- * L3 浏览器侧：单个 `SessionTransport` 实例名下发起的远程 run 流跟踪器。
- * 纯逻辑（无 socket 依赖），职责三项：
+ * L3 浏览器侧：单个 `SessionTransport` 实例名下发起的远程 run 流跟踪器，
+ * 兼「Agent 级观察通道」（watchId）的前端接收端。纯逻辑（无 socket 依赖），
+ * 职责四项：
  *
  * 1. **流归属过滤**——`ws/im` 是浏览器单例 socket，同一连接上可能同时挂着
  *    多个 `createRemoteSessionTransport` 实例（如主视图 + IM dock，各自面向
  *    不同/相同目标设备）。`handleFrame`/`handleEnd` 只处理本实例通过
- *    {@link register} 登记过的 streamId，其余（属于其它 transport 实例发起的
- *    流）一律忽略——不依赖服务端过滤，纯前端按 streamId 集合判定。
- * 2. **乱序重排**——每个 streamId 一个独立 {@link FrameSequencer}（不同流互不
- *    影响，一条流的重排缓冲不会卡住另一条）。
- * 3. **end 事件合成**——`agent.run.end` 本身多数情况下只是清理信号（B 侧总是
+ *    {@link register} 登记过的 streamId、{@link registerWatch} 登记过的
+ *    watchId，其余（属于其它 transport 实例发起/观察的流）一律忽略——不依赖
+ *    服务端过滤，纯前端按集合判定。
+ * 2. **乱序重排**——每个 streamId/watchId 一个独立 {@link FrameSequencer}
+ *    （不同流互不影响，一条流的重排缓冲不会卡住另一条；watch 通道额外开
+ *    `primeOnFirst`，见该类文档）。
+ * 3. **D6 重复投递抑制**——见 {@link handleFrame} 内联注释。
+ * 4. **end 事件合成**——`agent.run.end` 本身多数情况下只是清理信号（B 侧总是
  *    先发 run.done/run.error/run.interrupted 过程帧、才发 end，真正的终止语义
  *    已随过程帧送达，见 `remote-run-inbound.service.ts` 的
  *    `TERMINAL_REASON_BY_EVENT`）；但两种场景下**不会有任何过程帧**：网关判定
@@ -43,6 +54,13 @@ const END_REASON_TEXT: Record<AgentRunEnd["reason"], string> = {
  */
 export class RemoteRunTracker {
   private readonly streams = new Map<string, StreamEntry>();
+  /**
+   * 本实例观察（watch）中的通道：watchId → 条目。与 `streams` 分表的理由——
+   * 两者生命周期完全不同：stream 收到 `agentRunEnd` 即销毁（一次性），watch
+   * **跨多轮 run 存活**到显式 `releaseWatch`（常驻），混在一张表里必然会被
+   * `handleEnd` 的删除逻辑误清。
+   */
+  private readonly watches = new Map<string, WatchEntry>();
 
   /**
    * 登记一次本 transport 实例发起的 run（`startRun` 调用后立即调用）。
@@ -62,12 +80,68 @@ export class RemoteRunTracker {
   }
 
   /**
-   * 处理一帧 `AgentRunFrame`：非本实例发起的流返回空数组（忽略）；
-   * 已登记的流经该 streamId 专属的 `FrameSequencer` 重排后返回可吐出的事件。
+   * 登记一路观察通道（`watch_accepted{ok:true}` 到达后调用）。
+   * sequencer 开 `primeOnFirst`——观察者是中途接入，首帧 seq 不是 1。
+   */
+  registerWatch(watchId: string, sessionId: string): void {
+    this.watches.set(watchId, {
+      sessionId,
+      sequencer: new FrameSequencer({ primeOnFirst: true }),
+    });
+  }
+
+  /** 注销一路观察通道（unwatch / 组件卸载）。 */
+  releaseWatch(watchId: string): void {
+    this.watches.delete(watchId);
+  }
+
+  /**
+   * 只清 watch 表，不动 stream 表（D5 断线重连专用）。观察者 socket 断开时，
+   * 云端已把该连接名下的全部 watch 路由清掉（旧 watchId 在云端已失效），但
+   * 用户可能同时持有一条正在跑的自发起 stream（如刚点了发送、还没收到 end）
+   * ——那条 stream 与 socket 连接本身无关，不能被重连清理误伤，故与
+   * {@link reset} 分开一个只清半张表的入口。
+   */
+  resetWatches(): void {
+    this.watches.clear();
+  }
+
+  /** 该 watchId 是否本实例登记（供调用方短路无需处理的事件）。 */
+  ownsWatch(watchId: string): boolean {
+    return this.watches.has(watchId);
+  }
+
+  /**
+   * 处理一帧 `AgentRunFrame`。按 `streamId` / `watchId` 分流（协议保证二选一）：
+   *
+   * - `streamId`：本实例**自己发起**的远程 run（既有逻辑，零变化）。
+   * - `watchId`：本实例**观察**的通道。此处实现 spec **D6 重复投递抑制**——
+   *   若本实例同时持有**同一 sessionId** 的活跃 stream（自己刚发起的那轮），
+   *   watch 帧整条丢弃：设备侧对同一会话既走 per-run 转发器（回给发起方）
+   *   又走常驻转发器（镜像给观察者），发起方两条都收得到，不抑制就是双份。
+   *   按「持有期整段抑制」而非逐帧去重（D6 明确取此策略，简单且无状态爆炸）。
    */
   handleFrame(
     frame: AgentRunFrame,
   ): Array<{ event: string; payload: unknown }> {
+    if (frame.watchId) {
+      const entry = this.watches.get(frame.watchId);
+      if (!entry) return [];
+      const emitted = entry.sequencer.push({
+        seq: frame.seq,
+        event: frame.event,
+        payload: frame.payload,
+      });
+      // D6 抑制：**吃帧但保持记账**——必须先 push 再丢弃返回值，绝不能直接
+      // `return []` 跳过 sequencer。否则 nextExpectedSeq 冻结在抑制开始前的
+      // 值，而设备侧的 seq 计数器照常前进；抑制解除后的首帧 seq 远大于冻结值
+      // → 判为乱序塞进缓冲、永久等一批再也不会来的中间 seq → **通道卡死且
+      // 不自愈**。触发场景很自然：先观察某会话、再自己发消息接过去（watch
+      // 早已 prime 过），正是 spec 要求的「跨多轮 run 存活」。
+      if (this.hasActiveStreamFor(entry.sessionId)) return [];
+      return emitted;
+    }
+    if (!frame.streamId) return [];
     const entry = this.streams.get(frame.streamId);
     if (!entry) return [];
     entry.receivedFrame = true;
@@ -79,6 +153,24 @@ export class RemoteRunTracker {
       event: frame.event,
       payload: frame.payload,
     });
+  }
+
+  /**
+   * 本实例是否持有该会话的活跃 stream（D6 抑制判定）。公开而非私有——
+   * `session-transport.ts` 的 `onWatchAccepted` 合成 `run.snapshot` 前也要复用
+   * 这个判定（T12 review Finding 4）：`hasActiveStreamFor` 原本只在
+   * {@link handleFrame} 内部抑制 watch **帧**，但 `watch_accepted.inflight` 合成
+   * 的首发快照是无条件 emit 的，且 `useSessionStream.onSnapshot` 对正文是
+   * SET 覆盖而非累加——若本实例同时持有一条自己发起、正在流式输出的
+   * stream，watch 受理带回的 inflight 快照大概率比已累积的内容更旧，直接
+   * emit 会把正文回退一段，之后的增量帧接在旧基线上，中间那段永久丢失
+   * （要到 run.done 全量 SET 才自愈）。调用方复用这同一份判定，不新写一套。
+   */
+  hasActiveStreamFor(sessionId: string): boolean {
+    for (const entry of this.streams.values()) {
+      if (entry.sessionId === sessionId) return true;
+    }
+    return false;
   }
 
   /**
@@ -99,6 +191,9 @@ export class RemoteRunTracker {
         messageId: null,
         pendingIds: [],
         error: END_REASON_TEXT[end.reason],
+        // 同时透传结构化 reason：渲染层（MessageList）优先按它走 next-intl
+        // 专属文案，上面的中文常量退居兜底（未覆盖到的 reason / 非渲染消费方）。
+        reason: end.reason,
       } satisfies RunErrorEvent,
     };
   }
@@ -108,9 +203,10 @@ export class RemoteRunTracker {
     this.streams.delete(streamId);
   }
 
-  /** 清空全部登记（transport dispose 时调用，避免与后续新建的同类型实例
-   * 混淆残留状态；同一实例也可安全复用——清空后行为等同刚构造）。 */
+  /** 清空全部登记（stream + watch，transport dispose 时调用，避免与后续新建的
+   * 同类型实例混淆残留状态；同一实例也可安全复用——清空后行为等同刚构造）。 */
   reset(): void {
     this.streams.clear();
+    this.watches.clear();
   }
 }

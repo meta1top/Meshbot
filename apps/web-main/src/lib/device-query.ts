@@ -2,7 +2,12 @@
 
 import type { DeviceQueryKind, DeviceQueryRequestInput } from "@meshbot/types";
 import { IM_WS_EVENTS } from "@meshbot/types";
-import { DeviceQueryClient } from "@meshbot/web-common/session";
+// 直连子路径而非 `@meshbot/web-common/session` 桶装 barrel：barrel 把
+// `MarkdownContent`/`ArtifactBody` 等 JSX 组件也捆在一起，经 `@meshbot/design`
+// 再传递引入 `next-intl`/`react-markdown` 等纯 ESM 包——本文件只是 deviceQuery
+// 往返的纯逻辑单例，无需背上这条依赖链（也让 `session-transport.ts` 经本文件
+// 传递引入时仍可被 jest 独立加载，见 `session-transport.spec.ts` 排查记录）。
+import { DeviceQueryClient } from "@meshbot/web-common/session/device-query-client";
 import { getImSocket } from "./im-socket";
 
 /**
@@ -36,16 +41,18 @@ function ensure(): {
   return { socket, c: client };
 }
 
-/** 发起一次远程设备查询（correlationId 往返，默认 10s 超时）。 */
+/** 发起一次远程设备查询（correlationId 往返，默认 10s 超时）。
+ * `agentId`：目标云端 Agent id（计划二 2b：寻址从设备细化到设备上的某 Agent，
+ * 不是设备 id——见 `libs/types/src/im/im.schema.ts` 的 `targetAgentId`）。 */
 export function remoteQuery(
-  deviceId: string,
+  agentId: string,
   kind: DeviceQueryKind,
   params: DeviceQueryRequestInput["params"],
 ): Promise<unknown> {
   const { socket, c } = ensure();
   return c.query(
     (req) => socket.emit(IM_WS_EVENTS.deviceQueryRequest, req),
-    deviceId,
+    agentId,
     kind,
     params,
   );

@@ -26,6 +26,14 @@ export interface ToolCallView {
   subSessionId?: string;
   /** streaming = LLM 仍在流式生成本工具的参数（尚未开始执行）。 */
   status: "streaming" | "running" | "ok" | "error";
+  /**
+   * HITL 关卡已被应答的来源（Task 17，`run.hitl_settled` 广播帧写入）：非空
+   * 即该 confirm/ask 卡片已终局，即便 `status` 仍是 `"running"`——真正的工具
+   * 执行结果（`run.tool_call_end`）可能因实际副作用（发消息等）而晚到。卡片
+   * 据此立即禁用交互，避免用户对着一张早已失效的确认卡反复点击，或把自己
+   * 被丢弃的决定误当成已生效（Agent 级观察通道 D3 先到先得仲裁）。
+   */
+  hitlSettledBy?: "local" | "remote" | "observer";
 }
 
 /** 时间线上的一条消息（统一视图模型）。 */
@@ -45,6 +53,12 @@ export interface TimelineMessage {
   failed?: boolean;
   /** run 失败的错误原因（仅实时 run.error 事件携带；历史恢复的 failed 行无此值）。 */
   errorText?: string;
+  /**
+   * 结构化错误原因（透传自 `RunErrorEvent.reason`）。目前仅 L3 远程二次门控
+   * 拒绝场景设置为 `"agent_not_remotable"`：渲染层据此走专属 next-intl 文案，
+   * 而不是展示 `errorText` 的原始兜底文本。未设置时按既有行为展示 `errorText`。
+   */
+  errorReason?: string;
   /** 推理模型的思考过程（仅 assistant）：流式累积，渲染在气泡上方可展开折叠区。 */
   reasoning?: string;
   /**

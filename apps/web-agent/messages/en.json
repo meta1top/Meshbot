@@ -1,7 +1,12 @@
 {
   "common": {
     "switchToLightTheme": "Switch to light theme",
-    "switchToDarkTheme": "Switch to dark theme"
+    "switchToDarkTheme": "Switch to dark theme",
+    "close": "Close",
+    "alertTitle": "Notice",
+    "gotIt": "Got it",
+    "cancel": "Cancel",
+    "confirm": "Confirm"
   },
   "login": {
     "title": "Sign in",
@@ -39,10 +44,60 @@
     "reopen": "Didn't open? Reopen the authorization page"
   },
   "modelSetupGate": {
-    "title": "No model configured for your organization yet",
-    "description": "Ask an organization admin to configure a model in the cloud, then refresh here to continue.",
+    "title": "No model available yet",
+    "description": "Create a local model to get started, or configure one in your cloud organization.",
+    "configureLocal": "New local model",
+    "configureLocalDescription": "Enter a provider and API key — ready to use as soon as you save.",
     "configureInCloud": "Configure in cloud",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "createFailed": "Failed to create, please try again"
+  },
+  "modelForm": {
+    "provider": "Provider",
+    "selectProvider": "Select a provider",
+    "name": "Name",
+    "namePlaceholder": "Leave blank to auto-generate from provider and model",
+    "model": "Model",
+    "modelPlaceholder": "e.g. gpt-4o",
+    "apiKey": "API Key",
+    "apiKeyPlaceholder": "sk-...",
+    "apiKeyEditHint": "Leave blank to keep the current key",
+    "baseUrl": "API Base URL",
+    "baseUrlPlaceholder": "Leave blank to use the provider default",
+    "contextWindow": "Context window (optional)",
+    "contextWindowPlaceholder": "Leave blank to auto-resolve from the model",
+    "contextWindowPositive": "Context window must be a positive integer",
+    "submit": "Save",
+    "saving": "Saving...",
+    "cancel": "Cancel"
+  },
+  "modelSettings": {
+    "title": "Models",
+    "newLocalModel": "New local model",
+    "editTitle": "Edit local model",
+    "formDescription": "Local models are only saved on this device and are not visible to your cloud organization.",
+    "badgeLocal": "Local",
+    "badgeCloud": "Cloud",
+    "edit": "Edit",
+    "delete": "Delete",
+    "enable": "Enabled",
+    "disable": "Disabled",
+    "cloudReadonlyHint": "Managed by your cloud organization, read-only — edit it in cloud org settings",
+    "empty": "No model configured yet — create a local model to get started",
+    "colName": "Name",
+    "colProvider": "Provider",
+    "colModel": "Model",
+    "colSource": "Source",
+    "colStatus": "Status",
+    "loading": "Loading...",
+    "loadFailed": "Failed to load model configs",
+    "saveFailed": "Failed to save, please try again",
+    "deleteFailed": "Failed to delete, please try again",
+    "toggleFailed": "Failed to toggle status, please try again",
+    "deleteConfirmTitle": "Delete this model config?",
+    "deleteConfirmDescription": "This cannot be undone. Any agent using this model will no longer be able to call it.",
+    "dismiss": "Dismiss",
+    "cancel": "Cancel"
   },
   "assistantDock": {
     "title": "Quick Ask",
@@ -125,6 +180,7 @@
     "comingSoon": "Coming soon",
     "agentLocal": "Local",
     "agentComingSoon": "Other devices coming soon",
+    "hostOffline": "{device} (offline)",
     "workspaceDefault": "Default workspace",
     "modelSelect": "Select model"
   },
@@ -143,7 +199,8 @@
       "linkText": "text",
       "bulletList": "Bulleted list",
       "numberedList": "Numbered list"
-    }
+    },
+    "interruptUnavailable": "Cannot interrupt while observing: this run was not started from this device"
   },
   "schedule": {
     "title": "Scheduled tasks",
@@ -187,6 +244,7 @@
     "deletePending": "Delete",
     "cannotDeleteWhileProcessing": "Message is already being processed and cannot be deleted",
     "cannotEditWhileProcessing": "Message is already being processed and cannot be edited",
+    "cannotSendWhileRunning": "This session is still generating a reply. Wait for it to finish or stop it before sending a new message",
     "networkError": "Network error, please retry",
     "confirmOverwriteDraft": "Overwrite the current draft?",
     "reasoningProcess": "Reasoning",
@@ -239,6 +297,9 @@
       "presentFailed": "Presentation failed",
       "loading": "Loading…",
       "loadFailed": "Artifact no longer exists or has changed",
+      "loadFailedNoSource": "Couldn't determine where to load this artifact from. Please refresh and try again.",
+      "loadFailedRemoteRejected": "The other device declined this artifact request.",
+      "loadFailedRemoteUnreachable": "Couldn't reach the other device. Make sure it's online and try again.",
       "unsupported": "This file type can't be previewed, please download to view.",
       "tooLarge": "File is large ({size} MB), can't preview remotely",
       "tooLargeHint": "Upload to the org drive to preview it locally",
@@ -248,7 +309,11 @@
       "previewTitle": "Artifact preview",
       "imageAlt": "Artifact"
     },
-    "runErrorPrefix": "Run failed: "
+    "runErrorPrefix": "Run failed: ",
+    "runErrorAgentNotRemotable": "The target agent isn't available for remote access (it doesn't exist or remote access is off), so this message wasn't sent",
+    "runErrorSessionAgentMismatch": "This conversation doesn't belong to the selected agent, so this message wasn't sent",
+    "runErrorOffline": "The target device is offline, so this message wasn't sent",
+    "hitlSettledElsewhere": "Answered on another client"
   },
   "newMessage": {
     "title": "New message",
@@ -280,6 +345,7 @@
   "settingsSidebar": {
     "title": "Settings",
     "usage": "Usage",
+    "models": "Models",
     "scheduled": "Scheduled tasks"
   },
   "assistantSidebar": {
@@ -293,7 +359,10 @@
     "devicesLoadFailed": "Failed to load devices",
     "remoteSessionTitle": "Remote session",
     "remoteLoadFailed": "Failed to load remote session",
-    "remoteEmpty": "No sessions on this device"
+    "remoteEmpty": "No sessions on this device",
+    "editAgent": "Edit agent",
+    "newAgent": "New agent",
+    "sessionDeletedElsewhere": "This session was deleted from another device. You've been returned to start."
   },
   "messages": {
     "title": "Messages",
@@ -332,6 +401,8 @@
     "copy": "Copy"
   },
   "home": {
+    "remoteCreateTimeout": "The remote session wasn't created in time. Check that the target agent has remote access enabled and its device is online, then retry.",
+    "sendFailed": "Failed to send, please retry",
     "title": "What's up next?",
     "slogan": "Your work co-pilot",
     "titles": {
@@ -528,10 +599,10 @@
   "skills": {
     "title": "Skills",
     "loading": "Loading…",
-    "installed": "Installed",
     "installedTitle": "Installed Skills",
+    "installedTitleFor": "{name}'s Skills",
     "installedEmpty": "No skills installed yet",
-    "viewInstalled": "View all",
+    "agentsSectionTitle": "Agents",
     "market": "Market Sources",
     "sourceOurMarket": "MeshBot",
     "sourceGithub": "GitHub",
@@ -642,5 +713,58 @@
     "shareLinkExpire30": "30 days",
     "shareLinkExpireNever": "Never",
     "shareLinkPasswordPlaceholder": "Set access password (optional)"
+  },
+  "agent": {
+    "railLabel": "Agent navigation",
+    "newAgent": "New agent",
+    "editAgent": "Edit {name}",
+    "editor": {
+      "createTitle": "New agent",
+      "editTitle": "Edit agent",
+      "createDescription": "Set up a new agent persona: name, avatar, description and system prompt.",
+      "editDescription": "Persona changes apply to this agent's existing chats starting from the next reply.",
+      "duplicateFromLabel": "Duplicate from an existing agent",
+      "duplicateFromPlaceholder": "Pick an agent to copy",
+      "duplicating": "Duplicating…",
+      "duplicateFailed": "Duplicate failed, please retry",
+      "loadingAgent": "Loading agent…",
+      "agentNotFound": "This agent has been deleted or no longer exists",
+      "fieldName": "Name",
+      "fieldNamePlaceholder": "Give this agent a name",
+      "fieldAvatar": "Avatar",
+      "avatarEmojiOption": "Pick avatar emoji {emoji}",
+      "avatarEmojiCustomPlaceholder": "Custom",
+      "avatarEmojiCustomLabel": "Custom avatar emoji",
+      "avatarColorOption": "Pick avatar color {color}",
+      "fieldDescription": "Description",
+      "fieldDescriptionPlaceholder": "One line about what this agent does (optional)",
+      "fieldSystemPrompt": "System prompt",
+      "fieldSystemPromptPlaceholder": "Define this agent's persona, tone and behavior…",
+      "fieldDefaultModel": "Default model",
+      "fieldDefaultModelPlaceholder": "Choose a default model",
+      "fieldDefaultModelFollowAccount": "Follow account default",
+      "fieldRemoteEnabled": "Allow remote",
+      "fieldRemoteEnabledHint": "When on, you can dispatch this agent remotely from other devices or the web",
+      "save": "Save",
+      "saving": "Saving…",
+      "saveFailed": "Save failed, please retry",
+      "cancel": "Cancel",
+      "delete": "Delete",
+      "deleting": "Deleting…",
+      "deleteFailed": "Delete failed, please retry",
+      "deleteDisabledHint": "Keep at least one agent — the last one can't be deleted",
+      "deleteConfirmTitle": "Delete this agent?",
+      "deleteConfirmDescription": "This also deletes all of this agent's chats, memory and workspace files. This cannot be undone.",
+      "deleteConfirm": "Delete",
+      "mcpTitle": "MCP server configuration",
+      "mcpDescription": "Edit this agent's mcp.json. Changes take effect on the next reply.",
+      "mcpLoadFailed": "Failed to load MCP configuration, please retry",
+      "mcpPlaceholder": "Paste mcp.json content, e.g. Claude Desktop / Claude Code mcpServers config",
+      "mcpJsonInvalid": "Invalid JSON: {detail}",
+      "mcpSave": "Save MCP configuration",
+      "mcpSaving": "Saving…",
+      "mcpSaveSuccess": "Saved",
+      "mcpSaveFailed": "Save failed, please retry"
+    }
   }
 }

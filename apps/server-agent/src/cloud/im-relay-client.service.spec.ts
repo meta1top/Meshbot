@@ -261,6 +261,34 @@ describe("ImRelayClientService", () => {
       svc.disconnect("u1");
     });
 
+    it("云端 agentRegistryChanged → 桥成本地 IM_RELAY_EVENTS.agentRegistryChanged 且在 account.run 上下文内", async () => {
+      const s1 = new FakeSocket();
+      const { svc, emitSpy, emitter, account } = makeService(
+        { u1: { deviceToken: "tok-u1", orgId: "org1" } },
+        { u1: s1 },
+      );
+
+      await svc.connect("u1");
+
+      // 不变量：emit 必须发生在账号 ALS 上下文内，否则 EventsGateway 无法路由到 acct 房间
+      let ctxAtEmit: string | null | undefined;
+      emitter.on(IM_RELAY_EVENTS.agentRegistryChanged, () => {
+        ctxAtEmit = account.get();
+      });
+
+      s1.simulateServerEvent(IM_WS_EVENTS.agentRegistryChanged, {});
+
+      expect(emitSpy).toHaveBeenCalledWith(
+        IM_RELAY_EVENTS.agentRegistryChanged,
+        {
+          cloudUserId: "u1",
+        },
+      );
+      expect(ctxAtEmit).toBe("u1");
+
+      svc.disconnect("u1");
+    });
+
     it("auth connect_error（unauthorized）→ disconnect + setLoggedOut(该账号) + emit reauthRequired", async () => {
       const s1 = new FakeSocket();
       const { svc, cloudIdentityService, emitSpy } = makeService(
@@ -764,6 +792,118 @@ describe("ImRelayClientService", () => {
       expect(emitSpy).toHaveBeenCalledWith(IM_RELAY_EVENTS.connected, {
         cloudUserId: "u1",
       });
+      expect(ctxAtEmit).toBe("u1");
+
+      svc.disconnect("u1");
+    });
+  });
+
+  describe("Agent 级观察通道（watch）", () => {
+    it("emitAgentWatchFrame 未连接时静默跳过（best-effort，不抛）", () => {
+      const { svc } = makeService({}, {});
+      expect(() =>
+        svc.emitAgentWatchFrame("u-未连接", {
+          localAgentId: "a1",
+          scope: "session",
+          sessionId: "s1",
+          seq: 1,
+          event: "run.chunk",
+          payload: {},
+        }),
+      ).not.toThrow();
+    });
+
+    it("emitAgentWatchStart 未连接时抛 IM_NOT_CONNECTED", () => {
+      const { svc } = makeService({}, {});
+      expect(() =>
+        svc.emitAgentWatchStart("u-未连接", {
+          watchId: "w1",
+          targetAgentId: "cloud-a1",
+          scope: "agent",
+        }),
+      ).toThrow(
+        expect.objectContaining({ errorCode: AgentErrorCode.IM_NOT_CONNECTED }),
+      );
+    });
+
+    it("已连接时 watch 帧上行到 agent.watch.frame", async () => {
+      const s1 = new FakeSocket();
+      const { svc } = makeService(
+        { u1: { deviceToken: "tok-u1", orgId: "org1" } },
+        { u1: s1 },
+      );
+      await svc.connect("u1");
+
+      svc.emitAgentWatchFrame("u1", {
+        localAgentId: "a1",
+        scope: "session",
+        sessionId: "s1",
+        seq: 3,
+        event: "run.chunk",
+        payload: { sessionId: "s1" },
+      });
+
+      expect(s1.emitted).toContainEqual([
+        IM_WS_EVENTS.agentWatchFrame,
+        expect.objectContaining({ seq: 3, localAgentId: "a1" }),
+      ]);
+
+      svc.disconnect("u1");
+    });
+
+    it("下行 agent.watch.forwarded 桥成 IM_RELAY_EVENTS.agentWatchInbound（含 cloudUserId）", async () => {
+      const s1 = new FakeSocket();
+      const { svc, emitter } = makeService(
+        { u1: { deviceToken: "tok-u1", orgId: "org1" } },
+        { u1: s1 },
+      );
+      await svc.connect("u1");
+
+      const seen: unknown[] = [];
+      emitter.on(IM_RELAY_EVENTS.agentWatchInbound, (e) => seen.push(e));
+
+      s1.simulateServerEvent(IM_WS_EVENTS.agentWatchForwarded, {
+        watchId: "w1",
+        localAgentId: "a1",
+        scope: "session",
+        sessionId: "s1",
+        action: "start",
+        requesterDeviceId: "user:sock-1",
+      });
+
+      expect(seen).toEqual([
+        {
+          cloudUserId: "u1",
+          forwarded: expect.objectContaining({
+            watchId: "w1",
+            action: "start",
+          }),
+        },
+      ]);
+
+      svc.disconnect("u1");
+    });
+
+    it("下行 agent.watch.accepted 桥成 IM_RELAY_EVENTS.agentWatchAcceptedInbound（在 account.run 上下文内）", async () => {
+      const s1 = new FakeSocket();
+      const { svc, emitSpy, emitter, account } = makeService(
+        { u1: { deviceToken: "tok-u1", orgId: "org1" } },
+        { u1: s1 },
+      );
+      await svc.connect("u1");
+
+      let ctxAtEmit: string | null | undefined;
+      emitter.on(IM_RELAY_EVENTS.agentWatchAcceptedInbound, () => {
+        ctxAtEmit = account.get();
+      });
+
+      const accepted = { watchId: "w1", ok: true };
+      s1.simulateServerEvent(IM_WS_EVENTS.agentWatchAccepted, accepted);
+
+      expect(emitSpy).toHaveBeenCalledWith(
+        IM_RELAY_EVENTS.agentWatchAcceptedInbound,
+        accepted,
+      );
       expect(ctxAtEmit).toBe("u1");
 
       svc.disconnect("u1");

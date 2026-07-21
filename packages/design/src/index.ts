@@ -26,6 +26,19 @@ export {
 } from "./components/apple/select";
 export { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
 export {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogOverlay,
+  AlertDialogPortal,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "./components/ui/alert-dialog";
+export {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
@@ -54,7 +67,20 @@ export {
 } from "./components/ui/form";
 export { Label } from "./components/ui/label";
 export { Progress } from "./components/ui/progress";
+export {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetOverlay,
+  SheetPortal,
+  SheetTitle,
+  SheetTrigger,
+} from "./components/ui/sheet";
 export { Skeleton } from "./components/ui/skeleton";
+export { Switch } from "./components/ui/switch";
 export {
   Table,
   TableBody,
@@ -63,6 +89,7 @@ export {
   TableHeader,
   TableRow,
 } from "./components/ui/table";
+export { Textarea } from "./components/ui/textarea";
 export {
   Tooltip,
   TooltipContent,

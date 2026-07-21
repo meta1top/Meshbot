@@ -168,6 +168,27 @@ describe("SessionGateway", () => {
     expect(toEmit[0]).toEqual([SESSION_WS_EVENTS.runUsage, payload]);
   });
 
+  it("onRunHitlSettled：把关卡广播帧转发到对应房间（Task 17）", () => {
+    const runner = { getInflight: () => null, interrupt: jest.fn() };
+    const gw = new SessionGateway({} as never, runner as never);
+    const toEmit: unknown[] = [];
+    const rooms: string[] = [];
+    (gw as unknown as { server: unknown }).server = {
+      to: (room: string) => {
+        rooms.push(room);
+        return { emit: (...a: unknown[]) => toEmit.push(a) };
+      },
+    };
+    const payload = {
+      sessionId: "s1",
+      toolCallId: "t1",
+      by: "observer" as const,
+    };
+    gw.onRunHitlSettled(payload);
+    expect(rooms).toEqual(["s1"]);
+    expect(toEmit[0]).toEqual([SESSION_WS_EVENTS.runHitlSettled, payload]);
+  });
+
   describe("onRemoteShadowFrame（L3 影子渲染桥接）", () => {
     it("解包 REMOTE_SHADOW_FRAME_EVENT，按 payload.sessionId 转发到房间", () => {
       const runner = { getInflight: () => null, interrupt: jest.fn() };

@@ -29,6 +29,10 @@ export class Session extends SnowflakeBaseEntity {
   @Column({ name: "parent_tool_call_id", type: "text", nullable: true })
   parentToolCallId!: string | null;
 
+  /** 会话归属的 Agent（NOT NULL）。人格/技能/MCP/记忆/工作区全按它解析。 */
+  @Column({ name: "agent_id", type: "text" })
+  agentId!: string;
+
   /** 「有待了结的后台子任务」标记：建后台子会话置 1，播报完成置 0；兼作重启恢复扫描键。 */
   @Column({ type: "integer", default: 0 })
   background!: number;

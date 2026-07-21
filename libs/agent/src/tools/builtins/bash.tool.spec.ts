@@ -1,5 +1,6 @@
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { AccountContextService } from "../../account/account-context.service";
+import { AgentContextService } from "../../account/agent-context.service";
 import { MeshbotConfigService } from "../../config/meshbot-config.service";
 import { BashTool } from "./bash.tool";
 import type { ToolContext } from "../tool.types";
@@ -20,7 +21,10 @@ describe("BashTool", () => {
   const tmpDir = "/tmp";
   // MESHBOT_WORKSPACE 覆盖 getWorkspaceDir，故此处无需账号上下文。
   process.env.MESHBOT_WORKSPACE = tmpDir;
-  const config = new MeshbotConfigService(new AccountContextService());
+  const config = new MeshbotConfigService(
+    new AccountContextService(),
+    new AgentContextService(),
+  );
   const tool = new BashTool(config);
 
   it("echo hello 返成功 + 含 exit 0 和 stdout", async () => {

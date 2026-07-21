@@ -49,6 +49,7 @@ export function SidebarRow({
         className="flex min-w-0 flex-1 items-center gap-2 text-left"
       >
         {icon}
+        {/* 统一单行：超出宽度出省略号（长名字/带设备名后缀都靠 truncate 收口）。 */}
         <span className="min-w-0 flex-1 truncate">{label}</span>
         {trailing}
       </button>

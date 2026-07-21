@@ -84,4 +84,9 @@ export const AgentErrorCode = defineErrorCode({
     message: "im.remoteQueryUnavailable",
     httpStatus: 409,
   },
+  MODEL_CONFIG_READONLY: {
+    code: 3018,
+    message: "modelConfig.readonly",
+    httpStatus: 409,
+  },
 });

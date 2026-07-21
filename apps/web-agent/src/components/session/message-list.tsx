@@ -30,6 +30,14 @@ interface MessageListProps {
   messages: TimelineMessage[];
   /** 当前会话 id。供 UserMessageActions 调 regenerate 端点用。 */
   sessionId: string;
+  /**
+   * 本会话所属的 agentId（Task 12）：产物预览拼 URL 时用它，而非导航条
+   * 当前选中的 Agent——两者语义不同，混用会在切换导航条后把产物请求发到
+   * 错误的 workspace（404）。调用方必须显式传入「该会话真实归属的
+   * agentId」；确实拿不到（如随手问 dock 会话）时显式传 `undefined`，让
+   * 后端 `resolveOrDefault` 兜底到默认 Agent——不要传导航条选中态凑数。
+   */
+  agentId?: string;
   /** 会话是否有 inflight run。重试按钮按这个 disable。 */
   running: boolean;
   /**
@@ -90,6 +98,7 @@ export function MessageList({
   readOnly,
   onConfirm,
   onAnswer,
+  agentId,
 }: MessageListProps) {
   const t = useTranslations("session");
   const tArtifact = useTranslations("session.artifact");
@@ -136,14 +145,29 @@ export function MessageList({
           target?.name ?? target?.peer?.displayName ?? conversationId ?? "会话"
         );
       }}
-      onPreviewArtifact={(target: ArtifactPreviewTarget) => setArtifact(target)}
+      onPreviewArtifact={(target: ArtifactPreviewTarget) =>
+        setArtifact({
+          ...target,
+          agentId: target.remote ? undefined : agentId,
+        })
+      }
       artifactRemote={
+        // 字段名沿用 web-common 共享 prop 类型的 `deviceId`（该类型与
+        // apps/web-main 的远程会话视图共享，那里 deviceId 是真实宿主设备
+        // id）——本任务只改传入的值来源（remote.remoteAgentId），键名改名
+        // 需同步改 web-common 类型 + web-main 调用点，超出本任务范围，见
+        // assistant-conversation-body.tsx 同名注释与任务报告 concern。
         remote
-          ? { deviceId: remote.remoteDeviceId, sessionId: remote.sessionId }
+          ? { deviceId: remote.remoteAgentId, sessionId: remote.sessionId }
           : null
       }
-      toolCallLabels={{ artifactPresentFailed: tArtifact("presentFailed") }}
-      renderSubagentCard={(subTool) => <SubagentCard tool={subTool} />}
+      toolCallLabels={{
+        artifactPresentFailed: tArtifact("presentFailed"),
+        hitlSettledElsewhere: t("hitlSettledElsewhere"),
+      }}
+      renderSubagentCard={(subTool) => (
+        <SubagentCard tool={subTool} agentId={agentId} />
+      )}
       labels={{
         assistantName,
         runErrorPrefix: t("runErrorPrefix"),
@@ -152,6 +176,9 @@ export function MessageList({
         reasoningThought: (seconds) => t("reasoningThought", { seconds }),
         reasoningProcess: t("reasoningProcess"),
         compactionRowTitle: (count) => t("compaction.rowTitle", { count }),
+        runErrorAgentNotRemotable: t("runErrorAgentNotRemotable"),
+        runErrorSessionAgentMismatch: t("runErrorSessionAgentMismatch"),
+        runErrorOffline: t("runErrorOffline"),
       }}
     />
   );

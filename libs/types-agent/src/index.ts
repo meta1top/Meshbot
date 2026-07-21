@@ -1,3 +1,5 @@
+export * from "./agent";
+export * from "./agent.events";
 export * from "./ai";
 export * from "./ask-question";
 export {
@@ -19,9 +21,12 @@ export * from "./model-config.events";
 export * from "./present-file";
 export * from "./quick-assistant";
 export * from "./quick-assistant.events";
+export * from "./remote-agent.events";
 export * from "./schedule";
 export * from "./schedule.events";
 export * from "./session";
+export * from "./session-lifecycle.events";
+export * from "./session-status.events";
 export * from "./sidebar";
 export * from "./skill";
 export * from "./stats";

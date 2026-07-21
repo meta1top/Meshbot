@@ -1,11 +1,9 @@
-import Database from "better-sqlite3";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { AccountContextService } from "../../src/account/account-context.service";
-import { MeshbotConfigService } from "../../src/config/meshbot-config.service";
+import type { ActiveModelConfig } from "../../src/config/model-config.reader";
+import { CLOUD_GATEWAY_API_KEY_PLACEHOLDER } from "../../src/config/model-config.reader";
 import type { CloudTokenPort } from "../../src/graph/cloud-token.port";
+import type { ModelConfigReadPort } from "../../src/graph/model-config-read.port";
 import { ModelResolver } from "../../src/graph/model-resolver.service";
 import { ModelRunContext } from "../../src/graph/model-run-context";
 
@@ -14,47 +12,57 @@ import { ModelRunContext } from "../../src/graph/model-run-context";
  * token，通过 createChatModel 的 cloudTokenProvider 落到实际请求的
  * Authorization header 上——覆盖「按当前账号解析」「轮换透明（缓存命中仍取最
  * 新值）」「多账号隔离（共享同一 chat model 缓存实例时互不串号）」三个不变量。
+ *
+ * Critical C-1 修复后：模型配置改经 MODEL_CONFIG_READ_PORT 解析（不再直读
+ * sqlite），这里用按账号建模的 fake port 提供 resolveActive()。
  */
 describe("ModelResolver 云网关 device token 接线", () => {
-  let dir: string;
-  let dbPath: string;
+  const GATEWAY_CFG: ActiveModelConfig = {
+    providerType: "openai-compatible",
+    model: "gw-model",
+    name: "网关",
+    apiKey: CLOUD_GATEWAY_API_KEY_PLACEHOLDER,
+    baseUrl: "http://gw.test/api/v1",
+    isCloudModel: true,
+  };
+  const LOCAL_CFG: ActiveModelConfig = {
+    providerType: "openai",
+    model: "local-model",
+    name: "本地",
+    apiKey: "sk-real",
+    baseUrl: "",
+    isCloudModel: false,
+  };
 
-  beforeAll(() => {
-    dir = mkdtempSync(join(tmpdir(), "mrc-cloud-"));
-    dbPath = join(dir, "agent.db");
-    const db = new Database(dbPath);
-    db.exec(`CREATE TABLE model_configs (
-      id TEXT PRIMARY KEY, cloud_user_id TEXT, provider_type TEXT, name TEXT,
-      model TEXT, api_key TEXT, base_url TEXT DEFAULT '', enabled INTEGER,
-      created_at TEXT DEFAULT (datetime('now'))
-    )`);
-    // 两个账号的云网关模型配置刻意完全同形（同 provider/model/baseUrl/占位
-    // apiKey），使二者落到同一个 chat model 缓存 key —— 逼出「共享缓存实例下
-    // 是否仍按当前账号取对应 token」这个关键场景。
-    db.prepare(
-      `INSERT INTO model_configs (id, cloud_user_id, provider_type, name, model, api_key, base_url, enabled)
-       VALUES
-        ('mc-u1','u1','openai-compatible','网关','gw-model','__cloud__','http://gw.test/api/v1',1),
-        ('mc-u2','u2','openai-compatible','网关','gw-model','__cloud__','http://gw.test/api/v1',1)`,
-    ).run();
-    db.close();
-  });
+  function makeModelConfigPort(
+    account: AccountContextService,
+    activeByAcct: Record<string, ActiveModelConfig>,
+  ): ModelConfigReadPort {
+    return {
+      async resolveActive() {
+        const acct = account.get();
+        return acct ? (activeByAcct[acct] ?? null) : null;
+      },
+      async resolveById() {
+        return null;
+      },
+    };
+  }
 
-  afterAll(() => rmSync(dir, { recursive: true, force: true }));
-
-  function make(port: CloudTokenPort) {
+  function make(
+    cloudPort: CloudTokenPort,
+    activeByAcct: Record<string, ActiveModelConfig>,
+  ) {
     const account = new AccountContextService();
-    const config = {
-      getDatabasePath: () => dbPath,
-    } as unknown as MeshbotConfigService;
     const runCtx = new ModelRunContext();
+    const modelConfigPort = makeModelConfigPort(account, activeByAcct);
     const resolver = new ModelResolver(
-      config,
       account,
       runCtx,
+      modelConfigPort,
       undefined,
       undefined,
-      port,
+      cloudPort,
     );
     return { account, runCtx, resolver };
   }
@@ -91,7 +99,7 @@ describe("ModelResolver 云网关 device token 接线", () => {
 
   it("按当前账号（AccountContextService）解析 device token 并注入请求", async () => {
     const port: CloudTokenPort = { resolve: async () => "token-u1" };
-    const { account, runCtx, resolver } = make(port);
+    const { account, runCtx, resolver } = make(port, { u1: GATEWAY_CFG });
     const captured: (string | null)[] = [];
     const originalFetch = globalThis.fetch;
     globalThis.fetch = stubFetch(captured);
@@ -114,7 +122,7 @@ describe("ModelResolver 云网关 device token 接线", () => {
   it("token 轮换：chat model 缓存命中时仍取最新 token（不烘死在构造时）", async () => {
     let currentToken = "token-old";
     const port: CloudTokenPort = { resolve: async () => currentToken };
-    const { account, runCtx, resolver } = make(port);
+    const { account, runCtx, resolver } = make(port, { u1: GATEWAY_CFG });
     const captured: (string | null)[] = [];
     const originalFetch = globalThis.fetch;
     globalThis.fetch = stubFetch(captured);
@@ -146,10 +154,16 @@ describe("ModelResolver 云网关 device token 接线", () => {
       u1: "token-u1",
       u2: "token-u2",
     };
+    // account 在下面 make() 的解构里才赋值，但 resolve() 是异步回调、真正执行
+    // 时 account 早已初始化——闭包捕获的是绑定而非当时的值，同 CLOUD_TOKEN_PORT
+    // 原实现的写法。
     const port: CloudTokenPort = {
       resolve: async () => tokenByAccount[account.get() ?? ""] ?? null,
     };
-    const { account, runCtx, resolver } = make(port);
+    const { account, runCtx, resolver } = make(port, {
+      u1: GATEWAY_CFG,
+      u2: GATEWAY_CFG,
+    });
     const captured: (string | null)[] = [];
     const originalFetch = globalThis.fetch;
     globalThis.fetch = stubFetch(captured);
@@ -181,12 +195,6 @@ describe("ModelResolver 云网关 device token 接线", () => {
   });
 
   it("非云模型：不调用 CLOUD_TOKEN_PORT（本地/ollama 直连不受影响）", async () => {
-    const db = new Database(dbPath);
-    db.prepare(
-      `INSERT INTO model_configs (id, cloud_user_id, provider_type, name, model, api_key, base_url, enabled)
-       VALUES ('mc-u3','u3','openai','本地','local-model','sk-real','',1)`,
-    ).run();
-    db.close();
     let resolveCalls = 0;
     const port: CloudTokenPort = {
       resolve: async () => {
@@ -194,7 +202,7 @@ describe("ModelResolver 云网关 device token 接线", () => {
         return "should-not-be-used";
       },
     };
-    const { account, runCtx, resolver } = make(port);
+    const { account, runCtx, resolver } = make(port, { u3: LOCAL_CFG });
     await account.run("u3", () =>
       runCtx.run(null, () => resolver.resolveModel()),
     );

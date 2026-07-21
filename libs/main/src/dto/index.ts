@@ -18,6 +18,8 @@ import {
 import {
   type AcceptInvitationInput,
   AcceptInvitationSchema,
+  type AgentSyncBatch,
+  AgentSyncBatchSchema,
   type CompleteUploadInput,
   CompleteUploadSchema,
   type CreateFolderInput,
@@ -180,3 +182,7 @@ export class OrgModelConfigUpdateDto extends createI18nZodDto(
   OrgModelConfigUpdateSchema,
 ) {}
 export interface OrgModelConfigUpdateDto extends OrgModelConfigUpdateInput {}
+
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
+export class AgentSyncBatchDto extends createI18nZodDto(AgentSyncBatchSchema) {}
+export interface AgentSyncBatchDto extends AgentSyncBatch {}

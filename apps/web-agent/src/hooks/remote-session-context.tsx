@@ -12,7 +12,7 @@ import { createContext, type ReactNode, useContext, useMemo } from "react";
  * SessionTransport 内部），不再经本 context 取 confirm/answer。
  */
 type RemoteSession = {
-  remoteDeviceId: string;
+  remoteAgentId: string;
   /** B 设备上的会话 id（跨设备产物预览等按会话校验的请求用）。 */
   sessionId: string;
 };
@@ -21,18 +21,18 @@ const Ctx = createContext<RemoteSession | null>(null);
 
 /**
  * 远程会话上下文：让深层组件（产物预览卡 / 嵌套子代理卡）拿到
- * remoteDeviceId/sessionId，据此选择跨设备查询通道 / transport。本地会话不包
+ * remoteAgentId/sessionId，据此选择跨设备查询通道 / transport。本地会话不包
  * 这个 Provider，useRemoteSession 返回 null。
  */
 export function RemoteSessionProvider(props: {
-  remoteDeviceId: string;
+  remoteAgentId: string;
   sessionId: string;
   children: ReactNode;
 }) {
-  const { remoteDeviceId, sessionId, children } = props;
+  const { remoteAgentId, sessionId, children } = props;
   const value = useMemo<RemoteSession>(
-    () => ({ remoteDeviceId, sessionId }),
-    [remoteDeviceId, sessionId],
+    () => ({ remoteAgentId, sessionId }),
+    [remoteAgentId, sessionId],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

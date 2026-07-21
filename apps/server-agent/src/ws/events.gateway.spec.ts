@@ -1,6 +1,12 @@
 import { AccountContextService } from "@meshbot/lib-agent";
 import { AUTH_WS_EVENTS, IM_WS_EVENTS } from "@meshbot/types";
-import { SCHEDULE_EVENTS } from "@meshbot/types-agent";
+import {
+  AGENT_EVENTS,
+  REMOTE_AGENT_EVENTS,
+  SCHEDULE_EVENTS,
+  SESSION_LIFECYCLE_EVENTS,
+  SESSION_STATUS_EVENTS,
+} from "@meshbot/types-agent";
 
 import { EventsGateway } from "./events.gateway";
 
@@ -51,6 +57,20 @@ describe("EventsGateway 下行信封 + 账号路由", () => {
     expect(eventName).toBe("event");
     expect(env.type).toBe(IM_WS_EVENTS.conversationRead);
     expect(env.payload).toEqual(payload);
+  });
+
+  it("远程 Agent 注册表变更 → 按账号发 acct 房间信封（前端据此重拉 remote-agents）", () => {
+    const account = new AccountContextService();
+    const { gw, roomEmit, to, broadcastEmit } = makeGateway(account);
+
+    account.run("U1", () => gw.onRemoteAgentsChanged({ cloudUserId: "U1" }));
+
+    expect(to).toHaveBeenCalledWith("acct:U1");
+    const [eventName, env] = roomEmit.mock.calls[0];
+    expect(eventName).toBe("event");
+    expect(env.type).toBe(REMOTE_AGENT_EVENTS.registryChanged);
+    expect(env.payload).toEqual({ cloudUserId: "U1" });
+    expect(broadcastEmit).not.toHaveBeenCalled();
   });
 
   it("无账号上下文 → 降级全量广播单一 event", () => {
@@ -110,6 +130,97 @@ describe("EventsGateway 下行信封 + 账号路由", () => {
     expect(eventName).toBe("event");
     expect(env.type).toBe(SCHEDULE_EVENTS.fired);
     expect(env.payload).toEqual(payload);
+  });
+
+  it("session.status_changed 本地事件包信封下发到 acct 房间", () => {
+    const account = new AccountContextService();
+    const { gw, roomEmit, to } = makeGateway(account);
+    const payload = { agentId: "a1", sessionId: "s1", status: "idle" as const };
+    account.run("U1", () => gw.onSessionStatusChanged(payload));
+    expect(to).toHaveBeenCalledWith("acct:U1");
+    const [eventName, env] = roomEmit.mock.calls[0];
+    expect(eventName).toBe("event");
+    expect(env.type).toBe(SESSION_STATUS_EVENTS.changed);
+    expect(env.payload).toEqual(payload);
+  });
+
+  it("session.created 本地事件包信封下发到 acct 房间（侧栏会话列表实时插入）", () => {
+    const account = new AccountContextService();
+    const { gw, roomEmit, to } = makeGateway(account);
+    const payload = {
+      agentId: "a1",
+      session: {
+        id: "s1",
+        title: "新会话",
+        status: "running" as const,
+        pinned: false,
+        pinnedAt: null,
+        titleGenerated: false,
+        modelConfigId: null,
+        agentId: "a1",
+        createdAt: "2026-07-19T00:00:00.000Z",
+        updatedAt: "2026-07-19T00:00:00.000Z",
+      },
+    };
+    account.run("U1", () => gw.onSessionCreated(payload));
+    expect(to).toHaveBeenCalledWith("acct:U1");
+    const [eventName, env] = roomEmit.mock.calls[0];
+    expect(eventName).toBe("event");
+    expect(env.type).toBe(SESSION_LIFECYCLE_EVENTS.created);
+    expect(env.payload).toEqual(payload);
+  });
+
+  it("session.deleted 本地事件包信封下发到 acct 房间（侧栏会话列表实时移除）", () => {
+    const account = new AccountContextService();
+    const { gw, roomEmit, to } = makeGateway(account);
+    const payload = { agentId: "a1", sessionId: "s1" };
+    account.run("U1", () => gw.onSessionDeleted(payload));
+    expect(to).toHaveBeenCalledWith("acct:U1");
+    const [eventName, env] = roomEmit.mock.calls[0];
+    expect(eventName).toBe("event");
+    expect(env.type).toBe(SESSION_LIFECYCLE_EVENTS.deleted);
+    expect(env.payload).toEqual(payload);
+  });
+
+  it("session.renamed 本地事件包信封下发到 acct 房间（侧栏会话标题实时刷新）", () => {
+    const account = new AccountContextService();
+    const { gw, roomEmit, to } = makeGateway(account);
+    const payload = { agentId: "a1", sessionId: "s1", title: "新标题" };
+    account.run("U1", () => gw.onSessionRenamed(payload));
+    expect(to).toHaveBeenCalledWith("acct:U1");
+    const [eventName, env] = roomEmit.mock.calls[0];
+    expect(eventName).toBe("event");
+    expect(env.type).toBe(SESSION_LIFECYCLE_EVENTS.renamed);
+    expect(env.payload).toEqual(payload);
+  });
+
+  it("agent.changed 本地事件包信封下发到 acct 房间（侧栏/标题栏改名实时刷新）", () => {
+    const account = new AccountContextService();
+    const { gw, roomEmit, to } = makeGateway(account);
+    const payload = { cloudUserId: "U1", agentId: "a1" };
+    account.run("U1", () => gw.onAgentChanged(payload));
+    expect(to).toHaveBeenCalledWith("acct:U1");
+    const [eventName, env] = roomEmit.mock.calls[0];
+    expect(eventName).toBe("event");
+    expect(env.type).toBe(AGENT_EVENTS.changed);
+    expect(env.payload).toEqual(payload);
+  });
+
+  it("remote-agent.session_event 本地事件包信封下发到 acct 房间（远程 Agent 会话生命周期镜像，Task 18）", () => {
+    const account = new AccountContextService();
+    const { gw, roomEmit, to, broadcastEmit } = makeGateway(account);
+    const payload = {
+      agentId: "cloud-a1",
+      event: SESSION_LIFECYCLE_EVENTS.created,
+      payload: { agentId: "远程本地id", session: { id: "s9" } },
+    };
+    account.run("U1", () => gw.onRemoteAgentSessionEvent(payload));
+    expect(to).toHaveBeenCalledWith("acct:U1");
+    const [eventName, env] = roomEmit.mock.calls[0];
+    expect(eventName).toBe("event");
+    expect(env.type).toBe(REMOTE_AGENT_EVENTS.sessionEvent);
+    expect(env.payload).toEqual(payload);
+    expect(broadcastEmit).not.toHaveBeenCalled();
   });
 
   it("auth.reauth_required 本地事件 → 信封转发为 AUTH_WS_EVENTS.reauthRequired", () => {

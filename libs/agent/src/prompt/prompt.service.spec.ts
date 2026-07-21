@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AccountContextService } from "../account/account-context.service";
+import { AgentContextService } from "../account/agent-context.service";
 import { MeshbotConfigService } from "../config/meshbot-config.service";
 import { PromptService } from "./prompt.service";
 
@@ -16,7 +17,7 @@ function makeConfig(
   meshbotDir: string,
   ctx: AccountContextService,
 ): MeshbotConfigService {
-  const cfg = new MeshbotConfigService(ctx);
+  const cfg = new MeshbotConfigService(ctx, new AgentContextService());
   (cfg as unknown as { meshbotDir: string }).meshbotDir = meshbotDir;
   return cfg;
 }

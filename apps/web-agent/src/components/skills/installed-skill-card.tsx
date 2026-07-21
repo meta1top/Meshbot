@@ -9,6 +9,8 @@ import { uninstallSkill } from "@/rest/skills";
 
 interface Props {
   skill: InstalledSkill;
+  /** 当前选中 Agent id（Task 12：卸载按此隔离，落到对应 Agent 的 skills 目录）。 */
+  agentId?: string;
   onUninstalled: () => void;
   onPublish: (skill: InstalledSkill) => void;
 }
@@ -17,7 +19,12 @@ interface Props {
  * 已安装技能卡片：展示 name/description/source/version；
  * 操作「卸载」（内联确认后执行）和「上传到市场」（触发父级 dialog）。
  */
-export function InstalledSkillCard({ skill, onUninstalled, onPublish }: Props) {
+export function InstalledSkillCard({
+  skill,
+  agentId,
+  onUninstalled,
+  onPublish,
+}: Props) {
   const t = useTranslations("skills");
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -25,7 +32,7 @@ export function InstalledSkillCard({ skill, onUninstalled, onPublish }: Props) {
   async function handleConfirmUninstall() {
     setBusy(true);
     try {
-      await uninstallSkill(skill.name);
+      await uninstallSkill(skill.name, agentId);
       onUninstalled();
     } finally {
       setBusy(false);

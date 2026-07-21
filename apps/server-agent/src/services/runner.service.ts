@@ -1,16 +1,22 @@
 import {
   AccountContextService,
+  AgentContextService,
   GraphRunner,
+  McpService,
   ModelRunContext,
 } from "@meshbot/lib-agent";
 import {
   type InflightToolCall,
   type RunToolCallEndEvent,
+  SESSION_STATUS_EVENTS,
   SESSION_WS_EVENTS,
+  type SessionStatus,
+  type SessionStatusChangedEvent,
 } from "@meshbot/types-agent";
 import { Injectable, Logger, type OnModuleInit } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
 import { EventEmitter2 } from "@nestjs/event-emitter";
+import { AgentService } from "./agent.service";
 import { ContextCompactor } from "./context-compactor.service";
 import { isContextLengthError } from "./context-compactor.utils";
 import { LlmCallService } from "./llm-call.service";
@@ -91,15 +97,56 @@ export class RunnerService implements OnModuleInit {
     private readonly modelConfig: ModelConfigService,
     private readonly account: AccountContextService,
     private readonly modelRunCtx: ModelRunContext,
+    private readonly agentCtx: AgentContextService,
+    private readonly agents: AgentService,
+    private readonly mcp: McpService,
   ) {}
 
-  /** 启动时把遗留的 processing 消息退回 pending（重启 inflight 丢失后可重跑）。 */
+  /**
+   * 启动恢复：
+   * 1. 遗留 processing 消息退回 pending（重启 inflight 丢失后可重跑）；
+   * 2. 遗留 running 会话重置为 idle —— 进程崩在 run 中间时 kick* 的 finally
+   *    没机会执行，status 会永久停在 running，侧栏「运行中」绿点冷启动后
+   *    仍亮着且永不熄灭。本地轨单进程假设下，启动瞬间不可能有真正在跑的 run。
+   */
   async onModuleInit(): Promise<void> {
     // 本地轨单进程单用户：重启时全量回滚遗留 processing（无需按 session 过滤）
     const n = await this.sessions.rollbackProcessingToPending();
     if (n > 0) {
       this.logger.log(`启动恢复：${n} 条遗留 processing 消息已退回 pending`);
     }
+    const m = await this.sessions.resetRunningToIdle();
+    if (m > 0) {
+      this.logger.log(`启动恢复：${m} 个遗留 running 会话已重置为 idle`);
+    }
+  }
+
+  /**
+   * 写会话运行状态 + 经 ws/events 全局总线广播，让侧栏「运行中」绿点在任何
+   * 路由都能实时落态。
+   *
+   * 必须走全局总线而非 ws/session：后者只在会话页挂载时建连，在 /home 或消息页
+   * 收不到；且前端 sessionsAtom 首屏之后从不重拉，无事件就永远停在建会话时的
+   * status=running。
+   *
+   * agentId 由调用方传入（三个 kick* 入口在建账号上下文时已用 findOwnerAndAgent
+   * 一并查到，与 findOwner 是同一次索引查找，零成本），本方法不再回查 session
+   * 行——`sessions.setStatus` 对已删会话的 update 是安全的 no-op（affected:0，
+   * 不抛错），即便 run 收尾时会话已被并发删除（deleteSession 支持「先 interrupt
+   * 再删」），事件仍会照常发出；前端 patchSessionStatus 对不在列表里的 id 本就
+   * 原样跳过，不会有副作用。
+   */
+  private async setSessionStatus(
+    sessionId: string,
+    status: SessionStatus,
+    agentId: string,
+  ): Promise<void> {
+    await this.sessions.setStatus(sessionId, status);
+    this.emitter.emit(SESSION_STATUS_EVENTS.changed, {
+      agentId,
+      sessionId,
+      status,
+    } satisfies SessionStatusChangedEvent);
   }
 
   /** 启动消费循环（fire-and-forget）。已有消费循环则跳过（防重入）。 */
@@ -195,15 +242,16 @@ export class RunnerService implements OnModuleInit {
    * 错误事件已在 runOnce 内发出，本方法对外正常 resolve。
    */
   async kickAndWait(sessionId: string): Promise<void> {
-    const owner = await this.sessions.findOwner(sessionId);
+    const owner = await this.sessions.findOwnerAndAgent(sessionId);
     if (!owner) {
       this.logger.warn(`kick ${sessionId}: 找不到归属账号，跳过`);
       return;
     }
-    await this.account.run(owner, async () => {
+    const { cloudUserId, agentId } = owner;
+    await this.account.run(cloudUserId, async () => {
       if (this.running.has(sessionId)) return;
       this.running.add(sessionId);
-      await this.sessions.setStatus(sessionId, "running");
+      await this.setSessionStatus(sessionId, "running", agentId);
       try {
         while (true) {
           const batch = await this.sessions.claimPending(sessionId);
@@ -217,7 +265,7 @@ export class RunnerService implements OnModuleInit {
         }
       } finally {
         this.running.delete(sessionId);
-        await this.sessions.setStatus(sessionId, "idle");
+        await this.setSessionStatus(sessionId, "idle", agentId);
       }
     });
   }
@@ -230,15 +278,16 @@ export class RunnerService implements OnModuleInit {
    * 上下文），running 哨兵防双 kick，runOnce 抛错时记录日志后中断循环。
    */
   async kickRetryAndWait(sessionId: string): Promise<void> {
-    const owner = await this.sessions.findOwner(sessionId);
+    const owner = await this.sessions.findOwnerAndAgent(sessionId);
     if (!owner) {
       this.logger.warn(`kickRetry ${sessionId}: 找不到归属账号，跳过`);
       return;
     }
-    await this.account.run(owner, async () => {
+    const { cloudUserId, agentId } = owner;
+    await this.account.run(cloudUserId, async () => {
       if (this.running.has(sessionId)) return;
       this.running.add(sessionId);
-      await this.sessions.setStatus(sessionId, "running");
+      await this.setSessionStatus(sessionId, "running", agentId);
       try {
         while (true) {
           const batch = await this.sessions.claimFailed(sessionId);
@@ -252,7 +301,7 @@ export class RunnerService implements OnModuleInit {
         }
       } finally {
         this.running.delete(sessionId);
-        await this.sessions.setStatus(sessionId, "idle");
+        await this.setSessionStatus(sessionId, "idle", agentId);
       }
     });
   }
@@ -272,22 +321,23 @@ export class RunnerService implements OnModuleInit {
   }
 
   async kickResumeAndWait(sessionId: string): Promise<void> {
-    const owner = await this.sessions.findOwner(sessionId);
+    const owner = await this.sessions.findOwnerAndAgent(sessionId);
     if (!owner) {
       this.logger.warn(`kickResume ${sessionId}: 找不到归属账号，跳过`);
       return;
     }
-    await this.account.run(owner, async () => {
+    const { cloudUserId, agentId } = owner;
+    await this.account.run(cloudUserId, async () => {
       if (this.running.has(sessionId)) return;
       this.running.add(sessionId);
-      await this.sessions.setStatus(sessionId, "running");
+      await this.setSessionStatus(sessionId, "running", agentId);
       try {
         await this.runOnce(sessionId, [], true);
       } catch (err) {
         this.logger.warn(`resume runOnce 失败：${sessionId}`, err);
       } finally {
         this.running.delete(sessionId);
-        await this.sessions.setStatus(sessionId, "idle");
+        await this.setSessionStatus(sessionId, "idle", agentId);
       }
     });
   }
@@ -472,10 +522,17 @@ export class RunnerService implements OnModuleInit {
   }
 
   /**
-   * stream 消费入口：先读 session 拿 kind（subAgent 判定）与 modelConfigId
-   * （per-run 模型覆盖），再把「建流 + for-await 消费 + finally」整段包进
-   * ModelRunContext.run —— async generator 的 next() 跑在调用方（本方法）
-   * 的 ALS 上下文里，包裹范围必须覆盖整个消费循环，只包建流无效。
+   * stream 消费入口：先读 session 拿 kind（subAgent 判定）、agentId、modelConfigId，
+   * 再把「建流 + for-await 消费 + finally」整段包进 AgentContext + ModelRunContext ——
+   * async generator 的 next() 跑在调用方（本方法）的 ALS 上下文里，包裹范围必须
+   * 覆盖整个消费循环，只包建流无效。
+   *
+   * 模型三级优先级：会话覆盖 > Agent 默认 > 账号启用首行（最后一级由 ModelResolver 兜底）。
+   *
+   * MCP 按 Agent 懒加载（Task 6）：在 AgentContext 内、建流之前 `ensureAgent`
+   * 拉起该 Agent 的 MCP（已就绪则只刷新 lastUsedAt），`acquire` 挂引用计数
+   * 防止闲置回收在 run 进行中把工具抽走；`release` 必须在 finally 里——否则
+   * run 抛错时引用计数永久泄漏，该 Agent 的 MCP 再也回收不掉。
    */
   private async consumeRunStream(
     sessionId: string,
@@ -484,18 +541,38 @@ export class RunnerService implements OnModuleInit {
     resume: boolean,
     runStartedAt: number,
   ): Promise<void> {
+    const cloudUserId = this.account.getOrThrow();
     const session = await this.sessions.findOrNull(sessionId);
     const subAgent = session?.kind === "subagent";
-    await this.modelRunCtx.run(session?.modelConfigId ?? null, () =>
-      this.consumeRunStreamInCtx(
-        sessionId,
-        batch,
-        run,
-        resume,
-        runStartedAt,
-        subAgent,
-      ),
-    );
+    // 真值判断而非 `??`：`??` 只在 null/undefined 时才走兜底，historical 存量行
+    // （迁移默认值 ''）或落库时漏校验的空字符串会原样通过 `??`，把空串压进
+    // ALS（AgentContextService.getOrThrow 判空会抛错）。用 `||` 让空串与
+    // null/undefined 一样触发 ensureDefault 兜底。
+    const agentId = session?.agentId || (await this.agents.ensureDefault()).id;
+    const agent = await this.agents.findOrNull(agentId);
+    // 模型三级优先级同理：`??` 挡不住空串，空字符串会被误判为「会话已覆盖」，
+    // 静默跳过 Agent 默认模型这一级（ModelResolver 的三元把 '' 当 falsy 又
+    // 意外兜回账号默认，行为不崩但完全违背设计意图，且无任何日志）。
+    const modelOverride =
+      session?.modelConfigId || agent?.defaultModelConfigId || null;
+    await this.agentCtx.run(agentId, async () => {
+      await this.mcp.ensureAgent(cloudUserId, agentId);
+      this.mcp.acquire(cloudUserId, agentId);
+      try {
+        await this.modelRunCtx.run(modelOverride, () =>
+          this.consumeRunStreamInCtx(
+            sessionId,
+            batch,
+            run,
+            resume,
+            runStartedAt,
+            subAgent,
+          ),
+        );
+      } finally {
+        this.mcp.release(cloudUserId, agentId);
+      }
+    });
   }
 
   /**

@@ -1,0 +1,19 @@
+{
+  "generatedAt": "2026-07-15T00:09:22.855Z",
+  "paths": ["libs", "apps"],
+  "fileCount": 746,
+  "filterTypes": null,
+  "strict": false,
+  "total": 1,
+  "issues": [
+    {
+      "type": "REDUNDANT",
+      "file": "/Users/grant/Meta1/meshbot/apps/server-agent/src/services/agent.service.ts",
+      "line": 137,
+      "className": "AgentService",
+      "methodName": "removeInDb",
+      "details": "挂了 @Transactional() 但仅 1 处写动作（事务无意义）",
+      "evidence": ["144: this.repo.delete(...)"]
+    }
+  ]
+}

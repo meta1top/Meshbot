@@ -1,8 +1,5 @@
 import { z } from "zod";
 
-/** 随手问默认名字（无设置时回退）。 */
-export const QUICK_ASSISTANT_DEFAULT_NAME = "M";
-
 /** 随手问名字长度上限。 */
 export const QUICK_ASSISTANT_NAME_MAX = 20;
 

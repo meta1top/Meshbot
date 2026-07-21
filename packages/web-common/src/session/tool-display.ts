@@ -24,7 +24,7 @@ const TOOL_LABELS: Record<string, string> = {
   memory_delete: "删除记忆",
   memory_search: "检索记忆",
   read_file: "读取文件",
-  rename_quick_assistant: "重命名助手",
+  rename_agent: "重命名助手",
   schedule_create: "创建定时任务",
   schedule_delete: "删除定时任务",
   schedule_list: "定时任务列表",

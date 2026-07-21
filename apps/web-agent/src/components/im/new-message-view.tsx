@@ -2,7 +2,7 @@
 
 import { IM_WS_EVENTS } from "@meshbot/types";
 import { useAtomValue, useSetAtom } from "jotai";
-import { Hash, Sparkles, X } from "lucide-react";
+import { Hash, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
@@ -11,8 +11,10 @@ import { conversationsAtom, upsertConversationAtom } from "@/atoms/im";
 import { addSessionAtom } from "@/atoms/sessions";
 import { ChatInput } from "@/components/common/chat-input";
 import { ChannelPicker } from "@/components/im/channel-picker";
+import { parseAgentAvatar } from "@/lib/agent-avatar";
 import { getEventsSocket } from "@/lib/events-socket";
 import { filterRecipients } from "@/lib/recipient-filter";
+import { useAgents } from "@/rest/agents";
 import { createDm } from "@/rest/im";
 import { useMembers } from "@/rest/org";
 import { createSession } from "@/rest/session";
@@ -20,13 +22,16 @@ import { createSession } from "@/rest/session";
 type Recipient =
   | { kind: "channel"; id: string; label: string }
   | { kind: "member"; userId: string; label: string }
-  | { kind: "session" };
+  /** 就地选中的本机 Agent（起手台同款「哪个 Agent」维度，不读任何全局
+   * 当前 Agent 状态）——发起的新会话归这个 Agent。 */
+  | { kind: "session"; agentId: string; label: string };
 
 export function NewMessageView() {
   const t = useTranslations("newMessage");
   const tChat = useTranslations("chatInput");
   const router = useRouter();
   const currentUser = useAtomValue(currentUserAtom);
+  const { data: agents } = useAgents();
   const conversations = useAtomValue(conversationsAtom);
   const upsertConversation = useSetAtom(upsertConversationAtom);
   const addSession = useSetAtom(addSessionAtom);
@@ -48,13 +53,17 @@ export function NewMessageView() {
     [query, channels, members, currentUser?.id],
   );
 
-  const recipientLabel =
-    recipient?.kind === "session" ? t("startSession") : recipient?.label;
+  const recipientLabel = recipient?.label;
 
   const handleSend = async (body: string) => {
     if (!recipient) return;
     if (recipient.kind === "session") {
-      const res = await createSession(body);
+      const res = await createSession(
+        body,
+        undefined,
+        undefined,
+        recipient.agentId,
+      );
       addSession(res.session);
       router.push(`/assistant?id=${res.sessionId}`);
       return;
@@ -164,14 +173,31 @@ export function NewMessageView() {
             <div className="px-2.5 pt-3 pb-1 text-[11px] font-bold text-muted-foreground">
               {t("groupAssistant")}
             </div>
-            <button
-              type="button"
-              onClick={() => setRecipient({ kind: "session" })}
-              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13.5px] text-(--shell-accent) hover:bg-muted"
-            >
-              <Sparkles className="h-4 w-4 shrink-0" />
-              {t("startSession")}
-            </button>
+            {(agents ?? []).map((a) => {
+              const { emoji, color } = parseAgentAvatar(a.avatar);
+              return (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() =>
+                    setRecipient({
+                      kind: "session",
+                      agentId: a.id,
+                      label: a.name,
+                    })
+                  }
+                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13.5px] hover:bg-muted"
+                >
+                  <span
+                    className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px]"
+                    style={{ backgroundColor: color }}
+                  >
+                    {emoji}
+                  </span>
+                  <span className="truncate">{a.name}</span>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>

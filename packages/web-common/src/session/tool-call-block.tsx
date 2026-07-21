@@ -16,9 +16,14 @@ import type { ToolCallView } from "./timeline";
 import { TodoList } from "./todo-list";
 import { sanitizeMeshbotPaths, toolDisplayName } from "./tool-display";
 
-/** ArtifactFileCard 的唯一一处 i18n 文案，随 ToolCallBlock 一并透传。 */
+/** ArtifactFileCard / HITL 关卡广播的 i18n 文案，随 ToolCallBlock 一并透传。 */
 export interface ToolCallBlockLabels {
   artifactPresentFailed: string;
+  /**
+   * 「已由其他端应答」（Task 17）：im_send_message / ask_question 卡片被
+   * `run.hitl_settled` 标记为 settled、但真正的工具终态尚未到达时展示。
+   */
+  hitlSettledElsewhere: string;
 }
 
 export interface ToolCallBlockProps {
@@ -99,11 +104,18 @@ export function ToolCallBlock({
         tool={tool}
         targetName={targetName}
         onConfirm={onConfirm}
+        hitlSettledLabel={labels.hitlSettledElsewhere}
       />
     );
   }
   if (tool.name === "ask_question" && tool.status !== "streaming") {
-    return <AskQuestionCard tool={tool} onAnswer={onAnswer} />;
+    return (
+      <AskQuestionCard
+        tool={tool}
+        onAnswer={onAnswer}
+        hitlSettledLabel={labels.hitlSettledElsewhere}
+      />
+    );
   }
   if (tool.name === "present_file" && tool.status !== "streaming") {
     return (
@@ -121,7 +133,18 @@ export function ToolCallBlock({
   if (tool.name === "drive_create_share" && tool.status !== "streaming") {
     return <DriveCreateShareCard tool={tool} onConfirm={onConfirm} />;
   }
-  if (tool.name === "todo_write" && tool.status !== "streaming") {
+  // `tool.args !== undefined` 守卫：onToolEnd 的兜底建块路径（宿主消息/宿主块
+  // 都不在时间线上，直接建终态块）拿不到 args——end 事件本身不带这个字段。
+  // todo_write 卡片不像其余特化卡（im_send_message/ask_question/drive_*）那样
+  // 有「pending/终态」两态分叉、终态分支不依赖 args——它无条件从 args 取 todos
+  // 渲染，args 缺失时会画出一张看起来「清单已清空」的空卡，比通用 JSON 块更容易
+  // 误导（这正是本轮真机验收报的「待办清单渲染不出来」症状之一）。这里退回通用
+  // 渲染分支（能看到 status/结果文本），不新增专属空态文案。
+  if (
+    tool.name === "todo_write" &&
+    tool.status !== "streaming" &&
+    tool.args !== undefined
+  ) {
     const todos = ((tool.args ?? {}) as { todos?: TodoItem[] }).todos ?? [];
     return (
       <div className="flex w-full flex-col gap-1.5 rounded-[8px] border border-border bg-muted/30 px-3 py-2">

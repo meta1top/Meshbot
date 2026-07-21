@@ -75,7 +75,10 @@ export function RemoteMessageList({
       resolveImTargetName={(conversationId) => conversationId ?? ""}
       onPreviewArtifact={onPreviewArtifact}
       artifactRemote={{ deviceId, sessionId }}
-      toolCallLabels={{ artifactPresentFailed: tArtifact("presentFailed") }}
+      toolCallLabels={{
+        artifactPresentFailed: tArtifact("presentFailed"),
+        hitlSettledElsewhere: t("hitlSettledElsewhere"),
+      }}
       renderSubagentCard={(subTool: ToolCallView) => (
         <RemoteSubagentCard
           tool={subTool}
@@ -93,6 +96,9 @@ export function RemoteMessageList({
         reasoningThought: (seconds) => t("reasoningThought", { seconds }),
         reasoningProcess: t("reasoningProcess"),
         compactionRowTitle: (count) => t("compaction.rowTitle", { count }),
+        runErrorAgentNotRemotable: t("runErrorAgentNotRemotable"),
+        runErrorSessionAgentMismatch: t("runErrorSessionAgentMismatch"),
+        runErrorOffline: t("runErrorOffline"),
       }}
     />
   );

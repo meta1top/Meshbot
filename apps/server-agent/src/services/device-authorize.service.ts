@@ -117,9 +117,9 @@ export class DeviceAuthorizeService {
         token: access_token,
         createdAt: Date.now(),
       });
-      // emitAsync 等待监听器完成——ModelConfigSyncService 借此在登录响应返回前
-      // 完成首次云端模型同步，桌面端拿到 token 时模型列表已就位（免手动刷新）。
-      // 监听器异常不阻塞登录（同步失败有事件链/重连兜底）。
+      // emitAsync 等待监听器完成——AUTH_EVENTS.authorized 的监听器可借此在登录
+      // 响应返回前完成相关初始化（云端模型配置改读时代理，无需登录时预同步）。
+      // 监听器异常不阻塞登录。
       await this.emitter
         .emitAsync(AUTH_EVENTS.authorized, { cloudUserId: ex.user.id })
         .catch(() => undefined);

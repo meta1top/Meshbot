@@ -41,7 +41,7 @@ describe("RemoteRunService", () => {
       expect(streamId.length).toBeGreaterThan(0);
       expect(relay.emitAgentRunStart).toHaveBeenCalledWith("u1", {
         streamId,
-        targetDeviceId: "dB",
+        targetAgentId: "dB",
         mode: "create",
         sessionId: undefined,
         content: "hello",
@@ -77,7 +77,7 @@ describe("RemoteRunService", () => {
       expect(relay.emitAgentRunStart).not.toHaveBeenCalled();
     });
 
-    it("I3：不同 sessionId 或不同 targetDeviceId 不受占用影响，可正常发起", () => {
+    it("I3：不同 sessionId 或不同 targetAgentId 不受占用影响，可正常发起", () => {
       const { svc, relay } = make();
       svc.startRun("u1", "dB", "append", "remote-sess-1", "first");
       relay.emitAgentRunStart.mockClear();
@@ -149,6 +149,15 @@ describe("RemoteRunService", () => {
 
       expect(emitter.emit).not.toHaveBeenCalled();
     });
+
+    it("Task 18：带 watchId 的帧被忽略（即便 streamId 命中已登记订阅，也让给 RemoteWatchService 处理，防重复投递）", () => {
+      const { svc, emitter } = make();
+      const { streamId } = svc.startRun("u1", "dB", "create", null, "hi");
+
+      svc.onFrame(makeFrame({ streamId, watchId: "w1" }));
+
+      expect(emitter.emit).not.toHaveBeenCalled();
+    });
   });
 
   describe("onEnd", () => {
@@ -172,6 +181,127 @@ describe("RemoteRunService", () => {
       };
       expect(() => svc.onEnd(end)).not.toThrow();
     });
+
+    it("【Bug #13】append 模式二次门控拒绝（从未收到过帧）→ 补发影子 run.error 带 reason，前端才不会 running 卡死 + 消息凭空消失", () => {
+      const { svc, emitter } = make();
+      // append 模式一开始就带已知 sessionId（register 时写入 entry.sessionId），
+      // 但 onFrame 从未被调用过——模拟 B 侧二次门控在建会话/转发任何帧之前
+      // 直接拒绝的场景。
+      const { streamId } = svc.startRun(
+        "u1",
+        "dB",
+        "append",
+        "remote-sess-1",
+        "hello",
+      );
+
+      svc.onEnd({
+        streamId,
+        requesterDeviceId: "dA",
+        reason: "agent_not_remotable",
+      });
+
+      expect(emitter.emit).toHaveBeenCalledWith(REMOTE_SHADOW_FRAME_EVENT, {
+        event: SESSION_WS_EVENTS.runError,
+        payload: expect.objectContaining({
+          sessionId: "remote-sess-1",
+          messageId: null,
+          pendingIds: [],
+          reason: "agent_not_remotable",
+        }),
+      });
+    });
+
+    it("reason=session_agent_mismatch（会话归属不符）→ 补发影子 run.error，reason 与兜底文案都是这条独立语义，不复用 agent_not_remotable", () => {
+      const { svc, emitter } = make();
+      const { streamId } = svc.startRun(
+        "u1",
+        "dB",
+        "append",
+        "remote-sess-1",
+        "hello",
+      );
+
+      svc.onEnd({
+        streamId,
+        requesterDeviceId: "dA",
+        reason: "session_agent_mismatch",
+      });
+
+      const call = (emitter.emit as jest.Mock).mock.calls.find(
+        ([evt]: [string]) => evt === REMOTE_SHADOW_FRAME_EVENT,
+      );
+      const payload = call?.[1].payload as { reason: string; error: string };
+      expect(payload.reason).toBe("session_agent_mismatch");
+      expect(payload.error).toContain("该会话不属于所选 Agent");
+      expect(payload.error).not.toContain("远程 run 未能开始");
+    });
+
+    it("用户主动打断且赶在任何帧之前（从未收到过帧 + reason=interrupted）→ 补发影子 run.interrupted，不是 run.error", () => {
+      const { svc, emitter } = make();
+      const { streamId } = svc.startRun(
+        "u1",
+        "dB",
+        "append",
+        "remote-sess-1",
+        "hello",
+      );
+
+      svc.onEnd({ streamId, requesterDeviceId: "dA", reason: "interrupted" });
+
+      // 走 run.error 的话，前端会撞上 describePreflightRejection 的兜底文案
+      // 「远程 run 未能开始（interrupted）」——把用户自己按的停止说成失败。
+      expect(emitter.emit).toHaveBeenCalledWith(REMOTE_SHADOW_FRAME_EVENT, {
+        event: SESSION_WS_EVENTS.runInterrupted,
+        payload: { sessionId: "remote-sess-1", messageId: "" },
+      });
+      expect(emitter.emit).not.toHaveBeenCalledWith(
+        REMOTE_SHADOW_FRAME_EVENT,
+        expect.objectContaining({ event: SESSION_WS_EVENTS.runError }),
+      );
+    });
+
+    it("已收到过至少一帧（正常终止 done/error/interrupted）→ 不重复补发，B 侧转发的真实终止帧已经够了", () => {
+      const { svc, emitter } = make();
+      const { streamId } = svc.startRun(
+        "u1",
+        "dB",
+        "append",
+        "remote-sess-1",
+        "hello",
+      );
+      svc.onFrame(
+        makeFrame({
+          streamId,
+          sessionId: "remote-sess-1",
+          event: SESSION_WS_EVENTS.runDone,
+          payload: {
+            sessionId: "remote-sess-1",
+            messageId: "m1",
+            content: "hi",
+          },
+        }),
+      );
+      emitter.emit.mockClear();
+
+      svc.onEnd({ streamId, requesterDeviceId: "dA", reason: "done" });
+
+      expect(emitter.emit).not.toHaveBeenCalled();
+    });
+
+    it("create 模式二次门控拒绝、sessionId 未知（首帧从未到达）→ 无房间可发，静默清理不 emit", () => {
+      const { svc, emitter } = make();
+      const { streamId } = svc.startRun("u1", "dB", "create", null, "hello");
+      emitter.emit.mockClear();
+
+      svc.onEnd({
+        streamId,
+        requesterDeviceId: "dA",
+        reason: "agent_not_remotable",
+      });
+
+      expect(emitter.emit).not.toHaveBeenCalled();
+    });
   });
 
   describe("sendControl", () => {
@@ -179,7 +309,7 @@ describe("RemoteRunService", () => {
       const { svc, relay } = make();
       const control = {
         streamId: "stream-1",
-        targetDeviceId: "dB",
+        targetAgentId: "dB",
         sessionId: "remote-sess-1",
         kind: "interrupt" as const,
       };
@@ -280,6 +410,47 @@ describe("RemoteRunService", () => {
     it("未知返 null", () => {
       const { svc } = make();
       expect(svc.findRunBySession("dB", "no-sess")).toBeNull();
+    });
+  });
+
+  describe("hasActiveStreamFor（D6 抑制判定，供 RemoteWatchService 对账复用）", () => {
+    it("append 模式已登记 → true", () => {
+      const { svc } = make();
+      svc.startRun("u1", "dB", "append", "sess-1", "hi");
+      expect(svc.hasActiveStreamFor("dB", "sess-1")).toBe(true);
+    });
+
+    it("create 模式首帧回填 sessionId 前 → false，回填后 → true", () => {
+      const { svc } = make();
+      const { streamId } = svc.startRun("u1", "dB", "create", null, "hi");
+      expect(svc.hasActiveStreamFor("dB", "sess-9")).toBe(false);
+      svc.onFrame({
+        streamId,
+        sessionId: "sess-9",
+        seq: 0,
+        event: "run.started",
+        payload: { sessionId: "sess-9" },
+      } as any);
+      expect(svc.hasActiveStreamFor("dB", "sess-9")).toBe(true);
+    });
+
+    it("未知 (targetAgentId, sessionId) → false", () => {
+      const { svc } = make();
+      expect(svc.hasActiveStreamFor("dB", "no-sess")).toBe(false);
+    });
+
+    it("run 结束（onEnd）后 → false（对账不残留）", () => {
+      const { svc } = make();
+      const { streamId } = svc.startRun("u1", "dB", "append", "sess-1", "hi");
+      expect(svc.hasActiveStreamFor("dB", "sess-1")).toBe(true);
+      svc.onEnd({ streamId, requesterDeviceId: "d", reason: "done" } as any);
+      expect(svc.hasActiveStreamFor("dB", "sess-1")).toBe(false);
+    });
+
+    it("不同 targetAgentId 不串（key 必须包含 targetAgentId 维度）", () => {
+      const { svc } = make();
+      svc.startRun("u1", "dB", "append", "sess-1", "hi");
+      expect(svc.hasActiveStreamFor("dOther", "sess-1")).toBe(false);
     });
   });
 });

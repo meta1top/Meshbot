@@ -114,6 +114,7 @@ packages/
 - 数据库列名 snake_case（项目配置 `SnakeNamingStrategy`）
 - 公开方法包含中文 JSDoc
 - 禁止在 `if` 前一行放置注释（Biome 格式化会破坏结构）
+- **禁用原生 `window.alert` / `confirm`**：一律走 `packages/design/src/components/ui/` 的 shadcn 组件（`alert-dialog.tsx` / `alert.tsx`），惯例见 `apps/web-agent/src/components/agent/agent-editor-sheet.tsx`。原生弹窗阻塞、样式不受控、在 Electron 壳里尤其突兀。hook 里无法直接渲染时用 atom 存提示态 + shell layout 挂宿主组件
 - 不新建产品需求 / PRD 文档；设计决策记在对话或 commit 中。superpowers 流程产物（brainstorm 设计 spec、实施 plan）可写入 `docs/superpowers/`，属流程附件、不算 PRD
 
 ## 开发工作流
@@ -124,9 +125,53 @@ packages/
 4. **静态围栏** —— commit 前 `pnpm check`
 5. **commit** —— 中文提交信息，遵循 conventional commits 风格
 
+## 按风险分档投入（速度与质量平衡）
+
+不是所有改动都值得走完整的 review + 变异验证。**分档判据是「这个改动是否可能只坏一半」**
+——那类 bug 本地全对、远端全错，单测和 typecheck 都拦不住（真实案例：重复
+`EventEmitterModule.forRoot()` 导致两个 EventEmitter2，`@OnEvent` 两边都绑而运行时
+`.on()` 只绑一个，本地 UI 全正常、跨设备镜像永远收不到工具事件，查了四轮）。
+
+| 档 | 流程 | 适用 |
+|----|------|------|
+| **高** | 实施 → 独立 review → 变异验证 → 修 → 复审 | 跨设备协议 / wire format、并发与时序、seq 与去重、鉴权与归属校验、带生命周期的状态机 |
+| **中** | 实施 + 只对核心不变量做变异 + 抽查，不另派 reviewer | 单进程业务逻辑、前端 reducer、REST/DTO |
+| **低** | 直接做，测试 + 围栏过了就提交 | 文案 / i18n / 注释、纯样式布局、重命名挪文件、加兜底 label |
+
+小修**攒 3–5 个走一次 review**，不要一修一轮。用户的真机验收是质量体系的一环，
+不必全靠内部往返兜住。
+
+### 执行节奏（新需求同样要快）
+
+review 密度只解决「修 bug 慢」。**新需求慢是结构问题**——一个功能拆 20 个 task、
+严格串行执行、一次性规划到底，是真实发生过的反面案例（那次跨了好几天）。
+
+1. **并行派活**：每个 task 的固定开销（生成简报 → 派实施 → review → 修 → 复审）
+   与改动大小无关，串行等待是最大的一块。派活前按 plan 的 **Files 段先比对文件集**，
+   不重叠的 task 同时派。默认同时最多 2–3 个（兼顾进度可见性，可按需调整）；文件集
+   判断错会撞车，撞了就退回串行。
+2. **任务合并**：判据是「**如果两个相邻 task 总会被一起 review，它们就该是一个
+   task**」。改 10 行和改 300 行的固定开销一样，过度拆分纯亏。
+3. **小改自己做，不派 subagent**：<30 行且已理解代码时，subagent 的启动 + 重新认路 +
+   写报告的开销大于收益。
+4. **不要一次性规划到底**：只规划到**第一个可验证的交付点**，用户验完再规划下一段。
+   在任何真机反馈之前写满 20 个 task 的设计，会被现实反复打脸（真实代价：漏写调用方
+   3 次、代码片段照搬了另一端的架构 1 次，全部要额外补丁任务）。
+
+### 不因提速而放松的底线
+
+每条都对应本仓真实事故：
+
+1. **读完整输出，别信退出码** —— turbo / `tail` / `grep` 会掩盖真实失败
+2. **有未提交改动时绝不 `git checkout -- <文件>`** —— 会把未提交的修复一起还原
+3. **变异后先确认「变异真的落地」**（打印改动后内容）再看测试红绿 —— 正则没改到文件却当成"测试拦不住"
+4. **还原后读文件实际内容确认** —— `cd` 之后用相对路径 `cp`，还原会静默失败
+5. **改 DI / provider 必须真 boot**（`timeout 60 node dist/main.js`）—— typecheck / 单测 / 围栏全漏 DI 崩溃
+6. **机制不明时先埋点取证再改代码**；**交付某能力时必须自查「谁来调用它」** —— 后者是 plan 三次漏写调用方（能力建好却在 UI 上不可达）的根源
+
 ## 表归属
 
 | 应用 | 数据库 | 当前 Entity |
 |------|--------|-------------|
-| server-agent | `agent.db`（SQLite，`~/.meshbot/`，TypeORM 迁移管理） | `CloudIdentity`（含 `device_token` 列，浏览器授权换发的设备凭据）/ `Setting` / `ModelConfig`（含 `source` 列，`cloud` \| `local`，区分云端下发与本地配置）/ `Session` / `SessionMessage` / `LlmCall` / `PendingMessage` / `ImAgentSession`（会话映射 + 处理游标 `last_processed_message_id` / 追加游标 `last_appended_message_id`；设备 Agent 反向通道，子项目 B） |
-| server-main | Postgres（SQL DDL 文件，DBA 手动执行） | `AppUser` / `Organization` / `Membership` / `Invitation`（云端身份 + 企业/组织；Phase 1）/ `Device` / `DeviceAuthRequest` / `EmailVerification` / `OrgModelConfig`（设备授权登录 + 邮箱验证码 + 组织级模型配置云端化；子项目 A）/ `Conversation`（加 `agent_device_id` 列，人 ↔ 设备 Agent 私聊 DM 标记目标设备）/ `Message`（加 `sender_type` 列，`user` \| `agent`，默认 `user`；设备 Agent 反向通道，子项目 B） |
+| server-agent | `agent.db`（SQLite，`~/.meshbot/`，TypeORM 迁移管理） | `CloudIdentity`（含 `device_token` 列，浏览器授权换发的设备凭据）/ `Setting` / `ModelConfig`（含 `source` 列，`cloud` \| `local`，区分云端下发与本地配置）/ `Agent`（一设备多 Agent：`name`/`avatar`/`system_prompt`/`default_model_config_id`/`remote_enabled`/`visibility`，各自独立人格·技能·MCP·记忆·工作区，物理落在 `accounts/<cloudUserId>/agents/<agentId>/`；`remote_enabled`·`visibility` 已建列但本期未消费，留给云端注册）/ `Session`（加 `agent_id` 列，会话归属 Agent，NOT NULL，子会话继承父会话）/ `SessionMessage` / `LlmCall` / `PendingMessage` / `ImAgentSession`（会话映射 + 处理游标 `last_processed_message_id` / 追加游标 `last_appended_message_id`；设备 Agent 反向通道，子项目 B） |
+| server-main | Postgres（SQL DDL 文件，DBA 手动执行） | `AppUser` / `Organization` / `Membership` / `Invitation`（云端身份 + 企业/组织；Phase 1）/ `Device` / `DeviceAuthRequest` / `EmailVerification` / `OrgModelConfig`（设备授权登录 + 邮箱验证码 + 组织级模型配置云端化；子项目 A）/ `Conversation`（加 `agent_device_id` 列，人 ↔ 设备 Agent 私聊 DM 标记目标设备）/ `Message`（加 `sender_type` 列，`user` \| `agent`，默认 `user`；设备 Agent 反向通道，子项目 B） / `CloudAgent`（表 `agent`；本机 `remote_enabled` Agent 元数据的云端注册镜像，`(device_id, local_agent_id)` 唯一 + `deleted_at` 软删对账；只上 name/avatar/description，`remote_enabled` 不上云、本地为唯一真相；远程按云端 `agent.id` 寻址；一设备多 Agent 计划二·2b） |

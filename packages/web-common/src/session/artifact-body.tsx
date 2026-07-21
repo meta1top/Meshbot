@@ -13,10 +13,95 @@ function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
   return bytes;
 }
 
+/**
+ * 产物加载失败的展示态（真机验收缺陷 3）：原实现把三类完全不同的失败——
+ * transport 缺失（根本没发请求）、远程链路失败（拒绝/不可达）、本机 404——
+ * 全塞进一个 `err` 布尔，统一显示「产物已不存在或已变更」。这次就是它把
+ * 「打错了机器的 404」伪装成「文件没了」，把排查方向带偏到设备白名单上，
+ * 浪费了一整轮真机验收。至少区分这四态，文案才能指向真实原因。
+ *
+ * - `noSource`：`remote` 产物但未注入 `transport`——配置/接线错误，从未发出
+ *   任何网络请求。
+ * - `remoteRejected`：远程查询发出且拿到了明确的失败响应（如归属/白名单
+ *   校验不通过、对端处理出错）。
+ * - `remoteUnreachable`：远程查询发出但没能拿到确定结果（超时 / 网络层
+ *   失败，包括对端离线的上报）。
+ * - `notFound`：本机产物源 404 或网络错误（`fetchLocal` 失败）。
+ */
+export type ArtifactLoadErrorKind =
+  | "noSource"
+  | "remoteRejected"
+  | "remoteUnreachable"
+  | "notFound"
+  /**
+   * 分不出来的失败（非 409、非 5xx 的显式响应，如 401/403/400——那是**本机这台
+   * 服务器**拒了请求，鉴权/校验问题，既不是「对端拒绝」也不是「对端不可达」）。
+   * 渲染成通用文案，宁可少说也不误导——本轮正是因为把「打错机器的 404」说成
+   * 「文件没了」，把排查方向带偏到对端整整一轮。
+   */
+  | "unknown";
+
+/**
+ * 远程产物加载失败的错误分类：**只有 409 判「对端拒绝」，5xx / 无响应判
+ * 「对端不可达」，其余显式状态判「分不出来」（渲染通用文案）。** 这条边界是 review 抓出来的：
+ * 原实现写的是「除 504 外任何 status → 拒绝」，而 `IM_NOT_CONNECTED` 是 **503**、
+ * 由**本机自己的 relay 断线**抛出（`im-relay-client.service.ts`），跟对端毫无关系。
+ * 结果是 A 自己掉线时显示「对方设备拒绝了这次产物访问请求」，用户跑去 B 查白名单
+ * ——这个分级本身就是为消除误诊而做的，却又发了一次误诊。任何 5xx 都是「我这边
+ * 或链路出了问题」，归不可达才诚实。
+ *
+ * 判据取自后端错误码语义（`apps/server-agent/src/errors/agent.error-codes.ts`）：
+ * - `REMOTE_QUERY_UNAVAILABLE`（409）：对端已给出明确失败结果——涵盖白名单/归属
+ *   校验拒绝、对端离线上报、对端处理出错，后端目前未再细分 → **拒绝**
+ * - `REMOTE_QUERY_TIMEOUT`（504）、`IM_NOT_CONNECTED`（503）、其余 5xx、无响应
+ *   → **不可达**
+ *
+ * 残留不完美：409 里混着「对端离线上报」，语义上更接近不可达。要再精确需要后端
+ * 把 `reason` 透传到 HTTP 层，超出本次范围——但那是「粗了一档」，不像 503 那样
+ * **指向错误的排查对象**。
+ */
+export function classifyRemoteArtifactError(
+  err: unknown,
+): "remoteRejected" | "remoteUnreachable" | "unknown" {
+  const status = (err as { response?: { status?: number } } | null | undefined)
+    ?.response?.status;
+  if (status === 409) return "remoteRejected";
+  if (status === undefined || status >= 500) return "remoteUnreachable";
+  return "unknown";
+}
+
+/** 按错误态选文案；未提供细分文案（如 web-main 暂未跟进）时回退通用 `loadFailed`。 */
+export function resolveLoadFailedText(
+  labels: ArtifactBodyLabels,
+  err: ArtifactLoadErrorKind,
+): string {
+  switch (err) {
+    // 分不出来的失败：只说「加载失败」，不猜是谁的问题。
+    case "unknown":
+      return labels.loadFailed;
+    case "noSource":
+      return labels.loadFailedNoSource ?? labels.loadFailed;
+    case "remoteRejected":
+      return labels.loadFailedRemoteRejected ?? labels.loadFailed;
+    case "remoteUnreachable":
+      return labels.loadFailedRemoteUnreachable ?? labels.loadFailed;
+    default:
+      return labels.loadFailed;
+  }
+}
+
 /** ArtifactBody 的 i18n 文案注入（web-common 禁 next-intl，调用方经 useTranslations 组装）。 */
 export interface ArtifactBodyLabels {
   loading: string;
+  /** 通用兜底文案：未提供对应细分文案时使用，也是 `notFound` 态的专属文案
+   *  （本机产物 404 本就是这句话原本描述的场景，不再另开一个键）。 */
   loadFailed: string;
+  /** `noSource` 态专属文案（remote 产物缺 transport）；不传回退 `loadFailed`。 */
+  loadFailedNoSource?: string;
+  /** `remoteRejected` 态专属文案（远端明确拒绝/出错）；不传回退 `loadFailed`。 */
+  loadFailedRemoteRejected?: string;
+  /** `remoteUnreachable` 态专属文案（远端不可达：超时/离线/网络失败）；不传回退 `loadFailed`。 */
+  loadFailedRemoteUnreachable?: string;
   unsupported: string;
   /** 远程大产物提示文案；size 为调用方已格式化好的 MB 数字字符串（如 "3.2"）。 */
   tooLarge: (sizeMb: string) => string;
@@ -100,7 +185,7 @@ function useArtifactContent(
 ): {
   blobUrl: string | null;
   text: string | null;
-  err: boolean;
+  err: ArtifactLoadErrorKind | null;
   tooLarge: { size: number; name: string } | null;
 } {
   // 类型判定：path 源用 path，url 源用 name，都没有则 binary
@@ -108,7 +193,7 @@ function useArtifactContent(
   const kind = artifactKind(kindTarget);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [text, setText] = useState<string | null>(null);
-  const [err, setErr] = useState(false);
+  const [err, setErr] = useState<ArtifactLoadErrorKind | null>(null);
   const [tooLarge, setTooLarge] = useState<{
     size: number;
     name: string;
@@ -122,7 +207,7 @@ function useArtifactContent(
     let obj: string | null = null;
     setBlobUrl(null);
     setText(null);
-    setErr(false);
+    setErr(null);
     setTooLarge(null);
     // html 也按文本拉取，用 iframe srcDoc 渲染——不依赖 blob 的 MIME（presigned 可能不带 Content-Type）
     const isText = kind === "markdown" || kind === "text" || kind === "html";
@@ -130,7 +215,11 @@ function useArtifactContent(
     // 远程产物：经注入的 transport 拉内联内容；too-large 由专属状态承接（非错误）。
     if (remote && path) {
       if (!transport) {
-        setErr(true);
+        // 无数据源：remote 产物要求注入 transport，未注入即配置/接线错误——
+        // 从未发出任何网络请求，与下面 catch 里的「发了但失败」是完全不同的
+        // 根因，不能共用同一句「产物已不存在或已变更」（真机验收缺陷 3：这句
+        // 混淆过一次「打错了机器」和「文件真没了」，排查方向被带偏一整轮）。
+        setErr("noSource");
         return;
       }
       transport
@@ -149,8 +238,12 @@ function useArtifactContent(
             setBlobUrl(obj);
           }
         })
-        .catch(() => {
-          if (!cancelled) setErr(true);
+        .catch((e: unknown) => {
+          if (cancelled) return;
+          // 保留原始 error（此前 `.catch(() => setErr(true))` 直接丢弃，排查
+          // 只能靠猜）；文案按 remoteRejected/remoteUnreachable 细分。
+          console.error("[ArtifactBody] 远程产物加载失败", e);
+          setErr(classifyRemoteArtifactError(e));
         });
       return () => {
         cancelled = true;
@@ -179,8 +272,14 @@ function useArtifactContent(
           setBlobUrl(obj);
         }
       })
-      .catch(() => {
-        if (!cancelled) setErr(true);
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        // 本机 404 / 网盘 presigned 失效 / 网络错误统一归 notFound——都是
+        // 「这个来源本身取不到内容」，与远程链路失败（transport 层面的拒绝/
+        // 不可达）是不同性质的问题，不再共用同一条判断，但仍保留原始 error
+        // 供控制台排查（此前直接丢弃）。
+        console.error("[ArtifactBody] 本机产物加载失败", e);
+        setErr("notFound");
       });
     return () => {
       cancelled = true;
@@ -343,7 +442,7 @@ export function ArtifactBody({
   if (err) {
     return (
       <div className="flex h-full items-center justify-center px-4 text-center text-sm text-muted-foreground">
-        {labels.loadFailed}
+        {resolveLoadFailedText(labels, err)}
       </div>
     );
   }

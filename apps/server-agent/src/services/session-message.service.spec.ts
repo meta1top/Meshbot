@@ -549,6 +549,7 @@ describe("SessionMessageService", () => {
       cloudUserId: DEFAULT_USER,
       title: "子任务",
       kind: "subagent",
+      agentId: "seed-agent",
       parentSessionId: "s1",
       parentToolCallId: "tc-1",
     });

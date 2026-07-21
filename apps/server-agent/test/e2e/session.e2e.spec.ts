@@ -1,6 +1,8 @@
 import "reflect-metadata";
 import {
   AccountContextModule,
+  AGENT_RENAME_PORT,
+  type AgentRenamePort,
   AgentModule,
   ASK_QUESTION_PORT,
   type AskQuestionPort,
@@ -12,8 +14,8 @@ import {
   type ImContextPort,
   IM_SEND_PORT,
   type ImSendPort,
-  QUICK_ASSISTANT_PORT,
-  type QuickAssistantPort,
+  MODEL_CONFIG_READ_PORT,
+  type ModelConfigReadPort,
   SCHEDULE_TOOLS_PORT,
   type ScheduleToolsPort,
   SKILL_TOOLS_PORT,
@@ -32,6 +34,7 @@ import request from "supertest";
 import { AccountContextInterceptor } from "../../src/account/account-context.interceptor";
 import { AccountModule } from "../../src/account/account.module";
 import { SessionController } from "../../src/controllers/session.controller";
+import { Agent } from "../../src/entities/agent.entity";
 import { CronJob } from "../../src/entities/cron-job.entity";
 import { CronJobModule } from "../../src/cron-job.module";
 import { LlmCall } from "../../src/entities/llm-call.entity";
@@ -39,10 +42,12 @@ import { PendingMessage } from "../../src/entities/pending-message.entity";
 import { Session } from "../../src/entities/session.entity";
 import { SessionMessage } from "../../src/entities/session-message.entity";
 import { JwtAuthGuard } from "../../src/guards/jwt-auth.guard";
+import { AgentService } from "../../src/services/agent.service";
 import { CheckpointerCleanupService } from "../../src/services/checkpointer-cleanup.service";
 import { ConfirmationService } from "../../src/services/confirmation.service";
 import { ContextCompactor } from "../../src/services/context-compactor.service";
 import { LlmCallService } from "../../src/services/llm-call.service";
+import { CloudModelConfigProxyService } from "../../src/services/cloud-model-config-proxy.service";
 import { ModelConfigService } from "../../src/services/model-config.service";
 import { RunnerService } from "../../src/services/runner.service";
 import { SessionMessageService } from "../../src/services/session-message.service";
@@ -73,9 +78,9 @@ const STUB_SKILL_PORT: SkillToolsPort = {
 class StubSkillToolsModule {}
 
 /** 桩：本 e2e 只测会话 CRUD，不触发任何 agent 内置工具。AgentModule 里各工具靠
- *  @Global port 注入，这里统一提供桩端口（QUICK_ASSISTANT / IM_CONTEXT / IM_SEND /
+ *  @Global port 注入，这里统一提供桩端口（AGENT_RENAME / IM_CONTEXT / IM_SEND /
  *  ASK_QUESTION / DRIVE / SCHEDULE_TOOLS），让模块图可解析。 */
-const STUB_QUICK_ASSISTANT_PORT: QuickAssistantPort = {
+const STUB_AGENT_RENAME_PORT: AgentRenamePort = {
   rename: async () => {},
 };
 const STUB_IM_CONTEXT_PORT: ImContextPort = {
@@ -104,24 +109,31 @@ const STUB_SCHEDULE_TOOLS_PORT: ScheduleToolsPort = {
   findOwnedBy: async () => null,
   delete: async () => {},
 };
+/** 桩：本 e2e 不测模型解析（不触发真实 run），resolveActive/resolveById 恒返回 null 即可。 */
+const STUB_MODEL_CONFIG_READ_PORT: ModelConfigReadPort = {
+  resolveActive: async () => null,
+  resolveById: async () => null,
+};
 
 @Global()
 @Module({
   providers: [
-    { provide: QUICK_ASSISTANT_PORT, useValue: STUB_QUICK_ASSISTANT_PORT },
+    { provide: AGENT_RENAME_PORT, useValue: STUB_AGENT_RENAME_PORT },
     { provide: IM_CONTEXT_PORT, useValue: STUB_IM_CONTEXT_PORT },
     { provide: IM_SEND_PORT, useValue: STUB_IM_SEND_PORT },
     { provide: ASK_QUESTION_PORT, useValue: STUB_ASK_QUESTION_PORT },
     { provide: DRIVE_PORT, useValue: STUB_DRIVE_PORT },
     { provide: SCHEDULE_TOOLS_PORT, useValue: STUB_SCHEDULE_TOOLS_PORT },
+    { provide: MODEL_CONFIG_READ_PORT, useValue: STUB_MODEL_CONFIG_READ_PORT },
   ],
   exports: [
-    QUICK_ASSISTANT_PORT,
+    AGENT_RENAME_PORT,
     IM_CONTEXT_PORT,
     IM_SEND_PORT,
     ASK_QUESTION_PORT,
     DRIVE_PORT,
     SCHEDULE_TOOLS_PORT,
+    MODEL_CONFIG_READ_PORT,
   ],
 })
 class StubAgentToolPortsModule {}
@@ -157,6 +169,7 @@ describe("Session e2e", () => {
           type: "better-sqlite3",
           database: ":memory:",
           entities: [
+            Agent,
             Session,
             PendingMessage,
             LlmCall,
@@ -167,6 +180,7 @@ describe("Session e2e", () => {
           synchronize: true,
         }),
         TxTypeOrmModule.forFeature([
+          Agent,
           Session,
           PendingMessage,
           LlmCall,
@@ -190,6 +204,7 @@ describe("Session e2e", () => {
       controllers: [SessionController],
       providers: [
         SessionService,
+        AgentService,
         RunnerService,
         LlmCallService,
         SessionMessageService,
@@ -198,6 +213,12 @@ describe("Session e2e", () => {
         ConfirmationService,
         ContextCompactor,
         ModelConfigService,
+        // 本 e2e 只测会话 CRUD，不测云端模型配置代理；桩返回空列表即可满足
+        // ModelConfigService 构造依赖（合并读退化为「只有本地」，D1 语义）。
+        {
+          provide: CloudModelConfigProxyService,
+          useValue: { getCloudConfigs: async () => [] },
+        },
         JwtStrategy,
         // 鉴权 + 账号上下文注入：对齐 main.ts 的全局守卫/拦截器装配
         { provide: APP_GUARD, useClass: JwtAuthGuard },

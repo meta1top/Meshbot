@@ -10,6 +10,7 @@ import { useTranslations } from "next-intl";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { previewArtifactAtom } from "@/atoms/assistant-panel";
 import { currentUserAtom } from "@/atoms/auth";
+import { globalAlertMessageAtom } from "@/atoms/global-alert";
 import { conversationsAtom } from "@/atoms/im";
 import {
   loadRemoteSessionsAtom,
@@ -30,6 +31,7 @@ import { SubagentCard } from "@/components/session/subagent-card";
 import { RemoteSessionProvider } from "@/hooks/remote-session-context";
 import { useAutoOpenArtifact } from "@/hooks/use-auto-open-artifact";
 import { useChatScroll } from "@/hooks/use-chat-scroll";
+import { useGlobalConfirm } from "@/hooks/use-global-confirm";
 import { useLlmusePrefix } from "@/hooks/use-llmuse-prefix";
 import { useSessionStream } from "@/hooks/use-session-stream";
 import { toI18nList } from "@/lib/i18n-list";
@@ -50,12 +52,12 @@ interface AssistantConversationBodyProps {
   /** 共享滚动容器 ref，由 PageShell/page 传入。 */
   scrollRef: RefObject<HTMLDivElement | null>;
   /**
-   * L3：非空表示这是远程设备（B）上的会话——`useSessionStream` 走远程分支
-   * （历史/send/interrupt 隧道到 B），MessageList 传 `readOnly` 隐藏反馈/重试/
-   * 编辑等写操作（这些走本地端点，对远程会话的 id 无意义，且 L3 未覆盖）；
-   * 输入框本身保持可用，走 `startRemoteRun`。
+   * L3：非空表示这是远程 Agent（其宿主设备 B）上的会话——`useSessionStream`
+   * 走远程分支（历史/send/interrupt 隧道到 B），MessageList 传 `readOnly`
+   * 隐藏反馈/重试/编辑等写操作（这些走本地端点，对远程会话的 id 无意义，且
+   * L3 未覆盖）；输入框本身保持可用，走 `startRemoteRun`。
    */
-  remoteDeviceId?: string | null;
+  remoteAgentId?: string | null;
   /** 远程会话首轮由起手台 create 发起时的初始 streamId，见 useSessionStream 注释。 */
   remoteInitialStreamId?: string | null;
 }
@@ -67,14 +69,14 @@ interface AssistantConversationBodyProps {
  * `RemoteSessionProvider` 保留在本容器（不进 `SessionConversationView`）：
  * 远程会话时包一层 Provider，`SessionConversationView` 内部的
  * `renderSubagentCard` 注入的 `SubagentCard` 仍能通过 `useRemoteSession()`
- * 拿到 remoteDeviceId/sessionId（Provider 包的是整棵渲染树，不只消息列表，
+ * 拿到 remoteAgentId/sessionId（Provider 包的是整棵渲染树，不只消息列表，
  * 与原实现行为等价——`ChatInput`/`PendingList` 等兄弟节点本就不消费该
  * context）。
  */
 export function AssistantConversationBody({
   id,
   scrollRef,
-  remoteDeviceId = null,
+  remoteAgentId = null,
   remoteInitialStreamId = null,
 }: AssistantConversationBodyProps) {
   const t = useTranslations("session");
@@ -83,6 +85,8 @@ export function AssistantConversationBody({
   const tChat = useTranslations("chatInput");
   const [draft, setDraft] = useState("");
   const chatInputRef = useRef<ChatInputHandle>(null);
+  const setGlobalAlertMessage = useSetAtom(globalAlertMessageAtom);
+  const confirmDialog = useGlobalConfirm();
 
   // 输入框 placeholder：挂载后从同一组文案随机选一条（与首页一致，避免单调）
   // sync-locales 把数组 flatten 成 numeric-key 对象，toI18nList 兜底还原列表
@@ -111,14 +115,39 @@ export function AssistantConversationBody({
   // 进入远程会话时强制刷新对端会话列表：modelConfigId 可能已在对端被改
   // （侧栏懒加载的缓存不会自己失效），选择器初值需要新鲜快照。
   useEffect(() => {
-    if (remoteDeviceId) void loadRemoteSessions(remoteDeviceId, true);
-  }, [remoteDeviceId, loadRemoteSessions]);
+    if (remoteAgentId) void loadRemoteSessions(remoteAgentId, true);
+  }, [remoteAgentId, loadRemoteSessions]);
   const sessionModelId =
     modelOverride ??
-    (remoteDeviceId
-      ? (remoteSessions[remoteDeviceId]?.sessions.find((s) => s.id === id)
+    (remoteAgentId
+      ? (remoteSessions[remoteAgentId]?.sessions.find((s) => s.id === id)
           ?.modelConfigId ?? null)
       : (allSessions.find((s) => s.id === id)?.modelConfigId ?? null));
+  // 本地会话产物预览用的 agentId（Task 12）：只用该会话自己的 agentId
+  // （sessionsAtom 里查得到）——不再有「当前选中的 Agent」可兜底（Agent 并列，
+  // 无全局当前态），查不到就是 undefined，让产物预览按后续时序自然补齐。
+  // 远程会话（remoteAgentId 非空）不需要：产物走 transport.readArtifact，
+  // 不经 artifactRawUrl。
+  const sessionAgentId = remoteAgentId
+    ? undefined
+    : (allSessions.find((s) => s.id === id)?.agentId ?? undefined);
+  // 产物预览的远程描述符（真机验收缺陷 3）：上提到本组件参数可用的最早位置
+  // ——`useAutoOpenArtifact`（下方紧接着调用）与 `onPreviewArtifact`
+  // （渲染 JSX 里）都要用同一份，原实现只在 JSX 附近定义，`useAutoOpenArtifact`
+  // 那条自动弹出路径因此漏传，产物预览打错了机器（详见该 hook 的 JSDoc）。
+  // 不经 useRemoteSession() context——本容器渲染在 RemoteSessionProvider 之外
+  // （见下方 JSX），此处取 context 值会拿到 null。
+  //
+  // 注意：字段名沿用 web-common 共享 prop 类型的 `deviceId`（未随本任务改
+  // 名）——该字段在 web-common/artifact-body.tsx 内部从未被真正读取用于寻址
+  // （只有 sessionId 驱动 transport.readArtifact/uploadArtifactToDrive），
+  // 但类型定义与 apps/web-main 的远程会话视图共享（那里 deviceId 是真实的
+  // 宿主设备 id，非本次 agentId 迁移范畴）。改名需要同步改 web-common 的
+  // 3 处类型声明 + web-main 2 处调用点，超出本任务范围，故只改传入的值（现取
+  // remoteAgentId），键名保持 deviceId——已在报告里记为 concern。
+  const artifactRemote = remoteAgentId
+    ? { deviceId: remoteAgentId, sessionId: id }
+    : null;
   // 经 transport 统一路由：本地 PATCH /api/sessions/:id，远程走 device query 通道
   // （本地 PATCH 对远程会话 id 会 404）——分支判断已下沉到 session-transport.ts。
   const handleModelChange = async (mid: string) => {
@@ -133,22 +162,37 @@ export function AssistantConversationBody({
   const contextWindow = enabledModel?.contextWindow ?? 128_000;
 
   const prefix = useLlmusePrefix();
-  // transport 按 remoteDeviceId 二选一：无状态工厂，deviceId 不变时引用稳定，
+  // transport 按 remoteAgentId 二选一：无状态工厂，agentId 不变时引用稳定，
   // 避免每次渲染重建导致 useSessionStream 内部 effect/callback 误判依赖变化。
   const transport = useMemo(
     () =>
-      remoteDeviceId
-        ? createRemoteSessionTransport(remoteDeviceId)
+      remoteAgentId
+        ? createRemoteSessionTransport(remoteAgentId)
         : createLocalSessionTransport(),
-    [remoteDeviceId],
+    [remoteAgentId],
   );
   const stream = useSessionStream(
     id,
     scrollRef,
     transport,
-    remoteDeviceId,
+    remoteAgentId,
     remoteInitialStreamId,
   );
+
+  // Session 级观察通道（T18/T19 · 消费端 T19b）：正在看一个「不是自己发起的」
+  // 远程会话时才需要——逐字对照 web-main 的
+  // `apps/web-main/src/components/assistant/remote-session-view.tsx:250-255`
+  // （已真机验收）。不建这路 watch，B 端常驻转发器要等满 5 分钟 idle 才拆——
+  // 能兜住，但白占资源，且这段窗口内本组件也收不到 B 端的实时镜像帧。
+  // `transport.watchSession` 内部已处理断线重连自动重 watch（T12
+  // onReconnect），本组件不需要感知 socket 连接状态；本地会话
+  // （remoteAgentId 为空）的 transport 是本机专属实现，不提供
+  // `watchSession`，`?.` 安全跳过。
+  useEffect(() => {
+    if (!remoteAgentId) return;
+    const unwatch = transport.watchSession?.(id);
+    return () => unwatch?.();
+  }, [transport, remoteAgentId, id]);
 
   const timelineMessages = useMemo(
     () => stream.messages.filter((m) => !m.pending),
@@ -160,7 +204,14 @@ export function AssistantConversationBody({
   );
 
   // agent 产出 present_file 后自动打开右侧预览（多个产物弹第一个，正在看预览时不打扰）。
-  useAutoOpenArtifact(timelineMessages, stream.running);
+  // 真机验收缺陷 3：必须带上 artifactRemote，否则远程会话的产物预览会打错机器
+  // （详见 use-auto-open-artifact.ts 的 JSDoc）。
+  useAutoOpenArtifact(
+    timelineMessages,
+    stream.running,
+    sessionAgentId,
+    artifactRemote,
+  );
 
   const { stickToBottom, scrollToBottom, topSentinelRef } = useChatScroll({
     scrollContainerRef: scrollRef,
@@ -168,6 +219,20 @@ export function AssistantConversationBody({
     hasMore: stream.hasMoreHistory,
     onLoadMore: () => void stream.loadMoreHistory(),
   });
+
+  /**
+   * 发送：`stream.send` 返回 false = 本条输入被拒绝且没有任何留痕（当前唯一
+   * 来源：远程会话仍有 run 在跑的 I3 守卫）。`ChatInput.onSend` 是无条件清空
+   * 编辑器的，不回填 + 不提示的话用户打的字就凭空消失了（原 bug）。回填的是
+   * 用户真正打的 `text`，不是 `prefix(text)`（后者带隐藏的 llmuse 上下文块）。
+   */
+  const handleSend = async (text: string) => {
+    const accepted = await stream.send(prefix(text));
+    if (accepted) return;
+    setDraft(text);
+    chatInputRef.current?.focus(text);
+    setGlobalAlertMessage(t("cannotSendWhileRunning"));
+  };
 
   /**
    * 删除一条 pending 消息。
@@ -191,10 +256,10 @@ export function AssistantConversationBody({
       if (status === 404) {
         stream.apply((prev) => prev.filter((m) => m.id !== pendingId));
       } else if (status === 409) {
-        window.alert(t("cannotDeleteWhileProcessing"));
+        setGlobalAlertMessage(t("cannotDeleteWhileProcessing"));
       } else {
         console.error("删除 pending 失败", err);
-        window.alert(t("networkError"));
+        setGlobalAlertMessage(t("networkError"));
       }
     }
   };
@@ -204,7 +269,8 @@ export function AssistantConversationBody({
    * 若输入框已有非空 draft，confirm 后才覆盖。
    */
   const handleEditPending = async (pendingId: string) => {
-    if (draft.trim() && !window.confirm(t("confirmOverwriteDraft"))) return;
+    if (draft.trim() && !(await confirmDialog(t("confirmOverwriteDraft"))))
+      return;
     try {
       const { content } = await deletePendingMessage(id, pendingId);
       stream.apply((prev) => prev.filter((m) => m.id !== pendingId));
@@ -224,10 +290,10 @@ export function AssistantConversationBody({
       if (status === 404) {
         stream.apply((prev) => prev.filter((m) => m.id !== pendingId));
       } else if (status === 409) {
-        window.alert(t("cannotEditWhileProcessing"));
+        setGlobalAlertMessage(t("cannotEditWhileProcessing"));
       } else {
         console.error("编辑 pending 失败", err);
-        window.alert(t("networkError"));
+        setGlobalAlertMessage(t("networkError"));
       }
     }
   };
@@ -241,12 +307,6 @@ export function AssistantConversationBody({
   const setArtifact = useSetAtom(previewArtifactAtom);
   const tArtifact = useTranslations("session.artifact");
   const tCompaction = useTranslations("session.compaction");
-  // artifactRemote 直接用本组件已有的 remoteDeviceId/id，不经
-  // useRemoteSession() context——本容器渲染在 RemoteSessionProvider 之外
-  // （见下方 JSX），此处取 context 值会拿到 null。
-  const artifactRemote = remoteDeviceId
-    ? { deviceId: remoteDeviceId, sessionId: id }
-    : null;
 
   const view = (
     <SessionConversationView
@@ -259,7 +319,7 @@ export function AssistantConversationBody({
       queuedMessages={queuedMessages}
       sessionId={id}
       running={stream.running}
-      readOnly={!!remoteDeviceId}
+      readOnly={!!remoteAgentId}
       onRegenerateOptimisticCut={(messageId) => {
         // 截断到该消息（含），并清掉它的 failed 标记：
         // 重生成就是「这条 user 即将重跑」，旧的 failed 已陈旧；
@@ -288,9 +348,16 @@ export function AssistantConversationBody({
           target?.name ?? target?.peer?.displayName ?? conversationId ?? "会话"
         );
       }}
-      onPreviewArtifact={(target: ArtifactPreviewTarget) => setArtifact(target)}
+      onPreviewArtifact={(target: ArtifactPreviewTarget) =>
+        setArtifact({
+          ...target,
+          agentId: target.remote ? undefined : sessionAgentId,
+        })
+      }
       artifactRemote={artifactRemote}
-      renderSubagentCard={(subTool) => <SubagentCard tool={subTool} />}
+      renderSubagentCard={(subTool) => (
+        <SubagentCard tool={subTool} agentId={sessionAgentId} />
+      )}
       stickToBottom={stickToBottom}
       onScrollToBottom={scrollToBottom}
       onDeletePending={handleDeletePending}
@@ -300,9 +367,10 @@ export function AssistantConversationBody({
           ref={chatInputRef}
           value={draft}
           onChange={setDraft}
-          onSend={(text) => stream.send(prefix(text))}
+          onSend={(text) => void handleSend(text)}
           onInterrupt={stream.interrupt}
           isLoading={stream.running}
+          canInterrupt={stream.canInterrupt}
           placeholder={inputPlaceholder}
           trailingActions={
             <ModelSelect value={sessionModelId} onChange={handleModelChange} />
@@ -326,6 +394,7 @@ export function AssistantConversationBody({
           labels={{
             attachment: tChat("attachment"),
             interrupt: tChat("interrupt"),
+            interruptUnavailable: tChat("interruptUnavailable"),
             send: tChat("send"),
             usage: {
               nextRequestLabel: t("usage.nextRequestLabel"),
@@ -354,8 +423,14 @@ export function AssistantConversationBody({
           reasoningThought: (seconds) => t("reasoningThought", { seconds }),
           reasoningProcess: t("reasoningProcess"),
           compactionRowTitle: (count) => tCompaction("rowTitle", { count }),
+          runErrorAgentNotRemotable: t("runErrorAgentNotRemotable"),
+          runErrorSessionAgentMismatch: t("runErrorSessionAgentMismatch"),
+          runErrorOffline: t("runErrorOffline"),
         },
-        toolCall: { artifactPresentFailed: tArtifact("presentFailed") },
+        toolCall: {
+          artifactPresentFailed: tArtifact("presentFailed"),
+          hitlSettledElsewhere: t("hitlSettledElsewhere"),
+        },
         pendingList: {
           editPending: t("editPending"),
           deletePending: t("deletePending"),
@@ -377,8 +452,8 @@ export function AssistantConversationBody({
     />
   );
 
-  return remoteDeviceId ? (
-    <RemoteSessionProvider remoteDeviceId={remoteDeviceId} sessionId={id}>
+  return remoteAgentId ? (
+    <RemoteSessionProvider remoteAgentId={remoteAgentId} sessionId={id}>
       {view}
     </RemoteSessionProvider>
   ) : (

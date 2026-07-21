@@ -8,6 +8,11 @@ import type {
   AgentRunFrame,
   AgentRunStartForwarded,
   AgentRunStartInput,
+  AgentWatchAccepted,
+  AgentWatchForwarded,
+  AgentWatchFrame,
+  AgentWatchStartInput,
+  AgentWatchStopInput,
   DeviceQueryForwarded,
   DeviceQueryRequestInput,
   DeviceQueryResponse,
@@ -25,6 +30,8 @@ import { AgentErrorCode } from "../errors/agent.error-codes";
 import { AUTH_EVENTS } from "../services/auth.events";
 import {
   IM_RELAY_EVENTS,
+  type ImRelayAgentRegistryChangedEvent,
+  type ImRelayAgentWatchEvent,
   type ImRelayConnectedEvent,
   type ImRelayModelConfigChangedEvent,
 } from "./im-relay.events";
@@ -145,12 +152,29 @@ export class ImRelayClientService implements OnModuleDestroy {
         });
       }
 
-      // org 模型配置变更（云端广播的失效信号）→ 桥给 ModelConfigSyncService。
+      // org 模型配置变更（云端广播的失效信号）→ 桥给 CloudModelConfigProxyService（清缓存）。
       socket.on(IM_WS_EVENTS.modelConfigChanged, () => {
         this.account.run(cloudUserId, () => {
           this.emitter.emit(IM_RELAY_EVENTS.modelConfigChanged, {
             cloudUserId,
           } satisfies ImRelayModelConfigChangedEvent);
+        });
+      });
+
+      // 远程 Agent 注册表变更（云端广播的失效信号：同账号任一设备改了「允许远程」
+      // 开关或 Agent 元数据）→ 桥给 EventsGateway 下发浏览器重拉 /api/remote-agents。
+      //
+      // 两个已知盲区（云端广播侧限制，均退化为「不实时」而非「永久错」，由
+      // web-agent 重连时的补拉兜底，见 use-global-events.ts 的 onConnect）：
+      // 1. 设备/用户尚未归属组织（server-main 侧 orgId 为 null）→ 无 org 房间可投，
+      //    云端直接跳过广播（im.gateway.ts onCloudAgentChanged）。
+      // 2. 广播用的是变更方设备 token 解出的 orgId，而设备 orgId 与用户 activeOrgId
+      //    解耦：A、B 两台设备的 device.orgId 不同时，事件投不到 A。
+      socket.on(IM_WS_EVENTS.agentRegistryChanged, () => {
+        this.account.run(cloudUserId, () => {
+          this.emitter.emit(IM_RELAY_EVENTS.agentRegistryChanged, {
+            cloudUserId,
+          } satisfies ImRelayAgentRegistryChangedEvent);
         });
       });
 
@@ -197,6 +221,34 @@ export class ImRelayClientService implements OnModuleDestroy {
               cloudUserId,
               forwarded: payload,
             });
+          });
+        },
+      );
+      // Agent 级观察通道下行：入站 watch 登记/注销（云端转发到本设备，本设备是被观察方）。
+      socket.on(
+        IM_WS_EVENTS.agentWatchForwarded,
+        (payload: AgentWatchForwarded) => {
+          this.account.run(cloudUserId, () => {
+            this.emitter.emit(IM_RELAY_EVENTS.agentWatchInbound, {
+              cloudUserId,
+              forwarded: payload,
+            } satisfies ImRelayAgentWatchEvent);
+          });
+        },
+      );
+      // Agent 级观察通道下行：云端 fan-out 的观察帧（本设备是观察方，web-agent 代理路径）。
+      // 复用既有 IM_WS_EVENTS.agentRunFrame 监听器（下方）——云端 fan-out 时填
+      // watchId、不填 streamId，既有监听器已把帧桥成 IM_RELAY_EVENTS.agentRunFrame，
+      // T18 的代理层按 frame.watchId 是否存在分流即可，不重复注册监听器。
+      // Agent 级观察通道下行：云端回流的 watch 受理回包（含 inflight 快照）。
+      socket.on(
+        IM_WS_EVENTS.agentWatchAccepted,
+        (payload: AgentWatchAccepted) => {
+          this.account.run(cloudUserId, () => {
+            this.emitter.emit(
+              IM_RELAY_EVENTS.agentWatchAcceptedInbound,
+              payload,
+            );
           });
         },
       );
@@ -435,5 +487,54 @@ export class ImRelayClientService implements OnModuleDestroy {
     const conn = this.conns.get(cloudUserId);
     if (!conn?.socket.connected) return;
     conn.socket.emit(IM_WS_EVENTS.agentRunEnd, payload);
+  }
+
+  /**
+   * Agent 级观察通道：观察方发起 watch（上行，按账号）。
+   * @throws {AppError} IM_NOT_CONNECTED — 该账号未建立连接时抛出。
+   */
+  emitAgentWatchStart(
+    cloudUserId: string,
+    payload: AgentWatchStartInput,
+  ): void {
+    const conn = this.conns.get(cloudUserId);
+    if (!conn?.socket.connected) {
+      throw new AppError(AgentErrorCode.IM_NOT_CONNECTED);
+    }
+    conn.socket.emit(IM_WS_EVENTS.agentWatchStart, payload);
+  }
+
+  /**
+   * Agent 级观察通道：观察方显式 unwatch（上行，按账号；best-effort——
+   * 未连接时云端已因断线四路清理把该 watch 清掉，无需再抛）。
+   */
+  emitAgentWatchStop(cloudUserId: string, payload: AgentWatchStopInput): void {
+    const conn = this.conns.get(cloudUserId);
+    if (!conn?.socket.connected) return;
+    conn.socket.emit(IM_WS_EVENTS.agentWatchStop, payload);
+  }
+
+  /**
+   * Agent 级观察通道：被观察设备回发镜像帧（上行，按账号；best-effort，
+   * 未连接静默跳过——观察者由自身重连重 watch 兜底）。
+   * 每个 agent/session **只发一份**，云端按 watchers 表 fan-out。
+   */
+  emitAgentWatchFrame(cloudUserId: string, payload: AgentWatchFrame): void {
+    const conn = this.conns.get(cloudUserId);
+    if (!conn?.socket.connected) return;
+    conn.socket.emit(IM_WS_EVENTS.agentWatchFrame, payload);
+  }
+
+  /**
+   * Agent 级观察通道：被观察设备回发 watch 受理回包（含 inflight 快照，
+   * 上行，按账号；best-effort，理由同上）。
+   */
+  emitAgentWatchAccepted(
+    cloudUserId: string,
+    payload: AgentWatchAccepted,
+  ): void {
+    const conn = this.conns.get(cloudUserId);
+    if (!conn?.socket.connected) return;
+    conn.socket.emit(IM_WS_EVENTS.agentWatchAccepted, payload);
   }
 }

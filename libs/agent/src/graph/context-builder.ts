@@ -3,6 +3,7 @@ import { Inject, Injectable, Optional } from "@nestjs/common";
 import { AccountContextService } from "../account/account-context.service.js";
 import { MEMORY_GUIDE } from "../memory/memory-guide.js";
 import { MemoryService } from "../memory/memory.service.js";
+import { LLMUSE_GUIDE } from "../prompt/llmuse-guide.js";
 import { SkillService } from "../skills/skill.service.js";
 import type { ThreadId } from "./graph.types.js";
 import { ModelResolver } from "./model-resolver.service.js";
@@ -75,13 +76,13 @@ export class ContextBuilder {
       : null;
     const tz =
       ext?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
-    // 注入助手自己的名字（用户可改）：所有会话类型一致，让 agent 始终知道自己叫什么
+    // 注入当前 Agent 自己的名字（用户可改）：所有会话类型一致，让 agent 始终知道自己叫什么
     const lines = [
       `cloudUserId: ${cloudUserId}`,
       `sessionId: ${threadId}`,
       ...(ext?.displayName ? [`user: ${ext.displayName}`] : []),
-      ...(ext?.quickAssistantName
-        ? [`assistantName: ${ext.quickAssistantName}（你自己的名字）`]
+      ...(ext?.agentName
+        ? [`assistantName: ${ext.agentName}（你自己的名字）`]
         : []),
       `model: ${this.modelResolver?.getMeta().model ?? ""}`,
       ...(ext?.language ? [`language: ${ext.language}`] : []),
@@ -91,6 +92,28 @@ export class ContextBuilder {
       id: "system:ctx",
       content: `<context>\n${lines.join("\n")}\n</context>`,
     });
+  }
+
+  /**
+   * 组装人格消息（稳定 id system:persona；**每轮刷新**、reducer 按 id 原地更新）。
+   *
+   * 内容 = 当前 Agent 的 systemPrompt + 记忆段（MEMORY_GUIDE + core.md）+ LLMUSE 指南。
+   *
+   * 必须每轮刷新而非首轮注入：多 Agent 下用户随时可改 systemPrompt 或切换 Agent，
+   * 首轮写死会让老会话永远带着旧人格，且静默不报错。
+   */
+  async buildPersonaMessage(): Promise<SystemMessage> {
+    const ext = this.runtimeContext
+      ? await this.runtimeContext.resolve()
+      : null;
+    const content = [
+      ext?.agentSystemPrompt || "",
+      this.buildMemorySection(),
+      LLMUSE_GUIDE,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+    return new SystemMessage({ id: "system:persona", content });
   }
 
   /**

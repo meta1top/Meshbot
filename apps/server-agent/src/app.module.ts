@@ -27,6 +27,7 @@ import {
 import { AccountContextInterceptor } from "./account/account-context.interceptor";
 import { AccountModule } from "./account/account.module";
 import { AccountRuntimeModule } from "./account/account-runtime.module";
+import { AgentsModule } from "./agents.module";
 import { AuthModule } from "./auth.module";
 import { CronJobModule } from "./cron-job.module";
 import { ImContextModule } from "./im-context.module";
@@ -38,12 +39,14 @@ import { ImSendModule } from "./im-send.module";
 import { QuickAssistantModule } from "./quick-assistant.module";
 import { RuntimeContextModule } from "./runtime-context.module";
 import { SkillModule } from "./skill.module";
+import { AgentController } from "./controllers/agent.controller";
 import { ArtifactController } from "./controllers/artifact.controller";
 import { HealthController } from "./controllers/health.controller";
 import { ModelConfigController } from "./controllers/model-config.controller";
 import { SettingController } from "./controllers/setting.controller";
 import { SetupController } from "./controllers/setup.controller";
 import { EnvSchema } from "./env.schema";
+import { Agent } from "./entities/agent.entity";
 import { CloudIdentity } from "./entities/cloud-identity.entity";
 import { CronJob } from "./entities/cron-job.entity";
 import { LlmCall } from "./entities/llm-call.entity";
@@ -89,6 +92,7 @@ const meshbotDir = resolveMeshbotDir();
       type: "better-sqlite3",
       database: path.join(meshbotDir, "main.db"),
       entities: [
+        Agent,
         LlmCall,
         ModelConfig,
         Setting,
@@ -123,6 +127,7 @@ const meshbotDir = resolveMeshbotDir();
     // Phase 5 Track C1：结构化健康检查
     TerminusModule,
     AgentModule,
+    AgentsModule,
     AccountRuntimeModule,
     AccountModule,
     CronJobModule,
@@ -140,6 +145,7 @@ const meshbotDir = resolveMeshbotDir();
     StaticModule.forRoot(),
   ],
   controllers: [
+    AgentController,
     ArtifactController,
     HealthController,
     ModelConfigController,

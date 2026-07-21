@@ -7,6 +7,10 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
 } from "@meshbot/design";
 import {
   Loader2,
@@ -55,6 +59,8 @@ export interface SessionTreeLabels {
   deleteConfirmCancel?: string;
   /** 设备行内「新建会话」按钮 title（仅 onNewSession 注入时使用）。 */
   newSession?: string;
+  /** Agent 行编辑按钮 aria-label / title（仅 onEditAgent 注入时使用）。 */
+  editAgent?: string;
 }
 
 /**
@@ -69,9 +75,18 @@ export type SessionTreeNodeInfo =
       kind: "device";
       /** 在线态：决定 chevron 是否可点、offline 徽标是否显示。 */
       online: boolean;
-      /** 是否可展开（离线设备 hasChildren 仍可为 true 以撑出 chevron，
-       *  但点击/展开态由 expandable 挡住 —— 对齐 web-agent「离线也显示 chevron，
-       *  置灰不可点」的既有交互）。 */
+      /**
+       * 是否可展开——只控制这一行本身：为 false 时 `onClick` 置空、整行套
+       * `pointer-events-none opacity-50` 灰化不可点（见 `DeviceRow` 的
+       * `info.expandable ? row : <div className="pointer-events-none opacity-50">…`）。
+       * 注意它不管子节点是否渲染——`hasChildren && open` 是 `NavItem` 自己的
+       * 逻辑，落在 `renderRow` 返回值之外，不会被这层灰化包裹住。所以哪怕这里
+       * 传 `expandable: false`，也不能靠给非空 `children` 撑 chevron：会重演
+       * Agent 侧踩过的幽灵子行（未置灰、可 hover，见 `NavNode.chevronPlaceholder`
+       * 的 JSDoc）——离线时 `children` 仍要给空数组，chevron 改用
+       * `chevronPlaceholder` 单独撑出。当前没有调用方产出 `kind: "device"`
+       * 节点，这段是该判别分支留存的历史 API 说明。
+       */
       expandable: boolean;
     }
   | {
@@ -88,12 +103,34 @@ export type SessionTreeNodeInfo =
       kind: "placeholder";
       /** skeleton：一段脉冲占位；note：纯文字提示（骨架/空态/加载失败）。 */
       variant: "skeleton" | "note";
+    }
+  | {
+      kind: "agent";
+      /** 头像 emoji（web-agent 侧已从「emoji|色值」拆好，本组件只管渲染）。 */
+      emoji: string;
+      /** 头像背景色（#hex）。 */
+      color: string;
+      name: string;
+      /** 该 Agent 名下有会话在跑 → 显示脉冲点。 */
+      running: boolean;
+      /**
+       * 是否为远程 Agent（其他设备上注册、经云端寻址）。本机 Agent 不传即本机
+       * 语义——不出副标题、不灰化、保留 hover 编辑铅笔。
+       */
+      remote?: boolean;
+      /** 远程 Agent 的宿主设备名副标题（本机不传）。 */
+      deviceName?: string;
+      /** 远程宿主在线态；`false` → 整行灰化，不可展开/点击（本机不传）。 */
+      online?: boolean;
     };
 
 export interface SessionTreeProps {
   groups: NavGroup[];
-  /** 当前激活会话对应的 `NavNode.key`；用于高亮 + 驱动祖先设备分支自动展开
-   *（`SidebarNav` 内建：`node.defaultOpen ?? isNavNodeActive(node, activeKey)`）。 */
+  /** 当前激活会话对应的 `NavNode.key`；仅用于高亮。曾经还兼职「驱动祖先 Agent
+   *  分支自动展开」（`SidebarNav` 非受控态下 `node.defaultOpen ?? isNavNodeActive
+   *  (node, activeKey)` 的机制），但两端调用方（web-agent/web-main）现已全量
+   *  受控——`NavNode.open` 改由调用方自持的 `expanded` 集合驱动，该自动展开
+   *  机制对 Agent 节点不再生效。 */
   activeSessionKey?: string;
   /** 顶层加载态（设备列表本身未到达前）；命中时整树替换为骨架。 */
   loading?: boolean;
@@ -101,6 +138,13 @@ export interface SessionTreeProps {
   nodeInfo: (node: NavNode) => SessionTreeNodeInfo | undefined;
   /** 设备节点展开（用户点开，非 defaultOpen 触发）：懒加载该设备会话列表。 */
   onExpandDevice?: (node: NavNode) => void;
+  /**
+   * 展开态变化（透传 `SidebarNavProps.onToggle`）：开、合都会触发，区别于
+   * `onExpandDevice` 只在展开时触发一次。受控展开态场景（`NavNode.open`）下
+   * 调用方靠它更新自己持有的展开集合 + 落盘持久化；非受控场景可以不传，
+   * `SidebarNav` 内部局部 state 照常工作。
+   */
+  onToggle?: (node: NavNode, open: boolean) => void;
   /** 设备行内「新建会话」按钮点击（不传则该按钮不出现，如 web-agent 用全局
    *  头部「+」代替，不需要逐设备入口）。 */
   onNewSession?: (node: NavNode) => void;
@@ -108,6 +152,8 @@ export interface SessionTreeProps {
   onRenameSession?: (node: NavNode, title: string) => Promise<void> | void;
   /** 删除确认；成功后关闭确认框，失败时确认框留着、按钮恢复可点供重试/取消。 */
   onDeleteSession?: (node: NavNode) => Promise<void> | void;
+  /** Agent 行编辑按钮点击（不传则该按钮不出现）。 */
+  onEditAgent?: (node: NavNode) => void;
   labels: SessionTreeLabels;
 }
 
@@ -125,9 +171,11 @@ export function SessionTree({
   loading,
   nodeInfo,
   onExpandDevice,
+  onToggle,
   onNewSession,
   onRenameSession,
   onDeleteSession,
+  onEditAgent,
   labels,
 }: SessionTreeProps) {
   const renderRow = (node: NavNode, defaults: SidebarRowProps): ReactNode => {
@@ -167,6 +215,16 @@ export function SessionTree({
             {node.label}
           </div>
         );
+      case "agent":
+        return (
+          <AgentRow
+            node={node}
+            defaults={defaults}
+            info={info}
+            onEditAgent={onEditAgent}
+            labels={labels}
+          />
+        );
     }
   };
 
@@ -176,6 +234,7 @@ export function SessionTree({
       groups={groups}
       activeKey={activeSessionKey}
       onExpand={onExpandDevice}
+      onToggle={onToggle}
       renderRow={renderRow}
     />
   );
@@ -243,6 +302,132 @@ function DeviceRow({
     row
   ) : (
     <div className="pointer-events-none opacity-50">{row}</div>
+  );
+}
+
+/** Agent 行：chevron（SidebarNav 已在 defaults.icon 给出）+ 圆形头像（色底 emoji）
+ *  + 名字 + running 脉冲点 + hover 编辑（复用 SidebarRow 的 actions 出现机制，
+ *  不额外造 hover 逻辑）。编辑按钮盒子 h-5 w-5（同 SessionRow 三点菜单触发器），
+ *  比早前的 h-6 w-6 更贴合图标——原尺寸在短 Agent 名场景下和行右缘之间留白
+ *  明显偏大、视觉不平衡（Bug #2）。行本体点击只做展开/收起（`defaults.onClick`
+ *  是 NavItem 的 toggle 分支）——不再有「设为当前 Agent」的并行通道，Agent
+ *  是并列关系，没有全局当前态可切。
+ *
+ *  远程 Agent（`info.remote`）在同一行名字后跟弱化的「· 宿主设备名」——保持与
+ *  本机 Agent 一致的单行 h-7 节奏（早前的两行版实机偏臃肿），放不下先截设备名
+ *  （Agent 名 `shrink-0` 优先完整、`max-w-[65%]` 兜底极端长名字），完整信息靠
+ *  hover tooltip 补全；无编辑铅笔（远程 Agent 只读，不可
+ *  从这里改名/改人设）；宿主离线（`info.online === false`）时整行
+ *  `pointer-events-none` 灰化——不可展开/不可点击，右侧换成「离线」徽标（同设备
+ *  行的离线呈现）；灰化层的 `pointer-events-none` 让指针事件穿透到外层 tooltip
+ *  触发器，所以离线行照样能 hover 出完整信息。 */
+function AgentRow({
+  node,
+  defaults,
+  info,
+  onEditAgent,
+  labels,
+}: {
+  node: NavNode;
+  defaults: SidebarRowProps;
+  info: Extract<SessionTreeNodeInfo, { kind: "agent" }>;
+  onEditAgent?: (node: NavNode) => void;
+  labels: SessionTreeLabels;
+}) {
+  const offline = info.remote === true && info.online === false;
+  const showPencil = !!onEditAgent && !info.remote;
+  const hostName = info.remote ? info.deviceName : undefined;
+  const row = (
+    <SidebarRow
+      icon={
+        <>
+          {defaults.icon}
+          <span
+            className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px]"
+            style={{ backgroundColor: info.color }}
+          >
+            {info.emoji}
+          </span>
+        </>
+      }
+      label={
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span
+            className={cn(
+              "truncate font-semibold text-(--shell-sidebar-fg)",
+              // 收缩优先级：带「· 设备名」后缀时 Agent 名不参与 flex 收缩
+              // （shrink-0），宽度不够先截设备名——名字才是识别对象，被截成
+              // 「塞尔…」而让宿主设备名占满是本末倒置。max-w 是极端长名字的
+              // 兜底：名字自己最多吃 65%，再长就自己 truncate，不会把设备名
+              // 挤没、也不会撑破整行。本机 Agent（无后缀）不加限宽，避免在还
+              // 有空间时提前截断。
+              hostName && "max-w-[65%] shrink-0",
+            )}
+          >
+            {info.name}
+          </span>
+          {info.running ? (
+            <span
+              className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[#16a34a]"
+              aria-hidden
+            />
+          ) : null}
+          {hostName ? (
+            <span className="min-w-0 truncate text-[11px] font-normal text-(--shell-sidebar-fg)/50">
+              · {hostName}
+            </span>
+          ) : null}
+        </span>
+      }
+      depth={defaults.depth}
+      onClick={offline ? undefined : defaults.onClick}
+      trailing={
+        offline ? (
+          <span className="shrink-0 text-[11px] text-(--shell-sidebar-fg)/50">
+            {labels.offline}
+          </span>
+        ) : undefined
+      }
+      actions={
+        showPencil ? (
+          <button
+            type="button"
+            title={labels.editAgent}
+            aria-label={labels.editAgent}
+            onClick={(e) => {
+              e.stopPropagation();
+              onEditAgent?.(node);
+            }}
+            className="flex h-5 w-5 items-center justify-center rounded text-(--shell-sidebar-fg)/60 transition-colors hover:bg-(--shell-sidebar-hover) hover:text-(--shell-sidebar-fg)"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+        ) : undefined
+      }
+    />
+  );
+  const body = offline ? (
+    <div className="pointer-events-none opacity-50">{row}</div>
+  ) : (
+    row
+  );
+  // 无宿主设备名（本机 Agent）不套 tooltip：单行 truncate 已经够用，多包一层
+  // 触发器只会白白多出一个 DOM 节点。
+  if (!hostName) return body;
+  return (
+    // 自带 Provider：两端 layout 未必都挂了全局 TooltipProvider，Radix 的
+    // Provider 可嵌套且开销极小，就地兜底最省心。
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="w-full">{body}</div>
+        </TooltipTrigger>
+        <TooltipContent side="right" className="max-w-[220px]">
+          <div className="font-medium">{info.name}</div>
+          <div className="opacity-75">{hostName}</div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 

@@ -148,7 +148,7 @@ describe("createChatModel：云模型分支", () => {
 });
 
 describe("createChatModel：本地轨 provider 白名单", () => {
-  // 本地轨只经云网关取模型：model-config-sync.service.ts 的 toGatewayRow 把下发行
+  // 本地轨只经云网关取模型：CloudModelConfigProxyService 的 toGatewayRow 把下发行
   // 的 providerType 固定写成 openai-compatible，真实厂商调用发生在 server-main 的
   // model-gateway。所以本地轨出现其他 providerType 一定是脏数据。
   //

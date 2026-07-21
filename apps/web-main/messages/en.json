@@ -3,7 +3,8 @@
     "appTitle": "MeshBot Cloud",
     "switchToLightTheme": "Switch to light theme",
     "switchToDarkTheme": "Switch to dark theme",
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "close": "Close"
   },
   "appShell": {
     "newMessage": "New Message",
@@ -43,15 +44,17 @@
       "title": "Start a task",
       "subtitle": "Pick an authorized device and hand the task to its Agent",
       "placeholder": "Enter your task or question",
-      "pickDevice": "Select device",
-      "pickDeviceFirst": "Please select a device to run the task",
+      "pickAgent": "Select agent",
+      "pickAgentFirst": "Please select an agent to run this task first",
       "willRunOn": "Will run on {device}",
       "slogan": "Your work copilot",
       "scenes": {
         "daily": "Daily work",
         "code": "Coding",
         "design": "Design"
-      }
+      },
+      "hostOffline": "{device} (offline)",
+      "agentOffline": "The selected agent's host device is now offline. Please pick another one."
     },
     "input": {
       "attachment": "Add attachment",
@@ -59,12 +62,14 @@
     }
   },
   "assistantSidebar": {
-    "title": "Devices",
+    "title": "Agents",
     "newSession": "New session",
     "backToDevices": "Back to devices",
     "offlineSessionsHint": "Device is offline, sessions cannot be loaded",
     "remoteLoadFailed": "Failed to load sessions",
-    "remoteEmpty": "No sessions on this device yet"
+    "remoteEmpty": "No sessions for this Agent yet",
+    "empty": "No agents yet",
+    "watchFailed": "Unable to receive live updates for this Agent (the device may be offline or not remotely accessible)"
   },
   "loading": "",
   "validation": {
@@ -534,16 +539,29 @@
     "reasoningThinking": "Thinking {seconds}s",
     "reasoningThought": "Thought for {seconds}s",
     "runErrorPrefix": "Run failed: ",
+    "runErrorAgentNotRemotable": "The target agent isn't available for remote access (it doesn't exist or remote access is off), so this message wasn't sent",
+    "runErrorSessionAgentMismatch": "This conversation doesn't belong to the selected agent, so this message wasn't sent",
+    "runErrorOffline": "The target device is offline, so this message wasn't sent",
+    "hitlSettledElsewhere": "Answered on another client",
+    "watchRejectedPrefix": "Can't watch this device's output in real time: ",
+    "watchRejectedOffline": "The target device is offline",
+    "watchRejectedNotFound": "This agent isn't available for remote access (it doesn't exist or remote access is off)",
+    "watchRejectedSessionAgentMismatch": "This conversation doesn't belong to the selected agent",
+    "watchRejectedCrossAccount": "Cross-account access was denied",
+    "watchRejectedError": "The device failed to process the watch request",
+    "watchRejectedUnknown": "Failed to establish the watch channel",
     "remoteLoadFailed": "Failed to load session history",
     "actionFailed": "Action failed, please retry",
     "createFailed": "Failed to create session — the device may be offline. Please retry",
+    "sendWhileRunning": "This session is still generating a reply. Wait for it to finish or stop it before sending a new message",
     "dismiss": "Dismiss",
     "modelSelect": "Select model",
     "input": {
       "placeholder": "Type your task or question",
       "send": "Send",
       "stop": "Stop",
-      "attachment": "Add attachment"
+      "attachment": "Add attachment",
+      "stopUnavailable": "Cannot interrupt while observing: this run was not started from this device"
     },
     "compaction": {
       "bannerThreshold": "Compacting conversation history…",

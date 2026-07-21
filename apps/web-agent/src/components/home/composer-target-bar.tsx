@@ -6,47 +6,44 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@meshbot/design";
-import { useAtomValue, useSetAtom } from "jotai";
-import { ChevronRight, FolderClosed, MonitorSmartphone } from "lucide-react";
+import { ChevronRight, FolderClosed } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
+import { parseAgentAvatar } from "@/lib/agent-avatar";
 import {
-  deviceOnlineAtom,
-  devicesAtom,
-  loadDevicesAtom,
-} from "@/atoms/devices";
+  buildLauncherOptions,
+  type LauncherOption,
+  type LauncherTarget,
+  launcherTargetKey,
+} from "@/lib/launcher-target";
+import { useAgents } from "@/rest/agents";
+import { useRemoteAgents } from "@/rest/remote-agents";
 
 interface ComposerTargetBarProps {
-  /** 当前选中的 Agent 设备 id；null = 未选（走本机）。受父组件（起手台）控制，
-   * 供发送逻辑判断本次发送应走本地 createSession 还是 L3 远程 run。 */
-  selectedDeviceId: string | null;
-  onSelectDevice: (id: string) => void;
+  /** 当前选中目标；null = 未显式选择（视觉默认展示列表第一项，但发送逻辑由
+   *  父组件按 value 是否为 null 决定是否兜底默认 Agent）。 */
+  value: LauncherTarget | null;
+  onChange: (target: LauncherTarget) => void;
 }
 
 /**
- * 起手台 composer 下方目标选择器行：
- * 选择 Agent（默认本机，下拉列该账号所有设备，离线置灰）+ 选择工作空间（占位）。
- * 与助手侧栏共用 devicesAtom。选中项状态提升到父组件 LauncherHome（L3 发送
- * 逻辑需要据此判断走本地/远程）。
+ * 起手台 composer 下方目标选择器行：本机 Agent + 其他设备的远程 Agent 合并成
+ * 一个扁平下拉（本机在前、远程在后，D2）。远程项显示 Agent 名 + 宿主设备名
+ * 副标题、离线宿主置灰不可选（D1/D3）。「设备」不再是目标。
  */
-export function ComposerTargetBar({
-  selectedDeviceId,
-  onSelectDevice,
-}: ComposerTargetBarProps) {
+export function ComposerTargetBar({ value, onChange }: ComposerTargetBarProps) {
   const t = useTranslations("composer");
-  const devices = useAtomValue(devicesAtom);
-  const online = useAtomValue(deviceOnlineAtom);
-  const loadDevices = useSetAtom(loadDevicesAtom);
+  const { data: localAgents } = useAgents();
+  const { data: remoteAgents } = useRemoteAgents();
 
-  useEffect(() => {
-    void loadDevices();
-  }, [loadDevices]);
+  const options = useMemo(
+    () => buildLauncherOptions(localAgents, remoteAgents),
+    [localAgents, remoteAgents],
+  );
 
-  const local = useMemo(() => devices.find((d) => d.isCurrent), [devices]);
+  const selectedKey = launcherTargetKey(value);
   const selected =
-    devices.find((d) => d.id === selectedDeviceId) ?? local ?? null;
-  const selectedLabel =
-    selected && !selected.isCurrent ? selected.name : t("agentLocal");
+    options.find((o) => o.key === selectedKey) ?? options[0] ?? null;
 
   return (
     <div className="mt-2 flex items-center gap-4 px-1">
@@ -56,36 +53,19 @@ export function ComposerTargetBar({
             type="button"
             className="flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
-            <MonitorSmartphone className="h-3.5 w-3.5" />
-            {selectedLabel}
+            {selected ? <TargetAvatar avatar={selected.avatar} /> : null}
+            {selected?.name ?? ""}
             <ChevronRight className="h-3 w-3 opacity-60" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="min-w-[180px]">
-          {devices
-            .filter((d) => !d.revokedAt)
-            .map((d) => {
-              const isOnline = d.isCurrent || (online[d.id] ?? false);
-              return (
-                <DropdownMenuItem
-                  key={d.id}
-                  disabled={!isOnline}
-                  onClick={() => onSelectDevice(d.id)}
-                  className="flex items-center gap-2"
-                >
-                  <span
-                    className={`h-2 w-2 shrink-0 rounded-full ${isOnline ? "bg-[#16a34a]" : "bg-muted-foreground/40"}`}
-                  />
-                  <span className="truncate">
-                    {d.isCurrent ? t("agentLocal") : d.name}
-                  </span>
-                </DropdownMenuItem>
-              );
-            })}
+        <DropdownMenuContent align="start" className="min-w-[220px]">
+          {options.map((o) => (
+            <TargetItem key={o.key} option={o} onChange={onChange} />
+          ))}
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* 选择工作空间：默认工作区（agent 文件工作区，后续接真实目录） */}
+      {/* 选择工作空间：默认工作区（占位，后续接真实目录） */}
       <button
         type="button"
         title={t("comingSoon")}
@@ -96,5 +76,48 @@ export function ComposerTargetBar({
         <ChevronRight className="h-3 w-3 opacity-60" />
       </button>
     </div>
+  );
+}
+
+/** 圆形色底 emoji 头像（起手台目标行/下拉项共用）。 */
+function TargetAvatar({ avatar }: { avatar: string }) {
+  const { emoji, color } = parseAgentAvatar(avatar);
+  return (
+    <span
+      className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px]"
+      style={{ backgroundColor: color }}
+    >
+      {emoji}
+    </span>
+  );
+}
+
+/** 单个下拉项：本机=单行；远程=名字 + 宿主设备名副标题 + 离线灰化不可选。 */
+function TargetItem({
+  option,
+  onChange,
+}: {
+  option: LauncherOption;
+  onChange: (target: LauncherTarget) => void;
+}) {
+  const t = useTranslations("composer");
+  return (
+    <DropdownMenuItem
+      disabled={option.disabled}
+      onClick={() => onChange(option.target)}
+      className="flex items-center gap-2"
+    >
+      <TargetAvatar avatar={option.avatar} />
+      <span className="flex min-w-0 flex-col">
+        <span className="truncate">{option.name}</span>
+        {option.subtitle ? (
+          <span className="truncate text-[10px] text-muted-foreground">
+            {option.online
+              ? option.subtitle
+              : t("hostOffline", { device: option.subtitle })}
+          </span>
+        ) : null}
+      </span>
+    </DropdownMenuItem>
   );
 }

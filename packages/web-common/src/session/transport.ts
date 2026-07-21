@@ -1,8 +1,10 @@
+import type { AgentWatchAccepted } from "@meshbot/types";
 import type {
   HistoryResponse,
   PendingResponse,
   SessionSummary,
 } from "@meshbot/types-agent";
+import type { SessionListEvent } from "./session-list-events";
 
 /** run 流事件（本机 session WS 事件与远程 AgentRunFrame 解包后的统一形态）。 */
 export interface SessionRunEvents {
@@ -85,6 +87,57 @@ export interface SessionTransport {
    * `transport.dispose?.()` 调用，缺失时安全 no-op。
    */
   dispose?: () => void;
+  /**
+   * 开始观察某会话的推理帧（Agent 级观察通道 · Session 级 watch，spec D5
+   * 「打开会话即 session-watch」）。返回 unwatch 函数（幂等，可安全重复调用）。
+   * 契约扩展（Task 12）——远程 relay 实现（web-main）用它建立 watchId 通道，
+   * 中途接入靠 D7 inflight 快照续上半截输出，跨多轮 run 存活直到显式 unwatch。
+   * 本机专属实现（web-agent local 分支）可为 no-op 或不实现——本机 `ws/session`
+   * 本身已是实时的，不需要一条独立的观察通道。消费方统一按
+   * `transport.watchSession?.(sessionId)` 调用，缺失时安全跳过。
+   */
+  watchSession?: (sessionId: string) => () => void;
+  /**
+   * 开始观察该 Agent 的会话生命周期（Agent 级观察通道，spec D9「统一事件
+   * 契约」的前端接线点）。回调收到归一后的 {@link SessionListEvent}
+   * （created/deleted/renamed/status_changed），非生命周期帧（推理过程帧等）
+   * 已在实现层过滤掉，不会到达这里。返回 unwatch 函数（幂等，可安全重复
+   * 调用）。契约扩展（Task 15 · ⭐ 交付点 B）——远程 relay 实现（web-main）
+   * 用它建立与 `watchSession` 同族的 watchId 通道（scope="agent"），跨会话、
+   * 跨多轮 run 存活直到显式 unwatch。本机专属实现（web-agent local 分支）
+   * 要到 T19 才实现，可不实现——本机会话列表本身已经通过 `ws/events`
+   * 信封实时收生命周期事件，不需要一条独立的观察通道。消费方统一按
+   * `transport.watchAgent?.(cb)` 调用，缺失时安全跳过。
+   *
+   * `onError`（Bug 2 修复）：观察通道被拒绝（`offline`/`cross_account`/
+   * `not_found`/`session_agent_mismatch`/`error`；不含 `idle`——同 `reason`
+   * 字段整体语义，`idle` 会被实现层原地自动重新发起，透明自愈，不会冒泡到
+   * 这里）时的错误回调。Agent 级观察通道没有单一 `sessionId`，天然无法复用
+   * `watchSession` 那套按 sessionId 过滤的会话级拒绝横幅（web-main 实现
+   * 内部合成的 `WATCH_REJECTED_EVENT` 多播总线）——此前 web-main 的实现把
+   * 两种拒绝都塞进同一条总线，agent 级那份因 sessionId 是占位空串永远匹配
+   * 不上任何会话视图，等于静默丢弃（真机表现：侧栏收不到镜像事件也不报错，
+   * 用户以为对方没动静）。
+   * 可选：本机专属实现（web-agent local 分支）可不实现——不使用 `onEvent`
+   * 的同一个理由（全局事件总线），也没有需要单独告知调用方的错误通道。
+   */
+  watchAgent?: (
+    onEvent: (evt: SessionListEvent) => void,
+    onError?: (reason?: AgentWatchAccepted["reason"]) => void,
+    /**
+     * 观察通道**真正注册成功**时回调一次（R2b）。调用方应在此刻补拉一次该
+     * Agent 的会话列表。
+     *
+     * 为什么必须是「注册成功之后」而不是「发起注册之后」：拉快照与注册 watch
+     * 是两条互不排序的往返，注册完成**之前**到达的镜像事件会被直接丢弃（设备
+     * 侧 `AgentWatchMirrorService` 先查 `hasWatcher`，无观察者就零成本短路，
+     * 不排队也不补发）。所以「快照已生成 → B 建了新会话 → watch 才注册完」这个
+     * 顺序下，那条会话既不在快照里也不在事件里，要等下一次重拉才出现。
+     * 在注册成功之后补拉，快照的时间点晚于注册，缺口才真正闭合；在注册**之前**
+     * 补拉只是把窗口挪了个位置，洞还在。
+     */
+    onReady?: () => void,
+  ) => () => void;
 }
 
 /**
@@ -127,9 +180,28 @@ export class MulticastRunEvents {
 export class FrameSequencer {
   private nextExpectedSeq = 1;
   private buffer = new Map<number, { event: string; payload: unknown }>();
+  /** 当前是否已定基准（`primed=false` 时下一次 `push` 会用其 seq 作为起点）。 */
+  private primed: boolean;
+  /** 构造时记住的初值，供 `reset()` 恢复（`primeOnFirst` 模式下重置后允许重新定基准）。 */
+  private readonly primedDefault: boolean;
+
+  /**
+   * @param opts.primeOnFirst 首帧的 seq 作为起始基准（**观察者通道必须开**）。
+   *
+   * 自己发起的 run 流总是从 seq 1 开始收，默认 false 即可。但**观察者是中途
+   * 接入**——设备侧常驻转发器的 seq 从它建立那一刻起累加，观察者收到的第一
+   * 帧可能是 seq 47。若仍按 1 起算，这帧会被塞进重排缓冲等一个永远不会到来的
+   * seq 1，观察者一帧都吐不出来（静默失效，UI 表现为「watch 成功了但什么都
+   * 不动」）。开启后首帧即定基准，之后正常按连续性重排。
+   */
+  constructor(opts?: { primeOnFirst?: boolean }) {
+    this.primed = !opts?.primeOnFirst;
+    this.primedDefault = this.primed;
+  }
 
   /**
    * 推送一帧，返回可以立即吐出的帧序列（按 seq 连续）。
+   * - 若尚未定基准（`primeOnFirst` 模式下的首帧），以本帧 seq 为起点。
    * - 若帧 seq 等于 nextExpectedSeq，立即吐出，并检查缓冲区是否可连续吐出。
    * - 若帧 seq > nextExpectedSeq，缓冲待后续填补。
    * - 若帧 seq < nextExpectedSeq，说明是重复（已吐过），丢弃。
@@ -140,6 +212,11 @@ export class FrameSequencer {
     payload: unknown;
   }): Array<{ event: string; payload: unknown }> {
     const { seq, event, payload } = frame;
+
+    if (!this.primed) {
+      this.primed = true;
+      this.nextExpectedSeq = seq;
+    }
 
     // 丢弃重复 seq
     if (seq < this.nextExpectedSeq) {
@@ -169,9 +246,10 @@ export class FrameSequencer {
     return result;
   }
 
-  /** 重置序列器状态（清空缓冲和计数器）。 */
+  /** 重置序列器状态（清空缓冲和计数器；`primeOnFirst` 模式下允许重新定基准）。 */
   reset(): void {
     this.nextExpectedSeq = 1;
     this.buffer.clear();
+    this.primed = this.primedDefault;
   }
 }

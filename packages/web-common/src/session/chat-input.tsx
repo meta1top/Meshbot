@@ -42,6 +42,13 @@ export interface ChatInputLabels {
   attachment: string;
   /** 中断按钮 title。 */
   interrupt: string;
+  /**
+   * 观察态下停止按钮被禁用时的 title（Bug 1 修复）：`canInterrupt=false`
+   * 时用它替代 `interrupt`，向用户解释「这个按钮点了没用」，而不是让它看起来
+   * 像个失灵的按钮。可选：本地分支的停止按钮恒可用，永远用不上这个兜底，
+   * 缺省回退到 `interrupt`。
+   */
+  interruptUnavailable?: string;
   /** 发送按钮 title。 */
   send?: string;
   /** token 用量 tooltip 明细文案（仅 `tokenUsage.breakdown` 存在时用到）。 */
@@ -64,6 +71,13 @@ export interface ChatInputProps {
   onSend?: (message: string) => void;
   onInterrupt?: () => void;
   isLoading?: boolean;
+  /**
+   * 运行中时停止按钮是否可用（默认 `true`）。观察态下（remote 且当前没有
+   * 可路由的 streamId——见 `useSessionStream().canInterrupt` 文档）调用方
+   * 应传 `false`：按钮改渲染为禁用态而非可点击，防止用户以为点了就能停、
+   * 实际这个 run 还在继续跑（Bug 1）。
+   */
+  canInterrupt?: boolean;
   placeholder?: string;
   /** 底部动作栏左侧的前导动作（如 ComposerActions 的 技能/连应用/权限 mock 链）。 */
   leadingActions?: ReactNode;
@@ -118,6 +132,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       onSend,
       onInterrupt,
       isLoading = false,
+      canInterrupt = true,
       placeholder,
       leadingActions,
       trailingActions,
@@ -341,16 +356,32 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
 
             {/* 运行中只显示中断（发送隐藏，Enter 同步禁用——见 handleSend
                 守卫）；想发新消息先停止当前 run。排队追加的后端能力保留，
-                仅不再从此入口暴露。 */}
+                仅不再从此入口暴露。
+                观察态（`canInterrupt=false`，Bug 1 修复）：按钮仍然占位
+                （保持底部动作栏布局不跳动），但改为禁用态——不接 onClick、
+                变灰、title 换成解释文案，不能让用户点了以为真的停了但设备上
+                那个 run 其实还在继续跑。 */}
             {isLoading ? (
-              <button
-                type="button"
-                onClick={handleInterrupt}
-                className="flex h-8 w-8 shrink-0 items-center justify-center text-destructive transition-colors hover:text-destructive/80"
-                title={labels.interrupt}
-              >
-                <Square className="h-4 w-4 fill-current" />
-              </button>
+              canInterrupt ? (
+                <button
+                  type="button"
+                  onClick={handleInterrupt}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center text-destructive transition-colors hover:text-destructive/80"
+                  title={labels.interrupt}
+                >
+                  <Square className="h-4 w-4 fill-current" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  aria-disabled="true"
+                  className="flex h-8 w-8 shrink-0 cursor-not-allowed items-center justify-center text-muted-foreground/40"
+                  title={labels.interruptUnavailable ?? labels.interrupt}
+                >
+                  <Square className="h-4 w-4 fill-current" />
+                </button>
+              )
             ) : (
               <button
                 type="button"

@@ -16,17 +16,29 @@ export interface AskQuestionCardProps {
     toolCallId: string,
     answers: { selected: string[]; other?: string }[],
   ) => Promise<void>;
+  /**
+   * 关卡已被其他端应答的提示文案（Task 17，`run.hitl_settled` 广播帧）——
+   * `tool.hitlSettledBy` 非空、但真正的工具终态（`tool.result`）尚未到达时
+   * 展示这一句，而不是让卡片继续停在可作答的问题表单上。
+   */
+  hitlSettledLabel: string;
 }
 
 /** ask_question 的问题卡：每问题单/多选 + 「其他」输入，提交后解锁工具。 */
-export function AskQuestionCard({ tool, onAnswer }: AskQuestionCardProps) {
+export function AskQuestionCard({
+  tool,
+  onAnswer,
+  hitlSettledLabel,
+}: AskQuestionCardProps) {
   const questions =
     ((tool.args ?? {}) as { questions?: AskQuestion[] }).questions ?? [];
   const [picks, setPicks] = useState<Record<number, Set<string>>>({});
   const [others, setOthers] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState(false);
 
-  const pending = tool.status === "running";
+  // 已被别端应答但真正的工具终态还没到（result 未落地）：不再展示可作答
+  // 表单——避免用户对着一张早已失效的问题卡继续勾选/提交。
+  const pending = tool.status === "running" && !tool.hitlSettledBy;
   const result = parseStatus(tool.result);
 
   const toggle = (qi: number, label: string, multi: boolean) => {
@@ -65,7 +77,10 @@ export function AskQuestionCard({ tool, onAnswer }: AskQuestionCardProps) {
   if (!pending) {
     return (
       <div className="flex w-full items-center gap-2 rounded-[8px] border border-border bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground">
-        <Check className="h-3 w-3" /> {terminalLabel(result)}
+        <Check className="h-3 w-3" />{" "}
+        {tool.hitlSettledBy && !result
+          ? hitlSettledLabel
+          : terminalLabel(result)}
       </div>
     );
   }

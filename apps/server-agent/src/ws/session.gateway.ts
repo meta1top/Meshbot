@@ -10,6 +10,7 @@ import {
   type RunCompactionStartEvent,
   type RunDoneEvent,
   type RunErrorEvent,
+  type RunHitlSettledEvent,
   type RunHumanEvent,
   type RunInterruptedEvent,
   type RunReasoningChunkEvent,
@@ -258,6 +259,19 @@ export class SessionGateway extends BaseWebSocketGateway {
     this.server
       .to(payload.sessionId)
       .emit(SESSION_WS_EVENTS.runSubagentSettled, payload);
+  }
+
+  /**
+   * ConfirmationService → run.hitl_settled → 转发到本地 ws/session 房间
+   * （HITL 关卡广播帧，Task 17）。三条出口之一——另两条（per-run 发起方 /
+   * 全部观察者）由 `SessionFrameForwarder` 经 `FORWARDED_SESSION_EVENTS`
+   * 白名单自动覆盖，本 Gateway 只负责本机房间这一条。
+   */
+  @OnEvent(SESSION_WS_EVENTS.runHitlSettled)
+  onRunHitlSettled(payload: RunHitlSettledEvent): void {
+    this.server
+      .to(payload.sessionId)
+      .emit(SESSION_WS_EVENTS.runHitlSettled, payload);
   }
 
   /**

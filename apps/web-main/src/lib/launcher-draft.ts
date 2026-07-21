@@ -1,7 +1,7 @@
 import { clientSnowflakeId } from "@meshbot/web-common";
 
 /**
- * `/assistant` 启动台 → `/assistant/[deviceId]` 设备会话页的一次性草稿交接。
+ * `/assistant` 启动台 → `/assistant/[agentId]` Agent 会话页的一次性草稿交接。
  *
  * 用 `sessionStorage`（非 URL query）：启动台发送即导航，草稿文本长度不受
  * query string 长度限制；且天然只在当前标签页可见（不会被误分享）。

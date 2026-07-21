@@ -3,7 +3,6 @@ import { AccountContextService } from "@meshbot/lib-agent";
 import { DataSource } from "typeorm";
 import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
 import { ModelConfig } from "../entities/model-config.entity";
-import type { CloudModelConfigRow } from "./model-config.service";
 import { ModelConfigService } from "./model-config.service";
 
 /** 默认测试账号：作用域仓库要求每次调用都处于账号上下文内。 */
@@ -60,26 +59,6 @@ async function seedModelConfig(
   return repo.save(entity);
 }
 
-/** 造一条网关坐标行样例（sync service 已完成 AgentModelConfig → 网关行映射）。 */
-function cloudConfigRow(
-  overrides: Partial<CloudModelConfigRow> = {},
-): CloudModelConfigRow {
-  // id 与 model 同源（真实实现即本地行 id=云端配置 id），跟随 overrides.model
-  // 变化——否则多行 fixture 同 id 主键互覆，replaceCloudConfigs 断言只剩一行。
-  const model = overrides.model ?? "cloud-cfg-1";
-  return {
-    id: model,
-    providerType: "openai-compatible",
-    name: "Cloud GPT-4o",
-    model,
-    apiKey: "__cloud__",
-    baseUrl: "http://127.0.0.1:3200/api/v1",
-    contextWindow: 128_000,
-    enabled: true,
-    ...overrides,
-  };
-}
-
 describe("ModelConfigService", () => {
   let ds: DataSource;
   let ctx: AccountContextService;
@@ -87,6 +66,8 @@ describe("ModelConfigService", () => {
   let rawService: ModelConfigService;
   /** 自动包 DEFAULT_USER 账号上下文的 service 代理，供既有单测复用。 */
   let service: ModelConfigService;
+
+  let proxyGet: jest.Mock;
 
   beforeEach(async () => {
     ds = new DataSource({
@@ -98,9 +79,11 @@ describe("ModelConfigService", () => {
     await ds.initialize();
     ctx = new AccountContextService();
     const scopedFactory = new ScopedRepositoryFactory(ctx);
+    proxyGet = jest.fn().mockResolvedValue([]);
     rawService = new ModelConfigService(
       ds.getRepository(ModelConfig),
       scopedFactory,
+      { getCloudConfigs: proxyGet } as never,
     );
     service = wrapInAccount(rawService, ctx, DEFAULT_USER);
   });
@@ -162,8 +145,182 @@ describe("ModelConfigService", () => {
     expect(await service.hasEnabledModels()).toBe(true);
   });
 
+  /** 造一条内存态云端坐标行（source='cloud'，proxy 返回形状）。 */
+  function cloudRow(overrides: Partial<ModelConfig> = {}): ModelConfig {
+    const id = overrides.id ?? "cloud-1";
+    return {
+      id,
+      cloudUserId: DEFAULT_USER,
+      providerType: "openai-compatible",
+      name: "Cloud GPT-4o",
+      model: id,
+      apiKey: "__cloud__",
+      baseUrl: "http://cloud.test/api/v1",
+      enabled: true,
+      contextWindow: 128_000,
+      source: "cloud",
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+      ...overrides,
+    } as ModelConfig;
+  }
+
+  it("findAll 合并本地 local 行 + 云端代理行", async () => {
+    await seedModelConfig(ds, { cloudUserId: DEFAULT_USER, name: "Local A" });
+    proxyGet.mockResolvedValue([cloudRow({ id: "cloud-1", name: "Cloud A" })]);
+
+    const all = await service.findAll();
+    expect(all).toHaveLength(2);
+    expect(all.map((c) => c.source).sort()).toEqual(["cloud", "local"]);
+  });
+
+  it("findAll 只取本地 source='local'（存量 cloud 行被排除，只由代理提供云端）", async () => {
+    await seedModelConfig(ds, {
+      cloudUserId: DEFAULT_USER,
+      name: "Stale Cloud",
+      source: "cloud",
+    });
+    proxyGet.mockResolvedValue([]);
+
+    const all = await service.findAll();
+    expect(all).toHaveLength(0);
+  });
+
+  it("findAll 按 id 去重、本地优先", async () => {
+    const local = await seedModelConfig(ds, {
+      cloudUserId: DEFAULT_USER,
+      name: "Local Wins",
+    });
+    proxyGet.mockResolvedValue([cloudRow({ id: local.id, name: "Cloud Dup" })]);
+
+    const all = await service.findAll();
+    expect(all).toHaveLength(1);
+    expect(all[0].name).toBe("Local Wins");
+    expect(all[0].source).toBe("local");
+  });
+
+  it("findAllEnabled 合并后按 enabled 过滤", async () => {
+    await seedModelConfig(ds, {
+      cloudUserId: DEFAULT_USER,
+      name: "Local Off",
+      enabled: false,
+    });
+    proxyGet.mockResolvedValue([
+      cloudRow({ id: "c1", name: "Cloud On", enabled: true }),
+      cloudRow({ id: "c2", name: "Cloud Off", enabled: false }),
+    ]);
+
+    const enabled = await service.findAllEnabled();
+    expect(enabled.map((c) => c.name)).toEqual(["Cloud On"]);
+  });
+
+  it("findByIdOrName 本地优先命中，不打云端", async () => {
+    const local = await seedModelConfig(ds, {
+      cloudUserId: DEFAULT_USER,
+      name: "Local X",
+    });
+    const found = await service.findByIdOrName(local.id);
+    expect(found?.id).toBe(local.id);
+    expect(proxyGet).not.toHaveBeenCalled();
+  });
+
+  it("findByIdOrName 本地未命中 → 云端代理兜底", async () => {
+    proxyGet.mockResolvedValue([cloudRow({ id: "cloud-9", name: "Cloud Y" })]);
+    const found = await service.findByIdOrName("cloud-9");
+    expect(found?.name).toBe("Cloud Y");
+    expect(found?.source).toBe("cloud");
+  });
+
+  it("findByIdOrName 本地与云端都未命中 → null（云端不可达即空列表，不抛）", async () => {
+    proxyGet.mockResolvedValue([]);
+    const found = await service.findByIdOrName("ghost");
+    expect(found).toBeNull();
+  });
+
+  it("findOneOrFail 云端 id 命中返回云端行；都无则抛 NotFound", async () => {
+    proxyGet.mockResolvedValue([cloudRow({ id: "cloud-7" })]);
+    const found = await service.findOneOrFail("cloud-7");
+    expect(found.source).toBe("cloud");
+    await expect(service.findOneOrFail("nope")).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
+  it("hasEnabledModels 仅云端有 enabled 时也放行", async () => {
+    proxyGet.mockResolvedValue([cloudRow({ id: "c1", enabled: true })]);
+    expect(await service.hasEnabledModels()).toBe(true);
+  });
+
   it("无账号上下文调用作用域方法抛错", async () => {
     await expect(rawService.findAll()).rejects.toThrow();
+  });
+
+  it("create 写入 source='local'（enabled 默认 true）", async () => {
+    const created = await service.create({
+      providerType: "openai",
+      name: "My Local",
+      model: "gpt-4o",
+      apiKey: "sk-x",
+    } as never);
+    expect(created.source).toBe("local");
+    expect(created.enabled).toBe(true);
+    const rows = await ds.getRepository(ModelConfig).find();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].source).toBe("local");
+  });
+
+  it("update 改本地行字段", async () => {
+    const created = await service.create({
+      providerType: "openai",
+      name: "Old",
+      model: "gpt-4o",
+      apiKey: "sk-x",
+    } as never);
+    const updated = await service.update(created.id, { name: "New" } as never);
+    expect(updated.name).toBe("New");
+  });
+
+  it("setEnabled 切换本地行启用态", async () => {
+    const created = await service.create({
+      providerType: "openai",
+      name: "M",
+      model: "gpt-4o",
+      apiKey: "sk-x",
+    } as never);
+    const toggled = await service.setEnabled(created.id, false);
+    expect(toggled.enabled).toBe(false);
+  });
+
+  it("delete 删本地行", async () => {
+    const created = await service.create({
+      providerType: "openai",
+      name: "M",
+      model: "gpt-4o",
+      apiKey: "sk-x",
+    } as never);
+    await service.delete(created.id);
+    expect(await ds.getRepository(ModelConfig).find()).toHaveLength(0);
+  });
+
+  it("update 云端条目被拒（MODEL_CONFIG_READONLY，code 3018）", async () => {
+    proxyGet.mockResolvedValue([cloudRow({ id: "cloud-ro" })]);
+    await expect(
+      service.update("cloud-ro", { name: "X" } as never),
+    ).rejects.toMatchObject({ errorCode: { code: 3018 } });
+  });
+
+  it("delete 云端条目被拒（MODEL_CONFIG_READONLY）", async () => {
+    proxyGet.mockResolvedValue([cloudRow({ id: "cloud-ro" })]);
+    await expect(service.delete("cloud-ro")).rejects.toMatchObject({
+      errorCode: { code: 3018 },
+    });
+  });
+
+  it("update 完全不存在的 id → NotFound", async () => {
+    proxyGet.mockResolvedValue([]);
+    await expect(
+      service.update("ghost", { name: "X" } as never),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   describe("账号隔离（ScopedRepository）", () => {
@@ -223,100 +380,6 @@ describe("ModelConfigService", () => {
 
       const u2All = await ctx.run("u2", () => rawService.findAll());
       expect(u2All.map((r) => r.name)).toEqual(["Seeded-B"]);
-    });
-  });
-
-  describe("replaceCloudConfigs（云端模型配置整体替换）", () => {
-    it("存量 source='local' 行不受影响，新 cloud 行落库", async () => {
-      await seedModelConfig(ds, {
-        cloudUserId: "u1",
-        name: "Local Kept",
-        source: "local",
-      });
-
-      await ctx.run("u1", () =>
-        rawService.replaceCloudConfigs([cloudConfigRow({ name: "Cloud A" })]),
-      );
-
-      const all = await ctx.run("u1", () => rawService.findAll());
-      expect(all).toHaveLength(2);
-      const local = all.find((r) => r.source === "local");
-      const cloud = all.find((r) => r.source === "cloud");
-      expect(local?.name).toBe("Local Kept");
-      expect(cloud?.name).toBe("Cloud A");
-    });
-
-    it("旧 cloud 行被整体替换为新一批配置（不是增量合并）", async () => {
-      await seedModelConfig(ds, {
-        cloudUserId: "u1",
-        name: "Old Cloud",
-        source: "cloud",
-      });
-
-      await ctx.run("u1", () =>
-        rawService.replaceCloudConfigs([
-          cloudConfigRow({ model: "cfg-1", name: "New Cloud 1" }),
-          cloudConfigRow({ model: "cfg-2", name: "New Cloud 2" }),
-        ]),
-      );
-
-      const cloudRows = (
-        await ctx.run("u1", () => rawService.findAll())
-      ).filter((r) => r.source === "cloud");
-      expect(cloudRows).toHaveLength(2);
-      expect(cloudRows.map((r) => r.name).sort()).toEqual([
-        "New Cloud 1",
-        "New Cloud 2",
-      ]);
-      expect(cloudRows.some((r) => r.name === "Old Cloud")).toBe(false);
-    });
-
-    it("其他账号的行不受影响（作用域 delete 只删当前账号）", async () => {
-      await seedModelConfig(ds, {
-        cloudUserId: "u2",
-        name: "U2 Cloud",
-        source: "cloud",
-      });
-
-      await ctx.run("u1", () =>
-        rawService.replaceCloudConfigs([cloudConfigRow({ name: "U1 Cloud" })]),
-      );
-
-      const u2All = await ctx.run("u2", () => rawService.findAll());
-      expect(u2All).toHaveLength(1);
-      expect(u2All[0].name).toBe("U2 Cloud");
-    });
-
-    it("云配置写成指向网关的 openai-compatible 行（不落厂商明文）", async () => {
-      await ctx.run("u1", () =>
-        rawService.replaceCloudConfigs([
-          cloudConfigRow({
-            model: "m1",
-            name: "GPT4o",
-            baseUrl: "http://127.0.0.1:3200/api/v1",
-          }),
-        ]),
-      );
-
-      const [row] = await ctx.run("u1", () => rawService.findAll());
-      expect(row).toMatchObject({
-        providerType: "openai-compatible",
-        baseUrl: expect.stringMatching(/\/api\/v1$/),
-        model: "m1",
-        apiKey: "__cloud__",
-        source: "cloud",
-      });
-    });
-
-    it("contextWindow 为 null 时落库兜底为默认值（entity 列非空）", async () => {
-      await ctx.run("u1", () =>
-        rawService.replaceCloudConfigs([
-          cloudConfigRow({ contextWindow: null }),
-        ]),
-      );
-
-      const [row] = await ctx.run("u1", () => rawService.findAll());
-      expect(row.contextWindow).toBe(128_000);
     });
   });
 });

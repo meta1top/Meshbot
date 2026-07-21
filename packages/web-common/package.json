@@ -24,6 +24,26 @@
     "./session": {
       "types": "./src/session/index.ts",
       "default": "./src/session/index.ts"
+    },
+    "./session/transport": {
+      "types": "./src/session/transport.ts",
+      "default": "./src/session/transport.ts"
+    },
+    "./session/device-query-client": {
+      "types": "./src/session/device-query-client.ts",
+      "default": "./src/session/device-query-client.ts"
+    },
+    "./session/remote-run-tracker": {
+      "types": "./src/session/remote-run-tracker.ts",
+      "default": "./src/session/remote-run-tracker.ts"
+    },
+    "./session/watch-inflight": {
+      "types": "./src/session/watch-inflight.ts",
+      "default": "./src/session/watch-inflight.ts"
+    },
+    "./session/session-list-events": {
+      "types": "./src/session/session-list-events.ts",
+      "default": "./src/session/session-list-events.ts"
     }
   },
   "scripts": {
@@ -58,6 +78,12 @@
     }
   },
   "devDependencies": {
-    "@types/react": "^19"
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/react": "^19",
+    "jest-environment-jsdom": "^30.4.1",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
   }
 }

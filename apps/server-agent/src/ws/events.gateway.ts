@@ -18,12 +18,23 @@ import {
   type PresenceState,
 } from "@meshbot/types";
 import {
+  AGENT_EVENTS,
+  type AgentChangedEvent,
   QUICK_ASSISTANT_EVENTS,
   type QuickAssistantRenamedEvent,
   MODEL_CONFIG_EVENTS,
   type ModelConfigUpdatedEvent,
+  REMOTE_AGENT_EVENTS,
+  type RemoteAgentRegistryChangedEvent,
+  type RemoteAgentSessionEventPayload,
   SCHEDULE_EVENTS,
   type ScheduleFiredEvent,
+  SESSION_LIFECYCLE_EVENTS,
+  type SessionCreatedEvent,
+  type SessionDeletedEvent,
+  type SessionRenamedEvent,
+  SESSION_STATUS_EVENTS,
+  type SessionStatusChangedEvent,
 } from "@meshbot/types-agent";
 import { UseFilters, UseGuards } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
@@ -38,6 +49,10 @@ import {
 import type { Socket } from "socket.io";
 import { AccountContextService } from "@meshbot/lib-agent";
 import { ImRelayClientService } from "../cloud/im-relay-client.service";
+import {
+  IM_RELAY_EVENTS,
+  type ImRelayAgentRegistryChangedEvent,
+} from "../cloud/im-relay.events";
 import { AUTH_EVENTS } from "../services/auth.events";
 
 /**
@@ -179,10 +194,87 @@ export class EventsGateway extends BaseWebSocketGateway {
   }
 
   /**
+   * 会话运行状态变更（idle ↔ running）→ 信封投递给所属账号浏览器，
+   * 侧栏「运行中」绿点在任何路由都实时落态。
+   *
+   * RunnerService.setSessionStatus 在 `account.run(owner, ...)` 上下文内 emit，
+   * 故 emitEnvelope 能取到账号并路由到 acct 房间。走全局总线而非 ws/session：
+   * 后者只在会话页挂载时建连，/home 与消息页的侧栏收不到。
+   */
+  @OnEvent(SESSION_STATUS_EVENTS.changed)
+  onSessionStatusChanged(payload: SessionStatusChangedEvent): void {
+    this.emitEnvelope(SESSION_STATUS_EVENTS.changed, payload);
+  }
+
+  /**
+   * 本地新建会话 → 信封投递给所属账号浏览器，侧栏会话列表实时插入新行。
+   *
+   * `SessionService.createSession` 在 `createSessionInTx` 事务提交之后 emit
+   * （REST 建会话 `SessionController.create` / 远程 run 入站建会话
+   * `RemoteRunInboundService.onAgentRunRequest` 两条路径共用同一方法，因而
+   * 共用同一发射点：前者经 REST 鉴权拦截器建账号上下文，后者显式
+   * `account.run(cloudUserId, ...)`），故 emitEnvelope 能取到账号并路由到
+   * acct 房间。子 Agent 会话（`createSubSession`）与随手问会话
+   * （`kind="quick"`）刻意不触发这个事件——两者都不进侧栏，发了只会让侧栏
+   * 凭空多出一行（quick 的排除见 `SessionService.createSession` 内注释）。
+   */
+  @OnEvent(SESSION_LIFECYCLE_EVENTS.created)
+  onSessionCreated(payload: SessionCreatedEvent): void {
+    this.emitEnvelope(SESSION_LIFECYCLE_EVENTS.created, payload);
+  }
+
+  /**
+   * 本地会话删除 → 信封投递给所属账号浏览器，侧栏会话列表实时移除对应行。
+   *
+   * 两条发射路径都在账号上下文内 emit：单会话直接删（`SessionService
+   * .deleteSession`，REST 经鉴权拦截器）；Agent 整体删除的级联删除路径
+   * （`AgentService.removeWithData`，同样 REST 触发）——`session.deleted`
+   * 特意挪到 `removeWithData` 的 `@Transactional()` 事务**外面**发射（见 commit
+   * f8ef6f18），避免事务回滚后「已通知却没真删掉」。两条路径 emitEnvelope
+   * 都能取到账号并路由到 acct 房间。
+   */
+  @OnEvent(SESSION_LIFECYCLE_EVENTS.deleted)
+  onSessionDeleted(payload: SessionDeletedEvent): void {
+    this.emitEnvelope(SESSION_LIFECYCLE_EVENTS.deleted, payload);
+  }
+
+  /**
+   * 本地会话改名 → 信封投递给所属账号浏览器，侧栏会话标题实时刷新。
+   *
+   * 两条发射路径都在账号上下文内 emit：手动改名（`SessionService.patch`，
+   * REST 经鉴权拦截器）；LLM 自动生成标题（`patchIfNotGenerated`，由
+   * `SessionTitleService` fire-and-forget 触发——脱离了请求的 ALS 账号上下文，
+   * 该 Service 显式按会话 owner 重建 `account.run(owner, ...)` 后才调用）。
+   * 两条路径 emitEnvelope 都能取到账号并路由到 acct 房间。
+   */
+  @OnEvent(SESSION_LIFECYCLE_EVENTS.renamed)
+  onSessionRenamed(payload: SessionRenamedEvent): void {
+    this.emitEnvelope(SESSION_LIFECYCLE_EVENTS.renamed, payload);
+  }
+
+  /**
+   * 本地 Agent 增删改（含改名）→ 信封投递给所属账号浏览器，侧栏 Agent 列表与
+   * 会话标题栏实时刷新（前端 invalidate `["agents"]` 查询）。
+   *
+   * 发射点在 `AgentService.create/update/removeWithData`，故表单改名（REST
+   * `AgentController.update`）与 `rename_agent` 工具改名（`AGENT_RENAME_PORT`）
+   * 两条路径都会走到这里——修「工具改名后侧栏/标题栏仍显示旧名」。
+   * 两条路径都在账号上下文内 emit（REST 经鉴权拦截器、工具经 GraphService.run），
+   * 故 emitEnvelope 能取到账号并路由到 acct 房间。
+   */
+  @OnEvent(AGENT_EVENTS.changed)
+  onAgentChanged(payload: AgentChangedEvent): void {
+    this.emitEnvelope(AGENT_EVENTS.changed, payload);
+  }
+
+  /**
    * 本地随手问改名 → 信封投递给所属账号浏览器，dock 标题实时刷新。
    *
-   * QuickAssistantService.setName（agent 改名 tool / UI 改名）经 EventEmitter2 触发，
-   * 在账号上下文内 emit，故 emitEnvelope 能取到账号路由到 acct 房间。
+   * QuickAssistantController.rename（UI 改名，写默认 Agent 的 name）与
+   * `rename_agent` 工具（`AGENT_RENAME_PORT`，见 runtime-context.module）都会
+   * 在改到默认 Agent 时 emit 此事件；两者都在账号上下文内 emit，故 emitEnvelope
+   * 能取到账号路由到 acct 房间。与上面的 `agent.changed` 分工：这个只喂 dock 的
+   * `quickAssistantNameAtom`（默认 Agent 的显示名），那个失效整份 Agent 列表缓存。
    */
   @OnEvent(QUICK_ASSISTANT_EVENTS.renamed)
   onQuickAssistantRenamed(payload: QuickAssistantRenamedEvent): void {
@@ -190,14 +282,51 @@ export class EventsGateway extends BaseWebSocketGateway {
   }
 
   /**
-   * 云端模型配置同步完成 → 信封投递给所属账号浏览器，模型列表实时刷新。
+   * 云端模型配置变更（代理缓存已失效）→ 信封投递给所属账号浏览器，模型列表实时刷新。
    *
-   * ModelConfigSyncService.syncNow 成功后经 EventEmitter2 触发（事件驱动同步：
-   * 云端推送 / relay 重连 / 登录），前端收到后 invalidate model-configs 查询。
+   * CloudModelConfigProxyService 收到云端广播 modelConfigChanged 后清缓存并
+   * 经 EventEmitter2 触发，前端收到后 invalidate model-configs 查询。
    */
   @OnEvent(MODEL_CONFIG_EVENTS.updated)
   onModelConfigUpdated(payload: ModelConfigUpdatedEvent): void {
     this.emitEnvelope(MODEL_CONFIG_EVENTS.updated, payload);
+  }
+
+  /**
+   * 云端下行：远程 Agent 注册表变更 → 信封投递给所属账号浏览器，侧栏/起手台的
+   * 远程 Agent 列表实时增删（修「B 关掉允许远程后 A 客户端列表不消失」）。
+   *
+   * `ImRelayClientService` 收到云端广播 `im.agent_registry_changed` 后在
+   * `account.run(cloudUserId, ...)` 上下文内 emit，故 emitEnvelope 能取到账号
+   * 并路由到 acct 房间。前端收到后 invalidate `remote-agents` 查询。
+   *
+   * 两个已知盲区（云端广播侧限制，退化为「不实时」而非「永久错」，由 web-agent
+   * socket 重连时的补拉兜底）：
+   * 1. 设备/用户未归属组织（server-main 侧 orgId 为 null）→ 无房间可投，云端跳过。
+   * 2. A、B 两台设备的 `device.orgId` 不同（设备 orgId 与用户 activeOrgId 解耦）
+   *    → 广播用变更方的 orgId 房间，投不到 A。
+   */
+  @OnEvent(IM_RELAY_EVENTS.agentRegistryChanged)
+  onRemoteAgentsChanged(payload: ImRelayAgentRegistryChangedEvent): void {
+    this.emitEnvelope(REMOTE_AGENT_EVENTS.registryChanged, {
+      cloudUserId: payload.cloudUserId,
+    } satisfies RemoteAgentRegistryChangedEvent);
+  }
+
+  /**
+   * 远程 Agent 的会话生命周期镜像 → 信封投递给所属账号浏览器（Agent 级观察
+   * 通道，修缺口 ②）。
+   *
+   * **专属信封而非复用本地 `session.created` 等事件名**：本地那条总线上挂着
+   * `AgentWatchMirrorService`（会把收到的事件当本机事件再镜像出去 → 回环）与
+   * 本网关的本地下发路径（浏览器会把远程会话插进**本机**列表）。故包进
+   * `remote-agent.session_event` 信封并携带**云端 agentId**，浏览器按 agentId
+   * 分流到对应远程 Agent 的视图——与 `REMOTE_SHADOW_FRAME_EVENT` 不复用原始
+   * `SESSION_WS_EVENTS.*` 名是同一个理由。
+   */
+  @OnEvent(REMOTE_AGENT_EVENTS.sessionEvent)
+  onRemoteAgentSessionEvent(payload: RemoteAgentSessionEventPayload): void {
+    this.emitEnvelope(REMOTE_AGENT_EVENTS.sessionEvent, payload);
   }
 
   /**

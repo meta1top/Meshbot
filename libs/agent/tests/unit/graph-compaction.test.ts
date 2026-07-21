@@ -5,6 +5,7 @@ import { AIMessage } from "@langchain/core/messages";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AccountContextService } from "../../src/account/account-context.service";
+import { AgentContextService } from "../../src/account/agent-context.service";
 import { MeshbotConfigService } from "../../src/config/meshbot-config.service";
 import { AccountGraphProvider } from "../../src/graph/account-graph.provider";
 import { ContextBuilder } from "../../src/graph/context-builder.js";
@@ -12,7 +13,6 @@ import { GraphRunner } from "../../src/graph/graph-runner.service.js";
 import { ModelResolver } from "../../src/graph/model-resolver.service.js";
 import { ModelRunContext } from "../../src/graph/model-run-context.js";
 import { ThreadStateService } from "../../src/graph/thread-state.service.js";
-import { PromptService } from "../../src/prompt/prompt.service";
 import { ToolRegistry } from "../../src/tools/tool-registry";
 
 const TEST_ACCOUNT = "test-compaction-account";
@@ -29,9 +29,11 @@ describe("GraphService compaction hooks", () => {
     testDir = mkdtempSync(path.join(tmpdir(), "meshbot-compact-test-"));
     mkdirSync(path.join(testDir, "prompt"), { recursive: true });
     ctx = new AccountContextService();
-    const configService = new MeshbotConfigService(ctx);
+    const configService = new MeshbotConfigService(
+      ctx,
+      new AgentContextService(),
+    );
     (configService as unknown as Record<string, string>).meshbotDir = testDir;
-    const promptService = new PromptService(configService, ctx);
     invokeCalls = [];
     const fakeModel = {
       stream: async () => {
@@ -48,11 +50,14 @@ describe("GraphService compaction hooks", () => {
     const toolRegistry = new ToolRegistry(
       { getProviders: () => [] } as never,
       new AccountContextService(),
+      new AgentContextService(),
     );
     modelResolver = new ModelResolver(
-      configService,
       ctx,
       new ModelRunContext(),
+      // 测试全程走 overrideProvider（下方），resolveModel() 不会被调用，
+      // 这里给个不会命中的占位端口即可。
+      { resolveActive: async () => null, resolveById: async () => null },
       () => Promise.resolve(fakeModel as never),
       { providerType: "fake", model: "fake-model" },
     );
@@ -67,7 +72,6 @@ describe("GraphService compaction hooks", () => {
     const contextBuilder = new ContextBuilder(ctx);
     threadState = new ThreadStateService(accountGraphProvider);
     graphRunner = new GraphRunner(
-      promptService,
       accountGraphProvider,
       modelResolver,
       contextBuilder,

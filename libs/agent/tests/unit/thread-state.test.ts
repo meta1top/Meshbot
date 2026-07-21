@@ -5,6 +5,7 @@ import { AIMessageChunk } from "@langchain/core/messages";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AccountContextService } from "../../src/account/account-context.service";
+import { AgentContextService } from "../../src/account/agent-context.service";
 import { MeshbotConfigService } from "../../src/config/meshbot-config.service";
 import { AccountGraphProvider } from "../../src/graph/account-graph.provider";
 import { ContextBuilder } from "../../src/graph/context-builder.js";
@@ -23,7 +24,10 @@ function makeTestServices(testDir: string): {
   promptService: PromptService;
 } {
   const ctx = new AccountContextService();
-  const configService = new MeshbotConfigService(ctx);
+  const configService = new MeshbotConfigService(
+    ctx,
+    new AgentContextService(),
+  );
   (configService as unknown as Record<string, string>).meshbotDir = testDir;
   const promptService = new PromptService(configService, ctx);
   return { ctx, configService, promptService };
@@ -43,12 +47,15 @@ function makeServices(opts: {
     new ToolRegistry(
       { getProviders: () => [] } as never,
       new AccountContextService(),
+      new AgentContextService(),
     );
   const eventEmitter = opts.eventEmitter ?? new EventEmitter2();
   const modelResolver = new ModelResolver(
-    opts.configService,
     opts.account,
     new ModelRunContext(),
+    // 测试全程走 overrideProvider（下方），resolveModel() 不会被调用，
+    // 这里给个不会命中的占位端口即可。
+    { resolveActive: async () => null, resolveById: async () => null },
     () => Promise.resolve(opts.fakeModel as never),
     { providerType: "fake", model: "fake-model" },
   );
@@ -68,7 +75,6 @@ function makeServices(opts: {
   );
   const threadState = new ThreadStateService(accountGraphProvider);
   const graphRunner = new GraphRunner(
-    opts.promptService,
     accountGraphProvider,
     modelResolver,
     contextBuilder,

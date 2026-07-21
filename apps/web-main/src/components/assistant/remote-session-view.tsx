@@ -24,7 +24,13 @@ import {
 } from "@/hooks/use-remote-sessions";
 import { useStoredWidth } from "@/hooks/use-stored-width";
 import { takeLauncherDraft } from "@/lib/launcher-draft";
-import { createRemoteSessionTransport } from "@/lib/session-transport";
+import {
+  createRemoteSessionTransport,
+  WATCH_ACCEPTED_EVENT,
+  WATCH_REJECTED_EVENT,
+  type WatchAcceptedEvent,
+  type WatchRejectedEvent,
+} from "@/lib/session-transport";
 import { useProfile } from "@/rest/auth";
 import { ComposerActions } from "./composer-actions";
 import { RemoteModelSelect } from "./remote-model-select";
@@ -100,6 +106,13 @@ function startNewRemoteSession(
 }
 
 interface RemoteSessionViewProps {
+  /** 目标云端 Agent id（计划二 2b · T7：寻址主键，用于 transport 创建 /
+   * 远程会话列表查询 / 会话创建后失效缓存——不是设备 id）。 */
+  agentId: string;
+  /** Agent 的宿主设备 id：本组件不用它寻址，仅原样透传给
+   * `artifactRemote`/`RemoteSubagentCard`/`RemoteMessageList` 等纯展示/
+   * 流归属标记用途（`useSessionStream` 的 `remoteDeviceId` 形参只当
+   * 「是否 remote 分支」的布尔标记，不参与寻址，详见该 hook 类文档）。 */
   deviceId: string;
   /** 当前查看的会话 id；null = 尚未选中/新建（展示创建态输入框）。 */
   sessionId: string | null;
@@ -139,19 +152,19 @@ interface RemoteSessionViewProps {
  * `SessionConversationView` 历史加载态的同一块骨架），不渲染会话区。
  */
 export function RemoteSessionView(props: RemoteSessionViewProps) {
-  const { deviceId } = props;
+  const { agentId } = props;
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const [transport, setTransport] = useState<SessionTransport | null>(null);
   useEffect(() => {
-    const created = createRemoteSessionTransport(deviceId);
+    const created = createRemoteSessionTransport(agentId);
     setTransport(created);
-    // 三个监听器挂在 module 级单例 socket 上，deviceId 切换/组件卸载都要
+    // 三个监听器挂在 module 级单例 socket 上，agentId 切换/组件卸载都要
     // 显式 dispose，否则无界累积（同 transport.dispose() 既有惯例）。
     return () => {
       created.dispose?.();
     };
-  }, [deviceId]);
+  }, [agentId]);
 
   if (!transport) {
     return (
@@ -176,6 +189,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
  * 自身不做导航，只暴露状态转移。
  */
 function RemoteSessionViewReady({
+  agentId,
   deviceId,
   sessionId,
   streamId,
@@ -211,15 +225,59 @@ function RemoteSessionViewReady({
       // （新建会话时列表里先是空标题，标题一到就补上）。
       onTitleUpdated: () => {
         void queryClient.invalidateQueries({
-          queryKey: remoteSessionsQueryKey(deviceId),
+          queryKey: remoteSessionsQueryKey(agentId),
         });
       },
     },
-    deviceId,
+    agentId,
     streamId,
   );
 
-  const { data: sessions } = useRemoteSessions(deviceId, true);
+  // 观察通道被拒（设备离线 / Agent 不可远程 / 会话不归它）的可见反馈——
+  // `session-transport.ts` 的 `onWatchAccepted` 在 `ok:false` 时合成
+  // `WATCH_REJECTED_EVENT` 交给 `subscribe()`，不能只 console.warn 静默
+  // （上一轮 review 明确要求）。只认当前 sessionId 的拒绝（换会话后旧会话
+  // 迟到的拒绝回执不应污染新会话的横幅）。
+  const [watchNotice, setWatchNotice] = useState<WatchRejectedEvent | null>(
+    null,
+  );
+
+  // Session 级观察通道（spec D5「打开会话即 session-watch」）：进入会话即
+  // `transport.watchSession(sessionId)`，卸载/切会话时调用返回的 unwatch——
+  // 否则设备侧常驻转发器要等满 5 分钟 idle 才拆（能兜住，但白占资源）。
+  // `transport.watchSession` 内部已处理断线重连自动重 watch（T12
+  // `onReconnect`），本组件不需要感知 socket 连接状态。
+  useEffect(() => {
+    setWatchNotice(null); // 换会话/换 transport 先清掉上一轮的拒绝提示
+    if (!sessionId) return;
+    const unwatch = transport.watchSession?.(sessionId);
+    return () => unwatch?.();
+  }, [transport, sessionId]);
+
+  useEffect(() => {
+    const unsubscribe = transport.subscribe({
+      onEvent(event, payload) {
+        if (event === WATCH_REJECTED_EVENT) {
+          const rejected = payload as WatchRejectedEvent;
+          if (rejected.sessionId !== sessionId) return;
+          setWatchNotice(rejected);
+          return;
+        }
+        if (event === WATCH_ACCEPTED_EVENT) {
+          // 重 watch 成功后撤下此前可能挂着的旧横幅（T12 review Finding 7）：
+          // idle 回收之外的拒绝不会自动重连，但 socket 重连、或用户重新
+          // 打开设备后云端换发新 watchId 重新受理时，旧横幅不该继续挂着，
+          // 否则用户会以为仍然收不到实时帧。
+          const accepted = payload as WatchAcceptedEvent;
+          if (accepted.sessionId !== sessionId) return;
+          setWatchNotice(null);
+        }
+      },
+    });
+    return unsubscribe;
+  }, [transport, sessionId]);
+
+  const { data: sessions } = useRemoteSessions(agentId, true);
   const currentSession = sessions?.find((s) => s.id === sessionId);
   const [modelOverride, setModelOverride] = useState<string | null>(null);
   const sessionModelId = modelOverride ?? currentSession?.modelConfigId ?? null;
@@ -304,7 +362,14 @@ function RemoteSessionViewReady({
       return;
     }
     setDraft("");
-    await stream.send(text);
+    // send() 返回 false = 本条输入被拒绝且没有任何留痕（当前唯一来源：该会话
+    // 仍有 run 在跑的 I3 守卫）。ChatInput 的 onSend 是无条件清空编辑器的，
+    // 不回填 + 不提示的话用户打的字就凭空消失了（原 bug）。
+    const accepted = await stream.send(text);
+    if (!accepted) {
+      setDraft(text);
+      setActionError(t("sendWhileRunning"));
+    }
   };
 
   // 启动台草稿：挂载后取回（读即删）并自动发起首轮 create。
@@ -374,6 +439,46 @@ function RemoteSessionViewReady({
         type="button"
         onClick={() => setActionError(null)}
         className="shrink-0 text-destructive/70 hover:text-destructive"
+      >
+        {t("dismiss")}
+      </button>
+    </div>
+  );
+
+  /** watch 被拒的 reason → 文案（`session-transport.ts` 的 `WATCH_REJECTED_EVENT`，
+   * reason 原样透传自 `AgentWatchAccepted`）。 */
+  const watchRejectedReasonText = (
+    reason: WatchRejectedEvent["reason"],
+  ): string => {
+    switch (reason) {
+      case "offline":
+        return t("watchRejectedOffline");
+      case "not_found":
+        return t("watchRejectedNotFound");
+      case "session_agent_mismatch":
+        return t("watchRejectedSessionAgentMismatch");
+      case "cross_account":
+        return t("watchRejectedCrossAccount");
+      case "error":
+        return t("watchRejectedError");
+      default:
+        return t("watchRejectedUnknown");
+    }
+  };
+
+  /** 观察通道被拒的可见提示——警示色（非 destructive）：会话历史仍可正常看，
+   * 只是收不到「实时」帧，语义上是降级而非失败。可关闭，换会话会自动清空
+   * （见上方 effect）。 */
+  const watchNoticeBanner = watchNotice && (
+    <div className="mx-4 mt-2 flex items-center justify-between gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[13px] text-amber-700 dark:text-amber-400">
+      <span>
+        {t("watchRejectedPrefix")}
+        {watchRejectedReasonText(watchNotice.reason)}
+      </span>
+      <button
+        type="button"
+        onClick={() => setWatchNotice(null)}
+        className="shrink-0 text-amber-700/70 hover:text-amber-700 dark:text-amber-400/70"
       >
         {t("dismiss")}
       </button>
@@ -473,6 +578,7 @@ function RemoteSessionViewReady({
             </div>
           </div>
           {errorBanner}
+          {watchNoticeBanner}
           <div className="sticky bottom-4 mt-auto w-full bg-background">
             {/* Task 1 抽出的完整 ChatInput（web-agent 同款）。leadingActions
                 （技能/连应用/权限）是共享的占位动作链，云端与本地端 composer 一致；
@@ -521,6 +627,7 @@ function RemoteSessionViewReady({
         }
       >
         {errorBanner}
+        {watchNoticeBanner}
         <SessionConversationView
           historyLoading={stream.historyLoading}
           historyError={stream.historyError}
@@ -558,6 +665,7 @@ function RemoteSessionViewReady({
               onSend={(text) => void handleSend(text)}
               onInterrupt={stream.interrupt}
               isLoading={stream.running}
+              canInterrupt={stream.canInterrupt}
               placeholder={t("input.placeholder")}
               leadingActions={<ComposerActions />}
               trailingActions={
@@ -570,6 +678,7 @@ function RemoteSessionViewReady({
               labels={{
                 attachment: t("input.attachment"),
                 interrupt: t("input.stop"),
+                interruptUnavailable: t("input.stopUnavailable"),
               }}
             />
           )}
@@ -590,8 +699,14 @@ function RemoteSessionViewReady({
               reasoningProcess: t("reasoningProcess"),
               compactionRowTitle: (count) =>
                 t("compaction.rowTitle", { count }),
+              runErrorAgentNotRemotable: t("runErrorAgentNotRemotable"),
+              runErrorSessionAgentMismatch: t("runErrorSessionAgentMismatch"),
+              runErrorOffline: t("runErrorOffline"),
             },
-            toolCall: { artifactPresentFailed: t("artifact.presentFailed") },
+            toolCall: {
+              artifactPresentFailed: t("artifact.presentFailed"),
+              hitlSettledElsewhere: t("hitlSettledElsewhere"),
+            },
             pendingList: {
               editPending: t("editPending"),
               deletePending: t("deletePending"),

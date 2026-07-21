@@ -1,6 +1,8 @@
 export { AgentModule } from "./agent.module";
 export { AccountContextService } from "./account/account-context.service";
 export { AccountContextModule } from "./account/account-context.module";
+export { AgentContextService } from "./account/agent-context.service";
+export { AgentContextModule } from "./account/agent-context.module";
 export { MeshbotConfigService } from "./config/meshbot-config.service";
 export { MeshbotConfigModule } from "./config/meshbot-config.module";
 export type {
@@ -13,7 +15,10 @@ export { COMPACTION_SYSTEM_PROMPT } from "./prompt/compactor.prompt";
 export { GraphRunner } from "./graph/graph-runner.service";
 export { ModelResolver } from "./graph/model-resolver.service";
 export { ModelRunContext } from "./graph/model-run-context";
-export { CLOUD_GATEWAY_API_KEY_PLACEHOLDER } from "./config/model-config.reader";
+export {
+  CLOUD_GATEWAY_API_KEY_PLACEHOLDER,
+  type ActiveModelConfig,
+} from "./config/model-config.reader";
 export { ThreadStateService } from "./graph/thread-state.service";
 export { capForLlm } from "./graph/nodes/tools.node";
 export type { ModelProvider } from "./graph/nodes/supervisor.node";
@@ -50,9 +55,13 @@ export {
   type CloudTokenPort,
 } from "./graph/cloud-token.port";
 export {
-  QUICK_ASSISTANT_PORT,
-  type QuickAssistantPort,
-} from "./tools/quick-assistant.port";
+  MODEL_CONFIG_READ_PORT,
+  type ModelConfigReadPort,
+} from "./graph/model-config-read.port";
+export {
+  AGENT_RENAME_PORT,
+  type AgentRenamePort,
+} from "./tools/agent-rename.port";
 export {
   IM_CONTEXT_PORT,
   type ImContextPort,

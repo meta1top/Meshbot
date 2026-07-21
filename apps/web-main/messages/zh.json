@@ -3,7 +3,8 @@
     "appTitle": "MeshBot 云协同",
     "switchToLightTheme": "切换到浅色",
     "switchToDarkTheme": "切换到深色",
-    "loading": "加载中…"
+    "loading": "加载中…",
+    "close": "关闭"
   },
   "appShell": {
     "newMessage": "发起消息",
@@ -43,15 +44,17 @@
       "title": "开始一个任务",
       "subtitle": "选择一台已授权设备，把任务交给它的 Agent",
       "placeholder": "输入你的任务或问题",
-      "pickDevice": "选择设备",
-      "pickDeviceFirst": "请先选择要执行任务的设备",
+      "pickAgent": "选择 Agent",
+      "pickAgentFirst": "请先选择要执行任务的 Agent",
       "willRunOn": "将在 {device} 上执行",
       "slogan": "你的工作副驾",
       "scenes": {
         "daily": "日常办公",
         "code": "代码开发",
         "design": "设计创意"
-      }
+      },
+      "hostOffline": "{device}（离线）",
+      "agentOffline": "所选 Agent 的宿主设备已离线，请重新选择"
     },
     "input": {
       "attachment": "添加附件",
@@ -59,12 +62,14 @@
     }
   },
   "assistantSidebar": {
-    "title": "设备",
+    "title": "Agent",
     "newSession": "新会话",
     "backToDevices": "返回设备列表",
     "offlineSessionsHint": "设备离线，无法加载会话列表",
     "remoteLoadFailed": "会话列表加载失败",
-    "remoteEmpty": "该设备暂无会话"
+    "remoteEmpty": "该 Agent 暂无会话",
+    "empty": "还没有可用的 Agent",
+    "watchFailed": "无法接收该 Agent 的实时更新（设备可能离线或无法远程访问）"
   },
   "session": {
     "assistantName": "助手",
@@ -77,16 +82,29 @@
     "reasoningThinking": "思考中 {seconds}s",
     "reasoningThought": "已思考 {seconds}s",
     "runErrorPrefix": "运行失败：",
+    "runErrorAgentNotRemotable": "该 Agent 不可远程访问（不存在或未开启远程），本次消息未发送",
+    "runErrorSessionAgentMismatch": "该会话不属于所选 Agent，本次消息未发送",
+    "runErrorOffline": "目标设备已离线，本次消息未发送",
+    "hitlSettledElsewhere": "已由其他端应答",
+    "watchRejectedPrefix": "无法实时观察这台设备的输出：",
+    "watchRejectedOffline": "目标设备已离线",
+    "watchRejectedNotFound": "该 Agent 不可远程访问（不存在或未开启远程）",
+    "watchRejectedSessionAgentMismatch": "该会话不属于所选 Agent",
+    "watchRejectedCrossAccount": "跨账号访问被拒绝",
+    "watchRejectedError": "设备处理观察请求时出错",
+    "watchRejectedUnknown": "观察通道建立失败",
     "remoteLoadFailed": "会话历史加载失败",
     "actionFailed": "操作失败，请重试",
     "createFailed": "会话创建失败，设备可能已离线，请重试",
+    "sendWhileRunning": "当前会话仍在生成回复，请等待完成或先点停止，再发送新消息",
     "dismiss": "关闭",
     "modelSelect": "选择模型",
     "input": {
       "placeholder": "输入你的任务或问题",
       "send": "发送",
       "stop": "中断",
-      "attachment": "添加附件"
+      "attachment": "添加附件",
+      "stopUnavailable": "观察态下无法中断：这个 run 不是本端发起的"
     },
     "compaction": {
       "bannerThreshold": "会话历史压缩中…",

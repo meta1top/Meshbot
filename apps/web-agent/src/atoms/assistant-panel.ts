@@ -1,4 +1,4 @@
-import { QUICK_ASSISTANT_DEFAULT_NAME } from "@meshbot/types-agent";
+import { DEFAULT_AGENT_NAME } from "@meshbot/types-agent";
 import { atom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 
@@ -8,10 +8,12 @@ export const assistantPanelOpenAtom = atomWithStorage(
   false,
 );
 
-/** 随手问当前名字（dock 标题）。默认回退默认名；dock 打开时从 REST 拉取，ws renamed 事件实时更新。 */
-export const quickAssistantNameAtom = atom<string>(
-  QUICK_ASSISTANT_DEFAULT_NAME,
-);
+/**
+ * 随手问当前名字（dock 标题）。默认回退默认 Agent 名（`DEFAULT_AGENT_NAME`，
+ * 名字已统一由 `agent.name` 提供，不再有独立的「随手问名字」概念）；
+ * dock 打开时从 REST 拉取，ws renamed 事件实时更新。
+ */
+export const quickAssistantNameAtom = atom<string>(DEFAULT_AGENT_NAME);
 
 /** 面板当前随手问会话 id；null = 尚未开始（首条消息惰性创建）。 */
 export const currentQuickSessionIdAtom = atom<string | null>(null);
@@ -53,6 +55,12 @@ export interface PreviewArtifact {
   /** 文件名（presigned 源用它判类型 + 下载名）。 */
   name?: string;
   title?: string;
+  /**
+   * 本机产物（`path` 源）所属会话的 agentId（Task 12）。构造时应取该产物
+   * 所属**会话**的 agentId，而非当前导航条选中的 agentId——用户可能正在
+   * 查看某会话历史但已把导航条切到别的 Agent。`remote`/`url` 源不需要。
+   */
+  agentId?: string;
 }
 export const previewArtifactAtom = atom<PreviewArtifact | null>(null);
 

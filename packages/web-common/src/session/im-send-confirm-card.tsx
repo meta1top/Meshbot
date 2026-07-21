@@ -20,6 +20,12 @@ export interface ImSendConfirmCardProps {
     decision: "send" | "cancel",
     content?: string,
   ) => Promise<void>;
+  /**
+   * 关卡已被其他端应答的提示文案（Task 17，`run.hitl_settled` 广播帧）——
+   * `tool.hitlSettledBy` 非空、但真正的工具终态（`tool.result`）尚未到达时
+   * 展示这一句，而不是让卡片继续停在可编辑的待发送表单上。
+   */
+  hitlSettledLabel: string;
 }
 
 /** im_send_message 的可编辑确认卡：预填草稿，用户改后点发送 / 取消。 */
@@ -27,6 +33,7 @@ export function ImSendConfirmCard({
   tool,
   targetName,
   onConfirm,
+  hitlSettledLabel,
 }: ImSendConfirmCardProps) {
   const args = (tool.args ?? {}) as {
     conversationId?: string;
@@ -35,7 +42,9 @@ export function ImSendConfirmCard({
   const [text, setText] = useState(args.content ?? "");
   const [busy, setBusy] = useState(false);
 
-  const pending = tool.status === "running";
+  // 已被别端应答但真正的工具终态还没到（result 未落地）：不再展示可编辑
+  // 表单——避免用户对着一张早已失效的确认卡继续编辑/点击。
+  const pending = tool.status === "running" && !tool.hitlSettledBy;
   const result = parseStatus(tool.result);
 
   const act = async (decision: "send" | "cancel") => {
@@ -92,7 +101,8 @@ export function ImSendConfirmCard({
   return (
     <div className="flex w-full items-center gap-2 rounded-[8px] border border-border bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground">
       <Check className="h-3 w-3" />
-      {terminalLabel(result)} · {targetName}
+      {tool.hitlSettledBy && !result ? hitlSettledLabel : terminalLabel(result)}{" "}
+      · {targetName}
     </div>
   );
 }
