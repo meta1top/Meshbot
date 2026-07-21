@@ -4,7 +4,9 @@
     "switchToDarkTheme": "Switch to dark theme",
     "close": "Close",
     "alertTitle": "Notice",
-    "gotIt": "Got it"
+    "gotIt": "Got it",
+    "cancel": "Cancel",
+    "confirm": "Confirm"
   },
   "login": {
     "title": "Sign in",

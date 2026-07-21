@@ -4,7 +4,9 @@
     "switchToDarkTheme": "切换到深色",
     "close": "关闭",
     "alertTitle": "提示",
-    "gotIt": "知道了"
+    "gotIt": "知道了",
+    "cancel": "取消",
+    "confirm": "确认"
   },
   "login": {
     "title": "登录",

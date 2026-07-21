@@ -31,6 +31,7 @@ import { SubagentCard } from "@/components/session/subagent-card";
 import { RemoteSessionProvider } from "@/hooks/remote-session-context";
 import { useAutoOpenArtifact } from "@/hooks/use-auto-open-artifact";
 import { useChatScroll } from "@/hooks/use-chat-scroll";
+import { useGlobalConfirm } from "@/hooks/use-global-confirm";
 import { useLlmusePrefix } from "@/hooks/use-llmuse-prefix";
 import { useSessionStream } from "@/hooks/use-session-stream";
 import { toI18nList } from "@/lib/i18n-list";
@@ -85,6 +86,7 @@ export function AssistantConversationBody({
   const [draft, setDraft] = useState("");
   const chatInputRef = useRef<ChatInputHandle>(null);
   const setGlobalAlertMessage = useSetAtom(globalAlertMessageAtom);
+  const confirmDialog = useGlobalConfirm();
 
   // 输入框 placeholder：挂载后从同一组文案随机选一条（与首页一致，避免单调）
   // sync-locales 把数组 flatten 成 numeric-key 对象，toI18nList 兜底还原列表
@@ -267,7 +269,8 @@ export function AssistantConversationBody({
    * 若输入框已有非空 draft，confirm 后才覆盖。
    */
   const handleEditPending = async (pendingId: string) => {
-    if (draft.trim() && !window.confirm(t("confirmOverwriteDraft"))) return;
+    if (draft.trim() && !(await confirmDialog(t("confirmOverwriteDraft"))))
+      return;
     try {
       const { content } = await deletePendingMessage(id, pendingId);
       stream.apply((prev) => prev.filter((m) => m.id !== pendingId));
