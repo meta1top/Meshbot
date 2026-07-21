@@ -31,9 +31,14 @@ export const loadRemoteSessionsAtom = atom(
     if (cur?.status === "loading") return;
     if (!force && cur && cur.status !== "idle" && cur.status !== "error")
       return;
+    // 进 loading 保留旧 sessions（不清空）：`reloadTrackedRemoteSessionsAtom`
+    // 在每次 socket 重连都会 force 重拉已加载过的远程 Agent（见其 JSDoc），
+    // 若这里清成 []，断线重连一次列表就闪烁清空再重填，期间到达的镜像事件
+    // 也会被合并进这个 [] 随后被 REST 响应整体覆盖丢弃。旧值只在新快照
+    // （下方 loaded/error 分支）到达时才被替换。
     set(remoteSessionsAtom, (m) => ({
       ...m,
-      [agentId]: { status: "loading", sessions: [] },
+      [agentId]: { status: "loading", sessions: cur?.sessions ?? [] },
     }));
     try {
       const sessions = await fetchRemoteSessions(agentId);

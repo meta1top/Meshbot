@@ -81,6 +81,19 @@ export const addSessionAtom = atom(
 /**
  * 重命名（乐观）。空标题或与原值相同：直接 no-op 不发请求。
  * 失败回滚到原 title + 抛错给调用方（让 UI 弹 toast）。
+ *
+ * 成功/失败路径都只 patch 自己改过的字段（title/titleGenerated），**不整体
+ * 替换该行对象**——`status` 是 Session 的 DB 列，`runner.service.ts` 每次
+ * run 起停都会经独立的 `updateSessionStatusAtom` patch 它；await 网络往返
+ * 期间完全可能插入一次 status 变化。若整体替换：
+ * - 失败回滚用的是 await **之前**拍的快照 `before`，会把这段窗口内发生的
+ *   status 写入连带盖掉；
+ * - 成功路径用服务端响应 `updated` 整体替换，而该响应是服务端在处理这次
+ *   PATCH 请求时读回的快照，其 `status` 字段相对「此刻」同样可能过期。
+ * `sessionsAtom` 首屏之后从不重拉（侧栏绿点全靠事件增量维持，见文件头
+ * 注释），这类错误覆盖不会自愈，会一直挂到用户刷新页面——所以两条路径都改
+ * 成读取 await 之后最新的 `get(sessionsAtom)`，只覆盖 title/titleGenerated
+ * 这两个自己确实改过的字段，其余字段（包括 status）原样保留。
  */
 export const renameSessionAtom = atom(
   null,
@@ -97,12 +110,20 @@ export const renameSessionAtom = atom(
     try {
       const updated = await patchSession(params.id, { title: trimmed });
       const after = get(sessionsAtom).map((s) =>
-        s.id === params.id ? updated : s,
+        s.id === params.id
+          ? {
+              ...s,
+              title: updated.title,
+              titleGenerated: updated.titleGenerated,
+            }
+          : s,
       );
       set(sessionsAtom, sortSessions(after));
     } catch (err) {
       const rollback = get(sessionsAtom).map((s) =>
-        s.id === params.id ? before : s,
+        s.id === params.id
+          ? { ...s, title: before.title, titleGenerated: before.titleGenerated }
+          : s,
       );
       set(sessionsAtom, sortSessions(rollback));
       throw err;

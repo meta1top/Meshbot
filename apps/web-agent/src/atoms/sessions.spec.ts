@@ -1,15 +1,20 @@
 import type { SessionSummary } from "@meshbot/types-agent";
 import { createStore } from "jotai";
-import { deleteSession as deleteSessionApi } from "@/rest/session";
+import {
+  deleteSession as deleteSessionApi,
+  patchSession as patchSessionApi,
+} from "@/rest/session";
 import {
   addSessionAtom,
   applySessionListEventAtom,
   applySessionListEventToArray,
   deleteSessionAtom,
   patchSessionStatus,
+  renameSessionAtom,
   SELF_DELETE_GRACE_MS,
   selfDeletingSessionIdsAtom,
   sessionsAtom,
+  updateSessionStatusAtom,
 } from "./sessions";
 
 // deleteSessionAtom 唯一的网络依赖，mock 掉避免真实 REST 调用；deleteSessionAtom
@@ -283,5 +288,99 @@ describe("deleteSessionAtom 的自删宽限期锚点（review Important 3）", (
       /网络炸了/,
     );
     expect(store.get(selfDeletingSessionIdsAtom).has("boom")).toBe(false);
+  });
+});
+
+describe("renameSessionAtom（双写扫描 R1：回滚/成功路径整对象替换会盖掉别人的写入）", () => {
+  beforeEach(() => {
+    (patchSessionApi as jest.Mock).mockReset();
+  });
+
+  it("空标题或与原值相同 → no-op，不发请求，不改列表", async () => {
+    const store = createStore();
+    const s = makeSession("s1", "idle");
+    store.set(sessionsAtom, [s]);
+
+    await store.set(renameSessionAtom, { id: "s1", title: "   " });
+    await store.set(renameSessionAtom, { id: "s1", title: s.title });
+
+    expect(patchSessionApi).not.toHaveBeenCalled();
+    expect(store.get(sessionsAtom)[0]).toBe(s);
+  });
+
+  it("id 不在列表里 → no-op，不发请求", async () => {
+    const store = createStore();
+    store.set(sessionsAtom, [makeSession("s1", "idle")]);
+
+    await store.set(renameSessionAtom, { id: "不存在", title: "新标题" });
+
+    expect(patchSessionApi).not.toHaveBeenCalled();
+  });
+
+  it("成功路径：只合并服务端返回的 title/titleGenerated，不整体替换——await 窗口内别的写入（status）不丢", async () => {
+    const store = createStore();
+    store.set(sessionsAtom, [makeSession("s1", "idle")]);
+    let resolvePatch: (v: SessionSummary) => void = () => {};
+    (patchSessionApi as jest.Mock).mockReturnValue(
+      new Promise<SessionSummary>((resolve) => {
+        resolvePatch = resolve;
+      }),
+    );
+
+    const pending = store.set(renameSessionAtom, {
+      id: "s1",
+      title: "新标题",
+    });
+    // 乐观更新已应用
+    expect(store.get(sessionsAtom)[0].title).toBe("新标题");
+
+    // await 窗口内：runner 起了一个 run，status_changed 把 status patch 成
+    // running（与 renameSessionAtom 完全无关的一次写入）。
+    store.set(updateSessionStatusAtom, { id: "s1", status: "running" });
+    expect(store.get(sessionsAtom)[0].status).toBe("running");
+
+    // 服务端响应带着它自己读到的（此刻已经过期的）status 快照，不该覆盖上面
+    // 那次并发写入。
+    resolvePatch({
+      ...makeSession("s1", "idle"),
+      title: "新标题",
+      titleGenerated: true,
+    });
+    await pending;
+
+    const after = store.get(sessionsAtom)[0];
+    expect(after.title).toBe("新标题");
+    expect(after.titleGenerated).toBe(true);
+    expect(after.status).toBe("running");
+  });
+
+  it("失败回滚：只还原 title/titleGenerated，不碰 await 窗口内变化的 status", async () => {
+    const store = createStore();
+    store.set(sessionsAtom, [makeSession("s1", "idle")]);
+    let rejectPatch: (e: unknown) => void = () => {};
+    (patchSessionApi as jest.Mock).mockReturnValue(
+      new Promise<SessionSummary>((_resolve, reject) => {
+        rejectPatch = reject;
+      }),
+    );
+
+    const pending = store.set(renameSessionAtom, {
+      id: "s1",
+      title: "新标题",
+    });
+    expect(store.get(sessionsAtom)[0].title).toBe("新标题");
+
+    // await 窗口内并发的 status 写入（同上一测试）
+    store.set(updateSessionStatusAtom, { id: "s1", status: "running" });
+
+    rejectPatch(new Error("网络炸了"));
+    await expect(pending).rejects.toThrow(/网络炸了/);
+
+    const after = store.get(sessionsAtom)[0];
+    // title 回滚到改名前
+    expect(after.title).toBe(`会话 s1`);
+    expect(after.titleGenerated).toBe(false);
+    // status 是回滚窗口内发生的另一次写入，不该被这次回滚吞掉
+    expect(after.status).toBe("running");
   });
 });

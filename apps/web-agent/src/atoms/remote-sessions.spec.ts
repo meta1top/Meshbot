@@ -2,6 +2,7 @@ import type { SessionSummary } from "@meshbot/types-agent";
 import { createStore } from "jotai";
 import {
   applyRemoteSessionListEventAtom,
+  loadRemoteSessionsAtom,
   reloadTrackedRemoteSessionsAtom,
   remoteSessionsAtom,
 } from "./remote-sessions";
@@ -143,5 +144,45 @@ describe("reloadTrackedRemoteSessionsAtom", () => {
     const store = createStore();
     store.set(reloadTrackedRemoteSessionsAtom);
     expect(fetchRemoteSessions).not.toHaveBeenCalled();
+  });
+});
+
+describe("loadRemoteSessionsAtom（双写扫描 R2a：loading 期间清空导致闪烁+丢事件）", () => {
+  it("force 重拉进入 loading 时旧 sessions 仍可读，直到新快照到达才整体覆盖", async () => {
+    const store = createStore();
+    const stale = makeSession("stale", "a1");
+    store.set(remoteSessionsAtom, {
+      a1: { status: "loaded", sessions: [stale] },
+    });
+    let resolveFetch: (v: SessionSummary[]) => void = () => {};
+    (fetchRemoteSessions as jest.Mock).mockReturnValue(
+      new Promise<SessionSummary[]>((resolve) => {
+        resolveFetch = resolve;
+      }),
+    );
+
+    const pending = store.set(loadRemoteSessionsAtom, "a1", true);
+    // 尚未 resolve：status 已切到 loading，但旧数据不该被清空（无闪烁）
+    expect(store.get(remoteSessionsAtom).a1.status).toBe("loading");
+    expect(store.get(remoteSessionsAtom).a1.sessions).toEqual([stale]);
+
+    resolveFetch([makeSession("fresh", "a1")]);
+    await pending;
+
+    expect(store.get(remoteSessionsAtom).a1.status).toBe("loaded");
+    expect(store.get(remoteSessionsAtom).a1.sessions.map((s) => s.id)).toEqual([
+      "fresh",
+    ]);
+  });
+
+  it("首次加载（map 里无该 key）进入 loading 时 sessions 仍是空数组（没有旧值可保留）", async () => {
+    const store = createStore();
+    (fetchRemoteSessions as jest.Mock).mockReturnValue(new Promise(() => {}));
+
+    store.set(loadRemoteSessionsAtom, "a1");
+    expect(store.get(remoteSessionsAtom).a1).toEqual({
+      status: "loading",
+      sessions: [],
+    });
   });
 });
