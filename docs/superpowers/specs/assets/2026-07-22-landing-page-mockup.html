@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MeshBot — v3 主题切换 + 图形语言</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root, :root[data-theme="dark"]{
+    --bg:oklch(0.135 0.008 55);--panel:oklch(0.175 0.009 55);--card:oklch(0.205 0.011 55);
+    --line:oklch(0.245 0.009 55);--edge:oklch(0.29 0.011 55);
+    --fg:oklch(0.96 0.005 55);--dim:oklch(0.70 0.012 55);--faint:oklch(0.55 0.011 55);
+    --grid:rgba(232,130,63,.10);--glow:rgba(210,74,13,.13);--mesh:rgba(210,74,13,.34);
+    --brand:#d24a0d;--brand-lt:#e8823f;--ok:#3fa34d;
+  }
+  :root[data-theme="light"]{
+    --bg:#f2ece3;--panel:#faf7f2;--card:#ffffff;
+    --line:#e6ded4;--edge:#d5c9b9;
+    --fg:#241c15;--dim:#6b5d4f;--faint:#9a8b7b;
+    --grid:rgba(210,74,13,.11);--glow:rgba(210,74,13,.10);--mesh:rgba(210,74,13,.32);
+    --brand:#c04409;--brand-lt:#a83b07;--ok:#2f7d3a;
+  }
+  @media (prefers-color-scheme:light){
+    :root:not([data-theme]){
+      --bg:#f2ece3;--panel:#faf7f2;--card:#ffffff;--line:#e6ded4;--edge:#d5c9b9;
+      --fg:#241c15;--dim:#6b5d4f;--faint:#9a8b7b;
+      --grid:rgba(210,74,13,.11);--glow:rgba(210,74,13,.10);--mesh:rgba(210,74,13,.32);
+      --brand:#c04409;--brand-lt:#a83b07;--ok:#2f7d3a;
+    }
+  }
+  html{--sans:ui-sans-serif,system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+       --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+  body{background:var(--bg);color:var(--fg);font-family:var(--sans);-webkit-font-smoothing:antialiased;line-height:1.5;transition:background .3s,color .3s}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 30px}
+  .sec{position:relative;border-top:1px solid var(--line)}
+  .sec::before{content:attr(data-n);position:absolute;left:-52px;top:26px;font-family:var(--mono);font-size:10px;color:var(--brand);letter-spacing:.16em}
+  .sec-inner{max-width:1180px;margin:0 auto;padding:66px 30px;position:relative;z-index:2}
+  /* —— 图形语言 A：点阵网格 —— */
+  .dots{background-image:radial-gradient(circle,var(--grid) 1px,transparent 1px);background-size:23px 23px}
+  /* —— 图形语言 B：横向扫描线 —— */
+  .scan{background-image:repeating-linear-gradient(180deg,var(--grid) 0 1px,transparent 1px 7px)}
+  /* —— 图形语言 C：角落光晕 —— */
+  .glowtl::after{content:"";position:absolute;inset:0;background:radial-gradient(640px 300px at 12% 0%,var(--glow),transparent 68%);pointer-events:none;z-index:1}
+  .glowbr::after{content:"";position:absolute;inset:0;background:radial-gradient(560px 280px at 88% 100%,var(--glow),transparent 68%);pointer-events:none;z-index:1}
+
+  .lbl{font-family:var(--mono);font-size:10px;letter-spacing:.19em;text-transform:uppercase;color:var(--brand);margin-bottom:16px}
+  h1{font-size:clamp(46px,7.2vw,92px);line-height:.94;font-weight:800;letter-spacing:-.052em;margin:14px 0 22px}
+  h2{font-size:clamp(28px,3.7vw,42px);line-height:1.08;font-weight:780;letter-spacing:-.04em;margin-bottom:15px}
+  h1 em,h2 em{font-style:normal;color:var(--brand)}
+  .body{font-size:14.5px;line-height:1.78;color:var(--dim)}
+  .pip{width:5px;height:5px;border-radius:50%;background:var(--ok);box-shadow:0 0 6px color-mix(in srgb,var(--ok) 70%,transparent);flex-shrink:0}
+  .pip.o{background:var(--brand);box-shadow:0 0 6px color-mix(in srgb,var(--brand) 70%,transparent)}
+  .pip.off{background:var(--faint);box-shadow:none}
+  .btn{font-size:12.5px;font-weight:600;padding:8px 15px;border-radius:2px;text-decoration:none;display:inline-block;white-space:nowrap}
+  .btn-p{background:var(--brand);color:#fff}.btn-g{border:1px solid var(--edge);color:var(--fg)}.btn-t{color:var(--dim);font-weight:500}
+
+  nav{position:sticky;top:0;z-index:60;background:color-mix(in srgb,var(--bg) 86%,transparent);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+  .nav-in{max-width:1180px;margin:0 auto;padding:13px 30px;display:flex;align-items:center;gap:24px}
+  .mark{display:flex;align-items:center;gap:8px;font-weight:680;font-size:14.5px;letter-spacing:-.01em}
+  .mark i{width:16px;height:16px;background:var(--brand);border-radius:3px;display:block}
+  .nav-l{margin-left:12px;display:flex;gap:20px;font-size:13px;color:var(--dim)}
+  .nav-l a{color:inherit;text-decoration:none}.nav-l a:hover{color:var(--fg)}
+  .nav-r{margin-left:auto;display:flex;align-items:center;gap:10px}
+  .tgl{width:30px;height:30px;border:1px solid var(--edge);background:transparent;color:var(--dim);cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:2px;font-size:13px}
+  .tgl:hover{color:var(--fg);border-color:var(--brand)}
+
+  .hero{padding:76px 0 68px;position:relative;overflow:hidden}
+  .hero-in{position:relative;z-index:2}
+  .lead{font-size:16.5px;line-height:1.72;color:var(--dim);max-width:540px;margin-bottom:28px}
+  .cta{display:flex;gap:11px;align-items:center;flex-wrap:wrap}
+  .cta .btn{padding:12px 22px;font-size:13.5px}
+  .cta-note{font-family:var(--mono);font-size:11px;color:var(--faint);margin-left:5px}
+
+  .ws{margin-top:52px;border:1px solid var(--edge);background:var(--panel);display:grid;grid-template-columns:1fr 1.5fr .74fr;position:relative;box-shadow:0 24px 60px -30px rgba(0,0,0,.5)}
+  .ws-col{padding:14px;border-right:1px solid var(--line);min-height:250px}
+  .ws-col:last-child{border-right:0}
+  .ws-h{font-family:var(--mono);font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--faint);margin-bottom:13px;display:flex;align-items:center;gap:6px}
+  .msg{display:flex;gap:8px;margin-bottom:11px}
+  .av{width:21px;height:21px;border-radius:3px;flex-shrink:0;font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff}
+  .msg-b{font-size:11.5px;line-height:1.55;color:var(--dim)}
+  .msg-n{font-size:10.5px;font-weight:650;color:var(--fg);margin-bottom:1px}
+  .trow{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--line);background:var(--card);margin-bottom:5px;font-size:10.5px;color:var(--dim)}
+  .trow b{color:var(--fg);font-weight:600}
+  .tk{color:var(--brand);font-size:9px}
+  .art{border:1px solid color-mix(in srgb,var(--brand) 50%,transparent);background:color-mix(in srgb,var(--brand) 7%,transparent);padding:8px 9px;font-size:10.5px;margin-top:7px}
+  .agent-row{display:flex;align-items:center;gap:7px;padding:8px 0;border-bottom:1px solid var(--line);font-size:11px;color:var(--dim)}
+  .agent-row:last-child{border-bottom:0}
+  .agent-row b{color:var(--fg);font-weight:600;font-size:11.5px}
+  .agent-row small{display:block;color:var(--faint);font-size:9.5px;margin-top:1px}
+  .fade{opacity:0;transform:translateY(6px);animation:fadeIn .42s cubic-bezier(.22,.9,.28,1) forwards}
+  @keyframes fadeIn{to{opacity:1;transform:none}}
+  .breathe{animation:breathe 3.4s ease-in-out infinite}
+  @keyframes breathe{0%,100%{opacity:.5}50%{opacity:1}}
+
+  /* 02 放射 mesh 图 */
+  .compose{display:grid;grid-template-columns:.9fr 1.1fr;gap:44px;align-items:center;margin-top:30px}
+  .radial{position:relative;aspect-ratio:1/.86}
+  .radial svg{position:absolute;inset:0;width:100%;height:100%}
+  .dash{stroke:var(--mesh);stroke-width:1;fill:none;stroke-dasharray:4 5;animation:march 9s linear infinite}
+  @keyframes march{to{stroke-dashoffset:-90}}
+  .core{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:96px;height:96px;border-radius:6px;background:linear-gradient(140deg,var(--brand),color-mix(in srgb,var(--brand) 55%,#000));display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;box-shadow:0 0 42px -6px color-mix(in srgb,var(--brand) 65%,transparent)}
+  .core b{font-size:13.5px;font-weight:700}
+  .core small{font-size:9px;font-family:var(--mono);opacity:.82;margin-top:2px}
+  .sat{position:absolute;transform:translate(-50%,-50%);border:1px solid var(--edge);background:var(--card);padding:8px 11px;min-width:104px;box-shadow:0 6px 18px -10px rgba(0,0,0,.4)}
+  .sat-l{font-family:var(--mono);font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--brand);margin-bottom:3px}
+  .sat-v{font-size:11px;color:var(--dim);line-height:1.45}
+
+  /* 03 对话 */
+  .conv{border:1px solid var(--edge);background:var(--panel);margin-top:30px;max-width:800px;box-shadow:0 20px 50px -32px rgba(0,0,0,.45)}
+  .conv-h{padding:11px 16px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:10px;color:var(--faint);display:flex;align-items:center;gap:7px}
+  .conv-b{padding:20px 18px}
+  .u-msg{display:flex;gap:10px;margin-bottom:20px}
+  .u-av{width:25px;height:25px;border-radius:4px;background:#5b7fa8;flex-shrink:0;font-size:10px;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700}
+  .u-txt{font-size:14px;line-height:1.6;padding-top:3px}
+  .a-blk{padding-left:35px;margin-bottom:18px}
+  .a-txt{font-size:13.5px;line-height:1.72;color:var(--dim);margin-bottom:12px}
+  .todo{border:1px solid var(--line);background:var(--card);padding:12px 14px;margin-bottom:12px}
+  .todo-h{font-family:var(--mono);font-size:9px;letter-spacing:.14em;color:var(--brand);text-transform:uppercase;margin-bottom:9px}
+  .todo-i{display:flex;gap:8px;font-size:12px;color:var(--dim);padding:3px 0}
+  .todo-i.done{color:var(--faint)}.todo-i.done span:last-child{text-decoration:line-through}
+  .step{display:flex;align-items:center;gap:9px;padding:7px 11px;border-left:2px solid var(--line);font-size:12px;color:var(--faint);margin-bottom:3px}
+  .step.act{border-left-color:var(--brand);color:var(--dim)}
+  .ask{border:1px solid color-mix(in srgb,var(--brand) 42%,transparent);background:color-mix(in srgb,var(--brand) 5%,transparent);padding:14px;margin-bottom:12px}
+  .ask-q{font-size:13px;margin-bottom:11px;font-weight:600}
+  .ask-o{display:flex;gap:7px;flex-wrap:wrap}
+  .opt{border:1px solid var(--edge);padding:6px 12px;font-size:12px;color:var(--dim);background:var(--panel)}
+  .opt.sel{border-color:var(--brand);color:var(--fg);background:color-mix(in srgb,var(--brand) 16%,transparent)}
+  .artifact{border:1px solid var(--edge);background:var(--card);margin-bottom:12px}
+  .artifact-h{padding:9px 13px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--dim)}
+  .artifact-b{padding:13px;font-size:12px;line-height:1.75;color:var(--dim)}
+  .confirm{border:1px solid var(--edge);background:var(--card);padding:13px}
+  .confirm-h{font-family:var(--mono);font-size:9px;letter-spacing:.14em;color:var(--brand);text-transform:uppercase;margin-bottom:9px}
+  .confirm-p{border:1px solid var(--line);background:var(--panel);padding:10px;font-size:12px;color:var(--dim);margin-bottom:10px;line-height:1.6}
+  .mini{padding:6px 13px;font-size:11.5px;font-weight:600;border-radius:2px}
+  .mini.p{background:var(--brand);color:#fff}.mini.g{border:1px solid var(--edge);color:var(--dim)}
+
+  /* 04 团队 */
+  .im{border:1px solid var(--edge);background:var(--panel);display:grid;grid-template-columns:180px 1fr 148px;margin-top:30px;box-shadow:0 20px 50px -32px rgba(0,0,0,.45)}
+  .im-c{border-right:1px solid var(--line);padding:14px}
+  .im-c:last-child{border-right:0}
+  .ch{padding:6px 8px;font-size:12px;color:var(--dim);display:flex;align-items:center;justify-content:space-between;margin-bottom:2px}
+  .ch.on{background:var(--card);color:var(--fg);border-left:2px solid var(--brand)}
+  .badge{background:var(--brand);color:#fff;font-size:9px;padding:1px 5px;border-radius:8px;font-weight:700}
+  .im-m{display:flex;gap:9px;margin-bottom:14px}
+  .im-t{font-size:12.5px;line-height:1.6;color:var(--dim)}
+  .im-n{font-size:11.5px;font-weight:650;color:var(--fg)}
+  .im-n span{font-weight:400;color:var(--faint);font-size:10px;margin-left:5px}
+  .mem{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--dim);padding:5px 0}
+
+  /* 05 MCP：流入动效 */
+  .two{display:grid;grid-template-columns:1fr 1.08fr;gap:44px;align-items:center;margin-top:24px}
+  .code{border:1px solid var(--edge);background:var(--card);position:relative;overflow:hidden}
+  .code::before{content:"";position:absolute;top:0;left:-100%;width:100%;height:1px;background:linear-gradient(90deg,transparent,var(--brand),transparent);animation:sweep 4.2s ease-in-out infinite}
+  @keyframes sweep{0%{left:-100%}55%,100%{left:100%}}
+  .code-h{padding:8px 12px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:10px;color:var(--faint);display:flex;justify-content:space-between}
+  .code-b{padding:14px;font-family:var(--mono);font-size:11.5px;line-height:1.85;color:var(--dim);overflow-x:auto}
+  .k{color:var(--brand-lt)}.s{color:#6f9a6f}
+  :root[data-theme="light"] .s{color:#3f6b3f}
+  .pill{display:inline-block;border:1px solid var(--edge);padding:4px 9px;font-family:var(--mono);font-size:10px;color:var(--dim);margin:0 5px 5px 0}
+
+  /* 06 远程：波纹 */
+  .remote{display:grid;grid-template-columns:.78fr 96px 1.42fr;margin-top:30px;border:1px solid var(--edge);background:var(--panel)}
+  .rm{padding:16px;border-right:1px solid var(--line)}
+  .rm:last-child{border-right:0}
+  .rm-link{position:relative;display:flex;align-items:center;justify-content:center;border-right:1px solid var(--line)}
+  .rm-wire{position:absolute;left:0;right:0;top:50%;height:1px;background:var(--line)}
+  .rm-dot{width:6px;height:6px;border-radius:50%;background:var(--brand);position:absolute;top:50%;margin-top:-3px;box-shadow:0 0 9px 2px color-mix(in srgb,var(--brand) 55%,transparent);animation:flow 3.4s cubic-bezier(.4,0,.5,1) infinite}
+  @keyframes flow{0%{left:2px;opacity:0}12%{opacity:1}88%{opacity:1}100%{left:calc(100% - 8px);opacity:0}}
+  .ripple{position:absolute;left:50%;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border:1px solid var(--brand);border-radius:50%;animation:rip 3.4s ease-out infinite;opacity:0}
+  .ripple.d2{animation-delay:1.1s}
+  @keyframes rip{0%{transform:scale(.4);opacity:.75}100%{transform:scale(3.4);opacity:0}}
+  .phone{border:1px solid var(--edge);background:var(--card);border-radius:9px;padding:12px;max-width:186px;box-shadow:0 12px 30px -18px rgba(0,0,0,.5)}
+  .phone-bar{width:34px;height:3px;border-radius:2px;background:var(--edge);margin:0 auto 11px}
+
+  /* 07 三档：视觉密度递减 */
+  .zones{display:grid;grid-template-columns:1fr 1fr 1fr;border:1px solid var(--edge);margin-top:30px;overflow:hidden}
+  .zone{padding:22px 18px;border-right:1px solid var(--line);position:relative}
+  .zone:last-child{border-right:0}
+  .zone.z1{background:var(--card)}
+  .zone.z2{background:var(--panel);background-image:repeating-linear-gradient(-45deg,var(--grid) 0 1px,transparent 1px 9px)}
+  .zone.z3{background:transparent;background-image:radial-gradient(circle,var(--grid) 1px,transparent 1px);background-size:16px 16px}
+  .zone-h{font-family:var(--mono);font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:7px}
+  .zone-h.a{color:var(--ok)}.zone-h.b{color:var(--brand)}.zone-h.c{color:var(--faint)}
+  .zone li{list-style:none;font-size:12.5px;color:var(--dim);padding:5px 0 5px 13px;position:relative;line-height:1.55}
+  .zone li::before{content:"";position:absolute;left:0;top:11px;width:4px;height:1px;background:var(--edge)}
+  .zone-n{font-size:11.5px;color:var(--faint);margin-top:13px;padding-top:12px;border-top:1px solid var(--line);line-height:1.6}
+
+  /* 08 分享 */
+  .share{max-width:420px;margin:30px auto 0;border:1px solid var(--edge);background:var(--card);box-shadow:0 26px 60px -34px rgba(0,0,0,.5)}
+  .share-h{padding:13px 16px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:10px;color:var(--faint)}
+  .share-b{padding:20px 16px}
+  .share-f{font-size:15px;font-weight:650;margin-bottom:4px}
+  .share-m{font-size:11.5px;color:var(--faint);font-family:var(--mono);margin-bottom:16px}
+  .share-o{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--dim);padding:8px 0;border-top:1px solid var(--line)}
+  .sw{width:26px;height:14px;border-radius:8px;background:var(--brand);position:relative;flex-shrink:0}
+  .sw::after{content:"";position:absolute;right:2px;top:2px;width:10px;height:10px;border-radius:50%;background:#fff}
+  .sw.off{background:var(--edge)}.sw.off::after{left:2px;right:auto}
+
+  /* 09 上手 */
+  .steps{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--edge);margin-top:30px;position:relative}
+  .sp{padding:24px 18px;border-right:1px solid var(--line);position:relative}
+  .sp:last-child{border-right:0}
+  .sp-n{font-family:var(--mono);font-size:26px;color:var(--brand);font-weight:700;letter-spacing:-.05em;margin-bottom:10px;opacity:.85}
+  .sp-t{font-size:14px;font-weight:650;margin-bottom:5px}
+  .sp-d{font-size:12px;color:var(--faint);line-height:1.6}
+
+  footer{border-top:1px solid var(--line);padding:46px 0 40px}
+  .ft{display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr;gap:30px}
+  .ft h4{font-family:var(--mono);font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--faint);margin-bottom:12px;font-weight:400}
+  .ft a{display:block;color:var(--dim);text-decoration:none;font-size:12.5px;padding:4px 0}
+  .ft a:hover{color:var(--fg)}
+
+  @media (max-width:900px){
+    .ws,.im,.remote,.zones,.steps,.ft{grid-template-columns:1fr}
+    .ws-col,.im-c,.rm,.zone,.sp{border-right:0;border-bottom:1px solid var(--line);min-height:auto}
+    .compose,.two{grid-template-columns:1fr;gap:26px}
+    .sec::before{display:none}.a-blk{padding-left:0}
+    .rm-link{display:none}.radial{aspect-ratio:1/1.15}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .fade{opacity:1;transform:none;animation:none}
+    .breathe,.rm-dot,.ripple,.dash,.code::before{animation:none}
+    .ripple{opacity:0}
+  }
+</style>
+</head>
+<body>
+
+<nav><div class="nav-in">
+  <div class="mark"><i></i>MeshBot</div>
+  <div class="nav-l"><a href="#">能力</a><a href="#">文档</a><a href="#">GitHub</a></div>
+  <div class="nav-r">
+    <button type="button" class="tgl" id="tgl" aria-label="切换深色/浅色主题">◐</button>
+    <a class="btn btn-t" href="#">登录</a>
+    <a class="btn btn-p" href="#">免费开始</a>
+  </div>
+</div></nav>
+
+<header class="hero dots glowtl">
+  <div class="wrap hero-in">
+    <div class="lbl">TEAM · AGENTS</div>
+    <h1>同一个<br><em>工作空间</em></h1>
+    <p class="lead">你的团队在这里协作，你的 Agent 带着各自的人格、技能和记忆一起工作。会话与记忆留在本机。</p>
+    <div class="cta">
+      <a class="btn btn-p" href="#">免费开始</a>
+      <a class="btn btn-g" href="#">下载桌面端</a>
+      <span class="cta-note">macOS · Windows · Linux</span>
+    </div>
+    <div class="ws">
+      <div class="ws-col">
+        <div class="ws-h"><span class="pip"></span>#产品设计 · 4 人在线</div>
+        <div class="msg fade" style="animation-delay:.25s"><div class="av" style="background:#5b7fa8">陈</div><div><div class="msg-n">陈默</div><div class="msg-b">周报能不能让 Agent 先起个草？</div></div></div>
+        <div class="msg fade" style="animation-delay:1.5s"><div class="av" style="background:#8a6a4f">林</div><div><div class="msg-n">林岸</div><div class="msg-b">我让它读一下这周的会议记录</div></div></div>
+        <div class="msg fade" style="animation-delay:4.6s"><div class="av" style="background:var(--brand)">林</div><div><div class="msg-n">林岸 <span style="font-weight:400;color:var(--faint);font-size:9.5px">· 已确认发送</span></div><div class="msg-b">草稿好了：本周完成 12 项，阻塞 2 项 →</div></div></div>
+      </div>
+      <div class="ws-col">
+        <div class="ws-h"><span class="pip o breathe"></span>编辑助手 正在执行</div>
+        <div class="trow fade" style="animation-delay:2.1s"><span class="tk">▸</span><span>读取 <b>4 份会议记录</b></span></div>
+        <div class="trow fade" style="animation-delay:2.8s"><span class="tk">▸</span><span>回忆 <b>上季度周报的格式</b></span></div>
+        <div class="trow fade" style="animation-delay:3.5s"><span class="tk">▸</span><span>撰写 <b>weekly-report.md</b></span></div>
+        <div class="art fade" style="animation-delay:4.1s"><div style="font-family:var(--mono);font-size:9px;color:var(--brand);margin-bottom:4px">产物 · weekly-report.md</div><span style="color:var(--dim)">本周完成 12 项 · 阻塞 2 项 · 下周计划 5 项</span></div>
+      </div>
+      <div class="ws-col">
+        <div class="ws-h">你的 Agent</div>
+        <div class="agent-row"><span class="pip o"></span><div><b>编辑助手</b><small>文档 · 周报 · 校对</small></div></div>
+        <div class="agent-row"><span class="pip off"></span><div><b>代码审查员</b><small>接了仓库 MCP</small></div></div>
+        <div class="agent-row"><span class="pip off"></span><div><b>数据分析</b><small>独立工作区</small></div></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- 02 放射 mesh -->
+<section class="sec glowbr" data-n="02"><div class="sec-inner">
+  <div class="lbl">不是一个助手，是一群同事</div>
+  <div class="compose">
+    <div>
+      <h2>每个 Agent<br>都是<em>独立的个体</em></h2>
+      <p class="body">人格、技能、外部工具、记忆、工作区——五样东西各自独立，互不串味。给「编辑助手」装的技能，「代码审查员」看不到；它们的记忆也各自私有。</p>
+      <p class="body" style="margin-top:14px">你可以按事情养 Agent，而不是把一个万能助手调教到四不像。</p>
+    </div>
+    <div class="radial">
+      <svg viewBox="0 0 400 344" preserveAspectRatio="none" aria-hidden="true">
+        <path class="dash" d="M200 172 C150 172 120 96 92 62"/>
+        <path class="dash" d="M200 172 C258 172 288 100 316 66" style="animation-delay:-2s"/>
+        <path class="dash" d="M200 172 C142 172 104 196 60 206" style="animation-delay:-4s"/>
+        <path class="dash" d="M200 172 C260 172 300 200 344 212" style="animation-delay:-6s"/>
+        <path class="dash" d="M200 172 C200 232 200 268 200 300" style="animation-delay:-3s"/>
+      </svg>
+      <div class="core"><b>编辑助手</b><small>AGENT</small></div>
+      <div class="sat" style="left:19%;top:15%"><div class="sat-l">人格</div><div class="sat-v">克制、不寒暄</div></div>
+      <div class="sat" style="left:81%;top:16%"><div class="sat-l">技能</div><div class="sat-v">周报 · 纪要 · 校对</div></div>
+      <div class="sat" style="left:12%;top:61%"><div class="sat-l">外部工具</div><div class="sat-v">文档库 · 日历 MCP</div></div>
+      <div class="sat" style="left:86%;top:63%"><div class="sat-l">记忆</div><div class="sat-v">团队黑话与口径</div></div>
+      <div class="sat" style="left:50%;top:90%"><div class="sat-l">工作区</div><div class="sat-v">独立目录，不越界</div></div>
+    </div>
+  </div>
+</div></section>
+
+<!-- 03 对话 -->
+<section class="sec scan" data-n="03"><div class="sec-inner">
+  <div class="lbl">它是怎么干活的</div>
+  <h2>会拆解，会反问，<br><em>发出去前先问你</em></h2>
+  <p class="body" style="max-width:580px">不是给个答案就完事。它会把任务拆开、遇到拿不准的地方停下来问、把结果给你过目，替你发消息之前还要你点头。</p>
+  <div class="conv">
+    <div class="conv-h"><span class="pip o"></span>编辑助手</div>
+    <div class="conv-b">
+      <div class="u-msg"><div class="u-av">林</div><div class="u-txt">帮我把这周的会议记录整理成周报，发到 #产品设计</div></div>
+      <div class="a-blk">
+        <div class="a-txt">好，我先把这件事拆一下。</div>
+        <div class="todo">
+          <div class="todo-h">任务清单</div>
+          <div class="todo-i done"><span style="color:var(--brand)">✓</span><span>读取本周会议记录</span></div>
+          <div class="todo-i done"><span style="color:var(--brand)">✓</span><span>对齐上季度周报格式</span></div>
+          <div class="todo-i"><span style="color:var(--brand)">▸</span><span>撰写周报</span></div>
+          <div class="todo-i"><span style="color:var(--faint)">○</span><span>发送到 #产品设计</span></div>
+        </div>
+        <div class="step">读取 <b style="color:var(--dim)">4 份会议记录</b> · 共 1,240 行</div>
+        <div class="step act">回忆 <b style="color:var(--dim)">上季度周报的格式</b></div>
+      </div>
+      <div class="a-blk">
+        <div class="a-txt">写之前有个地方想确认一下——</div>
+        <div class="ask">
+          <div class="ask-q">这周有两项被卡住了，周报里怎么处理？</div>
+          <div class="ask-o"><div class="opt sel">单独列「阻塞」一节</div><div class="opt">并进「进行中」</div><div class="opt">先不写</div><div class="opt" style="color:var(--faint)">其他…</div></div>
+        </div>
+      </div>
+      <div class="a-blk">
+        <div class="a-txt">明白，那我单独列一节。写好了：</div>
+        <div class="artifact">
+          <div class="artifact-h"><span>weekly-report.md</span><span style="color:var(--brand)">产物</span></div>
+          <div class="artifact-b"><strong style="color:var(--fg)">本周完成（12）</strong><br>· 设备授权流程联调通过<br>· 消息未读计数多端同步修复<br><span style="color:var(--faint)">…</span><br><br><strong style="color:var(--fg)">阻塞（2）</strong><br>· 网盘界面待接入，后端已就绪<br>· 模型 provider 白名单与前端选项不一致</div>
+        </div>
+      </div>
+      <div class="a-blk">
+        <div class="a-txt">准备发到 #产品设计，你看下措辞——可以直接改：</div>
+        <div class="confirm">
+          <div class="confirm-h">发送前确认</div>
+          <div class="confirm-p">本周周报已整理：完成 12 项，其中设备授权流程已联调通过；有 2 项阻塞，详见附件。</div>
+          <div style="display:flex;gap:8px"><div class="mini p">确认发送</div><div class="mini g">取消</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div></section>
+
+<!-- 04 团队 -->
+<section class="sec" data-n="04"><div class="sec-inner">
+  <div class="lbl">团队本来就在的地方</div>
+  <h2>频道、私聊，<br>和<em>看得见的在场</em></h2>
+  <p class="body" style="max-width:580px">公开频道、私有频道、一对一私聊。未读和已读在你所有设备间同步，谁在线一眼看到。Agent 读得到频道内容，也能替你起草回复。</p>
+  <div class="im">
+    <div class="im-c">
+      <div class="ws-h">频道</div>
+      <div class="ch on"># 产品设计 <span class="badge">3</span></div>
+      <div class="ch"># 工程</div>
+      <div class="ch"># 随便聊</div>
+      <div class="ws-h" style="margin-top:18px">私聊</div>
+      <div class="ch"><span style="display:flex;align-items:center;gap:7px"><span class="pip"></span>陈默</span></div>
+      <div class="ch"><span style="display:flex;align-items:center;gap:7px"><span class="pip off"></span>周雨</span></div>
+    </div>
+    <div class="im-c">
+      <div class="ws-h"># 产品设计</div>
+      <div class="im-m"><div class="av" style="background:#5b7fa8">陈</div><div><div class="im-n">陈默 <span>14:02</span></div><div class="im-t">周报能不能让 Agent 先起个草？</div></div></div>
+      <div class="im-m"><div class="av" style="background:#8a6a4f">林</div><div><div class="im-n">林岸 <span>14:03</span></div><div class="im-t">我让它读一下这周的会议记录</div></div></div>
+      <div class="im-m"><div class="av" style="background:var(--brand)">林</div><div><div class="im-n">林岸 <span>14:07</span></div><div class="im-t">草稿好了：本周完成 12 项，阻塞 2 项。附件在网盘里。</div></div></div>
+      <div class="im-m"><div class="av" style="background:#6a7f5b">周</div><div><div class="im-n">周雨 <span>14:09</span></div><div class="im-t">看到了，阻塞那两条我来跟进</div></div></div>
+    </div>
+    <div class="im-c">
+      <div class="ws-h">成员 · 4</div>
+      <div class="mem"><span class="pip"></span>陈默</div>
+      <div class="mem"><span class="pip"></span>林岸</div>
+      <div class="mem"><span class="pip"></span>周雨</div>
+      <div class="mem"><span class="pip off"></span>吴迪</div>
+    </div>
+  </div>
+</div></section>
+
+<!-- 05 MCP -->
+<section class="sec dots" data-n="05"><div class="sec-inner">
+  <div class="lbl">迁移成本</div>
+  <div class="two">
+    <div>
+      <h2>你的 MCP 配置，<br><em>直接搬过来</em></h2>
+      <p class="body">字段名与 Claude Desktop、Claude Code 一致。把 <code style="font-family:var(--mono);font-size:13px;color:var(--brand-lt)">mcpServers</code> 那段粘进来就能用，stdio 与 http/sse 都支持。</p>
+      <p class="body" style="margin-top:14px">每个 Agent 一份独立配置，互不可见。闲置 30 分钟自动回收子进程。</p>
+      <div style="margin-top:18px"><span class="pill">stdio</span><span class="pill">http / sse</span><span class="pill">按 Agent 隔离</span><span class="pill">懒加载</span></div>
+    </div>
+    <div class="code">
+      <div class="code-h"><span>mcp.json</span><span style="color:var(--brand)">兼容</span></div>
+      <div class="code-b"><span class="k">{</span>
+  <span class="k">"mcpServers"</span>: {
+    <span class="k">"filesystem"</span>: {
+      <span class="k">"command"</span>: <span class="s">"npx"</span>,
+      <span class="k">"args"</span>: [<span class="s">"-y"</span>, <span class="s">"@mcp/server-fs"</span>]
+    },
+    <span class="k">"github"</span>: {
+      <span class="k">"url"</span>: <span class="s">"https://…/mcp"</span>,
+      <span class="k">"transport"</span>: <span class="s">"sse"</span>
+    }
+  }
+<span class="k">}</span></div>
+    </div>
+  </div>
+</div></section>
+
+<!-- 06 远程 -->
+<section class="sec glowtl" data-n="06"><div class="sec-inner">
+  <div class="lbl">离开电脑之后</div>
+  <h2>换个地方，<em>接着看它干活</em></h2>
+  <p class="body" style="max-width:580px">出门路上想起一件事，在手机上发一句就行。Agent 在它原来的地方继续跑，每一步你都能实时看到——它要是拿不准来问你，你在手机上回答也一样。</p>
+  <div class="remote">
+    <div class="rm">
+      <div class="ws-h">手机</div>
+      <div class="phone">
+        <div class="phone-bar"></div>
+        <div style="font-size:11.5px;color:var(--dim);line-height:1.55;margin-bottom:10px">把上午那份纪要也补进周报</div>
+        <div style="border-top:1px solid var(--line);padding-top:9px;font-size:11px;color:var(--faint)">正在执行 · 第 2 / 3 步</div>
+      </div>
+    </div>
+    <div class="rm rm-link">
+      <div class="rm-wire"></div><div class="rm-dot"></div>
+      <div class="ripple"></div><div class="ripple d2"></div>
+    </div>
+    <div class="rm">
+      <div class="ws-h"><span class="pip o breathe"></span>编辑助手 · 实时镜像</div>
+      <div class="trow"><span class="tk">▸</span><span>读取 <b>上午的会议纪要</b></span></div>
+      <div class="trow"><span class="tk">▸</span><span>合并进 <b>weekly-report.md</b></span></div>
+      <div class="ask" style="margin-top:9px;margin-bottom:0;padding:11px">
+        <div style="font-size:11.5px;font-weight:600;margin-bottom:9px">纪要里有个未定结论，写进去吗？</div>
+        <div class="ask-o"><div class="opt" style="font-size:11px;padding:5px 10px">写，标注待定</div><div class="opt" style="font-size:11px;padding:5px 10px">先略过</div></div>
+      </div>
+    </div>
+  </div>
+</div></section>
+
+<!-- 07 数据 -->
+<section class="sec" data-n="07"><div class="sec-inner">
+  <div class="lbl">说清楚，才敢用</div>
+  <h2>你的数据<em>在哪</em></h2>
+  <p class="body" style="max-width:580px">不用「安全第一」这种话糊弄你。下面是准确的三档。</p>
+  <div class="zones">
+    <div class="zone z1">
+      <div class="zone-h a"><span class="pip"></span>留在本机</div>
+      <ul><li>会话历史与全部消息</li><li>Agent 的记忆</li><li>工具执行记录</li><li>工作区里的文件</li></ul>
+      <div class="zone-n">云端没有对应的表，不做持久化。</div>
+    </div>
+    <div class="zone z2">
+      <div class="zone-h b"><span class="pip o"></span>过境，但不留存</div>
+      <ul><li>用云端模型网关时的对话内容</li><li>跨设备运行时的执行过程</li></ul>
+      <div class="zone-n">中转靠内存路由，进程重启即消失。想完全不过境，配置本机模型即可。</div>
+    </div>
+    <div class="zone z3">
+      <div class="zone-h c"><span class="pip off"></span>存在云端</div>
+      <ul><li>账号、组织与成员</li><li>团队消息</li><li>网盘里的文件</li><li>Agent 的名称与头像</li></ul>
+      <div class="zone-n">团队协作所必需的部分。模型厂商密钥加密存储，不下发到任何设备。</div>
+    </div>
+  </div>
+</div></section>
+
+<!-- 08 分享 -->
+<section class="sec dots" data-n="08"><div class="sec-inner">
+  <div class="lbl">交出去的时候</div>
+  <h2 style="text-align:center">分享一份文件，<br><em>条件由你定</em></h2>
+  <p class="body" style="max-width:520px;margin:0 auto;text-align:center">Agent 整理好的东西可以直接生成对外链接。加密码、设过期、随时撤销——对方不需要有账号。</p>
+  <div class="share">
+    <div class="share-h">分享链接</div>
+    <div class="share-b">
+      <div class="share-f">weekly-report.md</div>
+      <div class="share-m">meshbot.app/s/k3f9xq2m</div>
+      <div class="share-o"><div class="sw"></div>需要密码</div>
+      <div class="share-o"><div class="sw"></div>7 天后过期</div>
+      <div class="share-o"><div class="sw off"></div>允许下载原文件</div>
+      <div style="margin-top:16px;display:flex;gap:8px"><div class="mini p">复制链接</div><div class="mini g">撤销</div></div>
+    </div>
+  </div>
+</div></section>
+
+<!-- 09 上手 -->
+<section class="sec glowbr" data-n="09"><div class="sec-inner">
+  <div class="lbl">四步就位</div>
+  <h2>大约<em>五分钟</em></h2>
+  <div class="steps">
+    <div class="sp"><div class="sp-n">01</div><div class="sp-t">注册账号</div><div class="sp-d">邮箱验证即可，先建一个组织。</div></div>
+    <div class="sp"><div class="sp-n">02</div><div class="sp-t">装桌面端</div><div class="sp-d">macOS、Windows、Linux 都有。</div></div>
+    <div class="sp"><div class="sp-n">03</div><div class="sp-t">授权接入</div><div class="sp-d">浏览器点一下批准就连上了。</div></div>
+    <div class="sp"><div class="sp-n">04</div><div class="sp-t">配模型，开工</div><div class="sp-d">接自己的 key，或用组织统一配的。</div></div>
+  </div>
+  <div class="cta" style="margin-top:34px;justify-content:center">
+    <a class="btn btn-p" href="#">免费开始</a>
+    <a class="btn btn-g" href="#">下载桌面端</a>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  <div class="ft">
+    <div>
+      <div class="mark" style="margin-bottom:11px"><i></i>MeshBot</div>
+      <p style="font-size:12.5px;color:var(--faint);line-height:1.7;max-width:260px">人和 Agent 的协同工作空间。</p>
+    </div>
+    <div><h4>产品</h4><a href="#">能力</a><a href="#">下载</a><a href="#">更新日志</a></div>
+    <div><h4>开发者</h4><a href="#">文档</a><a href="#">GitHub</a><a href="#">技能开发</a></div>
+    <div><h4>关于</h4><a href="#">许可证</a><a href="#">隐私</a><a href="#">联系</a></div>
+  </div>
+  <div style="margin-top:34px;padding-top:20px;border-top:1px solid var(--line);font-family:var(--mono);font-size:11px;color:var(--faint)">© 2026 MeshBot</div>
+</div></footer>
+
+<script>
+  var root=document.documentElement, t=document.getElementById('tgl');
+  function cur(){return root.getAttribute('data-theme') || (matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');}
+  t.addEventListener('click',()=>{
+    var next = cur()==='dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme',next);
+    t.textContent = next==='dark' ? '◐' : '◑';
+  });
+  t.textContent = cur()==='dark' ? '◐' : '◑';
+</script>
+
+</body>
+</html>

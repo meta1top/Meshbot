@@ -119,7 +119,6 @@ export type RemotePatchSessionModelInput = z.infer<
   typeof RemotePatchSessionModelSchema
 >;
 
-// biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intentional class+interface merge to expose zod-inferred fields
 export class RemotePatchSessionModelDto extends createI18nZodDto(
   RemotePatchSessionModelSchema,
 ) {}

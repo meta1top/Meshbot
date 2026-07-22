@@ -1,15 +1,15 @@
 # meshbot 云端轨 CI/CD —— shell executor,单宿主机。
-# push main → build(两镜像并行,push hub.meta1.top) → deploy(同机 compose up)。
+# push main → prepare(算 tag) → build(两镜像并行,push hub.meta1.top) → deploy(同机 compose up)。
 # 质量门（typecheck / 单测 / 静态围栏）由 GitHub CI 在 PR 上把关;本流水线是纯部署,不重复。
 # build 阶段的 docker build 本身即两应用「能否编译」的检查。
 # 真实 secret 全在 Nacos;本流水线只经手 Nacos 引导变量 + 镜像 tag。
 
 stages:
+  - prepare
   - build
   - deploy
 
 variables:
-  IMAGE_TAG: "$CI_COMMIT_SHORT_SHA"
   REGISTRY_IMAGE: "$CI_REGISTRY_IMAGE"
 
 # 仅 main 触发（部署型流水线）
@@ -17,20 +17,52 @@ workflow:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
 
+# 镜像 tag = 日期 + 构建号，例：20260722-15
+#
+# 为什么要单独一个 stage：`variables:` 块在 script 之前求值，写 $(date) 不会执行，
+# 只会把字面量塞进去。用 dotenv artifact 把算好的值传给后续 stage 是 GitLab 的标准做法。
+#
+# 时区取 Asia/Shanghai 而非 UTC：这个 tag 是给人读的，要和 Portainer 上的
+# 本地时间戳对得上；用 UTC 会让凌晨的构建显示成前一天，反而增加对照成本。
+#
+# CI_PIPELINE_IID 是「项目级」递增序号（CI_PIPELINE_ID 是全实例级、数字很大且不连续），
+# 所以构建号用 IID。
+prepare-tag:
+  stage: prepare
+  script:
+    - echo "IMAGE_TAG=$(TZ=Asia/Shanghai date +%Y%m%d)-${CI_PIPELINE_IID}" >> build.env
+    - cat build.env
+  artifacts:
+    reports:
+      dotenv: build.env
+
+# 每个镜像打三个 tag，各有分工：
+#   $IMAGE_TAG            20260722-15  人读、可排序，Portainer 上显示的就是它
+#   $CI_COMMIT_SHORT_SHA  84ecd9e8     可追溯：一条 git show 就能查到线上跑的是哪份代码
+#   latest                             便于手动 pull
+# docker tag 只是指针，多打两个不额外占空间。
 build-server-main:
   stage: build
   script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
-    - docker build -f apps/server-main/Dockerfile -t "$REGISTRY_IMAGE/server-main:$IMAGE_TAG" -t "$REGISTRY_IMAGE/server-main:latest" .
+    - docker build -f apps/server-main/Dockerfile
+      -t "$REGISTRY_IMAGE/server-main:$IMAGE_TAG"
+      -t "$REGISTRY_IMAGE/server-main:$CI_COMMIT_SHORT_SHA"
+      -t "$REGISTRY_IMAGE/server-main:latest" .
     - docker push "$REGISTRY_IMAGE/server-main:$IMAGE_TAG"
+    - docker push "$REGISTRY_IMAGE/server-main:$CI_COMMIT_SHORT_SHA"
     - docker push "$REGISTRY_IMAGE/server-main:latest"
 
 build-web-main:
   stage: build
   script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
-    - docker build -f apps/web-main/Dockerfile -t "$REGISTRY_IMAGE/web-main:$IMAGE_TAG" -t "$REGISTRY_IMAGE/web-main:latest" .
+    - docker build -f apps/web-main/Dockerfile
+      -t "$REGISTRY_IMAGE/web-main:$IMAGE_TAG"
+      -t "$REGISTRY_IMAGE/web-main:$CI_COMMIT_SHORT_SHA"
+      -t "$REGISTRY_IMAGE/web-main:latest" .
     - docker push "$REGISTRY_IMAGE/web-main:$IMAGE_TAG"
+    - docker push "$REGISTRY_IMAGE/web-main:$CI_COMMIT_SHORT_SHA"
     - docker push "$REGISTRY_IMAGE/web-main:latest"
 
 deploy:
@@ -42,6 +74,7 @@ deploy:
   script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
     # 从 GitLab CI/CD 变量渲染 compose 的 .env.prod（NACOS_* / MESHBOT_NODE_ID 在项目变量里配好）
+    # IMAGE_TAG 来自 prepare-tag 的 dotenv artifact，容器实际跑的是日期+构建号那个 tag。
     - |
       cat > infra/prod/.env.prod <<EOF
       REGISTRY_IMAGE=$REGISTRY_IMAGE
@@ -55,4 +88,5 @@ deploy:
       EOF
     - docker compose -f infra/prod/docker-compose.prod.yml --env-file infra/prod/.env.prod pull
     - docker compose -f infra/prod/docker-compose.prod.yml --env-file infra/prod/.env.prod up -d
+    # 只清无 tag 的悬空层；不带 -a，避免把刚打的历史版本镜像一起删掉（回滚要用）
     - docker image prune -f

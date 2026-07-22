@@ -61,9 +61,9 @@ export function Transactional() {
       ...args: any[]
     ) => Promise<unknown>;
 
-    // biome-ignore lint/suspicious/noExplicitAny: 装饰器实现需要动态 this 上下文
     descriptor.value = async function (
       this: ServiceWithRepository,
+      // biome-ignore lint/suspicious/noExplicitAny: 装饰器实现需要动态 this 上下文
       ...args: any[]
     ) {
       const existingCtx = txStorage.getStore();

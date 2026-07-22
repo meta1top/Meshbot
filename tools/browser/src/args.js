@@ -7,8 +7,9 @@ export function parseArgs(argv) {
     if (a.startsWith("--")) {
       const key = a.slice(2);
       const next = argv[i + 1];
-      const value =
-        next !== undefined && !next.startsWith("--") ? (i++, next) : true;
+      const hasNextValue = next !== undefined && !next.startsWith("--");
+      if (hasNextValue) i++;
+      const value = hasNextValue ? next : true;
       if (key in flags) {
         flags[key] = Array.isArray(flags[key])
           ? [...flags[key], value]
