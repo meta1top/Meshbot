@@ -15,7 +15,15 @@ COPY packages/design/package.json     ./packages/design/
 COPY libs/types/package.json          ./libs/types/
 COPY libs/types-main/package.json     ./libs/types-main/
 COPY libs/types-agent/package.json    ./libs/types-agent/
-RUN pnpm install --frozen-lockfile --ignore-scripts
+# 见 apps/server-main/Dockerfile 同段注释：源由构建方注入（默认官方源），
+# fetch 超时/重试放宽、并发降低；不缓存 pnpm store（hoisted linker 用不上）。
+ARG NPM_REGISTRY=https://registry.npmjs.org/
+
+RUN pnpm config set registry "$NPM_REGISTRY" && \
+    pnpm config set fetch-timeout 300000 && \
+    pnpm config set fetch-retries 5 && \
+    pnpm config set network-concurrency 8 && \
+    pnpm install --frozen-lockfile --ignore-scripts
 
 # ============ Stage 2: build ==============================================
 FROM deps AS build
