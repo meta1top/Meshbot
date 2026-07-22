@@ -1,14 +1,18 @@
-import { getTranslations } from "next-intl/server";
+"use client";
+
+import { useTranslations } from "next-intl";
 import { RELEASES_LATEST_URL } from "@/lib/download-platform";
 
 /**
  * 落地页 HERO 区：主标题、CTA，以及「工作空间全景」三栏动效
- * （频道消息 / Agent 执行过程 / 我的 Agent 列表）。Server Component，
- * 入场动画纯 CSS `animation-delay` 实现，不引入客户端 JS。
+ * （频道消息 / Agent 执行过程 / 我的 Agent 列表）。Client Component
+ * （落地页各 section 统一走 `useTranslations`，避免服务端/客户端
+ * i18n 双轨导致 SSR 语言不一致），入场动画纯 CSS `animation-delay`
+ * 实现，不引入客户端 JS 动效库。
  */
-export async function LandingHero() {
-  const t = await getTranslations("landing.hero");
-  const tNav = await getTranslations("landing.nav");
+export function LandingHero() {
+  const t = useTranslations("landing.hero");
+  const tNav = useTranslations("landing.nav");
 
   return (
     <header className="lp-hero lp-dots lp-glow-tl">
