@@ -8,12 +8,13 @@ import { RELEASES_LATEST_URL } from "@/lib/download-platform";
  * 落地页 Footer：品牌简介 + 三栏导航（产品 / 开发者 / 关于）+ 版权行。
  * Client Component。
  *
- * 「许可证」当前指向仓库根 `https://github.com/meta1top/Meshbot`——
- * 仓库尚无 LICENSE 文件（见 spec §7 范围外前置依赖），LICENSE 补齐后
- * 应改指向具体文件路径，不得留 `href="#"` 死链接。「隐私」「联系」页面
- * 尚未建成，分别先接到预留路径 `/privacy` 与联系邮箱，同样不留死链接
- * （`href="#"` 触发 Biome `lint/a11y/useValidAnchor`，且对屏幕阅读器
- * 是无意义跳转）；待对应页面就绪后把 `/privacy` 接上真实内容即可。
+ * 链接一律指向真实存在的目标，不留 `href="#"`，也不编造尚不存在的地址
+ * （对外页面上一个无人接收的邮箱比没有更糟——它看起来在工作）。
+ *
+ * 「许可证」当前指向仓库根 `https://github.com/meta1top/Meshbot`——仓库尚无
+ * LICENSE 文件（见 spec §7 范围外前置依赖），补齐后应改指向具体文件路径。
+ * 「联系」指向 GitHub Issues，是当前唯一有人监控的对外渠道。
+ * 「隐私」入口已移除：仓库无隐私政策文档，等真有了再加回来。
  */
 export function LandingFooter() {
   const t = useTranslations("landing.footer");
