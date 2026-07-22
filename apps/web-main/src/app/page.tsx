@@ -1,3 +1,5 @@
+import { LandingAgentAnatomy } from "@/components/landing/landing-agent-anatomy";
+import { LandingConversation } from "@/components/landing/landing-conversation";
 import { LandingHero } from "@/components/landing/landing-hero";
 import { LandingNav } from "@/components/landing/landing-nav";
 import "@/components/landing/landing.css";
@@ -8,6 +10,8 @@ export default function Home() {
     <div className="lp-root">
       <LandingNav />
       <LandingHero />
+      <LandingAgentAnatomy />
+      <LandingConversation />
     </div>
   );
 }
