@@ -163,6 +163,12 @@ nav.lp-nav {
   background: var(--lp-brand);
   color: #fff;
 }
+/* 暗色下品牌橙 #d24a0d 配白字只有 4.44:1，差 WCAG AA 的 4.5 一点点；按钮文字
+   12.5px 够不上「大字号」3:1 豁免线。只把这一个选择器的底色压深一档到 5.12:1，
+   不动 --lp-brand 本身——它还承担发光、边框、强调字等用途，改了会波及全页。 */
+.dark .lp-btn-p {
+  background: color-mix(in srgb, var(--lp-brand) 92%, black);
+}
 .lp-btn-g {
   border: 1px solid var(--lp-edge);
   color: var(--lp-fg);
