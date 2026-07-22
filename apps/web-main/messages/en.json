@@ -138,6 +138,43 @@
       "pillPerAgent": "Per-agent isolation",
       "pillLazy": "Lazy-loaded",
       "codeCompat": "Compatible"
+    },
+    "remote": {
+      "eyebrow": "Once you step away",
+      "titleLine1": "From anywhere, ",
+      "titleAccent": "keep watching it work",
+      "lead": "Remembered something on your way out? Just send it from your phone. The agent keeps running right where it was, and you can watch every step in real time — if it needs to ask you something, you can answer right there on your phone too.",
+      "phoneLabel": "Phone",
+      "phoneMsg": "Add this morning's notes into the weekly report too",
+      "phoneStatus": "Running · Step 2 / 3",
+      "mirrorHeader": "Editor Assistant · Live mirror",
+      "toolRow1": "Reading <b>this morning's meeting notes</b>",
+      "toolRow2": "Merging into <b>weekly-report.md</b>",
+      "askQuestion": "The notes include an unresolved conclusion — include it?",
+      "askOpt1": "Include it, flagged as pending",
+      "askOpt2": "Skip it for now"
+    },
+    "dataZones": {
+      "eyebrow": "Clear enough to trust",
+      "titleLine1": "Where your data ",
+      "titleAccent": "actually lives",
+      "lead": "We won't wave away your questions with “security first.” Here are the three tiers, exactly as they work.",
+      "zone1Header": "Stays on your machine",
+      "zone1Item1": "Conversation history and every message",
+      "zone1Item2": "The agent's memory",
+      "zone1Item3": "Tool execution records",
+      "zone1Item4": "Files in the workspace",
+      "zone1Note": "There's no matching table in the cloud — none of this is persisted there.",
+      "zone2Header": "Passes through, but isn't stored",
+      "zone2Item1": "Conversation content when using the cloud model gateway",
+      "zone2Item2": "The execution stream when running across devices",
+      "zone2Note": "Relayed in memory only — it's gone the moment the process restarts. Configure a local model if you want nothing to pass through at all.",
+      "zone3Header": "Lives in the cloud",
+      "zone3Item1": "Accounts, organizations, and members",
+      "zone3Item2": "Team messages",
+      "zone3Item3": "Files in the drive",
+      "zone3Item4": "Agent names and avatars",
+      "zone3Note": "The parts team collaboration actually needs. Model provider keys are stored encrypted and never sent to any device."
     }
   },
   "common": {

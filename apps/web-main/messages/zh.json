@@ -138,6 +138,43 @@
       "pillPerAgent": "按 Agent 隔离",
       "pillLazy": "懒加载",
       "codeCompat": "兼容"
+    },
+    "remote": {
+      "eyebrow": "离开电脑之后",
+      "titleLine1": "换个地方，",
+      "titleAccent": "接着看它干活",
+      "lead": "出门路上想起一件事，在手机上发一句就行。Agent 在它原来的地方继续跑，每一步你都能实时看到——它要是拿不准来问你，你在手机上回答也一样。",
+      "phoneLabel": "手机",
+      "phoneMsg": "把上午那份纪要也补进周报",
+      "phoneStatus": "正在执行 · 第 2 / 3 步",
+      "mirrorHeader": "编辑助手 · 实时镜像",
+      "toolRow1": "读取 <b>上午的会议纪要</b>",
+      "toolRow2": "合并进 <b>weekly-report.md</b>",
+      "askQuestion": "纪要里有个未定结论，写进去吗？",
+      "askOpt1": "写，标注待定",
+      "askOpt2": "先略过"
+    },
+    "dataZones": {
+      "eyebrow": "说清楚，才敢用",
+      "titleLine1": "你的数据",
+      "titleAccent": "在哪",
+      "lead": "不用「安全第一」这种话糊弄你。下面是准确的三档。",
+      "zone1Header": "留在本机",
+      "zone1Item1": "会话历史与全部消息",
+      "zone1Item2": "Agent 的记忆",
+      "zone1Item3": "工具执行记录",
+      "zone1Item4": "工作区里的文件",
+      "zone1Note": "云端没有对应的表，不做持久化。",
+      "zone2Header": "过境，但不留存",
+      "zone2Item1": "用云端模型网关时的对话内容",
+      "zone2Item2": "跨设备运行时的执行过程",
+      "zone2Note": "中转靠内存路由，进程重启即消失。想完全不过境，配置本机模型即可。",
+      "zone3Header": "存在云端",
+      "zone3Item1": "账号、组织与成员",
+      "zone3Item2": "团队消息",
+      "zone3Item3": "网盘里的文件",
+      "zone3Item4": "Agent 的名称与头像",
+      "zone3Note": "团队协作所必需的部分。模型厂商密钥加密存储，不下发到任何设备。"
     }
   },
   "common": {

@@ -1,8 +1,10 @@
 import { LandingAgentAnatomy } from "@/components/landing/landing-agent-anatomy";
 import { LandingConversation } from "@/components/landing/landing-conversation";
+import { LandingDataZones } from "@/components/landing/landing-data-zones";
 import { LandingHero } from "@/components/landing/landing-hero";
 import { LandingMcp } from "@/components/landing/landing-mcp";
 import { LandingNav } from "@/components/landing/landing-nav";
+import { LandingRemote } from "@/components/landing/landing-remote";
 import { LandingTeam } from "@/components/landing/landing-team";
 import "@/components/landing/landing.css";
 
@@ -16,6 +18,8 @@ export default function Home() {
       <LandingConversation />
       <LandingTeam />
       <LandingMcp />
+      <LandingRemote />
+      <LandingDataZones />
     </div>
   );
 }
