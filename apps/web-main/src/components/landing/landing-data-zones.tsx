@@ -30,7 +30,7 @@ export function LandingDataZones() {
         <div className="lp-zones">
           <div className="lp-zone lp-zone-z1">
             <div className="lp-zone-h lp-zone-h-a">
-              <span className="lp-pip" />
+              <span className="lp-pip" aria-hidden="true" />
               {t("zone1Header")}
             </div>
             <ul>
@@ -44,7 +44,7 @@ export function LandingDataZones() {
 
           <div className="lp-zone lp-zone-z2">
             <div className="lp-zone-h lp-zone-h-b">
-              <span className="lp-pip lp-pip-o" />
+              <span className="lp-pip lp-pip-o" aria-hidden="true" />
               {t("zone2Header")}
             </div>
             <ul>
@@ -56,7 +56,7 @@ export function LandingDataZones() {
 
           <div className="lp-zone lp-zone-z3">
             <div className="lp-zone-h lp-zone-h-c">
-              <span className="lp-pip lp-pip-off" />
+              <span className="lp-pip lp-pip-off" aria-hidden="true" />
               {t("zone3Header")}
             </div>
             <ul>

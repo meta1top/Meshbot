@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { RELEASES_LATEST_URL } from "@/lib/download-platform";
+import { LandingDownloadButton } from "@/components/landing/landing-download-button";
 
 /**
  * 落地页 HERO 区：主标题、CTA，以及「工作空间全景」三栏动效
@@ -28,20 +28,21 @@ export function LandingHero() {
           <a className="lp-btn lp-btn-p" href="/register">
             {tNav("start")}
           </a>
-          <a className="lp-btn lp-btn-g" href={RELEASES_LATEST_URL}>
-            {t("download")}
-          </a>
-          <span className="lp-cta-note">{t("platforms")}</span>
+          <LandingDownloadButton />
         </div>
 
         <div className="lp-ws">
           <div className="lp-ws-col">
             <div className="lp-ws-h">
-              <span className="lp-pip" />
+              <span className="lp-pip" aria-hidden="true" />
               {t("channelName")} · {t("channelOnline")}
             </div>
             <div className="lp-msg lp-fade" style={{ animationDelay: ".25s" }}>
-              <div className="lp-av" style={{ background: "#5b7fa8" }}>
+              <div
+                className="lp-av"
+                style={{ background: "#5b7fa8" }}
+                aria-hidden="true"
+              >
                 {t("msg1Name").charAt(0)}
               </div>
               <div>
@@ -50,7 +51,11 @@ export function LandingHero() {
               </div>
             </div>
             <div className="lp-msg lp-fade" style={{ animationDelay: "1.5s" }}>
-              <div className="lp-av" style={{ background: "#8a6a4f" }}>
+              <div
+                className="lp-av"
+                style={{ background: "#8a6a4f" }}
+                aria-hidden="true"
+              >
                 {t("msg2Name").charAt(0)}
               </div>
               <div>
@@ -59,7 +64,11 @@ export function LandingHero() {
               </div>
             </div>
             <div className="lp-msg lp-fade" style={{ animationDelay: "4.6s" }}>
-              <div className="lp-av" style={{ background: "var(--lp-brand)" }}>
+              <div
+                className="lp-av"
+                style={{ background: "var(--lp-brand)" }}
+                aria-hidden="true"
+              >
                 {t("msg3Name").charAt(0)}
               </div>
               <div>
@@ -82,23 +91,29 @@ export function LandingHero() {
 
           <div className="lp-ws-col">
             <div className="lp-ws-h">
-              <span className="lp-pip lp-pip-o lp-breathe" />
+              <span className="lp-pip lp-pip-o lp-breathe" aria-hidden="true" />
               {t("agentRunningHeader")}
             </div>
             <div className="lp-trow lp-fade" style={{ animationDelay: "2.1s" }}>
-              <span className="lp-tk">▸</span>
+              <span className="lp-tk" aria-hidden="true">
+                ▸
+              </span>
               <span>
                 {t.rich("toolRow1", { b: (chunks) => <b>{chunks}</b> })}
               </span>
             </div>
             <div className="lp-trow lp-fade" style={{ animationDelay: "2.8s" }}>
-              <span className="lp-tk">▸</span>
+              <span className="lp-tk" aria-hidden="true">
+                ▸
+              </span>
               <span>
                 {t.rich("toolRow2", { b: (chunks) => <b>{chunks}</b> })}
               </span>
             </div>
             <div className="lp-trow lp-fade" style={{ animationDelay: "3.5s" }}>
-              <span className="lp-tk">▸</span>
+              <span className="lp-tk" aria-hidden="true">
+                ▸
+              </span>
               <span>
                 {t.rich("toolRow3", { b: (chunks) => <b>{chunks}</b> })}
               </span>
@@ -108,7 +123,7 @@ export function LandingHero() {
                 style={{
                   fontFamily: "var(--lp-mono)",
                   fontSize: "9px",
-                  color: "var(--lp-brand)",
+                  color: "var(--lp-brand-lt)",
                   marginBottom: "4px",
                 }}
               >
@@ -123,21 +138,21 @@ export function LandingHero() {
           <div className="lp-ws-col">
             <div className="lp-ws-h">{t("yourAgents")}</div>
             <div className="lp-agent-row">
-              <span className="lp-pip lp-pip-o" />
+              <span className="lp-pip lp-pip-o" aria-hidden="true" />
               <div>
                 <b>{t("agent1Name")}</b>
                 <small>{t("agent1Desc")}</small>
               </div>
             </div>
             <div className="lp-agent-row">
-              <span className="lp-pip lp-pip-off" />
+              <span className="lp-pip lp-pip-off" aria-hidden="true" />
               <div>
                 <b>{t("agent2Name")}</b>
                 <small>{t("agent2Desc")}</small>
               </div>
             </div>
             <div className="lp-agent-row">
-              <span className="lp-pip lp-pip-off" />
+              <span className="lp-pip lp-pip-off" aria-hidden="true" />
               <div>
                 <b>{t("agent3Name")}</b>
                 <small>{t("agent3Desc")}</small>

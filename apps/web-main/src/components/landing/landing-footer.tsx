@@ -24,8 +24,12 @@ export function LandingFooter() {
       <div className="lp-wrap">
         <div className="lp-ft">
           <div>
-            <div className="lp-mark" style={{ marginBottom: "11px" }}>
-              <i />
+            <div
+              className="lp-mark"
+              style={{ marginBottom: "11px" }}
+              translate="no"
+            >
+              <i aria-hidden="true" />
               MeshBot
             </div>
             <p

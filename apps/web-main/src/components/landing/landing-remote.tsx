@@ -1,18 +1,24 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { useRef } from "react";
+import { useInView } from "@/components/landing/use-in-view";
 
 /**
  * 落地页 06 区块：手机发起指令、桌面端 Agent 实时镜像执行过程，
  * 中间链路用脉冲信号 + 同心波纹动画表现「跨设备实时同步」。
  * Client Component；`prefers-reduced-motion` 下链路脉冲与波纹动画
- * 由 `landing.css` 的全局降级块统一停用。
+ * 由 `landing.css` 的全局降级块统一停用；循环动画默认暂停，
+ * `data-lp-anim` + `data-in-view` 挂在脉冲点与两圈波纹上，用
+ * `useInView` 监听 `.lp-rm-link` 容器，进入视口才播放。
  *
  * 文案红线：说「在手机上」，不写「手机浏览器」——手机 App 已在
  * 规划中，措辞不能锁死到浏览器场景。
  */
 export function LandingRemote() {
   const t = useTranslations("landing.remote");
+  const linkRef = useRef<HTMLDivElement>(null);
+  const inView = useInView(linkRef);
 
   return (
     <section className="lp-sec lp-glow-tl">
@@ -54,26 +60,45 @@ export function LandingRemote() {
             </div>
           </div>
 
-          <div className="lp-rm lp-rm-link">
-            <div className="lp-rm-wire" />
-            <div className="lp-rm-dot" />
-            <div className="lp-ripple" />
-            <div className="lp-ripple lp-ripple-d2" />
+          <div className="lp-rm lp-rm-link" ref={linkRef}>
+            <div className="lp-rm-wire" aria-hidden="true" />
+            <div
+              className="lp-rm-dot"
+              aria-hidden="true"
+              data-lp-anim
+              data-in-view={inView ? "true" : undefined}
+            />
+            <div
+              className="lp-ripple"
+              aria-hidden="true"
+              data-lp-anim
+              data-in-view={inView ? "true" : undefined}
+            />
+            <div
+              className="lp-ripple lp-ripple-d2"
+              aria-hidden="true"
+              data-lp-anim
+              data-in-view={inView ? "true" : undefined}
+            />
           </div>
 
           <div className="lp-rm">
             <div className="lp-ws-h">
-              <span className="lp-pip lp-pip-o lp-breathe" />
+              <span className="lp-pip lp-pip-o lp-breathe" aria-hidden="true" />
               {t("mirrorHeader")}
             </div>
             <div className="lp-trow">
-              <span className="lp-tk">▸</span>
+              <span className="lp-tk" aria-hidden="true">
+                ▸
+              </span>
               <span>
                 {t.rich("toolRow1", { b: (chunks) => <b>{chunks}</b> })}
               </span>
             </div>
             <div className="lp-trow">
-              <span className="lp-tk">▸</span>
+              <span className="lp-tk" aria-hidden="true">
+                ▸
+              </span>
               <span>
                 {t.rich("toolRow2", { b: (chunks) => <b>{chunks}</b> })}
               </span>

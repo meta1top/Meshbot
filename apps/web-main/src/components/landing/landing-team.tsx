@@ -44,7 +44,7 @@ export function LandingTeam() {
               <span
                 style={{ display: "flex", alignItems: "center", gap: "7px" }}
               >
-                <span className="lp-pip" />
+                <span className="lp-pip" aria-hidden="true" />
                 {t("dm1Name")}
               </span>
             </div>
@@ -52,7 +52,7 @@ export function LandingTeam() {
               <span
                 style={{ display: "flex", alignItems: "center", gap: "7px" }}
               >
-                <span className="lp-pip lp-pip-off" />
+                <span className="lp-pip lp-pip-off" aria-hidden="true" />
                 {t("dm2Name")}
               </span>
             </div>
@@ -61,7 +61,11 @@ export function LandingTeam() {
           <div className="lp-im-c">
             <div className="lp-ws-h"># {t("channel1Name")}</div>
             <div className="lp-im-m">
-              <div className="lp-av" style={{ background: "#5b7fa8" }}>
+              <div
+                className="lp-av"
+                style={{ background: "#5b7fa8" }}
+                aria-hidden="true"
+              >
                 {t("msg1Name").charAt(0)}
               </div>
               <div>
@@ -72,7 +76,11 @@ export function LandingTeam() {
               </div>
             </div>
             <div className="lp-im-m">
-              <div className="lp-av" style={{ background: "#8a6a4f" }}>
+              <div
+                className="lp-av"
+                style={{ background: "#8a6a4f" }}
+                aria-hidden="true"
+              >
                 {t("msg2Name").charAt(0)}
               </div>
               <div>
@@ -83,7 +91,11 @@ export function LandingTeam() {
               </div>
             </div>
             <div className="lp-im-m">
-              <div className="lp-av" style={{ background: "var(--lp-brand)" }}>
+              <div
+                className="lp-av"
+                style={{ background: "var(--lp-brand)" }}
+                aria-hidden="true"
+              >
                 {t("msg3Name").charAt(0)}
               </div>
               <div>
@@ -94,7 +106,11 @@ export function LandingTeam() {
               </div>
             </div>
             <div className="lp-im-m">
-              <div className="lp-av" style={{ background: "#6a7f5b" }}>
+              <div
+                className="lp-av"
+                style={{ background: "#6a7f5b" }}
+                aria-hidden="true"
+              >
                 {t("msg4Name").charAt(0)}
               </div>
               <div>
@@ -109,19 +125,19 @@ export function LandingTeam() {
           <div className="lp-im-c">
             <div className="lp-ws-h">{t("membersHeader")}</div>
             <div className="lp-mem">
-              <span className="lp-pip" />
+              <span className="lp-pip" aria-hidden="true" />
               {t("member1Name")}
             </div>
             <div className="lp-mem">
-              <span className="lp-pip" />
+              <span className="lp-pip" aria-hidden="true" />
               {t("member2Name")}
             </div>
             <div className="lp-mem">
-              <span className="lp-pip" />
+              <span className="lp-pip" aria-hidden="true" />
               {t("member3Name")}
             </div>
             <div className="lp-mem">
-              <span className="lp-pip lp-pip-off" />
+              <span className="lp-pip lp-pip-off" aria-hidden="true" />
               {t("member4Name")}
             </div>
           </div>

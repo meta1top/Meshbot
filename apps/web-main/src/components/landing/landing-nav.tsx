@@ -19,8 +19,8 @@ export function LandingNav() {
   return (
     <nav className="lp-nav">
       <div className="lp-nav-in">
-        <div className="lp-mark">
-          <i />
+        <div className="lp-mark" translate="no">
+          <i aria-hidden="true" />
           MeshBot
         </div>
         <div className="lp-nav-l">
@@ -35,7 +35,7 @@ export function LandingNav() {
             onClick={toggleTheme}
             aria-label={t("toggleTheme")}
           >
-            ◐
+            <span aria-hidden="true">◐</span>
           </button>
           {profile.isPending ? (
             <span className="lp-skel" aria-hidden />

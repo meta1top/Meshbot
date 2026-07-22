@@ -7,7 +7,12 @@
   --lp-edge: #d5c9b9;
   --lp-fg: #241c15;
   --lp-dim: #6b5d4f;
-  --lp-faint: #9a8b7b;
+  /*
+   * 原 #9a8b7b 对 --lp-bg 仅 2.81:1，WCAG AA 正文文字要求 4.5:1（本变量
+   * 全部用在 9-15px 的小字标签/说明文字，未达大字号 3:1 门槛豁免线）。
+   * 调深到 #75685a，对 bg/panel/card 分别 4.6/5.05/5.4，留出安全余量。
+   */
+  --lp-faint: #75685a;
   --lp-grid: rgba(210, 74, 13, 0.11);
   --lp-glow: rgba(210, 74, 13, 0.1);
   --lp-mesh: rgba(210, 74, 13, 0.32);
@@ -27,7 +32,9 @@
   --lp-edge: oklch(0.29 0.011 55);
   --lp-fg: oklch(0.96 0.005 55);
   --lp-dim: oklch(0.7 0.012 55);
-  --lp-faint: oklch(0.55 0.011 55);
+  /* 同上，暗色下原 L 0.55 对最亮的 --lp-card 仅 3.69:1，调到 0.604 后
+     对 bg/panel/card 分别 5.13/4.87/4.6。 */
+  --lp-faint: oklch(0.604 0.011 55);
   --lp-grid: rgba(232, 130, 63, 0.1);
   --lp-glow: rgba(210, 74, 13, 0.13);
   --lp-mesh: rgba(210, 74, 13, 0.34);
@@ -207,7 +214,9 @@ nav.lp-nav {
   top: 26px;
   font-family: var(--lp-mono);
   font-size: 10px;
-  color: var(--lp-brand);
+  /* 10px 小字，未达大字号豁免线，--lp-brand 对 --lp-bg 仅 4.39:1（差
+     一点点不到 AA 4.5:1），换用专为小字文本设计的 --lp-brand-lt。 */
+  color: var(--lp-brand-lt);
   letter-spacing: 0.16em;
 }
 .lp-root .lp-lbl {
@@ -215,7 +224,8 @@ nav.lp-nav {
   font-size: 10px;
   letter-spacing: 0.19em;
   text-transform: uppercase;
-  color: var(--lp-brand);
+  /* 同上：眼眉标签是 10px 小字，用 --lp-brand-lt 保证 AA 对比度。 */
+  color: var(--lp-brand-lt);
   margin-bottom: 16px;
 }
 .lp-root h1 {
@@ -425,6 +435,28 @@ nav.lp-nav {
   }
 }
 
+/* —— 视口门控：02/05/06 三段循环动画默认暂停，进入视口才播 —— */
+/* HERO 在首屏，不接入本套门控。 */
+.lp-root [data-lp-anim] {
+  animation-play-state: paused;
+}
+.lp-root [data-lp-anim][data-in-view="true"] {
+  animation-play-state: running;
+}
+/*
+ * 05 段橙光横扫动画画在 .lp-code 的 ::before 伪元素上（见下方
+ * 「05 MCP：流入动效」），data-lp-anim/data-in-view 挂在 .lp-code
+ * 本体，故门控规则需要 ::before 变体才能实际生效——
+ * animation-play-state 不继承，只对声明了 animation 的那个元素
+ * （含伪元素）本身起作用。
+ */
+.lp-root [data-lp-anim]::before {
+  animation-play-state: paused;
+}
+.lp-root [data-lp-anim][data-in-view="true"]::before {
+  animation-play-state: running;
+}
+
 /* —— 02 放射 mesh 图 —— */
 .lp-compose {
   display: grid;
@@ -499,7 +531,7 @@ nav.lp-nav {
   font-size: 8.5px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--lp-brand);
+  color: var(--lp-brand-lt);
   margin-bottom: 3px;
 }
 .lp-sat-v {
@@ -572,7 +604,7 @@ nav.lp-nav {
   font-family: var(--lp-mono);
   font-size: 9px;
   letter-spacing: 0.14em;
-  color: var(--lp-brand);
+  color: var(--lp-brand-lt);
   text-transform: uppercase;
   margin-bottom: 9px;
 }
@@ -660,7 +692,7 @@ nav.lp-nav {
   font-family: var(--lp-mono);
   font-size: 9px;
   letter-spacing: 0.14em;
-  color: var(--lp-brand);
+  color: var(--lp-brand-lt);
   text-transform: uppercase;
   margin-bottom: 9px;
 }
@@ -974,7 +1006,7 @@ nav.lp-nav {
   color: var(--lp-ok);
 }
 .lp-zone-h-b {
-  color: var(--lp-brand);
+  color: var(--lp-brand-lt);
 }
 .lp-zone-h-c {
   color: var(--lp-faint);
@@ -1133,6 +1165,22 @@ footer.lp-footer {
 }
 .lp-ft a:hover {
   color: var(--lp-fg);
+}
+
+@media (max-width: 640px) {
+  /*
+   * 375px 窄屏下 .lp-nav-in 一整行放不下「品牌 + 三条次要链接 + 主题
+   * 切换 + 登录/进入 + 免费开始」，会把 .lp-nav-r 挤出视口造成横向
+   * 滚动（截图验收发现，clientWidth 375 实测 scrollWidth 462）。
+   * 次要链接（能力/文档/GitHub）在 Footer 里都有，窄屏隐藏不丢信息。
+   */
+  .lp-nav-in {
+    padding: 13px 16px;
+    gap: 10px;
+  }
+  .lp-nav-l {
+    display: none;
+  }
 }
 
 @media (max-width: 900px) {

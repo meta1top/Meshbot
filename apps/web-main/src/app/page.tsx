@@ -16,15 +16,17 @@ export default function Home() {
   return (
     <div className="lp-root">
       <LandingNav />
-      <LandingHero />
-      <LandingAgentAnatomy />
-      <LandingConversation />
-      <LandingTeam />
-      <LandingMcp />
-      <LandingRemote />
-      <LandingDataZones />
-      <LandingShare />
-      <LandingOnboarding />
+      <main>
+        <LandingHero />
+        <LandingAgentAnatomy />
+        <LandingConversation />
+        <LandingTeam />
+        <LandingMcp />
+        <LandingRemote />
+        <LandingDataZones />
+        <LandingShare />
+        <LandingOnboarding />
+      </main>
       <LandingFooter />
     </div>
   );

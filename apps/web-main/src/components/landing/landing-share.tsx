@@ -33,15 +33,15 @@ export function LandingShare() {
             <div className="lp-share-f">{t("fileName")}</div>
             <div className="lp-share-m">{t("shareUrl")}</div>
             <div className="lp-share-o">
-              <div className="lp-sw" />
+              <div className="lp-sw" aria-hidden="true" />
               {t("optPassword")}
             </div>
             <div className="lp-share-o">
-              <div className="lp-sw" />
+              <div className="lp-sw" aria-hidden="true" />
               {t("optExpiry")}
             </div>
             <div className="lp-share-o">
-              <div className="lp-sw lp-sw-off" />
+              <div className="lp-sw lp-sw-off" aria-hidden="true" />
               {t("optDownload")}
             </div>
             <div style={{ marginTop: "16px", display: "flex", gap: "8px" }}>

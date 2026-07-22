@@ -28,12 +28,14 @@ export function LandingConversation() {
 
         <div className="lp-conv">
           <div className="lp-conv-h">
-            <span className="lp-pip lp-pip-o" />
+            <span className="lp-pip lp-pip-o" aria-hidden="true" />
             {t("headerAgentName")}
           </div>
           <div className="lp-conv-b">
             <div className="lp-u-msg">
-              <div className="lp-u-av">{t("userName").charAt(0)}</div>
+              <div className="lp-u-av" aria-hidden="true">
+                {t("userName").charAt(0)}
+              </div>
               <div className="lp-u-txt">{t("userMsg")}</div>
             </div>
 
@@ -42,19 +44,27 @@ export function LandingConversation() {
               <div className="lp-todo">
                 <div className="lp-todo-h">{t("todoHeader")}</div>
                 <div className="lp-todo-i lp-todo-i-done">
-                  <span style={{ color: "var(--lp-brand)" }}>✓</span>
+                  <span style={{ color: "var(--lp-brand)" }} aria-hidden="true">
+                    ✓
+                  </span>
                   <span>{t("todoItem1")}</span>
                 </div>
                 <div className="lp-todo-i lp-todo-i-done">
-                  <span style={{ color: "var(--lp-brand)" }}>✓</span>
+                  <span style={{ color: "var(--lp-brand)" }} aria-hidden="true">
+                    ✓
+                  </span>
                   <span>{t("todoItem2")}</span>
                 </div>
                 <div className="lp-todo-i">
-                  <span style={{ color: "var(--lp-brand)" }}>▸</span>
+                  <span style={{ color: "var(--lp-brand)" }} aria-hidden="true">
+                    ▸
+                  </span>
                   <span>{t("todoItem3")}</span>
                 </div>
                 <div className="lp-todo-i">
-                  <span style={{ color: "var(--lp-faint)" }}>○</span>
+                  <span style={{ color: "var(--lp-faint)" }} aria-hidden="true">
+                    ○
+                  </span>
                   <span>{t("todoItem4")}</span>
                 </div>
               </div>
@@ -94,7 +104,7 @@ export function LandingConversation() {
               <div className="lp-artifact">
                 <div className="lp-artifact-h">
                   <span>{t("artifactName")}</span>
-                  <span style={{ color: "var(--lp-brand)" }}>
+                  <span style={{ color: "var(--lp-brand-lt)" }}>
                     {t("artifactLabel")}
                   </span>
                 </div>

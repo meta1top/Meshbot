@@ -2,19 +2,19 @@
 
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { RELEASES_LATEST_URL } from "@/lib/download-platform";
+import { LandingDownloadButton } from "@/components/landing/landing-download-button";
 
 /**
  * 落地页 09 区块：四步上手栅格（注册账号 → 装桌面端 → 授权接入 →
  * 配模型开工）+ 收尾双 CTA。Client Component。等宽大号步骤数字
  * 纯装饰、与语言无关，故 "01"–"04" 直接写在 JSX 里（同 04 区块
  * 频道名前的 "#" 符号处理方式一致），不占用 i18n key。收尾 CTA
- * 复用 HERO 与导航栏的既有文案 key（landing.hero.download /
- * landing.nav.start），保证全页 CTA 措辞与跳转目标统一。
+ * 复用导航栏的既有文案 key（landing.nav.start）与 HERO 同款
+ * `<LandingDownloadButton />`，保证全页 CTA 措辞、平台探测与跳转
+ * 目标统一。
  */
 export function LandingOnboarding() {
   const t = useTranslations("landing.onboarding");
-  const tHero = useTranslations("landing.hero");
   const tNav = useTranslations("landing.nav");
 
   return (
@@ -56,9 +56,7 @@ export function LandingOnboarding() {
           <Link className="lp-btn lp-btn-p" href="/register">
             {tNav("start")}
           </Link>
-          <a className="lp-btn lp-btn-g" href={RELEASES_LATEST_URL}>
-            {tHero("download")}
-          </a>
+          <LandingDownloadButton />
         </div>
       </div>
     </section>

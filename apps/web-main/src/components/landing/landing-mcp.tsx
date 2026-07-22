@@ -1,16 +1,23 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { useRef } from "react";
+import { useInView } from "@/components/landing/use-in-view";
 
 /**
  * 落地页 05 区块：左文右代码，展示 MCP 配置零成本迁移。
  * Client Component；右侧 `mcp.json` 示例是固定 JSON 文本，
  * 代码不翻译，故不接入 i18n，仅左侧说明文字走 `t()`。
  * `.lp-code::before` 橙光横扫动画由 `landing.css` 的
- * `prefers-reduced-motion` 全局降级块统一停用。
+ * `prefers-reduced-motion` 全局降级块统一停用；循环动画默认暂停，
+ * `data-lp-anim` + `data-in-view` 挂在 `.lp-code` 本体上（动画实际
+ * 画在它的 `::before` 伪元素，`landing.css` 门控规则里带了对应的
+ * `::before` 变体选择器），进入视口才播放。
  */
 export function LandingMcp() {
   const t = useTranslations("landing.mcp");
+  const codeRef = useRef<HTMLDivElement>(null);
+  const inView = useInView(codeRef);
 
   return (
     <section className="lp-sec lp-dots">
@@ -49,10 +56,15 @@ export function LandingMcp() {
             </div>
           </div>
 
-          <div className="lp-code">
+          <div
+            className="lp-code"
+            ref={codeRef}
+            data-lp-anim
+            data-in-view={inView ? "true" : undefined}
+          >
             <div className="lp-code-h">
               <span>mcp.json</span>
-              <span style={{ color: "var(--lp-brand)" }}>
+              <span style={{ color: "var(--lp-brand-lt)" }}>
                 {t("codeCompat")}
               </span>
             </div>
