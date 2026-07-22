@@ -25,6 +25,14 @@ describe("isPublicPath", () => {
     expect(isPublicPath("/share")).toBe(true);
   });
 
+  it("/en 返回 true（英文落地页，task 9 路径分离）", () => {
+    expect(isPublicPath("/en")).toBe(true);
+  });
+
+  it("/en 精确匹配，不会像 /register 那样把同前缀路径误判为公开", () => {
+    expect(isPublicPath("/entry")).toBe(false);
+  });
+
   it("/assistant 返回 false，防止「/」误入 PUBLIC_PATHS 导致整站敞开", () => {
     // 这个测试防的漏洞：如果有人把「/」的精确匹配改回纯 startsWith，
     // 由于所有路径都以「/」开头，就会把整站误判为公开。

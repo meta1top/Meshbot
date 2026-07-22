@@ -7,7 +7,12 @@
       "login": "登录",
       "enterApp": "进入应用",
       "start": "免费开始",
-      "toggleTheme": "切换深色/浅色主题"
+      "toggleTheme": "切换深色/浅色主题",
+      "langGroup": "切换语言",
+      "langZh": "中文",
+      "langEn": "EN",
+      "switchToZh": "切换到中文页面",
+      "switchToEn": "切换到英文页面"
     },
     "hero": {
       "eyebrow": "TEAM · AGENTS",

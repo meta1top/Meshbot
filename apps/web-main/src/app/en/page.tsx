@@ -4,6 +4,7 @@ import { LandingConversation } from "@/components/landing/landing-conversation";
 import { LandingDataZones } from "@/components/landing/landing-data-zones";
 import { LandingFooter } from "@/components/landing/landing-footer";
 import { LandingHero } from "@/components/landing/landing-hero";
+import { LandingHtmlLangSync } from "@/components/landing/landing-html-lang-sync";
 import { LandingLocaleProvider } from "@/components/landing/landing-locale-provider";
 import { LandingMcp } from "@/components/landing/landing-mcp";
 import { LandingNav } from "@/components/landing/landing-nav";
@@ -12,28 +13,23 @@ import { LandingRemote } from "@/components/landing/landing-remote";
 import { LandingShare } from "@/components/landing/landing-share";
 import { LandingTeam } from "@/components/landing/landing-team";
 import "@/components/landing/landing.css";
-import zhMessages from "../../messages/zh.json";
+import enMessages from "../../../messages/en.json";
 
-const LANDING_TITLE = "MeshBot — 同一个工作空间";
+const LANDING_TITLE = "MeshBot — One Shared Workspace";
 const LANDING_DESCRIPTION =
-  "团队在这里协作，Agent 带着各自的人格、技能与记忆一起工作。";
+  "Your team collaborates here — agents bring their own persona, skills, and memory to the work.";
 
 /**
- * 落地页 metadata：覆盖根 layout 的通用 title/description，补上 OG /
- * twitter card，分享出去不再是无标题卡片。文案取自
- * docs/superpowers/specs/2026-07-22-landing-page-design.md §1 的产品定位
- * 与 hero 论点。不设 openGraph.images——分享卡配图尚未产出，指向不存在
- * 的图片比没有图片更糟（同一取舍见 LandingFooter 对编造链接的处理）。
- *
- * `alternates.languages` 声明 `/` 与 `/en` 互为对方的 hreflang（双语上线，
- * task 9）：搜索引擎需要这个声明才会分别收录两个语言版本，而不是把 `/en`
- * 当作 `/` 的重复内容。`x-default` 指回中文版——访客语言未知时的兜底。
+ * 落地页 metadata（英文，`/en`）。文案取自 `messages/en.json` 的
+ * `landing.hero` 论点译文，与中文版 `app/page.tsx` 同一套取舍：不设
+ * `openGraph.images`（配图尚未产出）。`alternates.languages` 与中文版
+ * 互相声明 hreflang，见 `app/page.tsx` 顶部注释。
  */
 export const metadata: Metadata = {
   title: LANDING_TITLE,
   description: LANDING_DESCRIPTION,
   alternates: {
-    canonical: "/",
+    canonical: "/en",
     languages: {
       "zh-CN": "/",
       en: "/en",
@@ -44,7 +40,7 @@ export const metadata: Metadata = {
     title: LANDING_TITLE,
     description: LANDING_DESCRIPTION,
     type: "website",
-    url: "/",
+    url: "/en",
   },
   twitter: {
     card: "summary_large_image",
@@ -54,22 +50,20 @@ export const metadata: Metadata = {
 };
 
 /**
- * 官网落地页（中文，`/`）。公开可访问，已登录用户同样看到本页（经导航栏
- * 入口进应用）。
+ * 官网落地页（英文，`/en`）。双语上线走路径分离（task 9）：与中文版
+ * `app/page.tsx` 渲染完全同一批 landing 组件，只是显式注入
+ * `locale="en"` 的 `NextIntlClientProvider`（经 `LandingLocaleProvider`
+ * 转一手，理由见该组件顶部注释）——不复制组件，只包一层，组件内部仍是
+ * 同一份 `useTranslations` 逻辑。
  *
- * 经 `LandingLocaleProvider` 显式嵌套一层 `locale="zh"` 的
- * `NextIntlClientProvider`，覆盖根 layout
- * 里 `IntlProvider` 按 cookie 决定的语言：落地页的语言由路径决定（`/` 恒
- * 中文、`/en` 恒英文，与 `/en/page.tsx` 同一手法），不受 `locale` cookie
- * 影响。这同时是原 bug 的修复——`IntlProvider` 的 `readLocaleCookie()` 在
- * SSR 期读不到 `document.cookie`、恒返回中文，若客户端存在 `locale=en`
- * cookie，两侧渲染出的语言会分叉，触发 hydration 报错；这里的显式覆盖让
- * 落地页在服务端与客户端都恒定渲染中文，cookie 状态不再能影响它。
+ * `<LandingHtmlLangSync lang="en" />` 负责把 `<html lang>` 从根 layout
+ * 硬编码的 `zh-CN` 客户端纠正为 `en`（局限见该组件顶部注释）。
  */
-export default function Home() {
+export default function EnHome() {
   return (
-    <LandingLocaleProvider locale="zh" messages={zhMessages}>
+    <LandingLocaleProvider locale="en" messages={enMessages}>
       <div className="lp-root">
+        <LandingHtmlLangSync lang="en" />
         <LandingNav />
         <main>
           <LandingHero />

@@ -150,6 +150,39 @@ nav.lp-nav {
   border-color: var(--lp-brand);
 }
 
+/* 语言切换（/ 与 /en 路径分离，见 landing-nav.tsx 顶部注释）。 */
+.lp-lang {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  border: 1px solid var(--lp-edge);
+  border-radius: 2px;
+  padding: 2px;
+}
+.lp-lang-a {
+  padding: 4px 7px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--lp-dim);
+  text-decoration: none;
+  border-radius: 1px;
+  line-height: 1;
+}
+.lp-lang-a:hover {
+  color: var(--lp-fg);
+}
+.lp-lang-cur {
+  background: var(--lp-brand);
+  color: #fff;
+}
+.lp-lang-cur:hover {
+  color: #fff;
+}
+/* 同 .dark .lp-btn-p：品牌橙配白字在暗色下差 WCAG AA 一点点，压深一档。 */
+.dark .lp-lang-cur {
+  background: color-mix(in srgb, var(--lp-brand) 92%, black);
+}
+
 .lp-btn {
   font-size: 12.5px;
   font-weight: 600;

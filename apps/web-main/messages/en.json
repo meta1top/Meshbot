@@ -7,7 +7,12 @@
       "login": "Sign in",
       "enterApp": "Open app",
       "start": "Get started",
-      "toggleTheme": "Toggle dark/light theme"
+      "toggleTheme": "Toggle dark/light theme",
+      "langGroup": "Switch language",
+      "langZh": "中文",
+      "langEn": "EN",
+      "switchToZh": "Switch to the Chinese page",
+      "switchToEn": "Switch to the English page"
     },
     "hero": {
       "eyebrow": "TEAM · AGENTS",
