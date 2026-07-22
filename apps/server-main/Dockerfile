@@ -35,13 +35,23 @@ COPY libs/types-main/package.json  ./libs/types-main/
 COPY libs/assets/package.json      ./libs/assets/
 
 # ⚠️ 禁止把 registry 换成第三方镜像源（含 registry.npmmirror.com）。
-# 2026-07-23 生产事故：换镜像源后 --frozen-lockfile 失去锁定效力，装出了
-# lockfile 里根本不存在的版本——顶层 zod 4.4.3、@meshbot/types 嵌套 zod 3.0.0
-# （lockfile 锁的是 3.25.76）。3.0.0 没有 z.coerce，server-main 启动即崩、
-# 生产 API 502。对照实验：同一 Dockerfile 换回官方源即得到正确的 3.25.76。
+#
+# 2026-07-23 生产事故：换源后 server-main 启动即崩、生产 API 502。容器里
+# 顶层 zod 4.4.3、@meshbot/types 嵌套 zod 3.0.0，而 lockfile 锁的是 3.25.76；
+# 3.0.0 没有 z.coerce，page.schema.js 加载即抛 TypeError。
+#
+# 关键在于**污染不发生在这一步**：分阶段实测，deps 阶段的
+# `pnpm install --frozen-lockfile` 在镜像源下装出的是正确的 3.25.76。
+# 出问题的是下面 build 阶段的 `pnpm deploy --prod --legacy`——它会**重新解析**
+# 依赖、不受 lockfile 约束，对着镜像源可能陈旧的 packument 元数据解析，就拿到了
+# lockfile 里根本不存在的版本。web-main 不走 pnpm deploy，所以同次发版它没事。
+#
+# 所以「换源但保留 --frozen-lockfile 就安全」是错的直觉：只要构建链路里有任何
+# 一步会重新解析（pnpm deploy / pnpm add / 无 lockfile 的 install），源的差异
+# 就会穿透进产物。
 #
 # 当初换源是为了解决 runner 拉包超时，但真正的病因是 pnpm 默认 60s fetch 超时；
-# 下面的超时/重试/并发设置已经解决了它——官方源实测 35.1s 装完 2290 个包。
+# 下面的超时/重试/并发设置已经解决了它——官方源实测 34.9s 装完 2290 个包。
 #
 # 注：不加 BuildKit cache mount 缓存 pnpm store——本仓 nodeLinker 是 hoisted，
 # 直接摊进 node_modules 不走内容寻址 store，实测 store 恒空、reused 恒为 0。
