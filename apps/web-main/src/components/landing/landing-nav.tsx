@@ -71,6 +71,7 @@ export function LandingNav() {
           >
             <span aria-hidden="true">◐</span>
           </button>
+          <span className="lp-nav-div" aria-hidden="true" />
           {profile.isPending ? (
             <span className="lp-skel" aria-hidden="true" />
           ) : (
