@@ -62,8 +62,17 @@ export function useTheme() {
 
   const toggleTheme = useCallback(() => {
     const current = getSnapshot();
-    const next = current === "dark" ? "light" : "dark";
-    setTheme(next);
+    // current 可能是 "system"：翻转前必须先解析成当前实际生效的明暗值。
+    // 否则暗色系统偏好下第一次点击会算出 "dark"——但 `.dark` 早已因跟随
+    // 系统而挂在 <html> 上，applyTheme 里 isDark === 当前 class 的判等
+    // 会提前 return，等于这次点击什么都没发生，要点第二次才生效。
+    const effective =
+      current === "system"
+        ? window.matchMedia("(prefers-color-scheme: dark)").matches
+          ? "dark"
+          : "light"
+        : current;
+    setTheme(effective === "dark" ? "light" : "dark");
   }, [setTheme]);
 
   return { theme, setTheme, toggleTheme } as const;
