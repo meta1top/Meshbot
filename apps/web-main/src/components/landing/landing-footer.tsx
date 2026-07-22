@@ -36,7 +36,8 @@ export function LandingFooter() {
               style={{ marginBottom: "11px" }}
               translate="no"
             >
-              <i aria-hidden="true" />
+              {/* biome-ignore lint/performance/noImgElement: 同 landing-nav.tsx，装饰性小尺寸 SVG。 */}
+              <img src="/logo.svg" alt="" aria-hidden="true" />
               MeshBot
             </div>
             <p

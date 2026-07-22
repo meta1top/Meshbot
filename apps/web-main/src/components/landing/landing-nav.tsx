@@ -28,7 +28,8 @@ export function LandingNav() {
     <nav className="lp-nav">
       <div className="lp-nav-in">
         <div className="lp-mark" translate="no">
-          <i aria-hidden="true" />
+          {/* biome-ignore lint/performance/noImgElement: 4KB 固定 16px 的装饰性 SVG，next/image 对 SVG 不做优化还多包一层。alt="" + aria-hidden 是因为紧邻的 MeshBot 文字已承担品牌语义，避免屏幕阅读器重复播报。 */}
+          <img src="/logo.svg" alt="" aria-hidden="true" />
           MeshBot
         </div>
         <div className="lp-nav-l">

@@ -105,12 +105,13 @@ nav.lp-nav {
   font-size: 14.5px;
   letter-spacing: -0.01em;
 }
-.lp-mark i {
+/* 品牌标识用 public/logo.svg 真图。设计稿里这里是个品牌色圆角方块，那只是
+   logo 的占位——不要照搬成实现。尺寸与占位块一致（16px），视觉重量不变。 */
+.lp-mark img {
   width: 16px;
   height: 16px;
-  background: var(--lp-brand);
-  border-radius: 3px;
   display: block;
+  flex-shrink: 0;
 }
 .lp-nav-l {
   margin-left: 12px;
