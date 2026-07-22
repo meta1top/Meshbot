@@ -76,7 +76,23 @@ export class ContextCompactor {
     private readonly modelResolver: ModelResolver,
     private readonly modelConfig: ModelConfigService,
     private readonly sessionMessages: SessionMessageService,
-    private readonly llmCalls: LlmCallService, // v1 未直接用，预留 v2 标记 purpose 用
+    // 非死代码——已排查是漏写的调用方，非误删候选。
+    // 设计稿 docs/superpowers/specs/2026-05-26-context-compaction-design.md §2 明确要求
+    // v1 就该把 summarize() 这次 LLM 调用写一行 llm_calls（未打 purpose 标记，直接 merge
+    // 进 sessionTotals），§10 只把"单独打标记、从 sessionTotals 里摘除"这部分推迟到 v2。
+    // 但落地时的实施 plan（docs/superpowers/plans/2026-05-26-context-compaction.md）
+    // 未把这行 record() 列进文件改动表，实现里也确实从未调用过，测试里长期用
+    // `{ provide: LlmCallService, useValue: {} }` 空对象 mock 也能全绿——
+    // 说明 doCompact() 里 modelResolver.summarize() 消耗的 token 至今未落库，
+    // 对 session 的 usage 累计（getSessionTotals）/ 全局用量看板（stats.service.ts）
+    // 都是隐形的。真正的修复需要：① ModelResolver.summarize() 从 model.invoke()
+    // 的响应里提取 usage（可复用 graph-runner.service.ts 的 extractUsage()，目前未导出）
+    // 并把返回值从 Promise<string> 改成带 usage 的结构；② 这里补一次 llmCalls.record()。
+    // 这属于改共享 chat-model 解析服务返回签名 + 触碰压缩兜底这条状态机路径的改动，
+    // 按仓库风险分档接近"跨设备协议/带生命周期状态机"一档，需要独立 review + 变异验证，
+    // 不适合在本次 lint 清理里顺手改掉，先保留字段 + 留痕，交给后续任务处理。
+    // biome-ignore lint/correctness/noUnusedPrivateClassMembers: 见上——设计稿要求 v1 记账、实施 plan 漏写调用方，非死代码。
+    private readonly llmCalls: LlmCallService,
     private readonly emitter: EventEmitter2,
   ) {}
 
