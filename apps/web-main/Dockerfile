@@ -15,12 +15,10 @@ COPY packages/design/package.json     ./packages/design/
 COPY libs/types/package.json          ./libs/types/
 COPY libs/types-main/package.json     ./libs/types-main/
 COPY libs/types-agent/package.json    ./libs/types-agent/
-# 见 apps/server-main/Dockerfile 同段注释：源由构建方注入（默认官方源），
-# fetch 超时/重试放宽、并发降低；不缓存 pnpm store（hoisted linker 用不上）。
-ARG NPM_REGISTRY=https://registry.npmjs.org/
-
-RUN pnpm config set registry "$NPM_REGISTRY" && \
-    pnpm config set fetch-timeout 300000 && \
+# ⚠️ 禁止换第三方镜像源，理由见 apps/server-main/Dockerfile 同段注释
+# （2026-07-23 生产事故：镜像源使 --frozen-lockfile 失效，装出 lockfile
+# 里不存在的 zod 版本导致 server-main 启动崩溃）。
+RUN pnpm config set fetch-timeout 300000 && \
     pnpm config set fetch-retries 5 && \
     pnpm config set network-concurrency 8 && \
     pnpm install --frozen-lockfile --ignore-scripts
