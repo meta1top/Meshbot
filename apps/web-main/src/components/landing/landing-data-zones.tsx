@@ -33,7 +33,11 @@ export function LandingDataZones() {
               <span className="lp-pip" aria-hidden="true" />
               {t("zone1Header")}
             </div>
-            <ul>
+            {/* biome-ignore lint/a11y/noRedundantRoles: 不冗余——landing.css
+                的 `.lp-zone li { list-style: none }` 会让 Safari/VoiceOver
+                把这份 <ul> 当成普通容器而丢失列表语义，role="list" 是显式
+                找回它的标准做法，biome 的静态检查看不到 CSS 侧这一层。 */}
+            <ul role="list">
               <li>{t("zone1Item1")}</li>
               <li>{t("zone1Item2")}</li>
               <li>{t("zone1Item3")}</li>
@@ -47,7 +51,11 @@ export function LandingDataZones() {
               <span className="lp-pip lp-pip-o" aria-hidden="true" />
               {t("zone2Header")}
             </div>
-            <ul>
+            {/* biome-ignore lint/a11y/noRedundantRoles: 不冗余——landing.css
+                的 `.lp-zone li { list-style: none }` 会让 Safari/VoiceOver
+                把这份 <ul> 当成普通容器而丢失列表语义，role="list" 是显式
+                找回它的标准做法，biome 的静态检查看不到 CSS 侧这一层。 */}
+            <ul role="list">
               <li>{t("zone2Item1")}</li>
               <li>{t("zone2Item2")}</li>
             </ul>
@@ -59,7 +67,11 @@ export function LandingDataZones() {
               <span className="lp-pip lp-pip-off" aria-hidden="true" />
               {t("zone3Header")}
             </div>
-            <ul>
+            {/* biome-ignore lint/a11y/noRedundantRoles: 不冗余——landing.css
+                的 `.lp-zone li { list-style: none }` 会让 Safari/VoiceOver
+                把这份 <ul> 当成普通容器而丢失列表语义，role="list" 是显式
+                找回它的标准做法，biome 的静态检查看不到 CSS 侧这一层。 */}
+            <ul role="list">
               <li>{t("zone3Item1")}</li>
               <li>{t("zone3Item2")}</li>
               <li>{t("zone3Item3")}</li>

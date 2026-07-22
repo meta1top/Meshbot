@@ -25,7 +25,10 @@ export function LandingNav() {
         </div>
         <div className="lp-nav-l">
           <a href="#features">{t("features")}</a>
-          <a href="/docs">{t("docs")}</a>
+          {/* 「文档」暂无独立文档站（apps/web-main/src/app 下没有 docs/），
+              先指向仓库，避免落地页公开可点的 404。见 landing-footer.tsx
+              同款注释。 */}
+          <a href="https://github.com/meta1top/Meshbot">{t("docs")}</a>
           <a href="https://github.com/meta1top/Meshbot">{t("github")}</a>
         </div>
         <div className="lp-nav-r">
@@ -38,7 +41,7 @@ export function LandingNav() {
             <span aria-hidden="true">◐</span>
           </button>
           {profile.isPending ? (
-            <span className="lp-skel" aria-hidden />
+            <span className="lp-skel" aria-hidden="true" />
           ) : (
             <Link
               className="lp-btn lp-btn-t"

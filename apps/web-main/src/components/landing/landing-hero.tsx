@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { LandingDownloadButton } from "@/components/landing/landing-download-button";
 
@@ -25,9 +26,9 @@ export function LandingHero() {
         </h1>
         <p className="lp-lead">{t("lead")}</p>
         <div className="lp-cta">
-          <a className="lp-btn lp-btn-p" href="/register">
+          <Link className="lp-btn lp-btn-p" href="/register">
             {tNav("start")}
-          </a>
+          </Link>
           <LandingDownloadButton />
         </div>
 
