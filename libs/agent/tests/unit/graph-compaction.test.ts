@@ -106,13 +106,17 @@ describe("GraphService compaction hooks", () => {
     expect(msgs.length).toBeGreaterThan(0);
   });
 
-  it("summarize 调 model.invoke 传 system + user 并返字符串", async () => {
+  it("summarize 调 model.invoke 传 system + user，返回文本与用量", async () => {
     const out = await modelResolver.summarize("[user] hi\n[assistant] hello", {
       systemPrompt: "SYS",
       timeoutMs: 1000,
       maxTokens: 100,
     });
-    expect(out).toBe("MOCK_SUMMARY");
+    expect(out.text).toBe("MOCK_SUMMARY");
+    // usage 由 extractUsage 从响应提取；本 mock 不带 usage 字段故为 null。
+    // 调用方（ContextCompactor）据此决定记不记账，不臆造 0。
+    expect(out.usage).toBeNull();
+    expect(typeof out.durationMs).toBe("number");
     expect(invokeCalls).toHaveLength(1);
     expect(invokeCalls[0].messages[0].content).toBe("SYS");
     expect(invokeCalls[0].messages[1].content).toContain("hi");

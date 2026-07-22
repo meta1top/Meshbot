@@ -52,6 +52,7 @@ async function seedLlmCall(
     cacheCreationTokens: overrides.cacheCreationTokens ?? 0,
     reasoningTokens: overrides.reasoningTokens ?? 0,
     durationMs: overrides.durationMs ?? 100,
+    purpose: overrides.purpose ?? null,
     createdAt: overrides.createdAt ?? new Date(),
   });
 }
@@ -517,5 +518,127 @@ describe("getLastBySession", () => {
     });
     const row = await service.getLastBySession("s2");
     expect(row?.inputTokens).toBe(50);
+  });
+
+  /**
+   * 回归用例——防压缩闩锁式误触发。
+   *
+   * getLastBySession 供 ContextCompactor 的 pre-check 用：
+   * `lastInputTokens / contextWindow >= 0.9` 即触发压缩。而压缩自身的 summarize
+   * 调用要把整段待压缩历史喂给模型，input_tokens 天然接近满窗口。若它滞留为
+   * 「最新一行」，此后每次 run 都白跑一次 snapshot 并提前压一次，直到落下普通
+   * 轮次行才自愈（闩锁式误触发）。
+   *
+   * 故带 purpose 的行（当前只有 'compaction'）必须排除在外：记账要全（进
+   * sessionTotals），触发判断只看真实对话轮次。
+   */
+  it("排除 compaction 行，返回最近一次真实对话调用", async () => {
+    // 显式 createdAt：record() 用毫秒精度的 new Date()，两次连续调用可能落在
+    // 同一毫秒，DESC 排序出现平局后返回哪条不确定——该用例会时红时绿。
+    // compaction 行刻意排在**更晚**，确保「没有排除逻辑就必然返回它」。
+    await seedLlmCall(ds, {
+      sessionId: "s3",
+      messageId: "m1",
+      cloudUserId: DEFAULT_USER,
+      inputTokens: 100,
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
+    await seedLlmCall(ds, {
+      sessionId: "s3",
+      messageId: "m2",
+      cloudUserId: DEFAULT_USER,
+      purpose: "compaction",
+      inputTokens: 90_000,
+      createdAt: new Date("2026-01-01T00:00:10.000Z"),
+    });
+
+    const row = await service.getLastBySession("s3");
+    expect(row?.inputTokens).toBe(100);
+    expect(row?.messageId).toBe("m1");
+  });
+
+  it("只有 compaction 行时返 null（不拿它当触发依据）", async () => {
+    await service.record({
+      sessionId: "s4",
+      messageId: "m1",
+      providerType: "x",
+      model: "y",
+      purpose: "compaction",
+      inputTokens: 90_000,
+      outputTokens: 500,
+      totalTokens: 90_500,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      reasoningTokens: 0,
+      durationMs: 2000,
+    });
+
+    expect(await service.getLastBySession("s4")).toBeNull();
+  });
+
+  /** 记账要全：压缩调用的 token 是真花了的，必须计入会话累计。 */
+  it("compaction 行仍计入 getSessionTotals", async () => {
+    await service.record({
+      sessionId: "s5",
+      messageId: "m1",
+      providerType: "x",
+      model: "y",
+      inputTokens: 100,
+      outputTokens: 10,
+      totalTokens: 110,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      reasoningTokens: 0,
+      durationMs: 10,
+    });
+    await service.record({
+      sessionId: "s5",
+      messageId: "m2",
+      providerType: "x",
+      model: "y",
+      purpose: "compaction",
+      inputTokens: 900,
+      outputTokens: 90,
+      totalTokens: 990,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      reasoningTokens: 0,
+      durationMs: 100,
+    });
+
+    const totals = await service.getSessionTotals("s5");
+    expect(totals.totalTokens).toBe(1100);
+  });
+
+  /**
+   * lastInputTokens 在前端用于显示「上下文占用了多少」。压缩 summarize 的
+   * input_tokens 接近满窗口，若取到它，压缩刚做完 UI 反而显示「上下文快满了」，
+   * 与用户眼见的事实相反。故求和含它、lastInputTokens 不含它。
+   */
+  it("lastInputTokens 只取普通对话轮次，不取 compaction 行", async () => {
+    await seedLlmCall(ds, {
+      sessionId: "s6",
+      messageId: "m1",
+      cloudUserId: DEFAULT_USER,
+      inputTokens: 100,
+      outputTokens: 10,
+      totalTokens: 110,
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
+    await seedLlmCall(ds, {
+      sessionId: "s6",
+      messageId: "m2",
+      cloudUserId: DEFAULT_USER,
+      purpose: "compaction",
+      inputTokens: 90_000,
+      outputTokens: 500,
+      totalTokens: 90_500,
+      createdAt: new Date("2026-01-01T00:00:10.000Z"),
+    });
+
+    const totals = await service.getSessionTotals("s6");
+    expect(totals.lastInputTokens).toBe(100);
+    expect(totals.callCount).toBe(2);
+    expect(totals.totalTokens).toBe(90_610);
   });
 });

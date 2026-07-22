@@ -1,6 +1,10 @@
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import type { BaseMessage } from "@langchain/core/messages";
-import { ModelResolver, ThreadStateService } from "@meshbot/lib-agent";
+import {
+  ModelResolver,
+  ThreadStateService,
+  type SummarizeResult,
+} from "@meshbot/lib-agent";
 import { SESSION_WS_EVENTS } from "@meshbot/types-agent";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { Test } from "@nestjs/testing";
@@ -22,12 +26,23 @@ function buildMessages(count: number): BaseMessage[] {
   return out;
 }
 
+/** summarize 的典型 usage：input 巨大——它要把整段待压缩历史喂给模型。 */
+const USAGE = {
+  inputTokens: 9_000,
+  outputTokens: 300,
+  totalTokens: 9_300,
+  cacheReadTokens: 0,
+  cacheCreationTokens: 0,
+  reasoningTokens: 0,
+};
+
 describe("ContextCompactor", () => {
   let compactor: ContextCompactor;
   let threadState: jest.Mocked<ThreadStateService>;
   let modelResolver: jest.Mocked<ModelResolver>;
   let modelConfig: jest.Mocked<ModelConfigService>;
   let sessionMessages: jest.Mocked<SessionMessageService>;
+  let llmCalls: jest.Mocked<LlmCallService>;
   let emitter: EventEmitter2;
   let emitSpy: jest.SpyInstance;
 
@@ -45,6 +60,9 @@ describe("ContextCompactor", () => {
     sessionMessages = {
       recordCompactionPlaceholder: jest.fn(),
     } as unknown as jest.Mocked<SessionMessageService>;
+    llmCalls = {
+      record: jest.fn(),
+    } as unknown as jest.Mocked<LlmCallService>;
     emitter = new EventEmitter2();
     emitSpy = jest.spyOn(emitter, "emit");
     const moduleRef = await Test.createTestingModule({
@@ -55,7 +73,7 @@ describe("ContextCompactor", () => {
         { provide: ModelConfigService, useValue: modelConfig },
         { provide: SessionMessageService, useValue: sessionMessages },
         { provide: EventEmitter2, useValue: emitter },
-        { provide: LlmCallService, useValue: {} },
+        { provide: LlmCallService, useValue: llmCalls },
       ],
     }).compile();
     compactor = moduleRef.get(ContextCompactor);
@@ -66,7 +84,11 @@ describe("ContextCompactor", () => {
       contextWindow: 10_000,
     } as never);
     threadState.getMessagesSnapshot.mockResolvedValue(buildMessages(10));
-    modelResolver.summarize.mockResolvedValue("MOCK_SUMMARY");
+    modelResolver.summarize.mockResolvedValue({
+      text: "MOCK_SUMMARY",
+      usage: USAGE,
+      durationMs: 123,
+    });
     await compactor.compact("s1");
     expect(modelResolver.summarize).toHaveBeenCalledTimes(1);
     expect(threadState.applyCompaction).toHaveBeenCalledTimes(1);
@@ -137,15 +159,15 @@ describe("ContextCompactor", () => {
       contextWindow: 10_000,
     } as never);
     threadState.getMessagesSnapshot.mockResolvedValue(buildMessages(10));
-    let resolveSum!: (v: string) => void;
+    let resolveSum!: (v: SummarizeResult) => void;
     modelResolver.summarize.mockReturnValue(
-      new Promise<string>((r) => {
+      new Promise<SummarizeResult>((r) => {
         resolveSum = r;
       }),
     );
     const p1 = compactor.compact("s1");
     const p2 = compactor.compact("s1");
-    resolveSum("S");
+    resolveSum({ text: "S", usage: null, durationMs: 0 });
     await Promise.all([p1, p2]);
     expect(modelResolver.summarize).toHaveBeenCalledTimes(1);
     expect(threadState.applyCompaction).toHaveBeenCalledTimes(1);
@@ -185,5 +207,71 @@ describe("ContextCompactor", () => {
     );
     await expect(compactor.compact("s1")).rejects.toThrow();
     expect(emitSpy).not.toHaveBeenCalled();
+  });
+
+  it("summarize 的 token 落一行 llm_calls，带 purpose=compaction 且挂占位行 id", async () => {
+    modelConfig.findEnabled.mockResolvedValue({
+      contextWindow: 10_000,
+      providerType: "openai",
+      model: "gpt-x",
+      name: "我的模型",
+    } as never);
+    threadState.getMessagesSnapshot.mockResolvedValue(buildMessages(10));
+    modelResolver.summarize.mockResolvedValue({
+      text: "S",
+      usage: USAGE,
+      durationMs: 456,
+    });
+
+    await compactor.compact("s1");
+
+    expect(llmCalls.record).toHaveBeenCalledTimes(1);
+    const arg = llmCalls.record.mock.calls[0][0];
+    expect(arg.purpose).toBe("compaction");
+    expect(arg.inputTokens).toBe(9_000);
+    expect(arg.durationMs).toBe(456);
+    expect(arg.providerType).toBe("openai");
+    expect(arg.modelName).toBe("我的模型");
+    // messageId 必须是压缩占位消息的 id：压缩不属于任何对话轮次，
+    // 占位消息是它在时间线上的化身，且 llm_calls.message_id 非空。
+    const placeholderArg =
+      sessionMessages.recordCompactionPlaceholder.mock.calls[0][0];
+    expect(arg.messageId).toBe(placeholderArg.id);
+  });
+
+  it("provider 未回吐 usage 时不落行，不臆造 0 污染统计", async () => {
+    modelConfig.findEnabled.mockResolvedValue({
+      contextWindow: 10_000,
+      providerType: "openai",
+      model: "gpt-x",
+    } as never);
+    threadState.getMessagesSnapshot.mockResolvedValue(buildMessages(10));
+    modelResolver.summarize.mockResolvedValue({
+      text: "S",
+      usage: null,
+      durationMs: 10,
+    });
+
+    await compactor.compact("s1");
+
+    expect(llmCalls.record).not.toHaveBeenCalled();
+  });
+
+  it("记账失败不影响压缩成功（best-effort）", async () => {
+    modelConfig.findEnabled.mockResolvedValue({
+      contextWindow: 10_000,
+      providerType: "openai",
+      model: "gpt-x",
+    } as never);
+    threadState.getMessagesSnapshot.mockResolvedValue(buildMessages(10));
+    modelResolver.summarize.mockResolvedValue({
+      text: "S",
+      usage: USAGE,
+      durationMs: 10,
+    });
+    llmCalls.record.mockRejectedValue(new Error("db down"));
+
+    await expect(compactor.compact("s1")).resolves.not.toBeNull();
+    expect(threadState.applyCompaction).toHaveBeenCalledTimes(1);
   });
 });
