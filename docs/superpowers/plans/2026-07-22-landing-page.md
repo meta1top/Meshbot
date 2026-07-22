@@ -4,7 +4,7 @@
 
 **Goal:** 把 `apps/web-main` 的 `/` 路由从「登录态重定向闸门」改造成公开可访问的官网落地页，9 段 + Footer，双主题、双语、带动效与降级。
 
-**Architecture:** 页面主体为 Server Component 静态渲染，仅导航栏右侧 CTA 因 token 存于 localStorage 而必须是 client component。视觉严格照搬已批准的 mockup，样式落在 landing 专属的 scoped CSS 文件，**不写入 `packages/design`**。主题切换**复用仓库已有的 `useTheme` 机制**，不新建。
+**Architecture:** 各 section 均为 client component + `useTranslations`（与既有 `IntlProvider` 一致，保住 `/` 的静态预渲染）。视觉严格照搬已批准的 mockup，样式落在 landing 专属的 scoped CSS 文件，**不写入 `packages/design`**。主题切换**复用仓库已有的 `useTheme` 机制**，不新建。
 
 **Tech Stack:** Next.js 16 App Router · React 19 · Tailwind v4（布局）+ scoped CSS（图形语言）· next-intl · Jest（纯函数单测）
 
