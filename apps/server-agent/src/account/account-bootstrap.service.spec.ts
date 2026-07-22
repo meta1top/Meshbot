@@ -1,13 +1,26 @@
 import { AccountBootstrapService } from "./account-bootstrap.service";
+import type { AccountRuntimeRegistry } from "./account-runtime.registry";
+import type { CloudIdentity } from "../entities/cloud-identity.entity";
+import type { CloudIdentityService } from "../services/cloud-identity.service";
+
+type StubIdentity = jest.Mocked<Pick<CloudIdentityService, "listLoggedIn">>;
+type StubRuntime = jest.Mocked<Pick<AccountRuntimeRegistry, "createRuntime">>;
 
 describe("AccountBootstrapService", () => {
   function makeService(
     loggedIn: { cloudUserId: string }[],
     createRuntime: jest.Mock,
   ) {
-    const identity = { listLoggedIn: jest.fn().mockResolvedValue(loggedIn) };
-    const runtime = { createRuntime };
-    return new AccountBootstrapService(identity as any, runtime as any);
+    const identity: StubIdentity = {
+      listLoggedIn: jest
+        .fn()
+        .mockResolvedValue(loggedIn as unknown as CloudIdentity[]),
+    };
+    const runtime: StubRuntime = { createRuntime };
+    return new AccountBootstrapService(
+      identity as unknown as CloudIdentityService,
+      runtime as unknown as AccountRuntimeRegistry,
+    );
   }
 
   it("calls createRuntime for every logged-in account", async () => {

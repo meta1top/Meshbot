@@ -394,13 +394,15 @@ describe("RemoteRunService", () => {
     it("create 首帧回填 sessionId 后可按 session 反查 streamId", () => {
       const { svc } = make();
       const { streamId } = svc.startRun("u1", "dB", "create", null, "hi");
-      svc.onFrame({
-        streamId,
-        sessionId: "sess-9",
-        seq: 0,
-        event: "run.started",
-        payload: { sessionId: "sess-9" },
-      } as any);
+      svc.onFrame(
+        makeFrame({
+          streamId,
+          sessionId: "sess-9",
+          seq: 0,
+          event: "run.started",
+          payload: { sessionId: "sess-9" },
+        }),
+      );
       expect(svc.findRunBySession("dB", "sess-9")).toEqual({
         streamId,
         sessionId: "sess-9",
@@ -424,13 +426,15 @@ describe("RemoteRunService", () => {
       const { svc } = make();
       const { streamId } = svc.startRun("u1", "dB", "create", null, "hi");
       expect(svc.hasActiveStreamFor("dB", "sess-9")).toBe(false);
-      svc.onFrame({
-        streamId,
-        sessionId: "sess-9",
-        seq: 0,
-        event: "run.started",
-        payload: { sessionId: "sess-9" },
-      } as any);
+      svc.onFrame(
+        makeFrame({
+          streamId,
+          sessionId: "sess-9",
+          seq: 0,
+          event: "run.started",
+          payload: { sessionId: "sess-9" },
+        }),
+      );
       expect(svc.hasActiveStreamFor("dB", "sess-9")).toBe(true);
     });
 
@@ -443,7 +447,7 @@ describe("RemoteRunService", () => {
       const { svc } = make();
       const { streamId } = svc.startRun("u1", "dB", "append", "sess-1", "hi");
       expect(svc.hasActiveStreamFor("dB", "sess-1")).toBe(true);
-      svc.onEnd({ streamId, requesterDeviceId: "d", reason: "done" } as any);
+      svc.onEnd({ streamId, requesterDeviceId: "d", reason: "done" });
       expect(svc.hasActiveStreamFor("dB", "sess-1")).toBe(false);
     });
 

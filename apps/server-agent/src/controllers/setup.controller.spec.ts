@@ -1,5 +1,24 @@
 import { AccountContextService } from "@meshbot/lib-agent";
+import type { JwtService } from "@nestjs/jwt";
 import { SetupController } from "./setup.controller";
+import type { CloudAuthService } from "../services/cloud-auth.service";
+import type { CloudIdentityService } from "../services/cloud-identity.service";
+import type { CloudIdentity } from "../entities/cloud-identity.entity";
+import type { ModelConfigService } from "../services/model-config.service";
+
+type StubIdentityService = jest.Mocked<
+  Pick<CloudIdentityService, "listLoggedIn" | "get">
+>;
+type StubCloudAuthService = jest.Mocked<
+  Pick<CloudAuthService, "trySyncActiveOrg">
+>;
+type StubModelConfigService = jest.Mocked<
+  Pick<ModelConfigService, "hasEnabledModels">
+>;
+// JwtService.verify 是泛型方法（<T>(token, options?) => T），具体 mock 实现
+// 无法真正满足任意 T 的泛型签名，故不走 Pick<JwtService,...> 精确匹配，
+// 只声明实际用到的具体签名，构造处再经 unknown 桥接到 JwtService。
+type StubJwtService = { verify: jest.Mock<{ sub?: string }, [string]> };
 
 /**
  * 回归测试：Public 路由 GET /api/setup-status 在无 ALS 账号上下文时，
@@ -21,32 +40,38 @@ describe("SetupController.getSetupStatus（Public 路由，无环境上下文）
     const byId = Object.fromEntries(
       opts.loggedIn.map((i) => [i.cloudUserId, i]),
     );
-    const identityService: any = {
-      listLoggedIn: jest.fn().mockResolvedValue(opts.loggedIn),
-      get: jest.fn((uid: string) => Promise.resolve(byId[uid] ?? null)),
+    const identityService: StubIdentityService = {
+      listLoggedIn: jest
+        .fn()
+        .mockResolvedValue(opts.loggedIn as unknown as CloudIdentity[]),
+      get: jest.fn((uid: string) =>
+        Promise.resolve(
+          (byId[uid] as unknown as CloudIdentity | undefined) ?? null,
+        ),
+      ),
     };
 
-    const cloudAuthService: any = {
+    const cloudAuthService: StubCloudAuthService = {
       trySyncActiveOrg: jest.fn().mockResolvedValue(undefined),
     };
 
-    const modelConfigService: any = {
+    const modelConfigService: StubModelConfigService = {
       hasEnabledModels: jest.fn().mockResolvedValue(opts.hasEnabledModels),
     };
 
-    const jwtService: any = {
-      verify: jest.fn(() => {
+    const jwtService: StubJwtService = {
+      verify: jest.fn((_token: string) => {
         if (opts.tokenUserId == null) throw new Error("invalid token");
         return { sub: opts.tokenUserId };
       }),
     };
 
     const controller = new SetupController(
-      modelConfigService,
-      identityService,
-      cloudAuthService,
+      modelConfigService as unknown as ModelConfigService,
+      identityService as unknown as CloudIdentityService,
+      cloudAuthService as unknown as CloudAuthService,
       ctx,
-      jwtService,
+      jwtService as unknown as JwtService,
     );
 
     return { controller, modelConfigService, identityService };
