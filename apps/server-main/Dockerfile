@@ -34,19 +34,18 @@ COPY libs/types/package.json       ./libs/types/
 COPY libs/types-main/package.json  ./libs/types-main/
 COPY libs/assets/package.json      ./libs/assets/
 
-# npm 源可由构建方注入：默认官方源（本地构建 / GitHub CI 不受影响），
-# GitLab 流水线经 --build-arg 传入国内镜像——runner 在阿里云，直连
-# registry.npmjs.org 会大量 error(23) 重试并最终超时（实测单请求 30s+，
-# 整个 job 273s 挂掉）；换阿里云镜像后本地实测 44.7s 装完 2290 个包。
-# lockfile 的 integrity 哈希照常校验，换源不改变落地内容。
-ARG NPM_REGISTRY=https://registry.npmjs.org/
-
-# 超时/重试放宽、并发降到 8，避免打满带宽后互相拖垮。
-# 注：不加 BuildKit cache mount 缓存 pnpm store——本仓 nodeLinker 是
-# hoisted，直接摊进 node_modules 不走内容寻址 store，实测 store 始终为空、
-# reused 恒为 0，加了只是徒增复杂度。
-RUN pnpm config set registry "$NPM_REGISTRY" && \
-    pnpm config set fetch-timeout 300000 && \
+# ⚠️ 禁止把 registry 换成第三方镜像源（含 registry.npmmirror.com）。
+# 2026-07-23 生产事故：换镜像源后 --frozen-lockfile 失去锁定效力，装出了
+# lockfile 里根本不存在的版本——顶层 zod 4.4.3、@meshbot/types 嵌套 zod 3.0.0
+# （lockfile 锁的是 3.25.76）。3.0.0 没有 z.coerce，server-main 启动即崩、
+# 生产 API 502。对照实验：同一 Dockerfile 换回官方源即得到正确的 3.25.76。
+#
+# 当初换源是为了解决 runner 拉包超时，但真正的病因是 pnpm 默认 60s fetch 超时；
+# 下面的超时/重试/并发设置已经解决了它——官方源实测 35.1s 装完 2290 个包。
+#
+# 注：不加 BuildKit cache mount 缓存 pnpm store——本仓 nodeLinker 是 hoisted，
+# 直接摊进 node_modules 不走内容寻址 store，实测 store 恒空、reused 恒为 0。
+RUN pnpm config set fetch-timeout 300000 && \
     pnpm config set fetch-retries 5 && \
     pnpm config set network-concurrency 8 && \
     pnpm install --frozen-lockfile --ignore-scripts

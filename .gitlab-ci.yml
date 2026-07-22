@@ -11,11 +11,6 @@ stages:
 
 variables:
   REGISTRY_IMAGE: "$CI_REGISTRY_IMAGE"
-  # runner 在阿里云，直连 registry.npmjs.org 会大量 error(23) 重试并超时
-  # （IID=7 实测两个 build 分别 273s/283s 挂在 pnpm install）。这里给国内镜像。
-  # Dockerfile 的 ARG 默认值仍是官方源，故本地构建与 GitHub CI 不受影响。
-  # 需要临时切回官方源时，在 GitLab 项目 CI/CD 变量里覆盖同名变量即可。
-  NPM_REGISTRY: "https://registry.npmmirror.com"
 
 # 仅 main 触发（部署型流水线）
 workflow:
@@ -51,7 +46,6 @@ build-server-main:
   script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
     - docker build -f apps/server-main/Dockerfile
-      --build-arg NPM_REGISTRY="$NPM_REGISTRY"
       -t "$REGISTRY_IMAGE/server-main:$IMAGE_TAG"
       -t "$REGISTRY_IMAGE/server-main:$CI_COMMIT_SHORT_SHA"
       -t "$REGISTRY_IMAGE/server-main:latest" .
@@ -64,7 +58,6 @@ build-web-main:
   script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
     - docker build -f apps/web-main/Dockerfile
-      --build-arg NPM_REGISTRY="$NPM_REGISTRY"
       -t "$REGISTRY_IMAGE/web-main:$IMAGE_TAG"
       -t "$REGISTRY_IMAGE/web-main:$CI_COMMIT_SHORT_SHA"
       -t "$REGISTRY_IMAGE/web-main:latest" .
