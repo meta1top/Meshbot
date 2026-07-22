@@ -196,6 +196,9 @@ nav.lp-nav {
 .lp-sec {
   position: relative;
   border-top: 1px solid var(--lp-line);
+  /* 导航栏 sticky 吸顶（实测高度 61.75px），锚点跳转（#features 等）不加
+     偏移会让目标区块顶部钻到导航栏底下（实测仅剩 5px 且上边框被盖住）。 */
+  scroll-margin-top: 72px;
 }
 .lp-sec-inner {
   max-width: 1180px;
@@ -812,19 +815,23 @@ nav.lp-nav {
   content: "";
   position: absolute;
   top: 0;
-  left: -100%;
+  left: 0;
   width: 100%;
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--lp-brand), transparent);
   animation: lp-sweep 4.2s ease-in-out infinite;
 }
+/*
+ * 只动 transform：元素宽度等于容器宽度，translateX(-100%)/(100%) 与旧版
+ * left:-100%/100% 渲染坐标完全一致（自身宽度即百分比基准），视觉零变化。
+ */
 @keyframes lp-sweep {
   0% {
-    left: -100%;
+    transform: translateX(-100%);
   }
   55%,
   100% {
-    left: 100%;
+    transform: translateX(100%);
   }
 }
 .lp-code-h {
@@ -900,14 +907,20 @@ nav.lp-nav {
   border-radius: 50%;
   background: var(--lp-brand);
   position: absolute;
+  left: 2px;
   top: 50%;
   margin-top: -3px;
   box-shadow: 0 0 9px 2px color-mix(in srgb, var(--lp-brand) 55%, transparent);
   animation: lp-flow 3.4s cubic-bezier(0.4, 0, 0.5, 1) infinite;
 }
+/*
+ * 只动 transform：.lp-rm-link 是固定 96px 宽的列，旧版轨迹
+ * left:2px → calc(100% - 8px) 换算成位移距离为 96-8-2=86px，
+ * translateX(0 → 86px) 是像素级精确等价，视觉零变化。
+ */
 @keyframes lp-flow {
   0% {
-    left: 2px;
+    transform: translateX(0);
     opacity: 0;
   }
   12% {
@@ -917,7 +930,7 @@ nav.lp-nav {
     opacity: 1;
   }
   100% {
-    left: calc(100% - 8px);
+    transform: translateX(86px);
     opacity: 0;
   }
 }
@@ -1238,11 +1251,22 @@ footer.lp-footer {
   .lp-radial {
     aspect-ratio: 1 / 1.15;
   }
-  .lp-sec-inner::before {
-    display: none;
-  }
   .lp-a-blk {
     padding-left: 0;
+  }
+}
+
+/*
+ * 段号标签（.lp-sec-inner::before）的可见阈值独立于上面 900px 断点：
+ * 居中列 max-width 1180px，标签 left:-52px，只有 (viewport-1180)/2 ≥ 52
+ * 即 viewport ≥ 1284px 时才落在居中列左侧的天然留白里；900–1283px 之间
+ * `display` 早已是 block，但渲染坐标在视口外——且仍留在无障碍树里，
+ * 屏幕阅读器会念出一串孤零零的 "02"…"09"。故用独立断点在 1284px 以下
+ * 直接隐藏，而不是复用上面的 900px 断点。
+ */
+@media (max-width: 1284px) {
+  .lp-sec-inner::before {
+    display: none;
   }
 }
 
@@ -1250,11 +1274,21 @@ footer.lp-footer {
   .lp-root *,
   .lp-root *::before,
   .lp-root *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: 降级生效的关键——本页
+       几乎每个动画元素在非降级路径下都带更高特异性的 `animation`/
+       `transition` 声明（含伪元素、data-lp-anim 门控），不加 !important
+       盖不掉，reduced-motion 用户会继续看到动画（已实测验证）。禁止用
+       biome 的 unsafe fix 静默移除，否则降级悄悄失效。 */
     animation: none !important;
+    /* biome-ignore lint/complexity/noImportantStyles: 同上，理由一致 */
     transition: none !important;
   }
   .lp-root .lp-fade {
+    /* biome-ignore lint/complexity/noImportantStyles: 同上——.lp-fade 的入场
+       动画在多处内联/关键帧里设置了非终态 opacity/transform，必须强制
+       覆盖成静态终态，否则降级后内容仍以初始隐藏态呈现，信息丢失。 */
     opacity: 1 !important;
+    /* biome-ignore lint/complexity/noImportantStyles: 同上，理由一致 */
     transform: none !important;
   }
 }
