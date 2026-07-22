@@ -175,6 +175,49 @@
       "zone3Item3": "Files in the drive",
       "zone3Item4": "Agent names and avatars",
       "zone3Note": "The parts team collaboration actually needs. Model provider keys are stored encrypted and never sent to any device."
+    },
+    "share": {
+      "eyebrow": "When you hand it off",
+      "titleLine1": "Share a file, ",
+      "titleAccent": "on your terms",
+      "lead": "Anything your agent finishes can turn straight into an outbound link. Add a password, set an expiry, revoke it anytime — the other side doesn't need an account.",
+      "cardHeader": "Share link",
+      "fileName": "weekly-report.md",
+      "shareUrl": "meshbot.app/s/k3f9xq2m",
+      "optPassword": "Require a password",
+      "optExpiry": "Expires in 7 days",
+      "optDownload": "Allow downloading the original file",
+      "copyLink": "Copy link",
+      "revoke": "Revoke"
+    },
+    "onboarding": {
+      "eyebrow": "Four steps to go",
+      "titleLine1": "About ",
+      "titleAccent": "five minutes",
+      "step1Title": "Create an account",
+      "step1Desc": "Just verify your email, then start an organization.",
+      "step2Title": "Install the desktop app",
+      "step2Desc": "Available for macOS, Windows, and Linux.",
+      "step3Title": "Authorize the connection",
+      "step3Desc": "One click in the browser and you're linked up.",
+      "step4Title": "Set up a model, and go",
+      "step4Desc": "Bring your own key, or use the one your organization configured."
+    },
+    "footer": {
+      "tagline": "The collaborative workspace for people and agents.",
+      "productHeader": "Product",
+      "productFeatures": "Features",
+      "productDownload": "Download",
+      "productChangelog": "Changelog",
+      "devHeader": "Developers",
+      "devDocs": "Docs",
+      "devGithub": "GitHub",
+      "devSkills": "Building skills",
+      "aboutHeader": "About",
+      "aboutLicense": "License",
+      "aboutPrivacy": "Privacy",
+      "aboutContact": "Contact",
+      "copyright": "© {year} MeshBot"
     }
   },
   "common": {

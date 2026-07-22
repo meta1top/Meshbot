@@ -175,6 +175,49 @@
       "zone3Item3": "网盘里的文件",
       "zone3Item4": "Agent 的名称与头像",
       "zone3Note": "团队协作所必需的部分。模型厂商密钥加密存储，不下发到任何设备。"
+    },
+    "share": {
+      "eyebrow": "交出去的时候",
+      "titleLine1": "分享一份文件，",
+      "titleAccent": "条件由你定",
+      "lead": "Agent 整理好的东西可以直接生成对外链接。加密码、设过期、随时撤销——对方不需要有账号。",
+      "cardHeader": "分享链接",
+      "fileName": "weekly-report.md",
+      "shareUrl": "meshbot.app/s/k3f9xq2m",
+      "optPassword": "需要密码",
+      "optExpiry": "7 天后过期",
+      "optDownload": "允许下载原文件",
+      "copyLink": "复制链接",
+      "revoke": "撤销"
+    },
+    "onboarding": {
+      "eyebrow": "四步就位",
+      "titleLine1": "大约",
+      "titleAccent": "五分钟",
+      "step1Title": "注册账号",
+      "step1Desc": "邮箱验证即可，先建一个组织。",
+      "step2Title": "装桌面端",
+      "step2Desc": "macOS、Windows、Linux 都有。",
+      "step3Title": "授权接入",
+      "step3Desc": "浏览器点一下批准就连上了。",
+      "step4Title": "配模型，开工",
+      "step4Desc": "接自己的 key，或用组织统一配的。"
+    },
+    "footer": {
+      "tagline": "人和 Agent 的协同工作空间。",
+      "productHeader": "产品",
+      "productFeatures": "能力",
+      "productDownload": "下载",
+      "productChangelog": "更新日志",
+      "devHeader": "开发者",
+      "devDocs": "文档",
+      "devGithub": "GitHub",
+      "devSkills": "技能开发",
+      "aboutHeader": "关于",
+      "aboutLicense": "许可证",
+      "aboutPrivacy": "隐私",
+      "aboutContact": "联系",
+      "copyright": "© {year} MeshBot"
     }
   },
   "common": {
