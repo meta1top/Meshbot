@@ -2,6 +2,7 @@ import {
   ThreadStateService,
   ModelResolver,
   COMPACTION_SYSTEM_PROMPT,
+  type SummarizeResult,
 } from "@meshbot/lib-agent";
 import { SESSION_WS_EVENTS } from "@meshbot/types-agent";
 import { Injectable, Logger } from "@nestjs/common";
@@ -76,22 +77,7 @@ export class ContextCompactor {
     private readonly modelResolver: ModelResolver,
     private readonly modelConfig: ModelConfigService,
     private readonly sessionMessages: SessionMessageService,
-    // 非死代码——已排查是漏写的调用方，非误删候选。
-    // 设计稿 docs/superpowers/specs/2026-05-26-context-compaction-design.md §2 明确要求
-    // v1 就该把 summarize() 这次 LLM 调用写一行 llm_calls（未打 purpose 标记，直接 merge
-    // 进 sessionTotals），§10 只把"单独打标记、从 sessionTotals 里摘除"这部分推迟到 v2。
-    // 但落地时的实施 plan（docs/superpowers/plans/2026-05-26-context-compaction.md）
-    // 未把这行 record() 列进文件改动表，实现里也确实从未调用过，测试里长期用
-    // `{ provide: LlmCallService, useValue: {} }` 空对象 mock 也能全绿——
-    // 说明 doCompact() 里 modelResolver.summarize() 消耗的 token 至今未落库，
-    // 对 session 的 usage 累计（getSessionTotals）/ 全局用量看板（stats.service.ts）
-    // 都是隐形的。真正的修复需要：① ModelResolver.summarize() 从 model.invoke()
-    // 的响应里提取 usage（可复用 graph-runner.service.ts 的 extractUsage()，目前未导出）
-    // 并把返回值从 Promise<string> 改成带 usage 的结构；② 这里补一次 llmCalls.record()。
-    // 这属于改共享 chat-model 解析服务返回签名 + 触碰压缩兜底这条状态机路径的改动，
-    // 按仓库风险分档接近"跨设备协议/带生命周期状态机"一档，需要独立 review + 变异验证，
-    // 不适合在本次 lint 清理里顺手改掉，先保留字段 + 留痕，交给后续任务处理。
-    // biome-ignore lint/correctness/noUnusedPrivateClassMembers: 见上——设计稿要求 v1 记账、实施 plan 漏写调用方，非死代码。
+    /** 压缩 summarize 的 token 记账（purpose='compaction'）。 */
     private readonly llmCalls: LlmCallService,
     private readonly emitter: EventEmitter2,
   ) {}
@@ -157,13 +143,18 @@ export class ContextCompactor {
     });
 
     let summaryText: string;
+    let summarizeUsage: SummarizeResult["usage"] = null;
+    let summarizeDurationMs = 0;
     try {
       const serialized = serializeForSummary(toSummarize);
-      summaryText = await this.modelResolver.summarize(serialized, {
+      const result = await this.modelResolver.summarize(serialized, {
         systemPrompt: COMPACTION_SYSTEM_PROMPT,
         timeoutMs: COMPACTION_SUMMARIZE_TIMEOUT_MS,
         maxTokens: COMPACTION_SUMMARY_MAX_TOKENS,
       });
+      summaryText = result.text;
+      summarizeUsage = result.usage;
+      summarizeDurationMs = result.durationMs;
     } catch (err) {
       this.emitter.emit(SESSION_WS_EVENTS.runCompactionError, {
         sessionId,
@@ -192,9 +183,10 @@ export class ContextCompactor {
     }
 
     // 占位行（失败仅 log，不回滚）
+    const placeholderId = `comp-${randomUUID()}`;
     try {
       await this.sessionMessages.recordCompactionPlaceholder({
-        id: `comp-${randomUUID()}`,
+        id: placeholderId,
         sessionId,
         summary: summaryText,
         removedCount: toSummarize.length,
@@ -204,6 +196,41 @@ export class ContextCompactor {
     } catch (err) {
       this.logger.warn(
         `recordCompactionPlaceholder failed; checkpointer 已正确，仅 UI 占位行丢失 session=${sessionId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    // summarize 这次调用的 token 记账（失败仅 log，不回滚——压缩本身已成功）。
+    // purpose='compaction' 让它被 getLastBySession 排除，避免闩锁式误触发；
+    // 但仍计入 getSessionTotals，因为这些 token 是真花了的。
+    // messageId 挂占位行：压缩不属于任何对话轮次，占位消息是它在时间线上的化身。
+    // usage 为 null 表示该 provider 未回吐用量，此时不落行——不臆造 0 污染统计
+    // （与普通轮次口径一致：graph-runner 也是 extracted 非空才记账）。
+
+    if (summarizeUsage) {
+      try {
+        await this.llmCalls.record({
+          sessionId,
+          messageId: placeholderId,
+          providerType: model.providerType,
+          model: model.model,
+          modelName: model.name,
+          purpose: "compaction",
+          inputTokens: summarizeUsage.inputTokens,
+          outputTokens: summarizeUsage.outputTokens,
+          totalTokens: summarizeUsage.totalTokens,
+          cacheReadTokens: summarizeUsage.cacheReadTokens,
+          cacheCreationTokens: summarizeUsage.cacheCreationTokens,
+          reasoningTokens: summarizeUsage.reasoningTokens,
+          durationMs: summarizeDurationMs,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `压缩 summarize 记账失败；压缩本身已生效，仅用量统计少一行 session=${sessionId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    } else {
+      this.logger.debug(
+        `provider 未回吐 summarize 用量，跳过压缩记账 session=${sessionId}`,
       );
     }
 

@@ -13,7 +13,10 @@ export type {
 } from "./graph/graph.types";
 export { COMPACTION_SYSTEM_PROMPT } from "./prompt/compactor.prompt";
 export { GraphRunner } from "./graph/graph-runner.service";
-export { ModelResolver } from "./graph/model-resolver.service";
+export {
+  ModelResolver,
+  type SummarizeResult,
+} from "./graph/model-resolver.service";
 export { ModelRunContext } from "./graph/model-run-context";
 export {
   CLOUD_GATEWAY_API_KEY_PLACEHOLDER,

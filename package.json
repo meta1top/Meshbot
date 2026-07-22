@@ -49,7 +49,7 @@
     "release": "changeset publish",
     "migration:agent": "pnpm --filter @meshbot/server-agent migration",
     "migration:archive:agent": "pnpm --filter @meshbot/server-agent migration:archive",
-    "test": "jest && pnpm --filter @meshbot/web-common test",
+    "test": "jest && pnpm --filter @meshbot/web-common test && pnpm --filter @meshbot/lib-agent test",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "typecheck": "turbo run typecheck",

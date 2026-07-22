@@ -1,4 +1,5 @@
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import type { AIMessageChunk } from "@langchain/core/messages";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { Inject, Injectable, Optional } from "@nestjs/common";
 import { AccountContextService } from "../account/account-context.service";
@@ -8,12 +9,24 @@ import {
 } from "../config/model-config.reader";
 import { CLOUD_TOKEN_PORT, type CloudTokenPort } from "./cloud-token.port";
 import { createChatModel } from "./llm.factory";
+import { type ExtractedUsage, extractUsage } from "./usage";
 import {
   MODEL_CONFIG_READ_PORT,
   type ModelConfigReadPort,
 } from "./model-config-read.port";
 import { ModelRunContext } from "./model-run-context";
 import type { ModelProvider } from "./nodes/supervisor.node";
+
+/**
+ * summarize 的返回。usage 可能为 null——并非所有 provider 都回吐 token 用量
+ * （extractUsage 已尝试四条兜底路径）；调用方据此决定记不记账，不要臆造 0。
+ */
+export interface SummarizeResult {
+  text: string;
+  usage: ExtractedUsage | null;
+  /** 本次调用耗时，供 llm_calls.duration_ms 落库。 */
+  durationMs: number;
+}
 
 /**
  * 负责解析、缓存当前账号的 chat model，并暴露 provider/meta 给 GraphService 及后续消费者。
@@ -176,17 +189,22 @@ export class ModelResolver {
   async summarize(
     serialized: string,
     opts: { systemPrompt: string; timeoutMs: number; maxTokens: number },
-  ): Promise<string> {
+  ): Promise<SummarizeResult> {
     const model = await this.provider()();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), opts.timeoutMs);
+    const startedAt = Date.now();
     try {
       const resp = await model.invoke(
         [new SystemMessage(opts.systemPrompt), new HumanMessage(serialized)],
         { signal: controller.signal, maxTokens: opts.maxTokens } as never,
       );
       const content = resp.content;
-      return typeof content === "string" ? content : JSON.stringify(content);
+      return {
+        text: typeof content === "string" ? content : JSON.stringify(content),
+        usage: extractUsage(resp as AIMessageChunk),
+        durationMs: Date.now() - startedAt,
+      };
     } finally {
       clearTimeout(timer);
     }
