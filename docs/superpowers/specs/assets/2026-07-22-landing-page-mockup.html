@@ -230,7 +230,7 @@
   <div class="mark"><i></i>MeshBot</div>
   <div class="nav-l"><a href="#">能力</a><a href="#">文档</a><a href="#">GitHub</a></div>
   <div class="nav-r">
-    <button class="tgl" id="tgl" aria-label="切换深色/浅色主题">◐</button>
+    <button type="button" class="tgl" id="tgl" aria-label="切换深色/浅色主题">◐</button>
     <a class="btn btn-t" href="#">登录</a>
     <a class="btn btn-p" href="#">免费开始</a>
   </div>
@@ -280,7 +280,7 @@
       <p class="body" style="margin-top:14px">你可以按事情养 Agent，而不是把一个万能助手调教到四不像。</p>
     </div>
     <div class="radial">
-      <svg viewBox="0 0 400 344" preserveAspectRatio="none">
+      <svg viewBox="0 0 400 344" preserveAspectRatio="none" aria-hidden="true">
         <path class="dash" d="M200 172 C150 172 120 96 92 62"/>
         <path class="dash" d="M200 172 C258 172 288 100 316 66" style="animation-delay:-2s"/>
         <path class="dash" d="M200 172 C142 172 104 196 60 206" style="animation-delay:-4s"/>
@@ -508,7 +508,7 @@
 <script>
   var root=document.documentElement, t=document.getElementById('tgl');
   function cur(){return root.getAttribute('data-theme') || (matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');}
-  t.addEventListener('click',function(){
+  t.addEventListener('click',()=>{
     var next = cur()==='dark' ? 'light' : 'dark';
     root.setAttribute('data-theme',next);
     t.textContent = next==='dark' ? '◐' : '◑';
