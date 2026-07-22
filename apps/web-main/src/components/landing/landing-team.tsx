@@ -21,6 +21,7 @@ export function LandingTeam() {
         <h2>
           {t("titleLine1")}
           <br />
+          {t("titleLine2Pre")}
           <em>{t("titleAccent")}</em>
         </h2>
         <p className="lp-body" style={{ maxWidth: "580px" }}>

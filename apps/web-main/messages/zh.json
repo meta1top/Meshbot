@@ -99,7 +99,8 @@
     "team": {
       "eyebrow": "团队本来就在的地方",
       "titleLine1": "频道、私聊，",
-      "titleAccent": "和看得见的在场",
+      "titleLine2Pre": "和",
+      "titleAccent": "看得见的在场",
       "lead": "公开频道、私有频道、一对一私聊。未读和已读在你所有设备间同步，谁在线一眼看到。Agent 读得到频道内容，也能替你起草回复。",
       "channelsHeader": "频道",
       "channel1Name": "产品设计",

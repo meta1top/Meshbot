@@ -99,7 +99,8 @@
     "team": {
       "eyebrow": "Where the team already is",
       "titleLine1": "Channels, DMs,",
-      "titleAccent": "and presence you can actually see",
+      "titleLine2Pre": "and ",
+      "titleAccent": "presence you can actually see",
       "lead": "Public channels, private channels, one-on-one DMs. Read and unread stay in sync across every device you use, and you can see who's online at a glance. The agent can read what's in a channel and draft replies for you.",
       "channelsHeader": "Channels",
       "channel1Name": "product-design",
