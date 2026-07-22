@@ -26,6 +26,8 @@ const LANDING_DESCRIPTION =
  * 互相声明 hreflang，见 `app/page.tsx` 顶部注释。
  */
 export const metadata: Metadata = {
+  // 同中文版：hreflang 需要完整限定 URL，见 `app/page.tsx` 顶部说明。
+  metadataBase: new URL("https://bot.meta1.top"),
   title: LANDING_TITLE,
   description: LANDING_DESCRIPTION,
   alternates: {

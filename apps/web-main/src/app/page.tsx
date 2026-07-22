@@ -30,6 +30,10 @@ const LANDING_DESCRIPTION =
  * 当作 `/` 的重复内容。`x-default` 指回中文版——访客语言未知时的兜底。
  */
 export const metadata: Metadata = {
+  // hreflang 必须是完整限定 URL——Google 明确要求，相对路径会被直接忽略
+  // （canonical 容忍相对路径，hreflang 不容忍）。没有 metadataBase 时
+  // Next 会原样输出相对路径，双语分别收录的目的就落空了。
+  metadataBase: new URL("https://bot.meta1.top"),
   title: LANDING_TITLE,
   description: LANDING_DESCRIPTION,
   alternates: {
