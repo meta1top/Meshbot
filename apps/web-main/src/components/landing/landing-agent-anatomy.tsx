@@ -13,7 +13,7 @@ export function LandingAgentAnatomy() {
   const t = useTranslations("landing.agentAnatomy");
 
   return (
-    <section className="lp-sec lp-glow-br">
+    <section className="lp-sec lp-glow-br" id="features">
       <div className="lp-sec-inner" data-n="02">
         <div className="lp-lbl">{t("eyebrow")}</div>
         <div className="lp-compose">

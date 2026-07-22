@@ -55,8 +55,9 @@ export function LandingFooter() {
             <a href="https://github.com/meta1top/Meshbot">
               {t("aboutLicense")}
             </a>
-            <Link href="/privacy">{t("aboutPrivacy")}</Link>
-            <a href="mailto:hello@meshbot.app">{t("aboutContact")}</a>
+            <a href="https://github.com/meta1top/Meshbot/issues">
+              {t("aboutContact")}
+            </a>
           </div>
         </div>
         <div
