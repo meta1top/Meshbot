@@ -117,7 +117,7 @@ export function DriveShareLinkModal({
         role="dialog"
         aria-modal="true"
         aria-label={t("shareLinkTitle")}
-        className="flex w-full max-w-[480px] flex-col gap-0 rounded-lg border border-border bg-background shadow-xl overflow-hidden"
+        className="flex w-full max-w-[480px] flex-col gap-0 rounded-xl border border-border bg-background shadow-xl overflow-hidden"
       >
         {/* 标题栏 */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3">

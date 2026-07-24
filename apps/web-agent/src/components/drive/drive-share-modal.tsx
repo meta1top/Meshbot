@@ -69,7 +69,7 @@ export function DriveShareModal({
         <div
           role="dialog"
           aria-modal="true"
-          className="flex w-full max-w-[400px] flex-col gap-4 rounded-lg border border-border bg-background p-5 shadow-xl"
+          className="flex w-full max-w-[400px] flex-col gap-4 rounded-xl border border-border bg-background p-5 shadow-xl"
         >
           <div className="flex items-center justify-between">
             <h2 className="text-[15px] font-semibold text-foreground">
@@ -181,7 +181,7 @@ export function DriveShareModal({
         role="dialog"
         aria-modal="true"
         aria-label={t("shareTitle")}
-        className="flex w-full max-w-[440px] flex-col gap-0 rounded-lg border border-border bg-background shadow-xl overflow-hidden"
+        className="flex w-full max-w-[440px] flex-col gap-0 rounded-xl border border-border bg-background shadow-xl overflow-hidden"
       >
         {/* 标题栏 */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3">

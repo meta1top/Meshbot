@@ -177,7 +177,7 @@ function RenameDialog({
         role="dialog"
         aria-modal="true"
         aria-label={t("renameTitle")}
-        className="flex w-full max-w-[360px] flex-col gap-3 rounded-lg border border-border bg-background p-5 shadow-xl"
+        className="flex w-full max-w-[360px] flex-col gap-3 rounded-xl border border-border bg-background p-5 shadow-xl"
         onSubmit={handleSubmit}
       >
         <div className="text-[15px] font-semibold text-foreground">

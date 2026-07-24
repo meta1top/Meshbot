@@ -134,7 +134,7 @@ export function DriveMoveModal({
         role="dialog"
         aria-modal="true"
         aria-label={t("moveTitle")}
-        className="flex w-full max-w-[440px] flex-col gap-0 rounded-lg border border-border bg-background shadow-xl overflow-hidden"
+        className="flex w-full max-w-[440px] flex-col gap-0 rounded-xl border border-border bg-background shadow-xl overflow-hidden"
       >
         {/* 标题栏 */}
         <div className="border-b border-border px-4 py-3">
