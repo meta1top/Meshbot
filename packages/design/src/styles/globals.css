@@ -25,13 +25,13 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 4px;
+  --radius-xl: 6px;
+  --radius-2xl: 6px;
+  --radius-3xl: 6px;
+  --radius-4xl: 6px;
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -46,7 +46,6 @@
 }
 
 :root {
-  --radius: 0.5rem;
   /* 品牌焦橙:全局唯一强调色(收敛原 --secondary #f97316 与 web-agent 局部
      --shell-accent #d24a0d 两个不一致的橙)。--brand 不复用 --accent(那是 shadcn 中性灰)。 */
   --brand: #d24a0d;
@@ -65,7 +64,7 @@
   --shell-accent: var(--brand);
   --shell-accent-hover: var(--brand-hover);
   --surface-0: #faf7f2;
-  --shell-radius: 0.5rem;
+  --shell-radius: 4px;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -207,4 +206,42 @@ html.theme-switching *::after {
   height: 0;
   color: var(--muted-foreground);
   pointer-events: none;
+}
+
+/* ── MeshBot 签名元素（落地页质感下沉，opt-in；spec 2026-07-25-visual-unification）── */
+.mb-eyebrow {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 10px;
+  letter-spacing: 0.19em;
+  text-transform: uppercase;
+  /* 10px 小字：亮色用压深橙保 AA（对齐落地页 --lp-brand-lt） */
+  color: #a83b07;
+}
+.dark .mb-eyebrow {
+  color: var(--brand);
+}
+.mb-dots {
+  background-image: radial-gradient(
+    circle,
+    rgba(210, 74, 13, 0.1) 1px,
+    transparent 1px
+  );
+  background-size: 23px 23px;
+}
+.dark .mb-dots {
+  background-image: radial-gradient(
+    circle,
+    rgba(210, 74, 13, 0.14) 1px,
+    transparent 1px
+  );
+}
+.mb-glow {
+  background: radial-gradient(
+    closest-side,
+    rgba(210, 74, 13, 0.08),
+    transparent
+  );
+}
+.mb-hairline-grid > * + * {
+  border-top: 1px solid var(--border);
 }
