@@ -22,7 +22,7 @@ export function PreLoginShellView({
   className,
 }: PreLoginShellViewProps) {
   return (
-    <div className="relative flex min-h-screen flex-col bg-(--surface-0) text-(--shell-sidebar-fg)">
+    <div className="relative isolate flex min-h-screen flex-col bg-(--surface-0) text-(--shell-sidebar-fg)">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"

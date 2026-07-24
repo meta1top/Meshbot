@@ -216,7 +216,9 @@ function BubbleItem({
         )}
         <div
           className={cn(
-            "min-w-0 whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-sm leading-relaxed",
+            // 圆角档位表收紧后 rounded-2xl=6px，气泡会变成直角矩形；这里是唯一的
+            // 聊天气泡语义元素，显式豁免用更大的圆角保留"泡"的观感（视觉统一 spec 允许豁免）。
+            "min-w-0 whitespace-pre-wrap break-words rounded-[14px] px-3 py-2 text-sm leading-relaxed",
             onLeft ? "bg-muted text-foreground" : "bg-[#16a34a] text-white",
           )}
         >
