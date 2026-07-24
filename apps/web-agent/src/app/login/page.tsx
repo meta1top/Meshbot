@@ -15,7 +15,6 @@ import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { AuthShellLayout } from "@/components/layouts/auth-shell-layout";
 import { profileQueryKey } from "@/lib/profile-client";
-import { ACCENT_BTN } from "@/lib/ui";
 import {
   applyAuthToken,
   completeAuthorize,
@@ -157,7 +156,8 @@ export default function LoginPage() {
 
       {stage === "waiting" ? (
         <>
-          <h1 className="text-[22px] font-extrabold tracking-tight">
+          <p className="mb-eyebrow mb-2">{t("eyebrow")}</p>
+          <h1 className="text-[22px] font-extrabold tracking-[-0.03em]">
             {t("waitingHeadline")}
           </h1>
           <p className="-mt-2 text-[12.5px] text-(--shell-sidebar-fg)/60">
@@ -191,7 +191,8 @@ export default function LoginPage() {
         </>
       ) : (
         <>
-          <h1 className="text-[22px] font-extrabold tracking-tight">
+          <p className="mb-eyebrow mb-2">{t("eyebrow")}</p>
+          <h1 className="text-[22px] font-extrabold tracking-[-0.03em]">
             {t("deviceHeadline")}
           </h1>
           <p className="-mt-2 text-[12.5px] text-(--shell-sidebar-fg)/60">
@@ -226,7 +227,8 @@ export default function LoginPage() {
           )}
           <Button
             type="button"
-            className={`h-12 w-full max-w-[300px] rounded-[14px] text-[13px] ${ACCENT_BTN}`}
+            variant="brand"
+            className="h-12 w-full max-w-[300px] text-[13px]"
             disabled={starting}
             onClick={onBrowserLogin}
           >

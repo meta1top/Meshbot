@@ -9,6 +9,7 @@
     "confirm": "Confirm"
   },
   "login": {
+    "eyebrow": "SIGN IN",
     "title": "Sign in",
     "subtitle": "Welcome",
     "browserLoginButton": "Sign in with browser",
