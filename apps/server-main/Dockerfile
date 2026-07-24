@@ -41,14 +41,28 @@ COPY libs/assets/package.json      ./libs/assets/
 # 3.0.0 没有 z.coerce，page.schema.js 加载即抛 TypeError。
 #
 # 关键在于**污染不发生在这一步**：分阶段实测，deps 阶段的
-# `pnpm install --frozen-lockfile` 在镜像源下装出的是正确的 3.25.76。
-# 出问题的是下面 build 阶段的 `pnpm deploy --prod --legacy`——它会**重新解析**
-# 依赖、不受 lockfile 约束，对着镜像源可能陈旧的 packument 元数据解析，就拿到了
-# lockfile 里根本不存在的版本。web-main 不走 pnpm deploy，所以同次发版它没事。
+# `pnpm install --frozen-lockfile` 在镜像源下装出的也是正确的 3.25.76。
+# 出问题的是下面 build 阶段的 `pnpm deploy --prod --legacy`，它自己在日志里说：
 #
-# 所以「换源但保留 --frozen-lockfile 就安全」是错的直觉：只要构建链路里有任何
-# 一步会重新解析（pnpm deploy / pnpm add / 无 lockfile 的 install），源的差异
-# 就会穿透进产物。
+#   [WARN] A pnpm-lock.yaml file exists. The current configuration prohibits
+#          to read or write a lockfile
+#   [WARN] Shared workspace lockfile detected but configuration forces legacy
+#          deploy implementation.
+#
+# 即 --legacy 让 deploy **完全忽略 lockfile、从零重新解析**（实测官方源
+# resolved 1041 个包、镜像源 resolved 1095 个）。重解析时 zod 无有效约束，
+# 取 dist-tags.latest = 4.4.3；@meshbot/types 的 ^3 又解析出嵌套的 3.0.0。
+# web-main 同次发版没事，因为它不走 pnpm deploy。
+#
+# ⚠️ 更要紧的是：**这条链路本来就没在用 lockfile**。换官方源只是碰巧重解析出
+# 能跑的组合，不是「锁定生效」。哪天某个包发新版，官方源下同样可能解析出不兼容
+# 的组合。真正的修法是让 deploy 受 lockfile 约束（去掉 --legacy 需另行验证，
+# 该参数原是为保留 node_modules/.pnpm 软链结构而加），此处仅记录，未修。
+#
+# 已排除的假设（都实测证伪过，别再走回头路）：
+#   ✗ 「换源使 --frozen-lockfile 失效」—— deps 阶段两种源都装出正确的 3.25.76
+#   ✗ 「镜像源 packument 元数据陈旧」—— 两个源的 zod packument 完全一致：
+#      875 个版本、dist-tags.latest 均为 4.4.3、都含 3.25.76 与 3.0.0
 #
 # 当初换源是为了解决 runner 拉包超时，但真正的病因是 pnpm 默认 60s fetch 超时；
 # 下面的超时/重试/并发设置已经解决了它——官方源实测 34.9s 装完 2290 个包。
