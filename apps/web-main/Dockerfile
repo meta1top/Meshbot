@@ -16,8 +16,10 @@ COPY libs/types/package.json          ./libs/types/
 COPY libs/types-main/package.json     ./libs/types-main/
 COPY libs/types-agent/package.json    ./libs/types-agent/
 # ⚠️ 禁止换第三方镜像源，理由见 apps/server-main/Dockerfile 同段注释
-# （2026-07-23 生产事故：镜像源使 --frozen-lockfile 失效，装出 lockfile
-# 里不存在的 zod 版本导致 server-main 启动崩溃）。
+# （2026-07-23 生产事故：pnpm deploy --legacy 完全忽略 lockfile、从零重解析，
+# 装出了 lockfile 里不存在的 zod 版本，server-main 启动崩溃。本文件当时未受
+# 影响——web-main 不走 pnpm deploy——但同样禁止，避免将来加入重解析步骤时
+# 踩同一个坑）。
 RUN pnpm config set fetch-timeout 300000 && \
     pnpm config set fetch-retries 5 && \
     pnpm config set network-concurrency 8 && \

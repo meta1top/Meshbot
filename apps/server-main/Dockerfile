@@ -35,13 +35,37 @@ COPY libs/types-main/package.json  ./libs/types-main/
 COPY libs/assets/package.json      ./libs/assets/
 
 # ⚠️ 禁止把 registry 换成第三方镜像源（含 registry.npmmirror.com）。
-# 2026-07-23 生产事故：换镜像源后 --frozen-lockfile 失去锁定效力，装出了
-# lockfile 里根本不存在的版本——顶层 zod 4.4.3、@meshbot/types 嵌套 zod 3.0.0
-# （lockfile 锁的是 3.25.76）。3.0.0 没有 z.coerce，server-main 启动即崩、
-# 生产 API 502。对照实验：同一 Dockerfile 换回官方源即得到正确的 3.25.76。
+#
+# 2026-07-23 生产事故：换源后 server-main 启动即崩、生产 API 502。容器里
+# 顶层 zod 4.4.3、@meshbot/types 嵌套 zod 3.0.0，而 lockfile 锁的是 3.25.76；
+# 3.0.0 没有 z.coerce，page.schema.js 加载即抛 TypeError。
+#
+# 关键在于**污染不发生在这一步**：分阶段实测，deps 阶段的
+# `pnpm install --frozen-lockfile` 在镜像源下装出的也是正确的 3.25.76。
+# 出问题的是下面 build 阶段的 `pnpm deploy --prod --legacy`，它自己在日志里说：
+#
+#   [WARN] A pnpm-lock.yaml file exists. The current configuration prohibits
+#          to read or write a lockfile
+#   [WARN] Shared workspace lockfile detected but configuration forces legacy
+#          deploy implementation.
+#
+# 即 --legacy 让 deploy **完全忽略 lockfile、从零重新解析**（实测官方源
+# resolved 1041 个包、镜像源 resolved 1095 个）。重解析时 zod 无有效约束，
+# 取 dist-tags.latest = 4.4.3；@meshbot/types 的 ^3 又解析出嵌套的 3.0.0。
+# web-main 同次发版没事，因为它不走 pnpm deploy。
+#
+# ⚠️ 更要紧的是：**这条链路本来就没在用 lockfile**。换官方源只是碰巧重解析出
+# 能跑的组合，不是「锁定生效」。哪天某个包发新版，官方源下同样可能解析出不兼容
+# 的组合。真正的修法是让 deploy 受 lockfile 约束（去掉 --legacy 需另行验证，
+# 该参数原是为保留 node_modules/.pnpm 软链结构而加），此处仅记录，未修。
+#
+# 已排除的假设（都实测证伪过，别再走回头路）：
+#   ✗ 「换源使 --frozen-lockfile 失效」—— deps 阶段两种源都装出正确的 3.25.76
+#   ✗ 「镜像源 packument 元数据陈旧」—— 两个源的 zod packument 完全一致：
+#      875 个版本、dist-tags.latest 均为 4.4.3、都含 3.25.76 与 3.0.0
 #
 # 当初换源是为了解决 runner 拉包超时，但真正的病因是 pnpm 默认 60s fetch 超时；
-# 下面的超时/重试/并发设置已经解决了它——官方源实测 35.1s 装完 2290 个包。
+# 下面的超时/重试/并发设置已经解决了它——官方源实测 34.9s 装完 2290 个包。
 #
 # 注：不加 BuildKit cache mount 缓存 pnpm store——本仓 nodeLinker 是 hoisted，
 # 直接摊进 node_modules 不走内容寻址 store，实测 store 恒空、reused 恒为 0。
