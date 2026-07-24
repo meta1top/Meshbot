@@ -148,7 +148,8 @@ function OnboardingFlow() {
       <div className="w-full max-w-[560px]">
         <AuthChainBanner />
         <div className="mb-3 text-left">
-          <p className="text-sm font-semibold">{t("modelStepTitle")}</p>
+          <p className="mb-eyebrow mb-2">{t("eyebrow")}</p>
+          <p className="text-sm font-extrabold">{t("modelStepTitle")}</p>
           <p className="text-xs text-muted-foreground">{t("modelStepDesc")}</p>
         </div>
         <ModelFormPanel

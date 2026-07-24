@@ -55,10 +55,8 @@ function LoginForm() {
         <AuthCard>
           <AuthChainBanner />
           <div className="space-y-0 pb-4">
-            <p className="mb-1 text-center text-xs text-muted-foreground">
-              {t("welcomeBack")}
-            </p>
-            <h1 className="text-center text-[28px] leading-[1.15] font-semibold tracking-tight text-foreground">
+            <p className="mb-eyebrow mb-2 text-center">{t("eyebrow")}</p>
+            <h1 className="text-center text-[28px] leading-[1.15] font-extrabold tracking-[-0.03em] text-foreground">
               {t("title")}
             </h1>
             <p className="mt-1 text-center text-[12px] tracking-[0.08em] text-muted-foreground">
@@ -110,7 +108,8 @@ function LoginForm() {
 
               <Button
                 type="submit"
-                className="mt-2 h-11 w-full rounded-xl bg-(--shell-accent) text-white hover:bg-(--shell-accent-hover)"
+                variant="brand"
+                className="mt-2 h-11 w-full"
                 disabled={loginMutation.isPending}
               >
                 {loginMutation.isPending ? t("signingIn") : t("signIn")}

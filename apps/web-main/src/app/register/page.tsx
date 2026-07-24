@@ -137,7 +137,8 @@ function RegisterFlow() {
           {step === "register" && (
             <div>
               <div className="space-y-1 pb-3">
-                <CardTitle className="text-center">
+                <p className="mb-eyebrow mb-2 text-center">{t("eyebrow")}</p>
+                <CardTitle className="text-center font-extrabold tracking-[-0.03em]">
                   {t("createAccount")}
                 </CardTitle>
                 <CardDescription className="text-center">
@@ -234,7 +235,8 @@ function RegisterFlow() {
 
                   <Button
                     type="submit"
-                    className="mt-1 h-11 w-full rounded-xl bg-(--shell-accent) text-white hover:bg-(--shell-accent-hover)"
+                    variant="brand"
+                    className="mt-1 h-11 w-full"
                     disabled={registerMutation.isPending}
                   >
                     {registerMutation.isPending
@@ -259,7 +261,8 @@ function RegisterFlow() {
           {step === "verify" && (
             <div>
               <div className="space-y-1 pb-3">
-                <CardTitle className="text-center">
+                <p className="mb-eyebrow mb-2 text-center">{t("eyebrow")}</p>
+                <CardTitle className="text-center font-extrabold tracking-[-0.03em]">
                   {t("verifyTitle")}
                 </CardTitle>
                 <CardDescription className="text-center">
@@ -295,7 +298,8 @@ function RegisterFlow() {
 
                 <Button
                   type="submit"
-                  className="mt-1 h-11 w-full rounded-xl bg-(--shell-accent) text-white hover:bg-(--shell-accent-hover)"
+                  variant="brand"
+                  className="mt-1 h-11 w-full"
                   disabled={verifyMutation.isPending || code.length !== 6}
                 >
                   {verifyMutation.isPending

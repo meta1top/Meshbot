@@ -392,7 +392,7 @@
     "subtitle": "本地 Agent + 云端协同，随时随地接管你的工作流。"
   },
   "login": {
-    "welcomeBack": "欢迎回到 MeshBot",
+    "eyebrow": "SIGN IN",
     "title": "登录",
     "subtitle": "云协同账号",
     "email": "邮箱",
@@ -405,6 +405,7 @@
     "goRegister": "去注册"
   },
   "register": {
+    "eyebrow": "CREATE ACCOUNT",
     "createAccount": "创建账号",
     "createAccountDescription": "注册云协同账号，创建或加入企业组织",
     "email": "邮箱",
@@ -439,6 +440,7 @@
     "chainBannerDevice": "完成后将继续为「{deviceName}」授权"
   },
   "authorize": {
+    "eyebrow": "AUTHORIZE DEVICE",
     "backToDesktop": "请回到 MeshBot 桌面端重新发起登录。",
     "requestMissing": {
       "title": "链接不完整",
@@ -681,6 +683,7 @@
     "description": ""
   },
   "onboarding": {
+    "eyebrow": "GET STARTED",
     "createFailed": "",
     "joinFailed": "",
     "title": "",
