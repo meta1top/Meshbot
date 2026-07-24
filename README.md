@@ -1,4 +1,4 @@
-# Meshbot
+# MeshBot
 
 [![CI](https://github.com/meta1top/Meshbot/actions/workflows/ci.yml/badge.svg)](https://github.com/meta1top/Meshbot/actions/workflows/ci.yml)
 
@@ -14,15 +14,17 @@
 
 ```
 apps/
-├── cli/        命令行 Agent 工具
-├── desktop/          Electron 桌面壳
-├── server-agent/     NestJS 本地 agent 后端（:3100，SQLite）
-├── server-main/      NestJS 云平台后端（:3200，Postgres）
-├── web-agent/        Next.js 桌面端 UI（:3101）
+├── cli/              命令行 Agent 工具（bin: meshbot）
+├── desktop/          Electron 桌面壳（fork server-agent）
+├── mobile/           React Native (Expo) 移动端脚手架
+├── server-agent/     NestJS 本地 Agent 后端（:7727 自动探测，SQLite）
+├── server-main/      NestJS 云平台后端（:3200，Postgres + Redis）
+├── web-agent/        Next.js 桌面端 UI（dev :3101，生产由 server-agent 同源伺服）
 └── web-main/         Next.js 云平台前端（:3102）
 
 libs/
-├── agent/            LangGraph 编排 + Agent 域业务
+├── agent/            LangGraph 编排 + Agent 域业务（包名 @meshbot/lib-agent）
+├── assets/           内置资产提供模块（技能包等）
 ├── common/           NestJS 基础设施（装饰器 / TxTypeOrmModule / Lock / Cache / DTO）
 ├── main/             server-main 业务模块（注册 / 登录框架基线，业务由 meshbot 自行迭代）
 ├── types/            跨域 Zod schema + TS 类型
@@ -34,20 +36,21 @@ packages/
 └── web-common/       Web 公共逻辑（Next.js shared）
 
 infra/
-└── dev/              本地开发依赖（docker-compose Postgres）
+├── dev/              本地开发依赖（docker-compose Postgres + Redis）
+└── prod/             生产部署（Docker 编排）
 ```
 
 ## 技术栈
 
 - **包管理**：pnpm workspace + Turborepo
-- **后端**：NestJS 11, TypeORM 0.3, LangGraph
-- **前端**：Next.js 15 (App Router), Tailwind CSS v4, shadcn/ui, next-intl
-- **桌面端**：Electron 41
+- **后端**：NestJS 11, TypeORM 0.3, LangChain / LangGraph 1.x
+- **前端**：Next.js 16 (App Router), React 19, Tailwind CSS v4, shadcn/ui, next-intl
+- **桌面端**：Electron 41；**移动端**：React Native (Expo)
 - **类型**：TypeScript 5, Zod 3
-- **数据**：本地 SQLite (better-sqlite3) + LanceDB；云端 Postgres 16
+- **数据**：本地 SQLite (better-sqlite3, TypeORM 迁移自升级)；云端 Postgres 16 + Redis（纯 SQL DDL，DBA 手动执行）
 - **i18n**：nestjs-i18n（后端） + next-intl（前端）
-- **测试**：Jest + ts-jest（含真 Postgres 隔离 schema e2e）
-- **质量门禁**：Biome（lint/format） + 5 个静态围栏（tx / naming / lock-tx / repo / dead-exports）+ husky pre-commit
+- **测试**：Jest + ts-jest（含真 Postgres 隔离 schema e2e）；libs/agent 用 vitest
+- **质量门禁**：Biome（lint/format） + 9 道静态围栏（tx / naming / lock-tx / repo / scope / dead-exports / error-code / pk / dev-script）+ husky pre-commit & pre-push
 
 ## 快速开始
 
@@ -56,15 +59,16 @@ infra/
 pnpm install
 
 # 启动云端依赖（server-main / 测试需要）
-pnpm dev:db:up            # docker-compose Postgres
+pnpm dev:db:up            # docker-compose Postgres + Redis
 
 # 启动单个应用
 pnpm dev:web-agent        # Next.js 桌面端 UI
 pnpm dev:web-main         # Next.js 云平台前端
-pnpm dev:server-agent     # NestJS 本地 agent
-pnpm dev:server-main      # NestJS 云平台后端（先 pnpm migration:run:main）
+pnpm dev:server-agent     # NestJS 本地 agent（SQLite 迁移启动自动执行）
+pnpm dev:server-main      # NestJS 云平台后端（schema 见 apps/server-main/migrations/*.sql，需手动执行）
 pnpm dev:desktop          # Electron（需先启动 web-agent）
-pnpm dev:cli        # 命令行 Agent
+pnpm dev:cli              # 命令行 Agent
+pnpm dev:mobile           # Expo 移动端
 
 # 全部同时启动
 pnpm dev
@@ -82,13 +86,13 @@ pnpm install --frozen-lockfile
 pnpm dev:db:up                       # e2e 依赖 Postgres
 pnpm lint                            # Biome
 pnpm typecheck                       # 全包 TS 类型检查
-pnpm check:strict                    # 6 围栏（CI 用 strict；本地 pnpm check 走 baseline 增量亦可）
+pnpm check:strict                    # 9 道围栏（CI 用 strict；本地 pnpm check 走 baseline 增量亦可）
 pnpm sync:locales -- --check         # i18n key 对齐
 pnpm test                            # Jest（含 server-main e2e）
 pnpm build                           # turbo run build
 ```
 
-husky pre-commit 已自动跑前 5 项（用 baseline 增量，CI 用 strict）。
+husky 钩子已自动兜底：pre-commit 跑 Biome（增量）+ 围栏（baseline 增量）+ i18n 对齐；pre-push 跑 lint + typecheck + 围栏 strict + i18n 对齐。
 
 ## 下载与安装
 
