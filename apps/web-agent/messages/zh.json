@@ -9,6 +9,7 @@
     "confirm": "确认"
   },
   "login": {
+    "eyebrow": "SIGN IN",
     "title": "登录",
     "subtitle": "欢迎使用",
     "deviceHeadline": "开始和你的 Agent 协作",

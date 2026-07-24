@@ -338,7 +338,10 @@ function AuthorizeFlow() {
       <AuthCard>
         <div>
           <div className="space-y-1 pb-3">
-            <CardTitle>{t("confirm.title")}</CardTitle>
+            <p className="mb-eyebrow mb-2">{t("eyebrow")}</p>
+            <CardTitle className="font-extrabold tracking-[-0.03em]">
+              {t("confirm.title")}
+            </CardTitle>
             <CardDescription>{t("confirm.subtitle")}</CardDescription>
           </div>
 
@@ -370,6 +373,7 @@ function AuthorizeFlow() {
           <div className="flex gap-2">
             <Button
               type="button"
+              variant="brand"
               className="flex-1"
               disabled={approveMutation.isPending}
               onClick={() => void handleApprove()}

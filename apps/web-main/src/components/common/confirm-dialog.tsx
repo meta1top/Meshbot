@@ -54,7 +54,7 @@ export function ConfirmDialog({
       <div
         role="alertdialog"
         aria-modal="true"
-        className="flex w-full max-w-[400px] flex-col gap-3 rounded-lg border border-border bg-background p-5 shadow-xl"
+        className="flex w-full max-w-[400px] flex-col gap-3 rounded-xl border border-border bg-background p-5 shadow-xl"
       >
         <div className="text-[15px] font-semibold text-foreground">{title}</div>
         {description && (

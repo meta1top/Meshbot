@@ -256,7 +256,7 @@ function AgentTargetBar({
             className="fixed inset-0 z-40 cursor-default"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute bottom-full left-2 z-50 mb-1 max-h-64 w-64 overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-md">
+          <div className="absolute bottom-full left-2 z-50 mb-1 max-h-64 w-64 overflow-y-auto rounded-xl border border-border bg-popover p-1 shadow-md">
             {agents.map((a) => (
               <button
                 key={a.id}

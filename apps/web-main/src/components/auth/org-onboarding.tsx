@@ -32,6 +32,9 @@ type Mode = "create" | "join";
  */
 export function OrgOnboarding() {
   const t = useTranslations("authorize");
+  // 眉标签走 onboarding 命名空间——本组件只在 /onboarding 页的「组织」步渲染，
+  // 但标题文案沿用既有 authorize.onboarding.* key，故眉标签单独取一次 t。
+  const onboardingT = useTranslations("onboarding");
   const [mode, setMode] = useState<Mode>("create");
 
   const createOrgMutation = useCreateOrg();
@@ -65,7 +68,10 @@ export function OrgOnboarding() {
   return (
     <div>
       <div className="space-y-1 pb-3">
-        <CardTitle>{t("onboarding.title")}</CardTitle>
+        <p className="mb-eyebrow mb-2">{onboardingT("eyebrow")}</p>
+        <CardTitle className="font-extrabold tracking-[-0.03em]">
+          {t("onboarding.title")}
+        </CardTitle>
         <CardDescription>{t("onboarding.description")}</CardDescription>
       </div>
       <div>

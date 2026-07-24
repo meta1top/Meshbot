@@ -185,7 +185,7 @@ export function SubagentCard({
   return (
     <div
       className={cn(
-        "flex w-full flex-col overflow-hidden rounded-[8px] border",
+        "flex w-full flex-col overflow-hidden rounded-lg border",
         status === "running" ? "border-primary/30" : "border-border",
       )}
     >

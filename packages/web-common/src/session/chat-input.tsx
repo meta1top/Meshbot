@@ -247,7 +247,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       : 0;
 
     return (
-      <div className="overflow-hidden rounded-[10px] border border-border bg-card">
+      <div className="overflow-hidden rounded-md border border-border bg-card">
         {/* 编辑区（tiptap；StarterKit 输入规则让 markdown 边打边可视化） */}
         <div className="px-3 pt-2.5 pb-1">
           <div className="max-h-[200px] w-full overflow-y-auto py-1.5">

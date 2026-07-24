@@ -316,7 +316,7 @@
     "subtitle": "Local agent + cloud collaboration — pick up your workflow anywhere."
   },
   "login": {
-    "welcomeBack": "Welcome back to MeshBot",
+    "eyebrow": "SIGN IN",
     "title": "Sign in",
     "subtitle": "Cloud account",
     "email": "Email",
@@ -329,6 +329,7 @@
     "goRegister": "Sign up"
   },
   "register": {
+    "eyebrow": "CREATE ACCOUNT",
     "createAccount": "Create account",
     "createAccountDescription": "Register a cloud account, then create or join an organization",
     "email": "Email",
@@ -363,6 +364,7 @@
     "chainBannerDevice": "We'll continue authorizing \"{deviceName}\" once this is done"
   },
   "authorize": {
+    "eyebrow": "AUTHORIZE DEVICE",
     "backToDesktop": "Please go back to the MeshBot desktop app and start the login again.",
     "requestMissing": {
       "title": "Incomplete link",
@@ -605,6 +607,7 @@
     "description": ""
   },
   "onboarding": {
+    "eyebrow": "GET STARTED",
     "createFailed": "",
     "joinFailed": "",
     "title": "",
