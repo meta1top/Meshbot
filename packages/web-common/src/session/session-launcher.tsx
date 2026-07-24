@@ -78,7 +78,7 @@ export function SessionLauncher({
         </div>
 
         {/* 场景分段（视觉占位） */}
-        <div className="inline-flex gap-1 rounded-xl bg-(--shell-sidebar) p-1">
+        <div className="inline-flex gap-1 rounded-md bg-(--shell-sidebar) p-1">
           {scenes.map((s) => (
             <button
               key={s.key}
@@ -86,8 +86,8 @@ export function SessionLauncher({
               onClick={() => setScene(s.key)}
               className={
                 scene === s.key
-                  ? "flex items-center gap-1.5 rounded-lg bg-(--shell-chrome) px-4 py-1.5 text-[13px] font-semibold text-white"
-                  : "flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-[13px] font-semibold text-(--shell-sidebar-fg)/60 hover:text-(--shell-sidebar-fg)"
+                  ? "flex items-center gap-1.5 rounded-sm bg-(--shell-chrome) px-4 py-1.5 text-[13px] font-semibold text-white"
+                  : "flex items-center gap-1.5 rounded-sm px-4 py-1.5 text-[13px] font-semibold text-(--shell-sidebar-fg)/60 hover:text-(--shell-sidebar-fg)"
               }
             >
               <s.icon className="h-3.5 w-3.5" />
@@ -137,7 +137,7 @@ function SuggestionChipsView({
         {[0, 1, 2].map((i) => (
           <span
             key={i}
-            className="h-8 w-28 animate-pulse rounded-lg bg-muted"
+            className="h-8 w-28 animate-pulse rounded-md bg-muted"
           />
         ))}
       </div>
@@ -151,7 +151,7 @@ function SuggestionChipsView({
           key={s}
           type="button"
           onClick={() => onPick(s)}
-          className="rounded-lg border border-border bg-card px-3.5 py-2 text-[13px] font-medium text-foreground/85 transition-colors hover:border-(--shell-accent) hover:text-(--shell-accent)"
+          className="rounded-md border border-border bg-card px-3.5 py-2 text-[13px] font-medium text-foreground/85 transition-colors hover:border-(--shell-accent) hover:text-(--shell-accent)"
         >
           {s}
         </button>
