@@ -147,7 +147,7 @@ export function ToolCallBlock({
   ) {
     const todos = ((tool.args ?? {}) as { todos?: TodoItem[] }).todos ?? [];
     return (
-      <div className="flex w-full flex-col gap-1.5 rounded-[8px] border border-border bg-muted/30 px-3 py-2">
+      <div className="flex w-full flex-col gap-1.5 rounded-lg border border-border bg-muted/30 px-3 py-2">
         <div className="text-xs font-medium text-muted-foreground">
           待办清单
         </div>
@@ -187,7 +187,7 @@ export function ToolCallBlock({
         ? "bg-destructive"
         : "bg-muted-foreground/40";
   return (
-    <div className="flex w-full flex-col rounded-[8px] border border-border overflow-hidden">
+    <div className="flex w-full flex-col rounded-lg border border-border overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}

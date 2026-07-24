@@ -25,9 +25,14 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+  /* 圆角三档（对齐落地页 landing.css 实测：全站 border-radius 仅 16 处，
+     只有按钮/标签用 2px、悬浮/带投影元素用 6px，扁平带边框大面板一律 0px 直角）：
+     - 控件档（sm/md，2px）：按钮、输入框、小标签
+     - 扁平容器档（lg，0px）：列表行、卡片、菜单面板等无投影的直角容器——对齐落地页面板规则
+     - 悬浮档（xl/2xl/3xl/4xl，6px）：Dialog/Popover/DropdownMenu/Select/Sheet 等带投影的 portal 浮层 + 登录卡 */
   --radius-sm: 2px;
   --radius-md: 2px;
-  --radius-lg: 4px;
+  --radius-lg: 0px;
   --radius-xl: 6px;
   --radius-2xl: 6px;
   --radius-3xl: 6px;
@@ -64,7 +69,9 @@
   --shell-accent: var(--brand);
   --shell-accent-hover: var(--brand-hover);
   --surface-0: #faf7f2;
-  --shell-radius: 4px;
+  /* 壳结构件（rail 图标按钮、侧栏行、settings 分栏面板角）全部扁平无投影，
+     归零对齐落地页面板规则；消费者审计见 spec 与本任务报告。 */
+  --shell-radius: 0px;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);

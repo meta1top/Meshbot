@@ -91,7 +91,7 @@ export function ArtifactFileCard({
   if (failed) {
     const detail = (tool.result ?? "").split("\n")[0].slice(0, 120);
     return (
-      <div className="flex w-full items-center gap-3 rounded-[8px] border border-border bg-muted/30 px-3 py-2.5">
+      <div className="flex w-full items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2.5">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
           <FileWarning className="h-4.5 w-4.5" />
         </span>
@@ -122,7 +122,7 @@ export function ArtifactFileCard({
       type="button"
       onClick={open}
       className={cn(
-        "flex w-full items-center gap-3 rounded-[8px] border border-border bg-muted/30 px-3 py-2.5 text-left transition-colors hover:bg-muted/50",
+        "flex w-full items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-left transition-colors hover:bg-muted/50",
       )}
     >
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-(--shell-accent)/12 text-(--shell-accent)">

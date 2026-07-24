@@ -45,7 +45,7 @@ export function DriveShareCard({ tool, onConfirm }: DriveShareCardProps) {
 
   if (!pending) {
     return (
-      <div className="flex w-full items-center gap-2 rounded-[8px] border border-border bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground">
+      <div className="flex w-full items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground">
         <Check className="h-3 w-3" />
         {terminalLabel(result)}
         {/* args 缺失时**整段省略**，不能靠 `shareWith`/`permission` 的默认值兜底：
@@ -63,7 +63,7 @@ export function DriveShareCard({ tool, onConfirm }: DriveShareCardProps) {
   }
 
   return (
-    <div className="flex w-full flex-col gap-2 rounded-[8px] border border-border bg-muted/30 px-3 py-2">
+    <div className="flex w-full flex-col gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2">
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <Share2 className="h-3 w-3 shrink-0" />
         <span>
