@@ -42,7 +42,7 @@
 
 新增到 design 包，前缀 `mb-*`，**opt-in 使用**，不影响存量：
 
-- `mb-eyebrow`——等宽 10px 大写橙色小标签（落地页眉标签同款：`letter-spacing: .19em`，亮色 `#c04409` / 暗色 `#d24a0d`）
+- `mb-eyebrow`——等宽 10px 大写橙色小标签（落地页眉标签同款：`letter-spacing: .19em`，亮色 `#a83b07`——10px 小字 `#c04409` 差一点不到 AA 4.5:1，对齐落地页 `--lp-brand-lt` 的处理 / 暗色 `var(--brand)`）
 - `mb-dots`——点阵纹理背景（低密度页面专用）
 - `mb-glow`——品牌橙径向柔光
 - `mb-hairline-grid`——1px 边框分栏容器
