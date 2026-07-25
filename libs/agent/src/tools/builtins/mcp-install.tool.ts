@@ -40,14 +40,19 @@ export class McpInstallTool implements MeshbotTool<Args, string> {
     private readonly port?: McpConfirmPort,
   ) {}
 
-  /** 查重 → 请求用户确认 → 确认后写入。 */
+  /** 查重 → 请求用户确认 → 确认后写入。返回 im_send 同范式 JSON（前端确认卡按 status 渲染终态）。 */
   async execute(args: Args, ctx: ToolContext): Promise<string> {
+    const result = (status: string, message: string) =>
+      JSON.stringify({ status, name: args.name, message });
     const existingServers = this.mcp.loadConfig()?.mcpServers ?? {};
     if (existingServers[args.name]) {
-      return `MCP 服务器 "${args.name}" 已存在，安装失败（如需变更请先 mcp_uninstall 或人工编辑）。`;
+      return result(
+        "error",
+        `MCP 服务器 "${args.name}" 已存在，安装失败（如需变更请先 mcp_uninstall 或人工编辑）。`,
+      );
     }
     if (!this.port) {
-      return "当前环境不支持确认，未安装。";
+      return result("error", "当前环境不支持确认，未安装。");
     }
 
     const outcome = await this.port.confirmInstall(
@@ -60,13 +65,19 @@ export class McpInstallTool implements MeshbotTool<Args, string> {
       ctx.signal,
     );
     if (outcome === "cancelled") {
-      return `用户拒绝安装 MCP 服务器 "${args.name}"，未安装。`;
+      return result(
+        "cancelled",
+        `用户拒绝安装 MCP 服务器 "${args.name}"，未安装。`,
+      );
     }
     if (outcome === "timeout") {
-      return `确认超时，未安装 MCP 服务器 "${args.name}"。`;
+      return result("timeout", `确认超时，未安装 MCP 服务器 "${args.name}"。`);
     }
     if (outcome === "interrupted") {
-      return `确认被中断，未安装 MCP 服务器 "${args.name}"。`;
+      return result(
+        "interrupted",
+        `确认被中断，未安装 MCP 服务器 "${args.name}"。`,
+      );
     }
 
     try {
@@ -82,10 +93,16 @@ export class McpInstallTool implements MeshbotTool<Args, string> {
       });
     } catch (err) {
       if (err instanceof McpInstallDuplicate) {
-        return `MCP 服务器 "${args.name}" 已存在，安装失败（如需变更请先 mcp_uninstall 或人工编辑）。`;
+        return result(
+          "error",
+          `MCP 服务器 "${args.name}" 已存在，安装失败（如需变更请先 mcp_uninstall 或人工编辑）。`,
+        );
       }
       throw err;
     }
-    return `已安装 MCP 服务器 "${args.name}"。下一轮对话生效——请告知用户。`;
+    return result(
+      "installed",
+      `已安装 MCP 服务器 "${args.name}"。下一轮对话生效——请告知用户。`,
+    );
   }
 }
