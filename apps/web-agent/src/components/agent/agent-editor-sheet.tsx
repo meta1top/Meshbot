@@ -157,10 +157,23 @@ export function AgentEditorSheet({
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"basic" | "mcp">("basic");
   const [discardOpen, setDiscardOpen] = useState(false);
+  // 新建态改「步骤条」（验收问题 3）：null = 非向导（真实编辑，或已通过
+  // 「从现有 Agent 复制」直接拿到成品 Agent）；1 = 步骤一（基本信息，尚无
+  // id）；2 = 步骤二（agent 已创建，此时挂 MCP）。步骤二没有表单可脏，
+  // requestClose 对它无意义（见下）。
+  const [wizardStep, setWizardStep] = useState<1 | 2 | null>(() =>
+    agentId === null ? 1 : null,
+  );
   const formApiRef = useRef<UseFormReturn<AgentFormValues> | null>(null);
 
   /** 关闭意图入口：表单脏则先弹放弃确认，否则直接关。X 按钮 / 遮罩 / ESC 都走这里。 */
   const requestClose = () => {
+    // 步骤二期间 agent 已真实创建、基本信息表单已保存，MCP 编辑器有自己的
+    // 独立保存语义——这里的脏检测只针对基本信息表单，对步骤二无意义。
+    if (wizardStep === 2) {
+      onOpenChange(false);
+      return;
+    }
     if (formApiRef.current?.formState.isDirty) setDiscardOpen(true);
     else onOpenChange(false);
   };
@@ -176,6 +189,8 @@ export function AgentEditorSheet({
       setDeleteConfirmOpen(false);
       setTab("basic");
       setDiscardOpen(false);
+      // 以 prop 为准：agentId 为 null 才是新建态，进步骤条步骤一。
+      setWizardStep(agentId === null ? 1 : null);
     }
   }, [open]);
 
@@ -223,15 +238,22 @@ export function AgentEditorSheet({
       if (mode === "edit" && localAgentId) {
         await updateAgent(localAgentId, values);
         await invalidateAgents();
+        onOpenChange(false);
       } else {
         // 创建接口（AgentCreateSchema）不认识 remoteEnabled——新建 Agent
         // 尚无 id，「允许远程」要等有 id 之后才有意义，这里剔除掉，只走
         // 编辑态提交。
         const { remoteEnabled: _remoteEnabled, ...createValues } = values;
-        await createAgent(createValues);
+        const created = await createAgent(createValues);
+        // 列表刷新（侧栏等 onCreated/invalidate 消费方）在创建成功当下立即
+        // 触发，不随「进入步骤二 / 用户点完成」推迟，也不重复触发。
         await invalidateAgents();
+        // 步骤条：创建成功不关闭 sheet，带着新 agentId 进入步骤二（MCP，
+        // 此时端点 /api/agents/:id/mcp 才有 id 可用）。
+        setLocalAgentId(created.id);
+        setTab("mcp");
+        setWizardStep(2);
       }
-      onOpenChange(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("saveFailed"));
     } finally {
@@ -246,8 +268,11 @@ export function AgentEditorSheet({
     try {
       const created = await duplicateAgent(sourceId);
       await invalidateAgents();
-      // 复制完成：脱离新建态，把这个已打开的抽屉直接切到编辑新 agent。
+      // 复制完成：脱离新建态/步骤条，把这个已打开的抽屉直接切到编辑新
+      // agent——复制出来的已是成品配置，不需要再走「基本信息 → MCP」的
+      // 步骤流程。
       setLocalAgentId(created.id);
+      setWizardStep(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("duplicateFailed"));
     } finally {
@@ -282,6 +307,67 @@ export function AgentEditorSheet({
     }
   };
 
+  // 底部固定动作条（UnifiedSheet `footer` 槽，不随正文滚动）：
+  // - 步骤二（wizardStep === 2）：agent 已创建，MCP 可留空，唯一动作是「完成」。
+  // - 其余（步骤一 / 真实编辑）：表单挂在正文滚动区，这里手动触发
+  //   formApiRef.current.handleSubmit（footer 已不在 <form> 内部，不能再用
+  //   type="submit"）。
+  const footerContent =
+    wizardStep === 2 ? (
+      <Button type="button" onClick={() => onOpenChange(false)}>
+        {t("wizardFinish")}
+      </Button>
+    ) : formReady ? (
+      <>
+        {mode === "edit" && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              {/* disabled 按钮包一层 span：Radix Tooltip 需要可聚焦/可 hover
+                  的触发元素，disabled button 不派发 mouseenter。 */}
+              <span className={cn(!canDelete && "cursor-not-allowed")}>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={!canDelete}
+                  className={cn(!canDelete && "pointer-events-none")}
+                  onClick={() => setDeleteConfirmOpen(true)}
+                >
+                  {t("delete")}
+                </Button>
+              </span>
+            </TooltipTrigger>
+            {!canDelete && (
+              <TooltipContent side="top">
+                {t("deleteDisabledHint")}
+              </TooltipContent>
+            )}
+          </Tooltip>
+        )}
+        <div className="flex-1" />
+        <Button
+          type="button"
+          variant="outline"
+          onClick={requestClose}
+          disabled={submitting}
+        >
+          {t("cancel")}
+        </Button>
+        <Button
+          type="button"
+          variant={wizardStep === 1 ? "brand" : "default"}
+          disabled={submitting}
+          onClick={() => formApiRef.current?.handleSubmit(handleSubmit)()}
+        >
+          {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          {submitting
+            ? t("saving")
+            : wizardStep === 1
+              ? t("wizardContinue")
+              : t("save")}
+        </Button>
+      </>
+    ) : null;
+
   return (
     <>
       <UnifiedSheet
@@ -290,7 +376,7 @@ export function AgentEditorSheet({
         modal
         dismissible={false}
         onDismissAttempt={requestClose}
-        title={mode === "edit" ? t("editTitle") : t("createTitle")}
+        title={wizardStep !== null ? t("createTitle") : t("editTitle")}
         headerActions={
           <button
             type="button"
@@ -302,20 +388,27 @@ export function AgentEditorSheet({
           </button>
         }
         headerTabs={
-          <SheetTabBar
-            items={[
-              { key: "basic", label: t("tabBasic") },
-              {
-                key: "mcp",
-                label: t("tabMcp"),
-                disabled: mode === "create",
-                disabledHint: t("tabMcpDisabledHint"),
-              },
-            ]}
-            active={tab}
-            onChange={(k) => setTab(k as "basic" | "mcp")}
-          />
+          wizardStep !== null ? (
+            <SheetTabBar
+              variant="steps"
+              items={[
+                { key: "basic", label: t("wizardStepBasic") },
+                { key: "mcp", label: t("wizardStepMcp") },
+              ]}
+              active={tab}
+            />
+          ) : (
+            <SheetTabBar
+              items={[
+                { key: "basic", label: t("tabBasic") },
+                { key: "mcp", label: t("tabMcp") },
+              ]}
+              active={tab}
+              onChange={(k) => setTab(k as "basic" | "mcp")}
+            />
+          )
         }
+        footer={footerContent}
         minWidth={448}
         defaultWidth="28rem"
         // app-no-drag：把面板 z 抬出顶部 DragRegion，头部 X 按钮才可点（Electron）
@@ -432,56 +525,14 @@ export function AgentEditorSheet({
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
-
-              <div className="mt-auto flex items-center justify-end gap-2">
-                {mode === "edit" && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      {/* disabled 按钮包一层 span：Radix Tooltip 需要可聚焦/可 hover
-                          的触发元素，disabled button 不派发 mouseenter。 */}
-                      <span className={cn(!canDelete && "cursor-not-allowed")}>
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          disabled={!canDelete}
-                          className={cn(!canDelete && "pointer-events-none")}
-                          onClick={() => setDeleteConfirmOpen(true)}
-                        >
-                          {t("delete")}
-                        </Button>
-                      </span>
-                    </TooltipTrigger>
-                    {!canDelete && (
-                      <TooltipContent side="top">
-                        {t("deleteDisabledHint")}
-                      </TooltipContent>
-                    )}
-                  </Tooltip>
-                )}
-                <div className="flex-1" />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={requestClose}
-                  disabled={submitting}
-                >
-                  {t("cancel")}
-                </Button>
-                <Button type="submit" disabled={submitting}>
-                  {submitting && (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  )}
-                  {submitting ? t("saving") : t("save")}
-                </Button>
-              </div>
             </Form>
           )}
         </div>
 
         {/* MCP 配置：独立于上面的 Agent 身份表单（各自保存），只在编辑既有 Agent
-            时展示——新建态尚无 agentId，MCP 端点挂在 /api/agents/:id/mcp 下，
-            没有 id 无处可读写；同时要求 formReady，避免和加载态同屏出现半截 UI。
-            tab 条已按 mode === "create" 禁用 mcp 项，这里的守卫是双保险。 */}
+            时展示——步骤一（尚无 agentId）不会渲染这块，MCP 端点挂在
+            /api/agents/:id/mcp 下，没有 id 无处可读写；同时要求 formReady，
+            避免和加载态同屏出现半截 UI。 */}
         <div
           className={cn(
             "min-h-0 flex-1 overflow-y-auto p-4",
