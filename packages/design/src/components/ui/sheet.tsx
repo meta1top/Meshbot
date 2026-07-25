@@ -10,8 +10,9 @@ import { cn } from "../../lib/utils";
 
 /**
  * 侧滑抽屉（基于 Radix Dialog）——本项目当前没有专门的 Drawer 原语，
- * Agent 编辑器等「侧边编辑面板」场景复用这套（区别于全高浮层 `ResizableSheet`：
- * 后者是随手问助手 / 产物预览的定制拖拽面板，这里是标准 modal 抽屉，不可拖宽）。
+ * Agent 编辑器等「侧边编辑面板」场景复用这套（区别于全高浮层 `UnifiedSheet`：
+ * 后者是随手问助手 / 产物预览 / 远程会话的定制拖拽面板，这里是标准 modal 抽屉，
+ * 不可拖宽）。
  */
 function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />;

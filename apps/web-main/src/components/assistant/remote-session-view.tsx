@@ -14,7 +14,7 @@ import {
   SessionConversationView,
   useSessionStream,
 } from "@meshbot/web-common/session";
-import { PageShellView, ResizableSheet } from "@meshbot/web-common/shell";
+import { PageShellView, UnifiedSheet } from "@meshbot/web-common/shell";
 import { useQueryClient } from "@tanstack/react-query";
 import { Sparkles } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -308,16 +308,6 @@ function RemoteSessionViewReady({
     setUploadNotice(null);
   }, [preview]);
 
-  // ESC 关产物面板（对齐旧弹窗 `artifact-preview-panel.tsx` 的既有行为）。
-  useEffect(() => {
-    if (!preview) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPreview(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [preview]);
-
   const timelineMessages = useMemo(
     () => stream.messages.filter((m) => !m.pending),
     [stream.messages],
@@ -489,12 +479,19 @@ function RemoteSessionViewReady({
 
   /**
    * 产物右侧滑入面板（对齐 web-agent `(shell)/layout.tsx` 的 `ArtifactSplitPane`
-   * aside 挂法，删掉的旧版是居中弹窗 `artifact-preview-panel.tsx`）：条件挂载
-   * （非常驻 + `absolute` 覆盖，不参与 flex 布局），落在 `(shell)/layout.tsx`
-   * 已有的 `relative overflow-hidden` 容器内（`AssistantLayout`/`AssistantSidebar`
-   * 均是透传 Fragment/Context.Provider，不产生额外 DOM 节点，本组件的输出直接是
-   * 该容器的 DOM 子节点）——web-main 无 Electron，标题栏自绘（未迁 UnifiedSheet，
-   * 见下方 JSX 注释），不需要 web-agent 那套 Electron 拖拽区类名注入。
+   * 挂法，删掉的旧版是居中弹窗 `artifact-preview-panel.tsx`）：落在
+   * `(shell)/layout.tsx` 已有的 `relative overflow-hidden` 容器内
+   * （`AssistantLayout`/`AssistantSidebar` 均是透传 Fragment/Context.Provider，
+   * 不产生额外 DOM 节点，本组件的输出直接是该容器的 DOM 子节点）——web-main 无
+   * Electron，不需要 web-agent 那套 Electron 拖拽区类名注入。
+   *
+   * 壳复用 web-common 的 `UnifiedSheet`（Task 5 起与 web-agent 随手问/产物预览
+   * 同一份底座）：`open`/`onOpenChange` 由 `preview` state 驱动（非 modal + 可
+   * 拖拽调宽，均是默认值），标题/按钮拆进 `title`/`headerActions` 两个 slot——
+   * 分别复用 web-common 拆出的 `getArtifactSplitPaneTitle` / `ArtifactSplitPaneActions`
+   * （二者的 `target` 均接受 `null`，`preview` 为 null 时自行退化，不需要额外判空）。
+   * ESC 关闭已由 `UnifiedSheet` 底座统一管理（含栈顶判定），不再自装 keydown
+   * 监听。
    *
    * `transport` 直接复用本组件已持有的同一 `SessionTransport` 实例（Task 3 报告
    * 「数据注入形态」：其 `readArtifact`/`uploadArtifactToDrive` 与共享
@@ -507,39 +504,31 @@ function RemoteSessionViewReady({
    * `onUploadedToDrive`：web-main 无网盘 presigned URL REST 客户端，不像
    * web-agent 那样自动切换预览源，退化为面板内提示成功（`uploadNotice`
    * state，沿用旧弹窗 `uploadSuccess` 文案）——Task 3 报告已记录两种取舍均可。
-   *
-   * 壳与拖拽调宽复用 web-common 的 `ResizableSheet`（与 web-agent 随手问/产物预览
-   * 同一份实现）：默认 50% 窗宽、下限 480px，拖过之后按 px 记住。
    */
-  const previewAside = preview && (
-    <ResizableSheet
+  const previewAside = (
+    <UnifiedSheet
+      open={preview != null}
+      onOpenChange={(open) => {
+        if (!open) setPreview(null);
+      }}
       width={previewWidth}
       onWidthChange={setPreviewWidth}
       defaultWidth="50vw"
       className="animate-in fade-in slide-in-from-right-4"
+      title={getArtifactSplitPaneTitle(preview, tArtifact("untitled"))}
+      headerActions={
+        <ArtifactSplitPaneActions
+          target={preview}
+          onClose={() => setPreview(null)}
+          labels={{
+            download: tArtifact("download"),
+            close: tArtifact("close"),
+            untitled: tArtifact("untitled"),
+          }}
+          transport={transport}
+        />
+      }
     >
-      {/* 标题栏：web-main 未迁 UnifiedSheet 底座（本期只迁 web-agent），自绘
-          h-13 标题栏，标题/按钮内容复用 web-common 拆出的两个 slot
-          （getArtifactSplitPaneTitle / ArtifactSplitPaneActions）。 */}
-      <div className="flex h-13 shrink-0 items-center border-b border-border">
-        <div className="flex h-full min-w-0 flex-1 items-center px-3">
-          <span className="min-w-0 truncate text-[12px] font-medium text-foreground">
-            {getArtifactSplitPaneTitle(preview, tArtifact("untitled"))}
-          </span>
-        </div>
-        <div className="flex items-center gap-2 pr-3">
-          <ArtifactSplitPaneActions
-            target={preview}
-            onClose={() => setPreview(null)}
-            labels={{
-              download: tArtifact("download"),
-              close: tArtifact("close"),
-              untitled: tArtifact("untitled"),
-            }}
-            transport={transport}
-          />
-        </div>
-      </div>
       {uploadNotice && (
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-emerald-600/10 px-3 py-2 text-[12px] text-emerald-700 dark:text-emerald-400">
           <span className="min-w-0 flex-1 truncate">
@@ -579,7 +568,7 @@ function RemoteSessionViewReady({
           }}
         />
       </div>
-    </ResizableSheet>
+    </UnifiedSheet>
   );
 
   if (!sessionId) {

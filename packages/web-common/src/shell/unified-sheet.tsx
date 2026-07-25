@@ -42,9 +42,9 @@ export interface UnifiedSheetProps {
 }
 
 /**
- * 统一右侧 Sheet 底座：全参数化的右侧全高浮层面板，取代四处各自为政的
- * 右侧面板实现（产物预览 / 随手问助手 dock / web-main 远程会话等场景后续
- * 逐个迁入）。在 {@link ResizableSheet} 的拖宽能力上加了 modal 遮罩、
+ * 统一右侧 Sheet 底座：全参数化的右侧全高浮层面板，取代原先四处各自为政的
+ * 右侧面板实现（产物预览 / 随手问助手 dock / web-main 远程会话，已全部迁完，
+ * 旧的 `ResizableSheet` 已删除）。在纯拖宽能力上加了 modal 遮罩、
  * dismissible 拦截、标题栏 + 动作槽 + tab 条编排、条件挂载。
  *
  * 三条不可动的规则，都是踩过的坑：
