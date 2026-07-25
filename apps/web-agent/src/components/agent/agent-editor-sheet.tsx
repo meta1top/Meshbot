@@ -35,6 +35,7 @@ import {
 } from "@meshbot/types-agent";
 import { SheetTabBar, UnifiedSheet } from "@meshbot/web-common/shell";
 import { useQueryClient } from "@tanstack/react-query";
+import axios from "axios";
 import { useAtomValue } from "jotai";
 import { Loader2, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -51,6 +52,8 @@ import {
   createAgent,
   deleteAgent,
   duplicateAgent,
+  getAgentMcp,
+  putAgentMcp,
   updateAgent,
   useAgents,
 } from "@/rest/agents";
@@ -62,6 +65,60 @@ const ACCOUNT_DEFAULT_VALUE = "__account_default__";
 
 /** 基本信息 <form> 的 id：固定 footer 里的提交按钮靠 `form` 属性关联它。 */
 const AGENT_EDITOR_FORM_ID = "agent-editor-form";
+
+/** mcp.json 默认占位文本，与后端 GET 空态返回值保持一致（见
+ *  `apps/server-agent/src/controllers/agent.controller.ts` 的 `getMcp`）。
+ *  新建向导 / 尚未加载完成的编辑态都以它为初值。 */
+const DEFAULT_MCP_RAW = '{\n  "mcpServers": {}\n}\n';
+
+/**
+ * 校验 mcp 文本是否为合法 JSON；空白视为合法（等价「未填写」）。
+ * 合法返回 null，非法返回 JSON.parse 抛出的原始 message，调用方套 i18n 文案。
+ */
+function mcpJsonSyntaxError(raw: string): string | null {
+  if (raw.trim() === "") return null;
+  try {
+    JSON.parse(raw);
+    return null;
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
+}
+
+/**
+ * mcp 文本在语义上是否等价于「空/默认配置」（空白或 `{"mcpServers": {}}`）——
+ * 新建向导「创建」时用来判断要不要额外调用一次 MCP 保存接口（agent 刚创建，
+ * 本就没有 mcp.json，等价空值没必要发这次请求）。调用前应已过
+ * {@link mcpJsonSyntaxError} 校验（非法 JSON 在这里按「非默认」处理，不阻断）。
+ */
+function isMcpDefaultValue(raw: string): boolean {
+  const trimmed = raw.trim();
+  if (trimmed === "") return true;
+  try {
+    return (
+      JSON.stringify(JSON.parse(trimmed)) === JSON.stringify({ mcpServers: {} })
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 从错误对象里提取展示文案：优先取后端 400 响应体的 `message`（如 MCP JSON
+ * 结构校验失败的具体原因），其次取 Error.message，都没有则用调用方给的兜底。
+ */
+function extractErrorMessage(err: unknown, fallback: string): string {
+  if (
+    axios.isAxiosError(err) &&
+    err.response?.data &&
+    typeof err.response.data === "object" &&
+    "message" in err.response.data &&
+    typeof (err.response.data as { message?: unknown }).message === "string"
+  ) {
+    return (err.response.data as { message: string }).message;
+  }
+  return err instanceof Error ? err.message : fallback;
+}
 
 const DefaultModelField = forwardRef<
   HTMLButtonElement,
@@ -160,24 +217,33 @@ export function AgentEditorSheet({
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"basic" | "mcp">("basic");
   const [discardOpen, setDiscardOpen] = useState(false);
-  // 新建态改「步骤条」（验收问题 3）：null = 非向导（真实编辑，或已通过
-  // 「从现有 Agent 复制」直接拿到成品 Agent）；1 = 步骤一（基本信息，尚无
-  // id）；2 = 步骤二（agent 已创建，此时挂 MCP）。步骤二没有表单可脏，
-  // requestClose 对它无意义（见下）。
+  // 新建态改「步骤条」：null = 非向导（真实编辑，或已通过「从现有 Agent
+  // 复制」直接拿到成品 Agent）；1 = 步骤一（基本信息，尚无 id，只做本地校验，
+  // 不发请求）；2 = 步骤二（MCP，留空可跳过；点「创建」才真正创建 agent，
+  // 若 MCP 非默认值再一并提交）。
   const [wizardStep, setWizardStep] = useState<1 | 2 | null>(() =>
     agentId === null ? 1 : null,
   );
   const formApiRef = useRef<UseFormReturn<AgentFormValues> | null>(null);
 
-  /** 关闭意图入口：表单脏则先弹放弃确认，否则直接关。X 按钮 / 遮罩 / ESC 都走这里。 */
+  // 受控 MCP 编辑器状态：`mcpInitial` 是加载/进入时的基线（编辑态=后端已存的
+  // mcp.json，向导态=默认占位文本），`mcpValue` 是当前编辑值——两者比较用于
+  // 脏判定与「编辑态保存时是否需要一并提交 MCP」。
+  const [mcpValue, setMcpValue] = useState(DEFAULT_MCP_RAW);
+  const [mcpInitial, setMcpInitial] = useState(DEFAULT_MCP_RAW);
+  const [mcpError, setMcpError] = useState<string | null>(null);
+  const [mcpLoading, setMcpLoading] = useState(false);
+  const [mcpLoadFailed, setMcpLoadFailed] = useState(false);
+
+  /** 关闭意图入口：表单脏或 MCP 文本相对基线有改动，先弹放弃确认，否则直接
+   *  关。X 按钮 / ESC 都走这里；遮罩点击不走（见 onDismissAttempt）。
+   *  向导步骤二关闭 = 放弃整个新建（agent 尚未创建），同样要经过这个脏判定
+   *  ——能走到步骤二说明步骤一至少填过必填项，表单必然脏，不会被误判成
+   *  「无改动直接关」。 */
   const requestClose = () => {
-    // 步骤二期间 agent 已真实创建、基本信息表单已保存，MCP 编辑器有自己的
-    // 独立保存语义——这里的脏检测只针对基本信息表单，对步骤二无意义。
-    if (wizardStep === 2) {
-      onOpenChange(false);
-      return;
-    }
-    if (formApiRef.current?.formState.isDirty) setDiscardOpen(true);
+    const formDirty = formApiRef.current?.formState.isDirty ?? false;
+    const mcpDirty = mcpValue !== mcpInitial;
+    if (formDirty || mcpDirty) setDiscardOpen(true);
     else onOpenChange(false);
   };
 
@@ -194,8 +260,41 @@ export function AgentEditorSheet({
       setDiscardOpen(false);
       // 以 prop 为准：agentId 为 null 才是新建态，进步骤条步骤一。
       setWizardStep(agentId === null ? 1 : null);
+      setMcpValue(DEFAULT_MCP_RAW);
+      setMcpInitial(DEFAULT_MCP_RAW);
+      setMcpError(null);
+      setMcpLoadFailed(false);
+      setMcpLoading(false);
     }
   }, [open]);
+
+  // 真实编辑态（非向导）加载该 Agent 现有的 mcp.json，按 localAgentId 隔离
+  // （复制流程切换 id 后重新拉取）。向导态（wizardStep !== null）故意不在这里
+  // 处理：步骤二的 MCP 是用户正在填的本地新值，不该被 GET 结果覆盖——包括
+  // 「agent 已创建但 MCP 保存失败」后停留在步骤二重试的场景，此时
+  // localAgentId 已非空但 wizardStep 仍是 2。
+  useEffect(() => {
+    if (!open || wizardStep !== null || !localAgentId) return;
+    let cancelled = false;
+    setMcpLoading(true);
+    setMcpLoadFailed(false);
+    setMcpError(null);
+    getAgentMcp(localAgentId)
+      .then((res) => {
+        if (cancelled) return;
+        setMcpValue(res.raw);
+        setMcpInitial(res.raw);
+      })
+      .catch(() => {
+        if (!cancelled) setMcpLoadFailed(true);
+      })
+      .finally(() => {
+        if (!cancelled) setMcpLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, wizardStep, localAgentId]);
 
   const mode: "create" | "edit" = localAgentId ? "edit" : "create";
   // react-hook-form 的 `defaultValues` 只在 `<Form>` 挂载那一刻生效，之后
@@ -234,31 +333,102 @@ export function AgentEditorSheet({
     await queryClient.invalidateQueries({ queryKey: agentsQueryKey });
   }
 
+  /**
+   * `<Form>` 的 onSubmit：走到这里说明 RHF + zodResolver 已经校验通过。
+   *
+   * - 向导步骤一「下一步」：只切步骤，不发任何请求——创建被推迟到步骤二
+   *   「创建」（见 {@link handleCreate}），这里只负责本地校验 + 前进。
+   * - 真实编辑态「保存」：基本信息 + （若有改动）MCP 配置一起提交。
+   *
+   * 向导步骤二的「创建」不走这条路径：它是独立按钮（type="button"），手动
+   * 用 `formApiRef.current?.getValues()` 取基本信息，理由见 handleCreate 注释。
+   */
   const handleSubmit = async (values: AgentFormValues) => {
+    if (wizardStep === 1) {
+      setTab("mcp");
+      setWizardStep(2);
+      return;
+    }
+    if (mode !== "edit" || !localAgentId) return; // 理论不可达，收窄类型
+
+    let mcpPayload: string | null = null;
+    if (mcpValue !== mcpInitial) {
+      const syntaxErr = mcpJsonSyntaxError(mcpValue);
+      if (syntaxErr) {
+        setMcpError(t("mcpJsonInvalid", { detail: syntaxErr }));
+        setTab("mcp");
+        return; // 阻断保存：基本信息也不提交
+      }
+      // 变化了但清空成空白 ≠「跳过提交」（那是向导态新建的语义，agent 尚无
+      // mcp.json 无需创建）——编辑态文件已存在，必须显式写回默认态才能真正
+      // 清空已保存的配置。
+      mcpPayload = mcpValue.trim() === "" ? DEFAULT_MCP_RAW : mcpValue;
+    }
+
     setSubmitting(true);
     setError(null);
     try {
-      if (mode === "edit" && localAgentId) {
-        await updateAgent(localAgentId, values);
-        await invalidateAgents();
-        onOpenChange(false);
-      } else {
+      await updateAgent(localAgentId, values);
+      if (mcpPayload !== null) {
+        await putAgentMcp(localAgentId, { raw: mcpPayload });
+        setMcpInitial(mcpPayload);
+        setMcpValue(mcpPayload);
+      }
+      await invalidateAgents();
+      onOpenChange(false);
+    } catch (err) {
+      setError(extractErrorMessage(err, t("saveFailed")));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  /**
+   * 向导步骤二「创建」：一次性完成「创建 agent →（MCP 非默认值时）提交 MCP
+   * 配置 → 刷新列表 → 关闭」。
+   *
+   * 用 `getValues()` 而不是把这个按钮也接进 `<Form>` 的 submit 路径——一是
+   * 「上一步」是 type="button"，两个按钮语义不对称没必要都走 submit；二是
+   * 失败恢复要能在不重新触发表单校验事件的前提下单独重试 MCP 这一步。
+   *
+   * 失败恢复（防重复创建）：createAgent 成功但 MCP 保存失败时，`localAgentId`
+   * 已经落回真实 id——下次点「创建」会因为 `agentId`（=localAgentId）非空
+   * 跳过 createAgent 分支，只重试 MCP 提交。
+   */
+  const handleCreate = async () => {
+    setError(null);
+    const syntaxErr = mcpJsonSyntaxError(mcpValue);
+    if (syntaxErr) {
+      setMcpError(t("mcpJsonInvalid", { detail: syntaxErr }));
+      return;
+    }
+    const mcpPayload = isMcpDefaultValue(mcpValue) ? null : mcpValue;
+
+    setSubmitting(true);
+    try {
+      let agentId = localAgentId;
+      if (!agentId) {
+        const values = formApiRef.current?.getValues();
+        if (!values) throw new Error(t("saveFailed"));
         // 创建接口（AgentCreateSchema）不认识 remoteEnabled——新建 Agent
-        // 尚无 id，「允许远程」要等有 id 之后才有意义，这里剔除掉，只走
-        // 编辑态提交。
+        // 尚无 id，「允许远程」要等有 id 之后才有意义，这里剔除掉。
         const { remoteEnabled: _remoteEnabled, ...createValues } = values;
         const created = await createAgent(createValues);
-        // 列表刷新（侧栏等 onCreated/invalidate 消费方）在创建成功当下立即
-        // 触发，不随「进入步骤二 / 用户点完成」推迟，也不重复触发。
+        agentId = created.id;
+        setLocalAgentId(agentId);
+        // 立即失效缓存，而不是拖到 MCP 也提交完——`mode`（= localAgentId ?
+        // "edit" : "create"）这一帧起就会翻成 "edit"，若 agents 列表缓存没
+        // 跟上，`formReady`/`agentMissing` 会把刚创建的 agent 误判成「不存在」
+        // （agentsReady && current===null），基本信息 <Form> 被整个卸载——
+        // MCP 保存失败后退回步骤一查看基本信息会看到「Agent 已被删除」的假象。
         await invalidateAgents();
-        // 步骤条：创建成功不关闭 sheet，带着新 agentId 进入步骤二（MCP，
-        // 此时端点 /api/agents/:id/mcp 才有 id 可用）。
-        setLocalAgentId(created.id);
-        setTab("mcp");
-        setWizardStep(2);
       }
+      if (mcpPayload !== null) {
+        await putAgentMcp(agentId, { raw: mcpPayload });
+      }
+      onOpenChange(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("saveFailed"));
+      setError(extractErrorMessage(err, t("saveFailed")));
     } finally {
       setSubmitting(false);
     }
@@ -311,15 +481,57 @@ export function AgentEditorSheet({
   };
 
   // 底部固定动作条（UnifiedSheet `footer` 槽，不随正文滚动）：
-  // - 步骤二（wizardStep === 2）：agent 已创建，MCP 可留空，唯一动作是「完成」。
-  // - 其余（步骤一 / 真实编辑）：footer 在 <form> 外，提交按钮用 HTML `form`
-  //   属性关联回表单——既保住点击提交，也保住输入框内按 Enter 的隐式提交
-  //   （form 内无 submit 控件时多字段表单的 Enter 提交会失效）。
+  // - 步骤一：[取消] [下一步]——「下一步」是表单提交按钮，用 HTML `form`
+  //   属性关联回 <form>，走 handleSubmit 的本地校验路径（也保住 Enter 隐式
+  //   提交，行为与点按钮一致）。
+  // - 步骤二：[上一步] [创建]——两者都是独立按钮，不进表单 submit 路径，
+  //   「创建」走 handleCreate（一次性创建 agent + 提交 MCP）。
+  // - 真实编辑态：[删除] [取消] [保存]——「保存」同样是表单提交按钮。
   const footerContent =
-    wizardStep === 2 ? (
-      <Button type="button" onClick={() => onOpenChange(false)}>
-        {t("wizardFinish")}
-      </Button>
+    wizardStep === 1 ? (
+      <>
+        <div className="flex-1" />
+        <Button
+          type="button"
+          variant="outline"
+          onClick={requestClose}
+          disabled={submitting}
+        >
+          {t("cancel")}
+        </Button>
+        <Button
+          type="submit"
+          form={AGENT_EDITOR_FORM_ID}
+          variant="brand"
+          disabled={submitting}
+        >
+          {t("wizardNext")}
+        </Button>
+      </>
+    ) : wizardStep === 2 ? (
+      <>
+        <div className="flex-1" />
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            setWizardStep(1);
+            setTab("basic");
+          }}
+          disabled={submitting}
+        >
+          {t("wizardBack")}
+        </Button>
+        <Button
+          type="button"
+          variant="brand"
+          disabled={submitting}
+          onClick={() => void handleCreate()}
+        >
+          {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          {submitting ? t("saving") : t("wizardCreate")}
+        </Button>
+      </>
     ) : formReady ? (
       <>
         {mode === "edit" && (
@@ -355,18 +567,9 @@ export function AgentEditorSheet({
         >
           {t("cancel")}
         </Button>
-        <Button
-          type="submit"
-          form={AGENT_EDITOR_FORM_ID}
-          variant={wizardStep === 1 ? "brand" : "default"}
-          disabled={submitting}
-        >
+        <Button type="submit" form={AGENT_EDITOR_FORM_ID} disabled={submitting}>
           {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          {submitting
-            ? t("saving")
-            : wizardStep === 1
-              ? t("wizardContinue")
-              : t("save")}
+          {submitting ? t("saving") : t("save")}
         </Button>
       </>
     ) : null;
@@ -378,7 +581,12 @@ export function AgentEditorSheet({
         onOpenChange={onOpenChange}
         modal
         dismissible={false}
-        onDismissAttempt={requestClose}
+        // 表单类抽屉：点遮罩大概率是误触（正在填写时手滑点到旁边），零响应——
+        // 不弹确认也不关闭；只有 ESC 走 requestClose 的脏确认逻辑，与头部 X
+        // 按钮行为一致。
+        onDismissAttempt={(source) => {
+          if (source === "esc") requestClose();
+        }}
         title={wizardStep !== null ? t("createTitle") : t("editTitle")}
         headerActions={
           <button
@@ -533,18 +741,28 @@ export function AgentEditorSheet({
           )}
         </div>
 
-        {/* MCP 配置：独立于上面的 Agent 身份表单（各自保存），只在编辑既有 Agent
-            时展示——步骤一（尚无 agentId）不会渲染这块，MCP 端点挂在
-            /api/agents/:id/mcp 下，没有 id 无处可读写；同时要求 formReady，
-            避免和加载态同屏出现半截 UI。 */}
+        {/* MCP 配置：受控编辑器，不再自带保存按钮——步骤二随「创建」提交，
+            真实编辑态随 footer「保存」与基本信息一起提交。步骤一（尚无
+            agentId、也没有本地 MCP 编辑意图）不渲染；真实编辑态额外要求
+            formReady，避免和加载态同屏出现半截 UI。 */}
         <div
           className={cn(
             "min-h-0 flex-1 overflow-y-auto p-4",
             tab !== "mcp" && "hidden",
           )}
         >
-          {mode === "edit" && localAgentId && formReady && (
-            <McpEditor agentId={localAgentId} />
+          {(wizardStep === 2 ||
+            (wizardStep === null && mode === "edit" && formReady)) && (
+            <McpEditor
+              value={mcpValue}
+              onChange={(v) => {
+                setMcpValue(v);
+                setMcpError(null);
+              }}
+              error={mcpError}
+              loading={mcpLoading}
+              loadFailed={mcpLoadFailed}
+            />
           )}
         </div>
       </UnifiedSheet>
