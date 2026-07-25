@@ -15,9 +15,12 @@ export {
 export { type ArtifactKind, artifactKind } from "./artifact-kind";
 export {
   ArtifactSplitPane,
+  ArtifactSplitPaneActions,
+  type ArtifactSplitPaneActionsProps,
   type ArtifactSplitPaneLabels,
   type ArtifactSplitPaneProps,
   type ArtifactSplitPaneTarget,
+  getArtifactSplitPaneTitle,
 } from "./artifact-split-pane";
 export {
   AskQuestionCard,

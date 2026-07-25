@@ -6,8 +6,10 @@ import type {
 } from "@meshbot/web-common/session";
 import {
   ArtifactSplitPane,
+  ArtifactSplitPaneActions,
   ChatInput,
   createSessionSocketAdapter,
+  getArtifactSplitPaneTitle,
   MessageSkeleton,
   SessionConversationView,
   useSessionStream,
@@ -491,8 +493,8 @@ function RemoteSessionViewReady({
    * （非常驻 + `absolute` 覆盖，不参与 flex 布局），落在 `(shell)/layout.tsx`
    * 已有的 `relative overflow-hidden` 容器内（`AssistantLayout`/`AssistantSidebar`
    * 均是透传 Fragment/Context.Provider，不产生额外 DOM 节点，本组件的输出直接是
-   * 该容器的 DOM 子节点）——web-main 无 Electron，不需要 web-agent 那套
-   * `titleBarClassName`/`actionButtonClassName` 拖拽区类名注入。
+   * 该容器的 DOM 子节点）——web-main 无 Electron，标题栏自绘（未迁 UnifiedSheet，
+   * 见下方 JSX 注释），不需要 web-agent 那套 Electron 拖拽区类名注入。
    *
    * `transport` 直接复用本组件已持有的同一 `SessionTransport` 实例（Task 3 报告
    * 「数据注入形态」：其 `readArtifact`/`uploadArtifactToDrive` 与共享
@@ -516,6 +518,28 @@ function RemoteSessionViewReady({
       defaultWidth="50vw"
       className="animate-in fade-in slide-in-from-right-4"
     >
+      {/* 标题栏：web-main 未迁 UnifiedSheet 底座（本期只迁 web-agent），自绘
+          h-13 标题栏，标题/按钮内容复用 web-common 拆出的两个 slot
+          （getArtifactSplitPaneTitle / ArtifactSplitPaneActions）。 */}
+      <div className="flex h-13 shrink-0 items-center border-b border-border">
+        <div className="flex h-full min-w-0 flex-1 items-center px-3">
+          <span className="min-w-0 truncate text-[12px] font-medium text-foreground">
+            {getArtifactSplitPaneTitle(preview, tArtifact("untitled"))}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 pr-3">
+          <ArtifactSplitPaneActions
+            target={preview}
+            onClose={() => setPreview(null)}
+            labels={{
+              download: tArtifact("download"),
+              close: tArtifact("close"),
+              untitled: tArtifact("untitled"),
+            }}
+            transport={transport}
+          />
+        </div>
+      </div>
       {uploadNotice && (
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-emerald-600/10 px-3 py-2 text-[12px] text-emerald-700 dark:text-emerald-400">
           <span className="min-w-0 flex-1 truncate">
@@ -533,12 +557,8 @@ function RemoteSessionViewReady({
       <div className="min-h-0 flex-1">
         <ArtifactSplitPane
           target={preview}
-          onClose={() => setPreview(null)}
           labels={{
             empty: tArtifact("empty"),
-            untitled: tArtifact("untitled"),
-            download: tArtifact("download"),
-            close: tArtifact("close"),
             body: {
               loading: tArtifact("loading"),
               loadFailed: tArtifact("loadFailed"),
