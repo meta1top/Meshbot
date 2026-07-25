@@ -51,6 +51,11 @@ import { SkillPublishTool } from "./tools/builtins/skill-publish.tool";
 import { SkillSearchMarketTool } from "./tools/builtins/skill-search-market.tool";
 import { SkillUninstallTool } from "./tools/builtins/skill-uninstall.tool";
 import { DispatchSubagentTool } from "./tools/builtins/dispatch-subagent.tool";
+import { McpListTool } from "./tools/builtins/mcp-list.tool";
+import { McpInstallTool } from "./tools/builtins/mcp-install.tool";
+import { McpUninstallTool } from "./tools/builtins/mcp-uninstall.tool";
+import { McpEnableTool } from "./tools/builtins/mcp-enable.tool";
+import { McpDisableTool } from "./tools/builtins/mcp-disable.tool";
 
 @Module({
   // **这里绝不能再 import `EventEmitterModule.forRoot()`。**
@@ -121,6 +126,11 @@ import { DispatchSubagentTool } from "./tools/builtins/dispatch-subagent.tool";
     MemorySearchTool,
     MemoryDeleteTool,
     McpService,
+    McpListTool,
+    McpInstallTool,
+    McpUninstallTool,
+    McpEnableTool,
+    McpDisableTool,
     PromptService,
     ModelResolver,
     ModelRunContext,

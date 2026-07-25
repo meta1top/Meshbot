@@ -82,3 +82,7 @@ export {
   type DrivePort,
 } from "./tools/drive.port";
 export * from "./tools/dispatch-subagent.port";
+export {
+  MCP_CONFIRM_PORT,
+  type McpConfirmPort,
+} from "./tools/mcp-confirm.port";
