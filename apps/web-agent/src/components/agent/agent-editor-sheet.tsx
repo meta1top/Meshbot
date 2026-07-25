@@ -60,6 +60,9 @@ import { useModelConfigs } from "@/rest/model-config";
 /** Radix Select 不允许 value="" —— 用哨兵值表示「跟随账号默认」，提交前后转换。 */
 const ACCOUNT_DEFAULT_VALUE = "__account_default__";
 
+/** 基本信息 <form> 的 id：固定 footer 里的提交按钮靠 `form` 属性关联它。 */
+const AGENT_EDITOR_FORM_ID = "agent-editor-form";
+
 const DefaultModelField = forwardRef<
   HTMLButtonElement,
   {
@@ -309,9 +312,9 @@ export function AgentEditorSheet({
 
   // 底部固定动作条（UnifiedSheet `footer` 槽，不随正文滚动）：
   // - 步骤二（wizardStep === 2）：agent 已创建，MCP 可留空，唯一动作是「完成」。
-  // - 其余（步骤一 / 真实编辑）：表单挂在正文滚动区，这里手动触发
-  //   formApiRef.current.handleSubmit（footer 已不在 <form> 内部，不能再用
-  //   type="submit"）。
+  // - 其余（步骤一 / 真实编辑）：footer 在 <form> 外，提交按钮用 HTML `form`
+  //   属性关联回表单——既保住点击提交，也保住输入框内按 Enter 的隐式提交
+  //   （form 内无 submit 控件时多字段表单的 Enter 提交会失效）。
   const footerContent =
     wizardStep === 2 ? (
       <Button type="button" onClick={() => onOpenChange(false)}>
@@ -353,10 +356,10 @@ export function AgentEditorSheet({
           {t("cancel")}
         </Button>
         <Button
-          type="button"
+          type="submit"
+          form={AGENT_EDITOR_FORM_ID}
           variant={wizardStep === 1 ? "brand" : "default"}
           disabled={submitting}
-          onClick={() => formApiRef.current?.handleSubmit(handleSubmit)()}
         >
           {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
           {submitting
@@ -467,6 +470,7 @@ export function AgentEditorSheet({
           {formReady && (
             <Form
               key={localAgentId ?? "create"}
+              id={AGENT_EDITOR_FORM_ID}
               formApiRef={formApiRef}
               schema={schema}
               defaultValues={{

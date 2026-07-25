@@ -44,6 +44,8 @@ interface FormProps<T extends FieldValues> extends PropsWithChildren {
    * 只读用途——受控写入仍走 defaultValues / FormItem，不要通过它 setValue。
    */
   formApiRef?: MutableRefObject<UseFormReturn<T> | null>;
+  /** 透传给 <form> 的 id：供表单外按钮用 `form` 属性关联提交（固定 footer 场景）。 */
+  id?: string;
 }
 
 /**
@@ -66,6 +68,7 @@ export function Form<T extends FieldValues>({
   className,
   disabled,
   formApiRef,
+  id,
   children,
 }: FormProps<T>) {
   // biome-ignore lint/suspicious/noExplicitAny: zod 4.x 与 zodResolver 类型微差
@@ -76,6 +79,7 @@ export function Form<T extends FieldValues>({
   return (
     <UIForm {...form}>
       <form
+        id={id}
         onSubmit={form.handleSubmit(onSubmit)}
         className={className}
         noValidate
