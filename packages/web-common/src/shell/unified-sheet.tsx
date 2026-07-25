@@ -11,7 +11,10 @@ export interface UnifiedSheetProps {
   onOpenChange: (open: boolean) => void;
   /** 左缘是否可拖拽调宽，默认 true。 */
   resizable?: boolean;
-  /** 是否渲染全屏遮罩（点击遮罩按 dismissible 分流），默认 false。 */
+  /**
+   * 是否为 modal：true 时遮罩拦截交互（点击按 dismissible 分流）；false 时
+   * 遮罩仅作视觉层次（pointer-events-none，更浅），主区仍可操作。默认 false。
+   */
   modal?: boolean;
   /** ESC / 点遮罩是否直接关闭；false 时改为触发 {@link onDismissAttempt}，默认 true。 */
   dismissible?: boolean;
@@ -25,6 +28,8 @@ export interface UnifiedSheetProps {
   headerBorder?: boolean;
   /** 标题栏下方的 tab 条（如 {@link SheetTabBar}）。 */
   headerTabs?: ReactNode;
+  /** 固定底部动作条（保存/取消等）：不随正文滚动，自带上边线。 */
+  footer?: ReactNode;
   /** 已保存的宽度（px）；null = 尚未调整过，用 defaultWidth。 */
   width?: number | null;
   /** 松手时提交一次最终宽度（拖动过程中不回调，避免调用方每帧 setState）。 */
@@ -76,6 +81,7 @@ export function UnifiedSheet({
   headerActions,
   headerBorder = true,
   headerTabs,
+  footer,
   width,
   onWidthChange,
   minWidth = 480,
@@ -164,11 +170,18 @@ export function UnifiedSheet({
 
   return (
     <>
-      {modal && (
+      {/* 遮罩：modal 拦截交互（浅色即可分层）；非 modal 仅视觉层次、可穿透 */}
+      {modal ? (
         <div
           data-testid="sheet-overlay"
-          className="fixed inset-0 z-9999 bg-black/40"
+          className="fixed inset-0 z-9999 bg-black/10"
           onClick={dismiss}
+          aria-hidden
+        />
+      ) : (
+        <div
+          data-testid="sheet-overlay"
+          className="pointer-events-none fixed inset-0 z-9999 bg-black/5"
           aria-hidden
         />
       )}
@@ -217,6 +230,11 @@ export function UnifiedSheet({
         </div>
         {headerTabs}
         <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+        {footer && (
+          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border p-4">
+            {footer}
+          </div>
+        )}
       </aside>
       {/* 拖拽时全屏罩：稳住鼠标事件，避免掠过 iframe / 选中文本丢失拖拽 */}
       {resizing && <div className="fixed inset-0 z-10001 cursor-col-resize" />}

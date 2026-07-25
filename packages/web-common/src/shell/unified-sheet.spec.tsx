@@ -80,9 +80,27 @@ describe("UnifiedSheet", () => {
     fireEvent.click(screen.getByTestId("sheet-overlay"));
     expect(onDismissAttempt).toHaveBeenCalled();
   });
-  it("modal=false 不渲染遮罩", () => {
-    render(<UnifiedSheet {...base}>x</UnifiedSheet>);
-    expect(screen.queryByTestId("sheet-overlay")).toBeNull();
+  it("modal=false 渲染纯视觉遮罩：pointer-events-none 且无点击关闭", () => {
+    const onOpenChange = jest.fn();
+    render(
+      <UnifiedSheet {...base} onOpenChange={onOpenChange}>
+        x
+      </UnifiedSheet>,
+    );
+    const overlay = screen.getByTestId("sheet-overlay");
+    expect(overlay.className).toMatch(/pointer-events-none/);
+    fireEvent.click(overlay);
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+  it("footer 固定动作条渲染在正文容器之外", () => {
+    render(
+      <UnifiedSheet {...base} footer={<button type="button">保存</button>}>
+        body
+      </UnifiedSheet>,
+    );
+    const footerBtn = screen.getByText("保存");
+    expect(footerBtn.closest("div")?.className).toMatch(/border-t/);
+    expect(screen.getByText("body").contains(footerBtn)).toBe(false);
   });
   it("headerBorder=false 时标题栏无底线类，headerTabs 渲染在标题栏下", () => {
     render(
