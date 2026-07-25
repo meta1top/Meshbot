@@ -625,6 +625,15 @@ export function AgentEditorSheet({
         // app-no-drag：把面板 z 抬出顶部 DragRegion，头部 X 按钮才可点（Electron）
         className="app-no-drag"
       >
+        {/* 错误条放在 tab 面板之外：保存/创建/MCP 提交失败时用户可能停在任一
+            tab（编辑 MCP 时保存失败尤其常见），藏在某个面板里会被 hidden 挡住。 */}
+        {error && (
+          <div className="shrink-0 px-4 pt-3">
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          </div>
+        )}
         {/* keep-mounted：CSS 隐藏而非卸载，切 tab 不丢编辑中状态 */}
         <div
           className={cn(
@@ -730,12 +739,6 @@ export function AgentEditorSheet({
                 >
                   <RemoteEnabledField />
                 </FormItem>
-              )}
-
-              {error && (
-                <Alert variant="destructive">
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
               )}
             </Form>
           )}
