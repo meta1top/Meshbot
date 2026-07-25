@@ -103,6 +103,9 @@ export function UnifiedSheet({
     openSheetStack.push(id);
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
+      // 内层弹窗（Radix AlertDialog 等）在 capture 相位消费 ESC 并 preventDefault
+      // （但不 stopPropagation）——尊重它，否则删除确认开着按 ESC 会连关两层。
+      if (e.defaultPrevented) return;
       if (openSheetStack[openSheetStack.length - 1] !== id) return;
       dismiss();
     };

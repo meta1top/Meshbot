@@ -107,6 +107,22 @@ describe("UnifiedSheet", () => {
     );
     expect(screen.queryByLabelText("resize")).toBeNull();
   });
+  it("ESC 已被内层弹窗 preventDefault 时不响应（嵌套确认框场景）", () => {
+    const onOpenChange = jest.fn();
+    render(
+      <UnifiedSheet {...base} onOpenChange={onOpenChange}>
+        x
+      </UnifiedSheet>,
+    );
+    const ev = new KeyboardEvent("keydown", {
+      key: "Escape",
+      cancelable: true,
+      bubbles: true,
+    });
+    ev.preventDefault();
+    document.dispatchEvent(ev);
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
   it("两个 sheet 同时 open 时 ESC 只关栈顶（后开的）", () => {
     const closeLower = jest.fn();
     const closeUpper = jest.fn();

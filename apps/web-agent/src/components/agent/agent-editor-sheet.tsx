@@ -316,7 +316,10 @@ export function AgentEditorSheet({
             onChange={(k) => setTab(k as "basic" | "mcp")}
           />
         }
+        minWidth={448}
         defaultWidth="28rem"
+        // app-no-drag：把面板 z 抬出顶部 DragRegion，头部 X 按钮才可点（Electron）
+        className="app-no-drag"
       >
         {/* keep-mounted：CSS 隐藏而非卸载，切 tab 不丢编辑中状态 */}
         <div
