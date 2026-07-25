@@ -38,4 +38,26 @@ describe("McpConfigSchema", () => {
       McpConfigSchema.parse({ mcpServers: { x: { url: "not-a-url" } } }),
     ).toThrow();
   });
+
+  it("enabled 缺省合法（不强制传）", () => {
+    const r = McpConfigSchema.parse({
+      mcpServers: {
+        fs: { command: "echo" },
+        remote: { url: "https://example.com/mcp" },
+      },
+    });
+    expect(r.mcpServers.fs.enabled).toBeUndefined();
+    expect(r.mcpServers.remote.enabled).toBeUndefined();
+  });
+
+  it("enabled 显式 true/false 都过校验", () => {
+    const r = McpConfigSchema.parse({
+      mcpServers: {
+        fs: { command: "echo", enabled: false },
+        remote: { url: "https://example.com/mcp", enabled: true },
+      },
+    });
+    expect(r.mcpServers.fs.enabled).toBe(false);
+    expect(r.mcpServers.remote.enabled).toBe(true);
+  });
 });

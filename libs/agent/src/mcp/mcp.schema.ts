@@ -28,12 +28,16 @@ const StdioServerSchema = z.object({
   command: z.string().min(1),
   args: z.array(z.string()).optional(),
   env: z.record(z.string(), z.string()).optional(),
+  /** 是否启用（缺省 true）。禁用 = 配置保留但不建连接。 */
+  enabled: z.boolean().optional(),
 });
 
 const HttpServerSchema = z.object({
   url: z.string().url(),
   transport: z.enum(["sse", "streamable_http"]).optional(),
   headers: z.record(z.string(), z.string()).optional(),
+  /** 是否启用（缺省 true）。禁用 = 配置保留但不建连接。 */
+  enabled: z.boolean().optional(),
 });
 
 /** 单个 server 配置：stdio（command）或 http/sse（url）二选一。 */

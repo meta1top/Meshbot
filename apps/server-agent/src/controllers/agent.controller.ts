@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import {
   AccountContextService,
   AgentContextService,
@@ -155,10 +155,7 @@ export class AgentController {
     if (!result.success) {
       throw new BadRequestException(`配置校验失败：${result.error.message}`);
     }
-    this.agentCtx.run(id, () => {
-      writeFileSync(this.config.getMcpConfigPath(), body.raw, "utf8");
-    });
-    // 让运行态失效——下次 run 时 ensureAgent 会按新配置重建 client。
-    await this.mcp.teardownAgent(this.currentAccount(), id);
+    // 写盘 + 失效运行态收敛到 McpService.updateConfig（REST 与自管理工具共用同一入口）。
+    await this.agentCtx.run(id, () => this.mcp.updateConfig(() => result.data));
   }
 }

@@ -1,4 +1,11 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { DiscoveryService } from "@nestjs/core";
@@ -9,7 +16,7 @@ import { AccountContextService } from "../account/account-context.service";
 import { AgentContextService } from "../account/agent-context.service";
 import { MeshbotConfigService } from "../config/meshbot-config.service";
 import { ToolRegistry } from "../tools/tool-registry";
-import { McpService } from "./mcp.service";
+import { McpService, mapServersToLangchainShape } from "./mcp.service";
 
 /**
  * 测哲学：真连 MCP server 不现实，这里只锁定「按 Agent 懒加载 + 引用计数 +
@@ -129,6 +136,24 @@ const ONE_SERVER = {
   },
 };
 
+describe("mapServersToLangchainShape 过滤 enabled===false", () => {
+  it("显式 enabled:false 的 server 被过滤，不出现在 langchain shape 里", () => {
+    const shape = mapServersToLangchainShape({
+      fs: { command: "echo", args: ["hi"] },
+      disabled: { command: "echo", args: ["bye"], enabled: false },
+      remote: { url: "https://example.com/mcp", enabled: true },
+    });
+    expect(Object.keys(shape).sort()).toEqual(["fs", "remote"]);
+  });
+
+  it("enabled 缺省视为启用，不被过滤", () => {
+    const shape = mapServersToLangchainShape({
+      fs: { command: "echo", args: ["hi"] },
+    });
+    expect(shape.fs).toBeDefined();
+  });
+});
+
 describe("McpService 按 Agent 懒加载 + 引用计数 + 闲置回收", () => {
   let home: string;
   let account: AccountContextService;
@@ -153,7 +178,7 @@ describe("McpService 按 Agent 懒加载 + 引用计数 + 闲置回收", () => {
     agentCtx = new AgentContextService();
     config = new MeshbotConfigService(account, agentCtx);
     reg = makeRegistry(account, agentCtx);
-    svc = new TestMcpService(config, reg);
+    svc = new TestMcpService(config, reg, account, agentCtx);
   });
 
   afterEach(async () => {
@@ -435,5 +460,97 @@ describe("McpService 按 Agent 懒加载 + 引用计数 + 闲置回收", () => {
     };
     expect(typeof timer.unref).toBe("function");
     setIntervalSpy.mockRestore();
+  });
+
+  describe("updateConfig：读-改-写单一入口", () => {
+    function mcpJsonPath(cloudUserId: string, agentId: string): string {
+      return path.join(
+        home,
+        "accounts",
+        cloudUserId,
+        "agents",
+        agentId,
+        "mcp.json",
+      );
+    }
+
+    it("mutator 产物 schema 校验失败 → 不落盘、不 teardown", async () => {
+      const teardownSpy = vi.spyOn(svc, "teardownAgent");
+
+      await runInContext("u1", "agent-a", async () => {
+        await expect(
+          svc.updateConfig(
+            () =>
+              ({
+                mcpServers: { bad: { args: ["--help"] } },
+              }) as never,
+          ),
+        ).rejects.toThrow();
+      });
+
+      expect(existsSync(mcpJsonPath("u1", "agent-a"))).toBe(false);
+      expect(teardownSpy).not.toHaveBeenCalled();
+    });
+
+    it("mutator 产物合法 → 先落盘再 teardown（次序断言：teardown 触发时文件必已可见），且失效当前运行态", async () => {
+      writeMcpJson(home, "u1", "agent-a", ONE_SERVER);
+      svc.stubs = [makeStubClient([fakeLcTool("mcp__fs__read")])];
+      await runInContext("u1", "agent-a", () =>
+        svc.ensureAgent("u1", "agent-a"),
+      );
+      expect(svc.getLoadedToolNames("u1", "agent-a")).not.toBeNull();
+
+      const target = mcpJsonPath("u1", "agent-a");
+      const teardownSpy = vi.spyOn(svc, "teardownAgent");
+
+      await runInContext("u1", "agent-a", () =>
+        svc.updateConfig((cfg) => ({
+          mcpServers: {
+            ...cfg.mcpServers,
+            web: { command: "echo", args: ["web"] },
+          },
+        })),
+      );
+
+      // teardown 被调用时，写盘早已完成——次序断言的关键点。
+      const teardownCall = teardownSpy.mock.invocationCallOrder[0];
+      expect(existsSync(target)).toBe(true);
+      const written = JSON.parse(readFileSync(target, "utf8"));
+      expect(written.mcpServers.web.command).toBe("echo");
+      expect(teardownSpy).toHaveBeenCalledWith("u1", "agent-a");
+      expect(teardownCall).toBeGreaterThan(0);
+
+      // teardown 生效：运行态已失效。
+      expect(svc.getLoadedToolNames("u1", "agent-a")).toBeNull();
+    });
+
+    it("无文件时 mutator 拿到空配置（mcpServers: {}）", async () => {
+      let seen: unknown;
+      await runInContext("u1", "agent-a", () =>
+        svc.updateConfig((cfg) => {
+          seen = cfg;
+          return cfg;
+        }),
+      );
+      expect(seen).toEqual({ mcpServers: {} });
+    });
+  });
+
+  describe("getLoadedToolNames", () => {
+    it("未加载过的 Agent 返回 null", () => {
+      expect(svc.getLoadedToolNames("u1", "agent-a")).toBeNull();
+    });
+
+    it("已加载的 Agent 返回工具名集合", async () => {
+      writeMcpJson(home, "u1", "agent-a", ONE_SERVER);
+      svc.stubs = [makeStubClient([fakeLcTool("mcp__fs__read")])];
+      await runInContext("u1", "agent-a", () =>
+        svc.ensureAgent("u1", "agent-a"),
+      );
+
+      const names = svc.getLoadedToolNames("u1", "agent-a");
+      expect(names).not.toBeNull();
+      expect([...(names ?? [])]).toEqual(["mcp__fs__read"]);
+    });
   });
 });
