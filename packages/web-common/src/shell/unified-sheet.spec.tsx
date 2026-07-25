@@ -1,0 +1,110 @@
+/**
+ * @jest-environment jsdom
+ */
+import "@testing-library/jest-dom";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { UnifiedSheet } from "./unified-sheet";
+
+const base = { open: true, onOpenChange: jest.fn(), title: "标题" };
+
+describe("UnifiedSheet", () => {
+  it("open=false 时不渲染 aside（条件挂载）", () => {
+    const { container } = render(
+      <UnifiedSheet {...base} open={false}>
+        x
+      </UnifiedSheet>,
+    );
+    expect(container.querySelector("aside")).toBeNull();
+  });
+  it("动作槽是拖动容器的兄弟节点而非子节点", () => {
+    render(
+      <UnifiedSheet
+        {...base}
+        headerActions={<button type="button">act</button>}
+      >
+        x
+      </UnifiedSheet>,
+    );
+    const drag = document.querySelector(".drag-handle");
+    expect(drag).not.toBeNull();
+    expect(drag!.contains(screen.getByText("act"))).toBe(false);
+  });
+  it("dismissible=true 时 ESC 关闭", () => {
+    const onOpenChange = jest.fn();
+    render(
+      <UnifiedSheet {...base} onOpenChange={onOpenChange}>
+        x
+      </UnifiedSheet>,
+    );
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+  it("dismissible=false 时 ESC 触发 onDismissAttempt 而不关", () => {
+    const onOpenChange = jest.fn();
+    const onDismissAttempt = jest.fn();
+    render(
+      <UnifiedSheet
+        {...base}
+        onOpenChange={onOpenChange}
+        dismissible={false}
+        onDismissAttempt={onDismissAttempt}
+      >
+        x
+      </UnifiedSheet>,
+    );
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(onDismissAttempt).toHaveBeenCalled();
+  });
+  it("modal=true 渲染遮罩；点遮罩按 dismissible 分流", () => {
+    const onOpenChange = jest.fn();
+    const { rerender } = render(
+      <UnifiedSheet {...base} modal onOpenChange={onOpenChange}>
+        x
+      </UnifiedSheet>,
+    );
+    fireEvent.click(screen.getByTestId("sheet-overlay"));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    const onDismissAttempt = jest.fn();
+    rerender(
+      <UnifiedSheet
+        {...base}
+        modal
+        dismissible={false}
+        onDismissAttempt={onDismissAttempt}
+        onOpenChange={jest.fn()}
+      >
+        x
+      </UnifiedSheet>,
+    );
+    fireEvent.click(screen.getByTestId("sheet-overlay"));
+    expect(onDismissAttempt).toHaveBeenCalled();
+  });
+  it("modal=false 不渲染遮罩", () => {
+    render(<UnifiedSheet {...base}>x</UnifiedSheet>);
+    expect(screen.queryByTestId("sheet-overlay")).toBeNull();
+  });
+  it("headerBorder=false 时标题栏无底线类，headerTabs 渲染在标题栏下", () => {
+    render(
+      <UnifiedSheet
+        {...base}
+        headerBorder={false}
+        headerTabs={<div data-testid="tabs" />}
+      >
+        x
+      </UnifiedSheet>,
+    );
+    expect(
+      document.querySelector(".drag-handle")!.parentElement!.className,
+    ).not.toMatch(/border-b/);
+    expect(screen.getByTestId("tabs")).toBeInTheDocument();
+  });
+  it("resizable=false 时无左缘手柄", () => {
+    render(
+      <UnifiedSheet {...base} resizable={false}>
+        x
+      </UnifiedSheet>,
+    );
+    expect(screen.queryByLabelText("resize")).toBeNull();
+  });
+});
