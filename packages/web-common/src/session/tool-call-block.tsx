@@ -12,6 +12,7 @@ import { AskQuestionCard } from "./ask-question-card";
 import { DriveCreateShareCard } from "./drive-create-share-card";
 import { DriveShareCard } from "./drive-share-card";
 import { ImSendConfirmCard } from "./im-send-confirm-card";
+import { McpInstallConfirmCard } from "./mcp-install-confirm-card";
 import type { ToolCallView } from "./timeline";
 import { TodoList } from "./todo-list";
 import { sanitizeMeshbotPaths, toolDisplayName } from "./tool-display";
@@ -132,6 +133,15 @@ export function ToolCallBlock({
   }
   if (tool.name === "drive_create_share" && tool.status !== "streaming") {
     return <DriveCreateShareCard tool={tool} onConfirm={onConfirm} />;
+  }
+  if (tool.name === "mcp_install" && tool.status !== "streaming") {
+    return (
+      <McpInstallConfirmCard
+        tool={tool}
+        onConfirm={onConfirm}
+        hitlSettledLabel={labels.hitlSettledElsewhere}
+      />
+    );
   }
   // `tool.args !== undefined` 守卫：onToolEnd 的兜底建块路径（宿主消息/宿主块
   // 都不在时间线上，直接建终态块）拿不到 args——end 事件本身不带这个字段。
