@@ -21,6 +21,11 @@ import { LLMUSE_GUIDE } from "../../src/prompt/llmuse-guide.js";
 import { PromptService } from "../../src/prompt/prompt.service";
 import { ToolRegistry } from "../../src/tools/tool-registry";
 
+/** ContextBuilder 第 2 参（AgentContextService）的测试替身：本文件用例不触发 MCP 路径，仅需占位对位。 */
+function agentCtxStub(): AgentContextService {
+  return { getOrThrow: () => "agent-test" } as unknown as AgentContextService;
+}
+
 const TEST_ACCOUNT = "test-account";
 
 function makeTestServices(testDir: string): {
@@ -79,6 +84,7 @@ function makeServices(opts: {
   );
   const contextBuilder = new ContextBuilder(
     opts.account,
+    agentCtxStub(),
     opts.runtimeContext,
     opts.memory,
     undefined,
