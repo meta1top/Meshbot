@@ -107,4 +107,21 @@ describe("UnifiedSheet", () => {
     );
     expect(screen.queryByLabelText("resize")).toBeNull();
   });
+  it("两个 sheet 同时 open 时 ESC 只关栈顶（后开的）", () => {
+    const closeLower = jest.fn();
+    const closeUpper = jest.fn();
+    render(
+      <>
+        <UnifiedSheet {...base} onOpenChange={closeLower}>
+          lower
+        </UnifiedSheet>
+        <UnifiedSheet {...base} onOpenChange={closeUpper}>
+          upper
+        </UnifiedSheet>
+      </>,
+    );
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(closeUpper).toHaveBeenCalledWith(false);
+    expect(closeLower).not.toHaveBeenCalled();
+  });
 });

@@ -62,6 +62,9 @@ export interface UnifiedSheetProps {
  *    （而非用 transform 常驻隐藏）：transform 不触发布局变化，Electron 不会重算
  *    draggable regions；挂载才产生真实布局变化，regions 必然重算。
  */
+/** 当前 open 的 UnifiedSheet 实例栈（模块级）：ESC 只由栈顶实例响应。 */
+const openSheetStack: symbol[] = [];
+
 export function UnifiedSheet({
   open,
   onOpenChange,
@@ -83,19 +86,32 @@ export function UnifiedSheet({
 }: UnifiedSheetProps) {
   const asideRef = useRef<HTMLElement>(null);
   const [resizing, setResizing] = useState(false);
+  const stackIdRef = useRef<symbol | null>(null);
+  if (stackIdRef.current === null) stackIdRef.current = Symbol("unified-sheet");
 
   const dismiss = useCallback(() => {
     if (dismissible) onOpenChange(false);
     else onDismissAttempt?.();
   }, [dismissible, onOpenChange, onDismissAttempt]);
 
+  // ESC 只作用于「栈顶」sheet：多实例同时 open（编辑 sheet 叠在预览面板上）时，
+  // 每个实例都在 document 上挂了 keydown，若不判栈顶会一键全关（或误触发
+  // 下层的 onDismissAttempt）。openSheetStack 按挂载序记录 open 实例，后开的在顶。
   useEffect(() => {
     if (!open) return;
+    const id = stackIdRef.current as symbol;
+    openSheetStack.push(id);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") dismiss();
+      if (e.key !== "Escape") return;
+      if (openSheetStack[openSheetStack.length - 1] !== id) return;
+      dismiss();
     };
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    return () => {
+      const i = openSheetStack.indexOf(id);
+      if (i >= 0) openSheetStack.splice(i, 1);
+      document.removeEventListener("keydown", onKey);
+    };
   }, [open, dismiss]);
 
   const startResize = useCallback(
