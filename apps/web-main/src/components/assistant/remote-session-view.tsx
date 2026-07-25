@@ -543,31 +543,38 @@ function RemoteSessionViewReady({
           </button>
         </div>
       )}
-      <div className="min-h-0 flex-1">
-        <ArtifactSplitPane
-          target={preview}
-          labels={{
-            empty: tArtifact("empty"),
-            body: {
-              loading: tArtifact("loading"),
-              loadFailed: tArtifact("loadFailed"),
-              unsupported: tArtifact("unsupported"),
-              tooLarge: (sizeMb: string) =>
-                tArtifact("tooLarge", { size: sizeMb }),
-              tooLargeHint: tArtifact("tooLargeHint"),
-              uploadFailed: tArtifact("uploadFailed"),
-              uploading: tArtifact("uploading"),
-              uploadToDrive: tArtifact("uploadToDrive"),
-              previewTitle: tArtifact("previewTitle"),
-              imageAlt: tArtifact("imageAlt"),
-            },
-          }}
-          transport={transport}
-          onUploadedToDrive={(up) => {
-            setUploadNotice({ name: up.name });
-          }}
-        />
-      </div>
+      {/* 直接作 UnifiedSheet children 的 flex 项（不要再套一层无 flex 的
+          包裹 div）：ArtifactSplitPane 自身根节点已带 `min-h-0 flex-1
+          overflow-auto`（或空态的 `h-full`），这组类只在直接父级是
+          `display:flex` 时才生效——UnifiedSheet 的 children 容器正是
+          `flex min-h-0 flex-1 flex-col`。之前多包的 `<div
+          className="min-h-0 flex-1">` 本身不带 `flex`，导致这层类失效、
+          高度退化成内容自适应，iframe 的 `h-full` 链条在此断掉，
+          面板下方大片空白（对齐 web-agent `(shell)/layout.tsx` 把
+          `<ArtifactSplitPane />` 直接作 UnifiedSheet 子节点的用法）。 */}
+      <ArtifactSplitPane
+        target={preview}
+        labels={{
+          empty: tArtifact("empty"),
+          body: {
+            loading: tArtifact("loading"),
+            loadFailed: tArtifact("loadFailed"),
+            unsupported: tArtifact("unsupported"),
+            tooLarge: (sizeMb: string) =>
+              tArtifact("tooLarge", { size: sizeMb }),
+            tooLargeHint: tArtifact("tooLargeHint"),
+            uploadFailed: tArtifact("uploadFailed"),
+            uploading: tArtifact("uploading"),
+            uploadToDrive: tArtifact("uploadToDrive"),
+            previewTitle: tArtifact("previewTitle"),
+            imageAlt: tArtifact("imageAlt"),
+          },
+        }}
+        transport={transport}
+        onUploadedToDrive={(up) => {
+          setUploadNotice({ name: up.name });
+        }}
+      />
     </UnifiedSheet>
   );
 
