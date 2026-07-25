@@ -20,12 +20,6 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
   Switch,
   Textarea,
   Tooltip,
@@ -39,16 +33,19 @@ import {
   DEFAULT_AGENT_AVATAR,
   QUICK_ASSISTANT_NAME_MAX,
 } from "@meshbot/types-agent";
+import { SheetTabBar, UnifiedSheet } from "@meshbot/web-common/shell";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAtomValue } from "jotai";
-import { Loader2 } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { forwardRef, useEffect, useState } from "react";
+import { forwardRef, useEffect, useRef, useState } from "react";
+import type { UseFormReturn } from "react-hook-form";
 import { type ZodType, z } from "zod";
 import { sessionsAtom } from "@/atoms/sessions";
 import { AgentAvatarField } from "@/components/agent/agent-avatar-field";
 import { McpEditor } from "@/components/agent/mcp-editor";
+import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import {
   agentsQueryKey,
   createAgent,
@@ -143,6 +140,7 @@ export function AgentEditorSheet({
   onOpenChange,
 }: AgentEditorSheetProps) {
   const t = useTranslations("agent.editor");
+  const tCommon = useTranslations("common");
   const queryClient = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();
@@ -157,6 +155,15 @@ export function AgentEditorSheet({
   const [deleting, setDeleting] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<"basic" | "mcp">("basic");
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const formApiRef = useRef<UseFormReturn<AgentFormValues> | null>(null);
+
+  /** 关闭意图入口：表单脏则先弹放弃确认，否则直接关。X 按钮 / 遮罩 / ESC 都走这里。 */
+  const requestClose = () => {
+    if (formApiRef.current?.formState.isDirty) setDiscardOpen(true);
+    else onOpenChange(false);
+  };
 
   // 抽屉每次从关到开都以 prop 为准重置——复制流程在「开着」期间改写
   // localAgentId，不受这个 effect 影响（它只在 open 变化时跑，故意不带 agentId
@@ -167,6 +174,8 @@ export function AgentEditorSheet({
       setLocalAgentId(agentId);
       setError(null);
       setDeleteConfirmOpen(false);
+      setTab("basic");
+      setDiscardOpen(false);
     }
   }, [open]);
 
@@ -274,21 +283,48 @@ export function AgentEditorSheet({
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        className="flex w-full flex-col gap-0 overflow-hidden sm:max-w-md"
+    <>
+      <UnifiedSheet
+        open={open}
+        onOpenChange={onOpenChange}
+        modal
+        dismissible={false}
+        onDismissAttempt={requestClose}
+        title={mode === "edit" ? t("editTitle") : t("createTitle")}
+        headerActions={
+          <button
+            type="button"
+            aria-label={tCommon("close")}
+            onClick={requestClose}
+            className="flex h-6 w-6 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        }
+        headerTabs={
+          <SheetTabBar
+            items={[
+              { key: "basic", label: t("tabBasic") },
+              {
+                key: "mcp",
+                label: t("tabMcp"),
+                disabled: mode === "create",
+                disabledHint: t("tabMcpDisabledHint"),
+              },
+            ]}
+            active={tab}
+            onChange={(k) => setTab(k as "basic" | "mcp")}
+          />
+        }
+        defaultWidth="28rem"
       >
-        <SheetHeader>
-          <SheetTitle>
-            {mode === "edit" ? t("editTitle") : t("createTitle")}
-          </SheetTitle>
-          <SheetDescription>
-            {mode === "edit" ? t("editDescription") : t("createDescription")}
-          </SheetDescription>
-        </SheetHeader>
-
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+        {/* keep-mounted：CSS 隐藏而非卸载，切 tab 不丢编辑中状态 */}
+        <div
+          className={cn(
+            "flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4",
+            tab !== "basic" && "hidden",
+          )}
+        >
           {mode === "create" && duplicateCandidates.length > 0 && (
             <div className="flex flex-col gap-1.5 rounded-md border border-dashed border-border p-3">
               <span className="text-[13px] font-medium text-foreground/85">
@@ -335,6 +371,7 @@ export function AgentEditorSheet({
           {formReady && (
             <Form
               key={localAgentId ?? "create"}
+              formApiRef={formApiRef}
               schema={schema}
               defaultValues={{
                 name: current?.name ?? "",
@@ -393,7 +430,7 @@ export function AgentEditorSheet({
                 </Alert>
               )}
 
-              <SheetFooter className="border-t-0 px-0 pt-0">
+              <div className="mt-auto flex items-center justify-end gap-2">
                 {mode === "edit" && (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -422,7 +459,7 @@ export function AgentEditorSheet({
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => onOpenChange(false)}
+                  onClick={requestClose}
                   disabled={submitting}
                 >
                   {t("cancel")}
@@ -433,52 +470,67 @@ export function AgentEditorSheet({
                   )}
                   {submitting ? t("saving") : t("save")}
                 </Button>
-              </SheetFooter>
+              </div>
             </Form>
-          )}
-
-          {/* MCP 配置：独立于上面的 Agent 身份表单（各自保存），只在编辑既有
-              Agent 时展示——新建态尚无 agentId，MCP 端点挂在 /api/agents/:id/mcp
-              下，没有 id 无处可读写；同时要求 formReady，避免和上面的加载态
-              同屏出现半截 UI。 */}
-          {mode === "edit" && localAgentId && formReady && (
-            <>
-              <div className="h-px bg-border" />
-              <McpEditor agentId={localAgentId} />
-            </>
           )}
         </div>
 
-        <AlertDialog
-          open={deleteConfirmOpen}
-          onOpenChange={setDeleteConfirmOpen}
+        {/* MCP 配置：独立于上面的 Agent 身份表单（各自保存），只在编辑既有 Agent
+            时展示——新建态尚无 agentId，MCP 端点挂在 /api/agents/:id/mcp 下，
+            没有 id 无处可读写；同时要求 formReady，避免和加载态同屏出现半截 UI。
+            tab 条已按 mode === "create" 禁用 mcp 项，这里的守卫是双保险。 */}
+        <div
+          className={cn(
+            "min-h-0 flex-1 overflow-y-auto p-4",
+            tab !== "mcp" && "hidden",
+          )}
         >
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>{t("deleteConfirmTitle")}</AlertDialogTitle>
-              <AlertDialogDescription>
-                {t("deleteConfirmDescription")}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel disabled={deleting}>
-                {t("cancel")}
-              </AlertDialogCancel>
-              <AlertDialogAction
-                disabled={deleting}
-                className={buttonVariants({ variant: "destructive" })}
-                onClick={(e) => {
-                  e.preventDefault();
-                  handleDelete();
-                }}
-              >
-                {deleting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                {deleting ? t("deleting") : t("deleteConfirm")}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </SheetContent>
-    </Sheet>
+          {mode === "edit" && localAgentId && formReady && (
+            <McpEditor agentId={localAgentId} />
+          )}
+        </div>
+      </UnifiedSheet>
+
+      <ConfirmDialog
+        open={discardOpen}
+        title={t("discardTitle")}
+        description={t("discardDescription")}
+        confirmText={t("discardConfirm")}
+        cancelText={t("discardCancel")}
+        destructive
+        onConfirm={() => {
+          setDiscardOpen(false);
+          onOpenChange(false);
+        }}
+        onCancel={() => setDiscardOpen(false)}
+      />
+
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("deleteConfirmTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("deleteConfirmDescription")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>
+              {t("cancel")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleting}
+              className={buttonVariants({ variant: "destructive" })}
+              onClick={(e) => {
+                e.preventDefault();
+                handleDelete();
+              }}
+            >
+              {deleting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {deleting ? t("deleting") : t("deleteConfirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

@@ -765,7 +765,14 @@
       "mcpSave": "保存 MCP 配置",
       "mcpSaving": "保存中…",
       "mcpSaveSuccess": "已保存",
-      "mcpSaveFailed": "保存失败，请重试"
+      "mcpSaveFailed": "保存失败，请重试",
+      "tabBasic": "基本信息",
+      "tabMcp": "MCP",
+      "tabMcpDisabledHint": "保存后可配置 MCP",
+      "discardTitle": "放弃未保存的更改？",
+      "discardDescription": "关闭后编辑内容将丢失",
+      "discardConfirm": "放弃",
+      "discardCancel": "继续编辑"
     }
   }
 }
