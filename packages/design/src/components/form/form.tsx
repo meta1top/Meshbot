@@ -6,6 +6,7 @@ import {
   cloneElement,
   type FC,
   isValidElement,
+  type MutableRefObject,
   type PropsWithChildren,
   type ReactElement,
   type ReactNode,
@@ -17,6 +18,7 @@ import {
   type FieldValues,
   type Resolver,
   type SubmitHandler,
+  type UseFormReturn,
   useForm,
 } from "react-hook-form";
 import type { ZodType } from "zod";
@@ -37,6 +39,13 @@ interface FormProps<T extends FieldValues> extends PropsWithChildren {
   onSubmit: SubmitHandler<T>;
   className?: string;
   disabled?: boolean;
+  /**
+   * 暴露 react-hook-form 实例给外部（读 formState.isDirty / 触发校验等）。
+   * 只读用途——受控写入仍走 defaultValues / FormItem，不要通过它 setValue。
+   */
+  formApiRef?: MutableRefObject<UseFormReturn<T> | null>;
+  /** 透传给 <form> 的 id：供表单外按钮用 `form` 属性关联提交（固定 footer 场景）。 */
+  id?: string;
 }
 
 /**
@@ -58,15 +67,19 @@ export function Form<T extends FieldValues>({
   onSubmit,
   className,
   disabled,
+  formApiRef,
+  id,
   children,
 }: FormProps<T>) {
   // biome-ignore lint/suspicious/noExplicitAny: zod 4.x 与 zodResolver 类型微差
   const resolver: Resolver<T> = zodResolver(schema as any);
   const form = useForm<T>({ resolver, defaultValues });
+  if (formApiRef) formApiRef.current = form;
 
   return (
     <UIForm {...form}>
       <form
+        id={id}
         onSubmit={form.handleSubmit(onSubmit)}
         className={className}
         noValidate

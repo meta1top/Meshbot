@@ -762,10 +762,17 @@
       "mcpLoadFailed": "Failed to load MCP configuration, please retry",
       "mcpPlaceholder": "Paste mcp.json content, e.g. Claude Desktop / Claude Code mcpServers config",
       "mcpJsonInvalid": "Invalid JSON: {detail}",
-      "mcpSave": "Save MCP configuration",
-      "mcpSaving": "Saving…",
-      "mcpSaveSuccess": "Saved",
-      "mcpSaveFailed": "Save failed, please retry"
+      "tabBasic": "Basic",
+      "tabMcp": "MCP",
+      "wizardStepBasic": "Basic info",
+      "wizardStepMcp": "MCP",
+      "wizardNext": "Next",
+      "wizardBack": "Back",
+      "wizardCreate": "Create",
+      "discardTitle": "Discard unsaved changes?",
+      "discardDescription": "Your edits will be lost",
+      "discardConfirm": "Discard",
+      "discardCancel": "Keep editing"
     }
   }
 }
