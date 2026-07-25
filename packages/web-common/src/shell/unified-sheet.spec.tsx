@@ -54,7 +54,7 @@ describe("UnifiedSheet", () => {
     );
     fireEvent.keyDown(document, { key: "Escape" });
     expect(onOpenChange).not.toHaveBeenCalled();
-    expect(onDismissAttempt).toHaveBeenCalled();
+    expect(onDismissAttempt).toHaveBeenCalledWith("esc");
   });
   it("modal=true 渲染遮罩；点遮罩按 dismissible 分流", () => {
     const onOpenChange = jest.fn();
@@ -78,7 +78,7 @@ describe("UnifiedSheet", () => {
       </UnifiedSheet>,
     );
     fireEvent.click(screen.getByTestId("sheet-overlay"));
-    expect(onDismissAttempt).toHaveBeenCalled();
+    expect(onDismissAttempt).toHaveBeenCalledWith("overlay");
   });
   it("modal=false 渲染纯视觉遮罩：pointer-events-none 且无点击关闭", () => {
     const onOpenChange = jest.fn();

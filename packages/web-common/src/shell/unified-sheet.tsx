@@ -18,8 +18,11 @@ export interface UnifiedSheetProps {
   modal?: boolean;
   /** ESC / 点遮罩是否直接关闭；false 时改为触发 {@link onDismissAttempt}，默认 true。 */
   dismissible?: boolean;
-  /** dismissible=false 时，ESC / 点遮罩触发的回调（如提示「有未保存改动」）。 */
-  onDismissAttempt?: () => void;
+  /**
+   * dismissible=false 时，ESC / 点遮罩触发的回调（带来源）：调用方可按来源
+   * 区别对待——表单类通常忽略 "overlay"（误触不该有任何反应），只响应 "esc"。
+   */
+  onDismissAttempt?: (source: "overlay" | "esc") => void;
   /** 标题栏文案；传字符串走默认排版，传节点完全自定义。 */
   title?: ReactNode;
   /** 标题栏右侧动作按钮组。 */
@@ -95,10 +98,13 @@ export function UnifiedSheet({
   const stackIdRef = useRef<symbol | null>(null);
   if (stackIdRef.current === null) stackIdRef.current = Symbol("unified-sheet");
 
-  const dismiss = useCallback(() => {
-    if (dismissible) onOpenChange(false);
-    else onDismissAttempt?.();
-  }, [dismissible, onOpenChange, onDismissAttempt]);
+  const dismiss = useCallback(
+    (source: "overlay" | "esc") => {
+      if (dismissible) onOpenChange(false);
+      else onDismissAttempt?.(source);
+    },
+    [dismissible, onOpenChange, onDismissAttempt],
+  );
 
   // ESC 只作用于「栈顶」sheet：多实例同时 open（编辑 sheet 叠在预览面板上）时，
   // 每个实例都在 document 上挂了 keydown，若不判栈顶会一键全关（或误触发
@@ -113,7 +119,7 @@ export function UnifiedSheet({
       // （但不 stopPropagation）——尊重它，否则删除确认开着按 ESC 会连关两层。
       if (e.defaultPrevented) return;
       if (openSheetStack[openSheetStack.length - 1] !== id) return;
-      dismiss();
+      dismiss("esc");
     };
     document.addEventListener("keydown", onKey);
     return () => {
@@ -175,7 +181,7 @@ export function UnifiedSheet({
         <div
           data-testid="sheet-overlay"
           className="fixed inset-0 z-9999 bg-black/10"
-          onClick={dismiss}
+          onClick={() => dismiss("overlay")}
           aria-hidden
         />
       ) : (
