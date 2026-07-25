@@ -284,8 +284,11 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
   /**
    * 读 & 校验当前 Agent 的 mcp.json（Agent 化路径）。文件不存在返 null；
    * JSON / schema 解析失败打日志返 null（配置写坏应被发现，但不拖垮启动）。
+   *
+   * 公开给 ContextBuilder（组装 system:mcp 清单）与自管理工具（mcp_list 等）
+   * 读取配置态；须在账号+Agent ALS 内调用（同 ensureAgent 的契约）。
    */
-  private loadConfig(): McpConfig | null {
+  loadConfig(): McpConfig | null {
     const path = this.config.getMcpConfigPath();
     if (!existsSync(path)) return null;
     let raw: unknown;
