@@ -425,7 +425,7 @@ export function AgentEditorSheet({
             <X className="h-4 w-4" />
           </button>
         }
-        // 新建态是单步表单，不需要 tab 条；编辑态三 tab：基本信息/提示词/MCP。
+        // 新建态是单步表单，不需要 tab 条；编辑态四 tab：基本信息/提示词/MCP/工具。
         headerTabs={
           mode === "edit" ? (
             <SheetTabBar
