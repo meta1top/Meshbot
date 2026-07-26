@@ -29,7 +29,9 @@ export function RecentSessionsSidebar() {
       <SidebarHeader title={t("recent")} />
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-2">
         {sessions.map((s) => (
-          <SessionListItem key={s.id} session={s} />
+          // depth=1：与助手树里 agent 展开后的会话条目同一缩进节奏（内容左移
+          // 22px），否则图标贴容器左缘、整列显得又挤又秃（用户验收反馈）。
+          <SessionListItem key={s.id} session={s} depth={1} />
         ))}
       </div>
     </div>
