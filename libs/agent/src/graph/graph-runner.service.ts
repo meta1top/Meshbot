@@ -120,9 +120,13 @@ export class GraphRunner {
    *
    * 每条入参构造一条带显式 id 的 HumanMessage（id = 调用方的 PendingMessage.id），
    * 让 checkpointer 里的 user 消息与 pending 表可对齐去重。
-   * system:persona / system:ctx / system:skills 均以稳定 id **每轮**刷新推送，
-   * reducer 按 id 原地替换、不累积（详见 graph.builder.ts 的 mergeMessages）。
-   * 透传 signal 支持中断。
+   * system:persona / system:ctx 恒存在，以稳定 id **每轮**刷新推送，reducer 按 id
+   * 原地替换、不累积；system:skills / system:mcp / system:prompts 三条可选系统
+   * 消息按 hasX 二选一：true 则同 id 重建（原地替换、位置不变），false 则改发
+   * RemoveMessage 清掉——防止 hasX 翻 false 后老会话残留旧内容（详见
+   * graph.builder.ts 的 mergeMessages；不能在 hasX=true 时也顺带塞 Remove，
+   * 否则触发 reducer 的「删原位、追加到末尾」降级路径，把系统消息挤到最新
+   * human 消息后面）。透传 signal 支持中断。
    *
    * @param inputs 至少一条 —— 调用方保证非空批次。
    * @param opts.subAgent 为 true 时用子图（排除 dispatch 工具）。
@@ -144,22 +148,47 @@ export class GraphRunner {
   ): AsyncGenerator<StreamChunk> {
     await this.threadState.sanitizeOrphanToolCalls(threadId);
     const inputMessages: BaseMessage[] = [];
-    // system:persona / system:ctx / system:skills 全部用稳定 id 每轮重发；
-    // reducer 按 id 原地更新（位置不变、不累积），无需先 RemoveMessage 再 Add。
-    // 人格正文（system:prompts）必须每轮刷新：用户随时可能改写提示词文件，
-    // 首轮写死会让老会话永远带旧人格（静默错误）。
+    // system:persona / system:ctx 恒存在，用稳定 id 每轮重发；reducer 按 id
+    // 原地更新（位置不变、不累积），无需先 RemoveMessage 再 Add。必须每轮刷新：
+    // 记忆 core.md / 运行时上下文随时可能变化，首轮写死会让老会话永远带旧内容
+    // （静默错误）。
     inputMessages.push(await this.contextBuilder.buildPersonaMessage());
     inputMessages.push(await this.contextBuilder.buildContextMessage(threadId));
+    // 可选系统消息（skills/mcp/prompts）：hasX 为 true 时重建（同 id 原地替换，
+    // 与 persona/ctx 同款，位置不变），为 false 时改成 RemoveMessage 清掉——
+    // hasX 从 true 翻 false（如删光提示词文件/卸载全部 MCP/删光技能）时，老会话
+    // checkpoint 里的旧消息必须清掉，否则残留旧人格/旧清单，用户不可见地被坑
+    // （终审 F2）。
+    //
+    // 重建与 Remove 严格二选一，**不能**在 hasX 为 true 的这一轮也无条件先塞
+    // RemoveMessage 再补同 id 新消息——mergeMessages 对「同批 RemoveMessage(id) +
+    // 同 id 新消息」的语义是「先删原位、再追加到末尾」（graph.builder.ts 里显式
+    // 写明是兼容旧 remove-then-add 的降级路径），若把这套「先 Remove 再 Add」当成
+    // 每轮常态使用，会让这三条系统消息在 hasX 恒为 true、内容压根没变的稳态下也
+    // 每轮被搬到消息列表末尾（挤在最新一条 human 消息后面）——系统前导块被打散、
+    // 位置不再稳定，直接烧掉 prompt 缓存。已用 vitest 实测复现（对 mergeMessages
+    // 连跑两轮「Remove+同 id 新消息」，system:skills 从位置 1 漂到 human 消息之
+    // 后），故改为本二选一写法，只在真正需要清掉（hasX=false）时才发 Remove。
+    // RemoveMessage 对 checkpoint 中不存在的 id 是安全 no-op——本仓 messages
+    // 通道用自定义 mergeMessages reducer（graph.builder.ts），不是 langgraph
+    // 内置 messagesStateReducer：它只在现存消息里按 id 命中才删，不存在的 id
+    // 直接被忽略（不抛错、不残留），已用 vitest 验证（见 messages-reducer.test.ts
+    // 「RemoveMessage 删除不存在的 id」用例），因此新会话首轮 hasX=false 时单独
+    // 发 Remove 面对空 checkpoint 同样安全。
     if (this.contextBuilder.hasSkills()) {
       inputMessages.push(this.contextBuilder.buildSkillsMessage());
+    } else {
+      inputMessages.push(new RemoveMessage({ id: "system:skills" }));
     }
     if (this.contextBuilder.hasMcp()) {
       inputMessages.push(this.contextBuilder.buildMcpMessage());
+    } else {
+      inputMessages.push(new RemoveMessage({ id: "system:mcp" }));
     }
-    // system:prompts 同范式每轮刷新：用户随时可能在提示词 tab 改写 prompts/ 目录
-    // 文件，改了下一轮就得感知（对照 system:mcp 刚做过的同款）。
     if (this.contextBuilder.hasPrompts()) {
       inputMessages.push(this.contextBuilder.buildPromptsMessage());
+    } else {
+      inputMessages.push(new RemoveMessage({ id: "system:prompts" }));
     }
     for (const input of inputs) {
       inputMessages.push(
@@ -204,19 +233,31 @@ export class GraphRunner {
       new RemoveMessage({ id: "system:ctx" }),
       await this.contextBuilder.buildContextMessage(threadId),
     ];
-    // system:mcp 与 persona/ctx 同范式每轮刷新：改 mcp.json 后老会话下一轮即感知。
-    if (this.contextBuilder.hasMcp()) {
-      resumeMessages.push(
-        new RemoveMessage({ id: "system:mcp" }),
-        this.contextBuilder.buildMcpMessage(),
-      );
+    // 可选系统消息（skills/mcp/prompts）：与 streamMessageImpl 同款「hasX 重建 /
+    // !hasX 二选一 Remove」（**不**在 hasX=true 时也顺带塞 Remove——同批
+    // RemoveMessage(id)+同 id 新消息会被 mergeMessages 降级成「删原位、追加到
+    // 末尾」，稳态每轮都执行会把系统消息搬到最新 human 消息后面，见
+    // streamMessageImpl 上方注释与实测），两条注入路径保持对称——否则同一条老
+    // 会话只要走过 resume（重试/续答）分支，就会绕开 streamMessageImpl 那次
+    // 清理，旧的技能目录/MCP 清单/提示词正文继续残留在 checkpoint 里（终审
+    // F2）。system:skills 此前 resumeStream 完全未处理（只有 streamMessageImpl
+    // 有），本次一并补齐，不再只靠首轮注入。RemoveMessage 对不存在的 id 是安全
+    // no-op（自定义 mergeMessages reducer，见 streamMessageImpl 上方注释与
+    // messages-reducer.test.ts 的验证）。
+    if (this.contextBuilder.hasSkills()) {
+      resumeMessages.push(this.contextBuilder.buildSkillsMessage());
+    } else {
+      resumeMessages.push(new RemoveMessage({ id: "system:skills" }));
     }
-    // system:prompts 同范式每轮刷新：改 prompts/ 文件后老会话下一轮即感知。
+    if (this.contextBuilder.hasMcp()) {
+      resumeMessages.push(this.contextBuilder.buildMcpMessage());
+    } else {
+      resumeMessages.push(new RemoveMessage({ id: "system:mcp" }));
+    }
     if (this.contextBuilder.hasPrompts()) {
-      resumeMessages.push(
-        new RemoveMessage({ id: "system:prompts" }),
-        this.contextBuilder.buildPromptsMessage(),
-      );
+      resumeMessages.push(this.contextBuilder.buildPromptsMessage());
+    } else {
+      resumeMessages.push(new RemoveMessage({ id: "system:prompts" }));
     }
     yield* this.runGraphStream(
       threadId,

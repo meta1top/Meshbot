@@ -17,8 +17,10 @@ import { ModelResolver } from "../../src/graph/model-resolver.service.js";
 import { ModelRunContext } from "../../src/graph/model-run-context.js";
 import { ThreadStateService } from "../../src/graph/thread-state.service.js";
 import type { RuntimeContextPort } from "../../src/graph/runtime-context.port";
+import type { McpService } from "../../src/mcp/mcp.service";
 import { PromptService } from "../../src/prompt/prompt.service";
 import type { PromptFileService } from "../../src/prompts/prompt-file.service";
+import type { SkillService } from "../../src/skills/skill.service";
 import { ToolRegistry } from "../../src/tools/tool-registry";
 import type { MeshbotTool } from "../../src/tools/tool.types";
 
@@ -746,6 +748,264 @@ describe("GraphRunner system:prompts 每轮刷新", () => {
     expect(promptsContent).toContain("全新人格");
     expect(promptsContent).not.toContain("初始人格");
   });
+});
+
+// ─── F2：可选系统消息 hasX 翻转后老会话残留清理 ────────────────────────────────
+//
+// 背景（终审 F2）：system:skills / system:mcp / system:prompts 三条可选系统消息，
+// graph-runner 原先是「hasX 才 RemoveMessage + push」——hasX 从 true 翻 false 时
+// （删光提示词文件 / 卸载全部 MCP / 删光技能），既不再重建，也不会去删旧的那条，
+// 老会话 checkpoint 里的旧消息永久残留：旧人格 / 旧清单继续喂给 LLM，用户不可见
+// 地被坑。修复为「无条件 RemoveMessage({id}) + hasX 条件重建」，两条注入路径
+// （streamMessageImpl 续聊 / resumeStream 重试续答）都要覆盖到——resumeStream
+// 此前甚至完全没处理 system:skills（只有 streamMessageImpl 有），本次一并补齐。
+//
+// 用两个共享同一个 AccountGraphProvider（= 同一份 checkpoint）的 GraphRunner
+// 模拟 hasX 翻转：hasSkills()/hasMcp() 只看 ContextBuilder 构造时是否注入了对应
+// Optional 服务，同一个 ContextBuilder 实例运行期不可变，因此用「注入版」与
+// 「不注入版」两个 ContextBuilder 分饰 hasX 翻转前后的两轮；hasPrompts() 虽然
+// 是内容驱动的，也同样用两个 PromptFileService 测试替身（有内容 / 空列表）保持
+// 三种可选消息的测试结构一致。RemoveMessage 对 checkpoint 中不存在的 id 是安全
+// no-op 已在 messages-reducer.test.ts 用 mergeMessages 直接验证过。
+
+/** F2 残留测试用「有内容」的技能/MCP/提示词服务替身：list() 恒返回一个带标记内容的条目。 */
+function makeEnabledFlagServices(marker: string): {
+  skills: SkillService;
+  mcp: McpService;
+  prompts: PromptFileService;
+} {
+  return {
+    skills: {
+      list: () => [{ name: marker, description: `${marker}-desc` }],
+    } as unknown as SkillService,
+    mcp: {
+      loadConfig: () => ({
+        mcpServers: { [marker]: { command: "x", args: [] } },
+      }),
+      getLoadedToolNames: () => null,
+    } as unknown as McpService,
+    prompts: {
+      list: () => [
+        {
+          file: "AGENT.md",
+          size: marker.length,
+          mtime: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      read: () => marker,
+    } as unknown as PromptFileService,
+  };
+}
+
+describe("GraphRunner F2：可选系统消息 hasX 翻转后老会话残留清理", () => {
+  let testDir: string;
+
+  beforeEach(() => {
+    testDir = mkdtempSync(path.join(tmpdir(), "meshbot-f2-residual-test-"));
+    mkdirSync(path.join(testDir, "prompt"), { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(testDir, { recursive: true, force: true });
+  });
+
+  /** 真实跑一轮的最简 BaseChatModel：每次调用产出唯一 msg id + 固定正文，不触发 tool_calls。 */
+  class RoundModel extends BaseChatModel {
+    private callCount = 0;
+    _llmType() {
+      return "f2-residual-fake";
+    }
+    async _generate(): Promise<never> {
+      throw new Error("不应走 _generate");
+    }
+    async *_streamResponseChunks(): AsyncGenerator<ChatGenerationChunk> {
+      this.callCount += 1;
+      yield new ChatGenerationChunk({
+        message: new AIMessageChunk({
+          id: `f2-round-${this.callCount}`,
+          content: "ok",
+        }),
+        text: "ok",
+      });
+    }
+  }
+
+  /** 装配一对共享同一 AccountGraphProvider（= 同一份 checkpoint）的 GraphRunner：A 注入了 flag 对应服务，B 没有。 */
+  function makeRunnerPair(flag: "skills" | "mcp" | "prompts") {
+    const ctx = new AccountContextService();
+    const configService = new MeshbotConfigService(
+      ctx,
+      new AgentContextService(),
+    );
+    (configService as unknown as Record<string, string>).meshbotDir = testDir;
+    const toolRegistry = new ToolRegistry(
+      { getProviders: () => [] } as never,
+      new AccountContextService(),
+      new AgentContextService(),
+    );
+    const eventEmitter = new EventEmitter2();
+    const fakeModel = new RoundModel({});
+    const modelResolver = new ModelResolver(
+      ctx,
+      new ModelRunContext(),
+      { resolveActive: async () => null, resolveById: async () => null },
+      () => Promise.resolve(fakeModel as never),
+      { providerType: "fake", model: "fake-model" },
+    );
+    // 两个 GraphRunner 共用同一个 AccountGraphProvider 实例 → accountGraph() 内部
+    // 按账号缓存的 {graph, checkpointer} 是同一份，第二轮才能读到第一轮写入的旧消息。
+    const accountGraphProvider = new AccountGraphProvider(
+      configService,
+      ctx,
+      toolRegistry,
+      eventEmitter,
+      modelResolver,
+    );
+    const threadState = new ThreadStateService(accountGraphProvider);
+
+    const enabled = makeEnabledFlagServices(`marker-${flag}`);
+    const contextBuilderA = new ContextBuilder(
+      ctx,
+      agentCtxStub(),
+      undefined,
+      undefined,
+      flag === "skills" ? enabled.skills : undefined,
+      modelResolver,
+      flag === "mcp" ? enabled.mcp : undefined,
+      flag === "prompts" ? enabled.prompts : undefined,
+    );
+    const contextBuilderB = new ContextBuilder(
+      ctx,
+      agentCtxStub(),
+      undefined,
+      undefined,
+      undefined,
+      modelResolver,
+      undefined,
+      flag === "prompts"
+        ? ({ list: () => [], read: () => "" } as unknown as PromptFileService)
+        : undefined,
+    );
+    const graphRunnerA = new GraphRunner(
+      accountGraphProvider,
+      modelResolver,
+      contextBuilderA,
+      threadState,
+    );
+    const graphRunnerB = new GraphRunner(
+      accountGraphProvider,
+      modelResolver,
+      contextBuilderB,
+      threadState,
+    );
+    return { ctx, threadState, graphRunnerA, graphRunnerB };
+  }
+
+  const cases: Array<{ flag: "skills" | "mcp" | "prompts"; msgId: string }> = [
+    { flag: "skills", msgId: "system:skills" },
+    { flag: "mcp", msgId: "system:mcp" },
+    { flag: "prompts", msgId: "system:prompts" },
+  ];
+
+  for (const { flag, msgId } of cases) {
+    it(`streamMessage 续聊：${flag} 的 hasX 从 true 翻 false 后，checkpoint 里 ${msgId} 被清除`, async () => {
+      const { ctx, threadState, graphRunnerA, graphRunnerB } =
+        makeRunnerPair(flag);
+      const threadId = await graphRunnerA.startSession({ model: "fake" });
+
+      // 第一轮：hasX=true，真实跑一轮，把 msgId 写进 checkpoint
+      await ctx.run(TEST_ACCOUNT, async () => {
+        for await (const _ of graphRunnerA.streamMessage(threadId, [
+          { id: "pm-1", content: "hi" },
+        ])) {
+          // 消费完
+        }
+      });
+      const before = await ctx.run(TEST_ACCOUNT, () =>
+        threadState.getMessagesSnapshot(threadId),
+      );
+      expect(before.some((m) => m.id === msgId)).toBe(true);
+
+      // 第二轮：hasX=false（老会话续聊），走 streamMessageImpl
+      await ctx.run(TEST_ACCOUNT, async () => {
+        for await (const _ of graphRunnerB.streamMessage(threadId, [
+          { id: "pm-2", content: "hello" },
+        ])) {
+          // 消费完
+        }
+      });
+      const after = await ctx.run(TEST_ACCOUNT, () =>
+        threadState.getMessagesSnapshot(threadId),
+      );
+      expect(after.some((m) => m.id === msgId)).toBe(false);
+    });
+
+    it(`resumeStream：${flag} 的 hasX 从 true 翻 false 后，checkpoint 里 ${msgId} 被清除`, async () => {
+      const { ctx, threadState, graphRunnerA, graphRunnerB } =
+        makeRunnerPair(flag);
+      const threadId = await graphRunnerA.startSession({ model: "fake" });
+
+      // 第一轮：hasX=true，真实跑一轮，把 msgId 写进 checkpoint
+      await ctx.run(TEST_ACCOUNT, async () => {
+        for await (const _ of graphRunnerA.streamMessage(threadId, [
+          { id: "pm-1", content: "hi" },
+        ])) {
+          // 消费完
+        }
+      });
+      const before = await ctx.run(TEST_ACCOUNT, () =>
+        threadState.getMessagesSnapshot(threadId),
+      );
+      expect(before.some((m) => m.id === msgId)).toBe(true);
+
+      // 第二轮：hasX=false，走 resumeStream（重试/续答分支，不加新 HumanMessage）
+      await ctx.run(TEST_ACCOUNT, async () => {
+        for await (const _ of graphRunnerB.resumeStream(threadId)) {
+          // 消费完
+        }
+      });
+      const after = await ctx.run(TEST_ACCOUNT, () =>
+        threadState.getMessagesSnapshot(threadId),
+      );
+      expect(after.some((m) => m.id === msgId)).toBe(false);
+    });
+
+    it(`streamMessage 续聊：${flag} 的 hasX 恒为 true（内容不变）连续两轮，${msgId} 位置不漂移到最新 human 消息之后`, async () => {
+      // 回归护栏：若误把「hasX 重建 / !hasX 二选一 Remove」写成「无条件 Remove +
+      // hasX 条件重建」，hasX 恒 true 的稳态下每轮都会命中 mergeMessages 的
+      // 「同批 RemoveMessage(id) + 同 id 新消息 → 删原位、追加到末尾」降级路径，
+      // 把系统消息挤到最新 human 消息后面，系统前导块被打散、prompt 缓存被烧掉。
+      const { ctx, threadState, graphRunnerA } = makeRunnerPair(flag);
+      const threadId = await graphRunnerA.startSession({ model: "fake" });
+
+      await ctx.run(TEST_ACCOUNT, async () => {
+        for await (const _ of graphRunnerA.streamMessage(threadId, [
+          { id: "pm-1", content: "hi" },
+        ])) {
+          // 消费完
+        }
+      });
+      await ctx.run(TEST_ACCOUNT, async () => {
+        for await (const _ of graphRunnerA.streamMessage(threadId, [
+          { id: "pm-2", content: "hello" },
+        ])) {
+          // 消费完
+        }
+      });
+
+      const snapshot = await ctx.run(TEST_ACCOUNT, () =>
+        threadState.getMessagesSnapshot(threadId),
+      );
+      const flagIdx = snapshot.findIndex((m) => m.id === msgId);
+      const firstHumanIdx = snapshot.findIndex((m) => m.id === "pm-1");
+      expect(flagIdx).toBeGreaterThanOrEqual(0);
+      expect(firstHumanIdx).toBeGreaterThanOrEqual(0);
+      // 系统前导块必须仍在第一条 human 消息之前——不能被搬到会话历史中间/末尾。
+      expect(flagIdx).toBeLessThan(firstHumanIdx);
+      // 恰好一条，不因两轮刷新而重复累积。
+      expect(snapshot.filter((m) => m.id === msgId)).toHaveLength(1);
+    });
+  }
 });
 
 // ─── messages 流按 metadata.thread_id 过滤（子图冒泡防护） ────────────────────
