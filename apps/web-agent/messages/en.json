@@ -450,7 +450,8 @@
       "longestStreak": "Longest streak",
       "peakHour": "Peak hour",
       "favoriteModel": "Favorite model"
-    }
+    },
+    "noRecentSessions": "No sessions yet — start one from the composer"
   },
   "metrics": {
     "sessions": "Sessions",

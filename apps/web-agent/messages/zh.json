@@ -450,7 +450,8 @@
       "longestStreak": "最长连续天数",
       "peakHour": "高峰时段",
       "favoriteModel": "常用模型"
-    }
+    },
+    "noRecentSessions": "暂无会话，去中间输入框开启第一个吧"
   },
   "metrics": {
     "sessions": "会话数",
