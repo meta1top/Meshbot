@@ -21,7 +21,6 @@ import {
   SelectTrigger,
   SelectValue,
   Switch,
-  Textarea,
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -46,12 +45,15 @@ import { type ZodType, z } from "zod";
 import { sessionsAtom } from "@/atoms/sessions";
 import { AgentAvatarField } from "@/components/agent/agent-avatar-field";
 import { McpEditor } from "@/components/agent/mcp-editor";
+import {
+  PromptFilesEditor,
+  type PromptFilesEditorHandle,
+} from "@/components/agent/prompt-files-editor";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import {
   agentsQueryKey,
   createAgent,
   deleteAgent,
-  duplicateAgent,
   getAgentMcp,
   putAgentMcp,
   updateAgent,
@@ -82,24 +84,6 @@ function mcpJsonSyntaxError(raw: string): string | null {
     return null;
   } catch (err) {
     return err instanceof Error ? err.message : String(err);
-  }
-}
-
-/**
- * mcp 文本在语义上是否等价于「空/默认配置」（空白或 `{"mcpServers": {}}`）——
- * 新建向导「创建」时用来判断要不要额外调用一次 MCP 保存接口（agent 刚创建，
- * 本就没有 mcp.json，等价空值没必要发这次请求）。调用前应已过
- * {@link mcpJsonSyntaxError} 校验（非法 JSON 在这里按「非默认」处理，不阻断）。
- */
-function isMcpDefaultValue(raw: string): boolean {
-  const trimmed = raw.trim();
-  if (trimmed === "") return true;
-  try {
-    return (
-      JSON.stringify(JSON.parse(trimmed)) === JSON.stringify({ mcpServers: {} })
-    );
-  } catch {
-    return false;
   }
 }
 
@@ -182,13 +166,10 @@ interface AgentEditorSheetProps {
 }
 
 /**
- * Agent 编辑抽屉：新建 / 编辑 / 复制 / 删除。
+ * Agent 编辑抽屉：新建（单步表单）/ 编辑（基本信息 + 提示词 + MCP 三 tab）/ 删除。
  *
- * 「复制」需要在同一次打开会话里把抽屉从「新建」切到「编辑新 agent」，
- * 而 `agentId` 是父组件受控的 prop（由 `assistant-sidebar` 触发，只会传
- * null 或某个既有 agent id，不知道复制诞生的新 id）——用 `localAgentId`
- * 内部状态承接：每次抽屉从关到开都用 prop 重置一次，但打开期间可以被
- * `handleDuplicate` 改写，脱离 prop 独立驱动 UI。
+ * 「从现有 Agent 复制」入口已移出本组件（改到侧栏菜单，见第三段），新建态
+ * 恒是单步表单：name/avatar/description/defaultModel，创建成功直接关闭。
  *
  * 无全局「当前 Agent」概念（Agent 并列，各处就地选）：删除 Agent 后不再
  * 切换任何「当前」，只在「正打开的会话恰好属于被删 Agent」时导航离开
@@ -211,19 +192,19 @@ export function AgentEditorSheet({
 
   const [localAgentId, setLocalAgentId] = useState<string | null>(agentId);
   const [submitting, setSubmitting] = useState(false);
-  const [duplicating, setDuplicating] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"basic" | "mcp">("basic");
+  type EditorTab = "basic" | "prompts" | "mcp";
+  const [tab, setTab] = useState<EditorTab>("basic");
   const [discardOpen, setDiscardOpen] = useState(false);
-  // 新建态改「步骤条」：null = 非向导（真实编辑，或已通过「从现有 Agent
-  // 复制」直接拿到成品 Agent）；1 = 步骤一（基本信息，尚无 id，只做本地校验，
-  // 不发请求）；2 = 步骤二（MCP，留空可跳过；点「创建」才真正创建 agent，
-  // 若 MCP 非默认值再一并提交）。
-  const [wizardStep, setWizardStep] = useState<1 | 2 | null>(() =>
-    agentId === null ? 1 : null,
-  );
+  // 未保存切 tab（离开「提示词」时）待确认的目标 tab；null 表示当前弹出的
+  // discardOpen 确认框是「关闭整个抽屉」而非「切 tab」，两者共用同一个确认框。
+  const [pendingTab, setPendingTab] = useState<EditorTab | null>(null);
+  // 提示词 tab 当前选中文件是否有未保存改动——由 PromptFilesEditor 冒泡上来，
+  // 并入 requestClose / 切 tab 的脏检测。
+  const [promptDirty, setPromptDirty] = useState(false);
+  const promptEditorRef = useRef<PromptFilesEditorHandle>(null);
   const formApiRef = useRef<UseFormReturn<AgentFormValues> | null>(null);
 
   // 受控 MCP 编辑器状态：`mcpInitial` 是加载/进入时的基线（编辑态=后端已存的
@@ -235,21 +216,34 @@ export function AgentEditorSheet({
   const [mcpLoading, setMcpLoading] = useState(false);
   const [mcpLoadFailed, setMcpLoadFailed] = useState(false);
 
-  /** 关闭意图入口：表单脏或 MCP 文本相对基线有改动，先弹放弃确认，否则直接
-   *  关。X 按钮 / ESC 都走这里；遮罩点击不走（见 onDismissAttempt）。
-   *  向导步骤二关闭 = 放弃整个新建（agent 尚未创建），同样要经过这个脏判定
-   *  ——能走到步骤二说明步骤一至少填过必填项，表单必然脏，不会被误判成
-   *  「无改动直接关」。 */
+  /** 关闭意图入口：表单脏 / MCP 文本相对基线有改动 / 提示词当前文件有未保存
+   *  改动，先弹放弃确认，否则直接关。X 按钮 / ESC 都走这里；遮罩点击不走
+   *  （见 onDismissAttempt）。`pendingTab` 置空表示这次确认框是「关闭整个
+   *  抽屉」的语义（区别于切 tab 的确认，见下方 tab 切换处理）。 */
   const requestClose = () => {
     const formDirty = formApiRef.current?.formState.isDirty ?? false;
     const mcpDirty = mcpValue !== mcpInitial;
-    if (formDirty || mcpDirty) setDiscardOpen(true);
-    else onOpenChange(false);
+    if (formDirty || mcpDirty || promptDirty) {
+      setPendingTab(null);
+      setDiscardOpen(true);
+    } else {
+      onOpenChange(false);
+    }
   };
 
-  // 抽屉每次从关到开都以 prop 为准重置——复制流程在「开着」期间改写
-  // localAgentId，不受这个 effect 影响（它只在 open 变化时跑，故意不带 agentId
-  // 依赖：agentId 变化但 open 未变化时不应该打断正在编辑的复制态）。
+  /** 切 tab 请求入口：离开「提示词」且当前文件有未保存改动时先弹放弃确认
+   *  （复用 discardOpen 同一个确认框，`pendingTab` 记录确认后要切到的 tab）；
+   *  其余情况直接切换。 */
+  const requestTabChange = (next: EditorTab) => {
+    if (tab === "prompts" && promptDirty && next !== "prompts") {
+      setPendingTab(next);
+      setDiscardOpen(true);
+      return;
+    }
+    setTab(next);
+  };
+
+  // 抽屉每次从关到开都以 prop 为准重置。
   // biome-ignore lint/correctness/useExhaustiveDependencies: 有意只依赖 open
   useEffect(() => {
     if (open) {
@@ -258,8 +252,8 @@ export function AgentEditorSheet({
       setDeleteConfirmOpen(false);
       setTab("basic");
       setDiscardOpen(false);
-      // 以 prop 为准：agentId 为 null 才是新建态，进步骤条步骤一。
-      setWizardStep(agentId === null ? 1 : null);
+      setPendingTab(null);
+      setPromptDirty(false);
       setMcpValue(DEFAULT_MCP_RAW);
       setMcpInitial(DEFAULT_MCP_RAW);
       setMcpError(null);
@@ -268,13 +262,10 @@ export function AgentEditorSheet({
     }
   }, [open]);
 
-  // 真实编辑态（非向导）加载该 Agent 现有的 mcp.json，按 localAgentId 隔离
-  // （复制流程切换 id 后重新拉取）。向导态（wizardStep !== null）故意不在这里
-  // 处理：步骤二的 MCP 是用户正在填的本地新值，不该被 GET 结果覆盖——包括
-  // 「agent 已创建但 MCP 保存失败」后停留在步骤二重试的场景，此时
-  // localAgentId 已非空但 wizardStep 仍是 2。
+  // 编辑态加载该 Agent 现有的 mcp.json，按 localAgentId 隔离；`!localAgentId`
+  // 已隐含新建态跳过（新建态没有既有 mcp.json 可拉）。
   useEffect(() => {
-    if (!open || wizardStep !== null || !localAgentId) return;
+    if (!open || !localAgentId) return;
     let cancelled = false;
     setMcpLoading(true);
     setMcpLoadFailed(false);
@@ -294,7 +285,7 @@ export function AgentEditorSheet({
     return () => {
       cancelled = true;
     };
-  }, [open, wizardStep, localAgentId]);
+  }, [open, localAgentId]);
 
   const mode: "create" | "edit" = localAgentId ? "edit" : "create";
   // react-hook-form 的 `defaultValues` 只在 `<Form>` 挂载那一刻生效，之后
@@ -302,8 +293,7 @@ export function AgentEditorSheet({
   // agents 列表尚未加载完成时就挂载 `<Form>`，defaultValues 会被冻结成空
   // 字符串——用户什么都没删，保存时却把这份「看起来是用户清空」的空值原样
   // 提交，后端 `AgentService.update()` 走的是 `Object.assign` 部分覆盖语义，
-  // 无法分辨「真清空」与「表单没读到值」，于是把已保存的 systemPrompt 覆盖
-  // 成空串——这正是「系统提示词保存后失效 / 重新打开看不到」的根因。
+  // 无法分辨「真清空」与「表单没读到值」，会把已保存字段覆盖成空串。
   // 用「数据就绪前不挂载 `<Form>`」根治：确保挂载时 defaultValues 一定来自
   // 已加载好的真实 Agent 数据。
   const agentsReady = agents !== undefined;
@@ -311,7 +301,6 @@ export function AgentEditorSheet({
     ? (agents.find((a) => a.id === localAgentId) ?? null)
     : null;
   const canDelete = (agents?.length ?? 0) > 1;
-  const duplicateCandidates = agents ?? [];
   // 新建态不依赖 agents 加载（没有既有数据要等）；编辑态必须等 agents 就绪
   // 且能找到目标 Agent，才允许 `<Form>` 挂载。
   const formReady = mode === "create" || (agentsReady && current !== null);
@@ -336,20 +325,31 @@ export function AgentEditorSheet({
   /**
    * `<Form>` 的 onSubmit：走到这里说明 RHF + zodResolver 已经校验通过。
    *
-   * - 向导步骤一「下一步」：只切步骤，不发任何请求——创建被推迟到步骤二
-   *   「创建」（见 {@link handleCreate}），这里只负责本地校验 + 前进。
-   * - 真实编辑态「保存」：基本信息 + （若有改动）MCP 配置一起提交。
-   *
-   * 向导步骤二的「创建」不走这条路径：它是独立按钮（type="button"），手动
-   * 用 `formApiRef.current?.getValues()` 取基本信息，理由见 handleCreate 注释。
+   * - 新建态：单步表单直接创建（`remoteEnabled` 尚无 id 时没有意义，提交前剔除），
+   *   成功即刷新列表并关闭抽屉，不再有「创建后进 MCP 步骤」这一环——MCP/提示词
+   *   留给创建完成后重新打开编辑抽屉配置。
+   * - 编辑态：基本信息 + （若有改动）MCP 配置一起提交。
    */
   const handleSubmit = async (values: AgentFormValues) => {
-    if (wizardStep === 1) {
-      setTab("mcp");
-      setWizardStep(2);
+    if (mode === "create") {
+      setSubmitting(true);
+      setError(null);
+      try {
+        // 创建接口（AgentCreateSchema）不认识 remoteEnabled——新建 Agent
+        // 尚无 id，「允许远程」要等有 id 之后才有意义，这里剔除掉。
+        const { remoteEnabled: _remoteEnabled, ...createValues } = values;
+        await createAgent(createValues);
+        await invalidateAgents();
+        onOpenChange(false);
+      } catch (err) {
+        setError(extractErrorMessage(err, t("saveFailed")));
+      } finally {
+        setSubmitting(false);
+      }
       return;
     }
-    if (mode !== "edit" || !localAgentId) return; // 理论不可达，收窄类型
+
+    if (!localAgentId) return; // 理论不可达，收窄类型
 
     let mcpPayload: string | null = null;
     if (mcpValue !== mcpInitial) {
@@ -359,9 +359,8 @@ export function AgentEditorSheet({
         setTab("mcp");
         return; // 阻断保存：基本信息也不提交
       }
-      // 变化了但清空成空白 ≠「跳过提交」（那是向导态新建的语义，agent 尚无
-      // mcp.json 无需创建）——编辑态文件已存在，必须显式写回默认态才能真正
-      // 清空已保存的配置。
+      // 变化了但清空成空白 ≠「跳过提交」——编辑态文件已存在，必须显式写回
+      // 默认态才能真正清空已保存的配置。
       mcpPayload = mcpValue.trim() === "" ? DEFAULT_MCP_RAW : mcpValue;
     }
 
@@ -380,76 +379,6 @@ export function AgentEditorSheet({
       setError(extractErrorMessage(err, t("saveFailed")));
     } finally {
       setSubmitting(false);
-    }
-  };
-
-  /**
-   * 向导步骤二「创建」：一次性完成「创建 agent →（MCP 非默认值时）提交 MCP
-   * 配置 → 刷新列表 → 关闭」。
-   *
-   * 用 `getValues()` 而不是把这个按钮也接进 `<Form>` 的 submit 路径——一是
-   * 「上一步」是 type="button"，两个按钮语义不对称没必要都走 submit；二是
-   * 失败恢复要能在不重新触发表单校验事件的前提下单独重试 MCP 这一步。
-   *
-   * 失败恢复（防重复创建）：createAgent 成功但 MCP 保存失败时，`localAgentId`
-   * 已经落回真实 id——下次点「创建」会因为 `agentId`（=localAgentId）非空
-   * 跳过 createAgent 分支，只重试 MCP 提交。
-   */
-  const handleCreate = async () => {
-    setError(null);
-    const syntaxErr = mcpJsonSyntaxError(mcpValue);
-    if (syntaxErr) {
-      setMcpError(t("mcpJsonInvalid", { detail: syntaxErr }));
-      return;
-    }
-    const mcpPayload = isMcpDefaultValue(mcpValue) ? null : mcpValue;
-
-    setSubmitting(true);
-    try {
-      let agentId = localAgentId;
-      if (!agentId) {
-        const values = formApiRef.current?.getValues();
-        if (!values) throw new Error(t("saveFailed"));
-        // 创建接口（AgentCreateSchema）不认识 remoteEnabled——新建 Agent
-        // 尚无 id，「允许远程」要等有 id 之后才有意义，这里剔除掉。
-        const { remoteEnabled: _remoteEnabled, ...createValues } = values;
-        const created = await createAgent(createValues);
-        agentId = created.id;
-        setLocalAgentId(agentId);
-        // 立即失效缓存，而不是拖到 MCP 也提交完——`mode`（= localAgentId ?
-        // "edit" : "create"）这一帧起就会翻成 "edit"，若 agents 列表缓存没
-        // 跟上，`formReady`/`agentMissing` 会把刚创建的 agent 误判成「不存在」
-        // （agentsReady && current===null），基本信息 <Form> 被整个卸载——
-        // MCP 保存失败后退回步骤一查看基本信息会看到「Agent 已被删除」的假象。
-        await invalidateAgents();
-      }
-      if (mcpPayload !== null) {
-        await putAgentMcp(agentId, { raw: mcpPayload });
-      }
-      onOpenChange(false);
-    } catch (err) {
-      setError(extractErrorMessage(err, t("saveFailed")));
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDuplicate = async (sourceId: string) => {
-    if (!sourceId || duplicating) return;
-    setDuplicating(true);
-    setError(null);
-    try {
-      const created = await duplicateAgent(sourceId);
-      await invalidateAgents();
-      // 复制完成：脱离新建态/步骤条，把这个已打开的抽屉直接切到编辑新
-      // agent——复制出来的已是成品配置，不需要再走「基本信息 → MCP」的
-      // 步骤流程。
-      setLocalAgentId(created.id);
-      setWizardStep(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("duplicateFailed"));
-    } finally {
-      setDuplicating(false);
     }
   };
 
@@ -481,98 +410,54 @@ export function AgentEditorSheet({
   };
 
   // 底部固定动作条（UnifiedSheet `footer` 槽，不随正文滚动）：
-  // - 步骤一：[取消] [下一步]——「下一步」是表单提交按钮，用 HTML `form`
-  //   属性关联回 <form>，走 handleSubmit 的本地校验路径（也保住 Enter 隐式
-  //   提交，行为与点按钮一致）。
-  // - 步骤二：[上一步] [创建]——两者都是独立按钮，不进表单 submit 路径，
-  //   「创建」走 handleCreate（一次性创建 agent + 提交 MCP）。
-  // - 真实编辑态：[删除] [取消] [保存]——「保存」同样是表单提交按钮。
-  const footerContent =
-    wizardStep === 1 ? (
-      <>
-        <div className="flex-1" />
-        <Button
-          type="button"
-          variant="outline"
-          onClick={requestClose}
-          disabled={submitting}
-        >
-          {t("cancel")}
-        </Button>
-        <Button
-          type="submit"
-          form={AGENT_EDITOR_FORM_ID}
-          variant="brand"
-          disabled={submitting}
-        >
-          {t("wizardNext")}
-        </Button>
-      </>
-    ) : wizardStep === 2 ? (
-      <>
-        <div className="flex-1" />
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => {
-            setWizardStep(1);
-            setTab("basic");
-          }}
-          disabled={submitting}
-        >
-          {t("wizardBack")}
-        </Button>
-        <Button
-          type="button"
-          variant="brand"
-          disabled={submitting}
-          onClick={() => void handleCreate()}
-        >
-          {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          {submitting ? t("saving") : t("wizardCreate")}
-        </Button>
-      </>
-    ) : formReady ? (
-      <>
-        {mode === "edit" && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              {/* disabled 按钮包一层 span：Radix Tooltip 需要可聚焦/可 hover
-                  的触发元素，disabled button 不派发 mouseenter。 */}
-              <span className={cn(!canDelete && "cursor-not-allowed")}>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  disabled={!canDelete}
-                  className={cn(!canDelete && "pointer-events-none")}
-                  onClick={() => setDeleteConfirmOpen(true)}
-                >
-                  {t("delete")}
-                </Button>
-              </span>
-            </TooltipTrigger>
-            {!canDelete && (
-              <TooltipContent side="top">
-                {t("deleteDisabledHint")}
-              </TooltipContent>
-            )}
-          </Tooltip>
-        )}
-        <div className="flex-1" />
-        <Button
-          type="button"
-          variant="outline"
-          onClick={requestClose}
-          disabled={submitting}
-        >
-          {t("cancel")}
-        </Button>
-        <Button type="submit" form={AGENT_EDITOR_FORM_ID} disabled={submitting}>
-          {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          {submitting ? t("saving") : t("save")}
-        </Button>
-      </>
-    ) : null;
+  // - 新建态：[取消] [创建(brand)]——单步表单，「创建」是表单提交按钮。
+  // - 编辑态：[删除] [取消] [保存]——「保存」同样是表单提交按钮。
+  const footerContent = formReady ? (
+    <>
+      {mode === "edit" && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            {/* disabled 按钮包一层 span：Radix Tooltip 需要可聚焦/可 hover
+                的触发元素，disabled button 不派发 mouseenter。 */}
+            <span className={cn(!canDelete && "cursor-not-allowed")}>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={!canDelete}
+                className={cn(!canDelete && "pointer-events-none")}
+                onClick={() => setDeleteConfirmOpen(true)}
+              >
+                {t("delete")}
+              </Button>
+            </span>
+          </TooltipTrigger>
+          {!canDelete && (
+            <TooltipContent side="top">
+              {t("deleteDisabledHint")}
+            </TooltipContent>
+          )}
+        </Tooltip>
+      )}
+      <div className="flex-1" />
+      <Button
+        type="button"
+        variant="outline"
+        onClick={requestClose}
+        disabled={submitting}
+      >
+        {t("cancel")}
+      </Button>
+      <Button
+        type="submit"
+        form={AGENT_EDITOR_FORM_ID}
+        variant={mode === "create" ? "brand" : undefined}
+        disabled={submitting}
+      >
+        {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+        {submitting ? t("saving") : mode === "create" ? t("create") : t("save")}
+      </Button>
+    </>
+  ) : null;
 
   return (
     <>
@@ -587,7 +472,7 @@ export function AgentEditorSheet({
         onDismissAttempt={(source) => {
           if (source === "esc") requestClose();
         }}
-        title={wizardStep !== null ? t("createTitle") : t("editTitle")}
+        title={mode === "create" ? t("createTitle") : t("editTitle")}
         headerActions={
           <button
             type="button"
@@ -598,26 +483,19 @@ export function AgentEditorSheet({
             <X className="h-4 w-4" />
           </button>
         }
+        // 新建态是单步表单，不需要 tab 条；编辑态三 tab：基本信息/提示词/MCP。
         headerTabs={
-          wizardStep !== null ? (
-            <SheetTabBar
-              variant="steps"
-              items={[
-                { key: "basic", label: t("wizardStepBasic") },
-                { key: "mcp", label: t("wizardStepMcp") },
-              ]}
-              active={tab}
-            />
-          ) : (
+          mode === "edit" ? (
             <SheetTabBar
               items={[
                 { key: "basic", label: t("tabBasic") },
+                { key: "prompts", label: t("tabPrompts") },
                 { key: "mcp", label: t("tabMcp") },
               ]}
               active={tab}
-              onChange={(k) => setTab(k as "basic" | "mcp")}
+              onChange={(k) => requestTabChange(k as EditorTab)}
             />
-          )
+          ) : undefined
         }
         footer={footerContent}
         minWidth={448}
@@ -641,36 +519,6 @@ export function AgentEditorSheet({
             tab !== "basic" && "hidden",
           )}
         >
-          {mode === "create" && duplicateCandidates.length > 0 && (
-            <div className="flex flex-col gap-1.5 rounded-md border border-dashed border-border p-3">
-              <span className="text-[13px] font-medium text-foreground/85">
-                {t("duplicateFromLabel")}
-              </span>
-              <Select
-                onValueChange={handleDuplicate}
-                disabled={duplicating}
-                value=""
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={t("duplicateFromPlaceholder")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {duplicateCandidates.map((a) => (
-                    <SelectItem key={a.id} value={a.id}>
-                      {a.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {duplicating && (
-                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  {t("duplicating")}
-                </span>
-              )}
-            </div>
-          )}
-
           {!formReady && !agentMissing && (
             <div className="flex flex-1 items-center justify-center gap-2 py-10 text-[13px] text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -694,7 +542,6 @@ export function AgentEditorSheet({
                 name: current?.name ?? "",
                 avatar: current?.avatar ?? DEFAULT_AGENT_AVATAR,
                 description: current?.description ?? "",
-                systemPrompt: current?.systemPrompt ?? "",
                 defaultModelConfigId: current?.defaultModelConfigId ?? null,
                 remoteEnabled: current?.remoteEnabled ?? false,
               }}
@@ -714,14 +561,6 @@ export function AgentEditorSheet({
 
               <FormItem name="description" label={t("fieldDescription")}>
                 <Input placeholder={t("fieldDescriptionPlaceholder")} />
-              </FormItem>
-
-              <FormItem name="systemPrompt" label={t("fieldSystemPrompt")}>
-                <Textarea
-                  rows={10}
-                  className="min-h-40 resize-y font-mono text-[12.5px] leading-relaxed"
-                  placeholder={t("fieldSystemPromptPlaceholder")}
-                />
               </FormItem>
 
               <FormItem
@@ -744,18 +583,34 @@ export function AgentEditorSheet({
           )}
         </div>
 
-        {/* MCP 配置：受控编辑器，不再自带保存按钮——步骤二随「创建」提交，
-            真实编辑态随 footer「保存」与基本信息一起提交。步骤一（尚无
-            agentId、也没有本地 MCP 编辑意图）不渲染；真实编辑态额外要求
-            formReady，避免和加载态同屏出现半截 UI。 */}
+        {/* 提示词 tab：新建态不存在（无 agentId 可挂载文件），只在编辑态挂载。
+            keep-mounted（hidden 而非卸载）与其余 tab 一致；`min-h-0` + 内部
+            自带滚动，不再套外层 overflow-y-auto（左列/正文两栏各自滚动）。 */}
+        <div
+          className={cn(
+            "flex min-h-0 flex-1 flex-col overflow-hidden",
+            tab !== "prompts" && "hidden",
+          )}
+        >
+          {mode === "edit" && formReady && localAgentId && (
+            <PromptFilesEditor
+              ref={promptEditorRef}
+              agentId={localAgentId}
+              onDirtyChange={setPromptDirty}
+            />
+          )}
+        </div>
+
+        {/* MCP 配置：受控编辑器，不再自带保存按钮——随 footer「保存」与基本
+            信息一起提交。只在编辑态且 formReady 时渲染，避免和加载态同屏
+            出现半截 UI。 */}
         <div
           className={cn(
             "min-h-0 flex-1 overflow-y-auto p-4",
             tab !== "mcp" && "hidden",
           )}
         >
-          {(wizardStep === 2 ||
-            (wizardStep === null && mode === "edit" && formReady)) && (
+          {mode === "edit" && formReady && (
             <McpEditor
               value={mcpValue}
               onChange={(v) => {
@@ -770,6 +625,8 @@ export function AgentEditorSheet({
         </div>
       </UnifiedSheet>
 
+      {/* 统一的「放弃未保存修改」确认框：`pendingTab` 非空 = 切 tab 场景（确认后
+          丢弃提示词当前文件的未保存改动、切到目标 tab）；为空 = 关闭整个抽屉。 */}
       <ConfirmDialog
         open={discardOpen}
         title={t("discardTitle")}
@@ -779,9 +636,18 @@ export function AgentEditorSheet({
         destructive
         onConfirm={() => {
           setDiscardOpen(false);
-          onOpenChange(false);
+          if (pendingTab) {
+            promptEditorRef.current?.discardDirty();
+            setTab(pendingTab);
+            setPendingTab(null);
+          } else {
+            onOpenChange(false);
+          }
         }}
-        onCancel={() => setDiscardOpen(false)}
+        onCancel={() => {
+          setDiscardOpen(false);
+          setPendingTab(null);
+        }}
       />
 
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
