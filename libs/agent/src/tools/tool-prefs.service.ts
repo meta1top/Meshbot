@@ -1,8 +1,14 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Injectable, Logger } from "@nestjs/common";
-import { PROTECTED_TOOLS, ToolPrefsSchema } from "@meshbot/types-agent";
+import {
+  PROTECTED_TOOLS,
+  TOOL_GROUPS,
+  ToolPrefsSchema,
+  type ToolPrefsView,
+} from "@meshbot/types-agent";
 import { MeshbotConfigService } from "../config/meshbot-config.service";
+import type { MeshbotTool } from "./tool.types";
 
 /** 豁免工具集合（Set 形态，便于 O(1) 判定；从 types-agent 的 as const 元组派生）。 */
 const PROTECTED_SET = new Set<string>(PROTECTED_TOOLS);
@@ -76,5 +82,51 @@ export class ToolPrefsService {
     const filePath = this.config.getToolsConfigPath();
     mkdirSync(path.dirname(filePath), { recursive: true });
     writeFileSync(filePath, JSON.stringify(prefs, null, 2), "utf8");
+  }
+
+  /**
+   * 组装 `GET /api/agents/:id/tools` 响应视图：按 `TOOL_GROUPS` 定义序分组，
+   * 组内按定义序排列；未登记进任何组的工具按 `allTools` 的注册序并入 `other`
+   * 组尾部；空组（该组没有任何工具在 `allTools` 里）不返回。
+   *
+   * @param allTools 全量内建工具（未过滤，来自 `ToolRegistry.listBuiltinsUnfiltered()`）
+   */
+  buildView(allTools: MeshbotTool[]): ToolPrefsView {
+    const disabled = this.getDisabledTools();
+    const registeredNames = new Set(allTools.map((t) => t.name));
+
+    // 组内序：按 TOOL_GROUPS 定义顺序取「当前确实注册了」的工具名。
+    const groupedNames = new Map<string, string[]>();
+    const nameToGroup = new Map<string, string>();
+    for (const [key, names] of Object.entries(TOOL_GROUPS)) {
+      groupedNames.set(
+        key,
+        names.filter((name) => registeredNames.has(name)),
+      );
+      for (const name of names) {
+        nameToGroup.set(name, key);
+      }
+    }
+
+    // 未登记进任何组的工具，按注册序并入 other 组尾部（新增工具不阻塞）。
+    for (const tool of allTools) {
+      if (!nameToGroup.has(tool.name)) {
+        groupedNames.get("other")?.push(tool.name);
+      }
+    }
+
+    const groups = [...groupedNames.entries()]
+      .filter(([, names]) => names.length > 0)
+      .map(([key, names]) => ({
+        key,
+        tools: names.map((name) => ({
+          name,
+          protected: PROTECTED_SET.has(name),
+          // 豁免工具恒为「未禁用」——写入侧已剔除豁免名，读取侧同样不采信禁用集。
+          disabled: PROTECTED_SET.has(name) ? false : disabled.has(name),
+        })),
+      }));
+
+    return { groups };
   }
 }

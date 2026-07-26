@@ -66,3 +66,32 @@ export const ToolPrefsSchema = z.object({
   disabledTools: z.array(z.string()).default([]),
 });
 export type ToolPrefs = z.infer<typeof ToolPrefsSchema>;
+
+/**
+ * `GET /api/agents/:id/tools` 单个工具项：`disabled` 是当前 Agent 的启停态
+ * （豁免工具恒为 false——UI 灰置不可勾，但态本身不算「被禁用」）；`protected`
+ * 标记该工具是否命中 `PROTECTED_TOOLS`（UI 据此渲染灰置 + 提示）。
+ */
+export const ToolPrefsGroupItemSchema = z.object({
+  name: z.string(),
+  disabled: z.boolean(),
+  protected: z.boolean(),
+});
+
+/** 分组视图：`key` 命中 `TOOL_GROUPS` 的 key（未登记工具落 `other`）。 */
+export const ToolPrefsGroupSchema = z.object({
+  key: z.string(),
+  tools: z.array(ToolPrefsGroupItemSchema),
+});
+
+/**
+ * `GET /api/agents/:id/tools` 响应：分组序固定为 `TOOL_GROUPS` 的定义序（`other`
+ * 恒在最后一组）；组内工具按该组定义序排列，未登记进任何组的工具按注册序并入
+ * `other` 组尾部；空组（该组在当前 registry 里没有任何已注册工具）不返回。
+ */
+export const ToolPrefsViewSchema = z.object({
+  groups: z.array(ToolPrefsGroupSchema),
+});
+export type ToolPrefsGroupItem = z.infer<typeof ToolPrefsGroupItemSchema>;
+export type ToolPrefsGroup = z.infer<typeof ToolPrefsGroupSchema>;
+export type ToolPrefsView = z.infer<typeof ToolPrefsViewSchema>;

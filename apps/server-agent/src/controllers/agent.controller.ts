@@ -8,8 +8,14 @@ import {
   MeshbotConfigService,
   PROMPT_FILE_MAIN,
   PromptFileService,
+  ToolPrefsService,
+  ToolRegistry,
 } from "@meshbot/lib-agent";
-import type { AgentView, PromptFileMeta } from "@meshbot/types-agent";
+import type {
+  AgentView,
+  PromptFileMeta,
+  ToolPrefsView,
+} from "@meshbot/types-agent";
 import {
   BadRequestException,
   Body,
@@ -29,6 +35,8 @@ import {
   McpRawDto,
   PromptFileBodyDto,
   PromptFileMetaDto,
+  ToolPrefsDto,
+  ToolPrefsViewDto,
 } from "../dto/agent.dto";
 import type { Agent } from "../entities/agent.entity";
 import { AgentService } from "../services/agent.service";
@@ -63,6 +71,8 @@ export class AgentController {
     private readonly mcp: McpService,
     private readonly account: AccountContextService,
     private readonly prompts: PromptFileService,
+    private readonly toolRegistry: ToolRegistry,
+    private readonly toolPrefs: ToolPrefsService,
   ) {}
 
   /** 当前账号 —— REST 请求已由鉴权拦截器压过账号上下文，这里直接取即可。 */
@@ -232,5 +242,42 @@ export class AgentController {
       );
     }
     await this.agentCtx.run(id, () => this.prompts.remove(file));
+  }
+
+  @Get(":id/tools")
+  @ApiOperation({
+    summary:
+      "查询该 Agent 的工具启停态（全量内建工具，按 TOOL_GROUPS 分组，含禁用/豁免标记）",
+  })
+  @ApiOkResponse({ description: "分组工具启停视图", type: ToolPrefsViewDto })
+  async getTools(@Param("id") id: string): Promise<ToolPrefsView> {
+    await this.agents.findOrThrow(id);
+    return this.agentCtx.run(id, () =>
+      this.toolPrefs.buildView(this.toolRegistry.listBuiltinsUnfiltered()),
+    );
+  }
+
+  @Put(":id/tools")
+  @ApiOperation({
+    summary:
+      "写入该 Agent 的禁用工具列表（豁免工具名静默剔除；未知工具名 400，防拼错静默无效）",
+  })
+  @ApiBody({ type: ToolPrefsDto })
+  @ApiOkResponse({ description: "已写入" })
+  async putTools(
+    @Param("id") id: string,
+    @Body() body: ToolPrefsDto,
+  ): Promise<void> {
+    await this.agents.findOrThrow(id);
+    await this.agentCtx.run(id, () => {
+      const known = new Set(
+        this.toolRegistry.listBuiltinsUnfiltered().map((t) => t.name),
+      );
+      const unknown = body.disabledTools.filter((name) => !known.has(name));
+      if (unknown.length > 0) {
+        throw new BadRequestException(`未知工具名：${unknown.join(", ")}`);
+      }
+      this.toolPrefs.setDisabledTools(body.disabledTools);
+    });
   }
 }

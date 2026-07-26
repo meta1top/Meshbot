@@ -12,12 +12,19 @@ import {
   AgentContextService,
   MeshbotConfigService,
   PromptFileService,
+  Tool,
+  ToolPrefsService,
+  ToolRegistry,
+  type MeshbotTool,
   type McpService,
   type ThreadStateService,
+  type ToolContext,
 } from "@meshbot/lib-agent";
 import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
+import type { DiscoveryService } from "@nestjs/core";
 import { DataSource } from "typeorm";
+import { z } from "zod";
 import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
 import { Agent } from "../entities/agent.entity";
 import { LlmCall } from "../entities/llm-call.entity";
@@ -43,6 +50,45 @@ function fixture(name: string) {
 
 const DEFAULT_USER = "test-user";
 
+// 工具启停 REST 测试用假工具：bash 命中 TOOL_GROUPS.filesTerminal（真实分组名），
+// todo_write 命中豁免（PROTECTED_TOOLS），mystery_tool 未登记进任何组——验证落
+// other 组尾部。
+@Tool()
+class FakeBashTool implements MeshbotTool<Record<string, never>, string> {
+  readonly name = "bash";
+  readonly description = "假 bash 工具";
+  readonly schema = z.object({});
+  async execute(_args: Record<string, never>, _ctx: ToolContext) {
+    return "";
+  }
+}
+
+@Tool()
+class FakeTodoWriteTool implements MeshbotTool<Record<string, never>, string> {
+  readonly name = "todo_write";
+  readonly description = "假 todo_write 工具";
+  readonly schema = z.object({});
+  async execute(_args: Record<string, never>, _ctx: ToolContext) {
+    return "";
+  }
+}
+
+@Tool()
+class FakeMysteryTool implements MeshbotTool<Record<string, never>, string> {
+  readonly name = "mystery_tool";
+  readonly description = "未登记进任何 TOOL_GROUPS 的假工具";
+  readonly schema = z.object({});
+  async execute(_args: Record<string, never>, _ctx: ToolContext) {
+    return "";
+  }
+}
+
+function fakeDiscovery(instances: object[]): DiscoveryService {
+  return {
+    getProviders: () => instances.map((inst) => ({ instance: inst })) as never,
+  } as unknown as DiscoveryService;
+}
+
 /**
  * 本文件走「真实 Service + 内存 sqlite」的集成风格（而非 mock AgentService）——
  * DELETE 端点要断言磁盘目录真被清掉、会话真被级联删掉，光靠 mock 验证不了这些
@@ -59,6 +105,8 @@ describe("AgentController", () => {
   let sessionService: SessionService;
   let mcp: { teardownAgent: jest.Mock; updateConfig: jest.Mock };
   let emitter: { emit: jest.Mock };
+  let toolPrefs: ToolPrefsService;
+  let toolRegistry: ToolRegistry;
   let controller: AgentController;
 
   beforeEach(async () => {
@@ -149,6 +197,18 @@ describe("AgentController", () => {
       sessionService,
       emitter as unknown as EventEmitter2,
     );
+    toolPrefs = new ToolPrefsService(config);
+    toolRegistry = new ToolRegistry(
+      fakeDiscovery([
+        new FakeBashTool(),
+        new FakeTodoWriteTool(),
+        new FakeMysteryTool(),
+      ]),
+      account,
+      agentCtx,
+      toolPrefs,
+    );
+    toolRegistry.onModuleInit();
     controller = new AgentController(
       agentService,
       agentCtx,
@@ -156,6 +216,8 @@ describe("AgentController", () => {
       mcp as unknown as McpService,
       account,
       new PromptFileService(config),
+      toolRegistry,
+      toolPrefs,
     );
   });
 
@@ -396,6 +458,95 @@ describe("AgentController", () => {
         await expect(controller.listPrompts("ghost")).rejects.toThrow(
           NotFoundException,
         );
+      });
+    });
+  });
+
+  describe("工具启停 REST", () => {
+    it("GET：全量内建工具含禁用与豁免标记；分组齐全；未登记工具落 other 组尾部", async () => {
+      await run(async () => {
+        const agent = await agentService.ensureDefault();
+        const view = await controller.getTools(agent.id);
+
+        // 只有确实注册了工具的组才出现：bash → filesTerminal，todo_write →
+        // interaction，mystery_tool 未登记进任何组 → other 组尾部。
+        const groupKeys = view.groups.map((g) => g.key);
+        expect(groupKeys).toEqual(["filesTerminal", "interaction", "other"]);
+
+        const filesTerminal = view.groups.find(
+          (g) => g.key === "filesTerminal",
+        );
+        expect(filesTerminal?.tools).toEqual([
+          { name: "bash", disabled: false, protected: false },
+        ]);
+
+        const interaction = view.groups.find((g) => g.key === "interaction");
+        expect(interaction?.tools).toEqual([
+          { name: "todo_write", disabled: false, protected: true },
+        ]);
+
+        const other = view.groups.find((g) => g.key === "other");
+        expect(other?.tools).toEqual([
+          { name: "mystery_tool", disabled: false, protected: false },
+        ]);
+      });
+    });
+
+    it("PUT 写入后 GET 反映禁用态", async () => {
+      await run(async () => {
+        const agent = await agentService.ensureDefault();
+        await controller.putTools(agent.id, {
+          disabledTools: ["bash"],
+        } as never);
+
+        const view = await controller.getTools(agent.id);
+        const filesTerminal = view.groups.find(
+          (g) => g.key === "filesTerminal",
+        );
+        expect(filesTerminal?.tools).toEqual([
+          { name: "bash", disabled: true, protected: false },
+        ]);
+      });
+    });
+
+    it("PUT 含豁免名（todo_write）被静默剔除，不报错，GET 上豁免项恒 disabled:false", async () => {
+      await run(async () => {
+        const agent = await agentService.ensureDefault();
+        await controller.putTools(agent.id, {
+          disabledTools: ["bash", "todo_write"],
+        } as never);
+
+        const view = await controller.getTools(agent.id);
+        const interaction = view.groups.find((g) => g.key === "interaction");
+        expect(interaction?.tools).toEqual([
+          { name: "todo_write", disabled: false, protected: true },
+        ]);
+        const filesTerminal = view.groups.find(
+          (g) => g.key === "filesTerminal",
+        );
+        expect(filesTerminal?.tools[0]?.disabled).toBe(true);
+      });
+    });
+
+    it("PUT 含未知工具名（拼错）→ 400，防拼错静默无效", async () => {
+      await run(async () => {
+        const agent = await agentService.ensureDefault();
+        await expect(
+          controller.putTools(agent.id, {
+            disabledTools: ["bahs"],
+          } as never),
+        ).rejects.toThrow(BadRequestException);
+      });
+    });
+
+    it("不存在的 agentId → 404（tools 端点同样受 findOrThrow 保护）", async () => {
+      await run(async () => {
+        await expect(controller.getTools("ghost")).rejects.toThrow(
+          NotFoundException,
+        );
+        await expect(
+          controller.putTools("ghost", { disabledTools: [] } as never),
+        ).rejects.toThrow(NotFoundException);
       });
     });
   });
