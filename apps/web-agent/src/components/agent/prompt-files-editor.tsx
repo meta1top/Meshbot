@@ -80,6 +80,9 @@ export const PromptFilesEditor = forwardRef<
   const dirty = content !== initialContent;
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
+  // 渲染期同步的 selectedFile 引用：给在途异步（保存 PUT）回来后核对「文件是否已切换」用。
+  const selectedFileRef = useRef(selectedFile);
+  selectedFileRef.current = selectedFile;
 
   useEffect(() => {
     onDirtyChange(dirty);
@@ -163,28 +166,34 @@ export const PromptFilesEditor = forwardRef<
 
   const handleSave = async () => {
     if (!selectedFile) return;
+    // 捕获发起保存时的目标文件与内容：PUT 在途期间用户可能已切换文件，
+    // 响应回来时若 selectedFile 已变，绝不能把旧文件的基线/保存态写到新文件上。
+    const targetFile = selectedFile;
+    const targetContent = content;
     setSaving(true);
     setSaveError(null);
     try {
-      await putAgentPrompt(agentId, selectedFile, content);
-      setInitialContent(content);
+      await putAgentPrompt(agentId, targetFile, targetContent);
       setFiles((prev) =>
         prev
           ? prev.map((f) =>
-              f.file === selectedFile
+              f.file === targetFile
                 ? {
                     ...f,
-                    size: content.length,
+                    size: targetContent.length,
                     mtime: new Date().toISOString(),
                   }
                 : f,
             )
           : prev,
       );
+      if (selectedFileRef.current !== targetFile) return;
+      setInitialContent(targetContent);
     } catch (err) {
+      if (selectedFileRef.current !== targetFile) return;
       setSaveError(err instanceof Error ? err.message : t("promptSaveFailed"));
     } finally {
-      setSaving(false);
+      if (selectedFileRef.current === targetFile) setSaving(false);
     }
   };
 

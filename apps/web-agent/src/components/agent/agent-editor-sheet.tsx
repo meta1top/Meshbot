@@ -306,7 +306,7 @@ export function AgentEditorSheet({
   const formReady = mode === "create" || (agentsReady && current !== null);
   const agentMissing = mode === "edit" && agentsReady && current === null;
 
-  // AgentEditorFormSchema 的 description/systemPrompt/defaultModelConfigId/
+  // AgentEditorFormSchema 的 description/defaultModelConfigId/
   // remoteEnabled 带 `.default()`：zod 的 Input 类型（可省略）与 Output 类型
   // （`AgentFormValues`，已套默认值、必填）天然不同，而 `<Form>` 的泛型要求
   // `ZodType<T>`（Input===Output===T）。这里始终传完整 defaultValues（没有
