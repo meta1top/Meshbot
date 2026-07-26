@@ -1,5 +1,18 @@
 "use client";
 
+import {
+  Alert,
+  AlertDescription,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  buttonVariants,
+} from "@meshbot/design";
 import type { SessionSummary } from "@meshbot/types-agent";
 import {
   SessionTree,
@@ -13,8 +26,9 @@ import {
   SidebarHeader,
   writeExpandedKeys,
 } from "@meshbot/web-common/shell";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAtomValue, useSetAtom } from "jotai";
-import { Plus, SquarePen } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -38,7 +52,12 @@ import { useRemoteAgentLifecycleWatch } from "@/hooks/use-remote-agent-lifecycle
 import { parseAgentAvatar } from "@/lib/agent-avatar";
 import { groupSessionsByAgent } from "@/lib/group-sessions-by-agent";
 import { shouldShowSidebarSkeleton } from "@/lib/should-show-sidebar-skeleton";
-import { useAgents } from "@/rest/agents";
+import {
+  agentsQueryKey,
+  deleteAgent,
+  duplicateAgent,
+  useAgents,
+} from "@/rest/agents";
 import { useRemoteAgents } from "@/rest/remote-agents";
 
 /** 本地会话 key 前缀（`s:<sessionId>`）。 */
@@ -65,6 +84,11 @@ export function AssistantSidebar() {
   const t = useTranslations("assistantSidebar");
   const tSessionMenu = useTranslations("appShell.sessionMenu");
   const tDeleteConfirm = useTranslations("appShell.deleteConfirm");
+  // 复用编辑抽屉原有的删除确认文案（title/description/confirm/cancel/
+  // deleteFailed/deleting/deleteDisabledHint）——迁出到侧栏后语义不变，
+  // 沿用同一份 i18n key，不重复造一份。
+  const tEditor = useTranslations("agent.editor");
+  const queryClient = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -89,6 +113,15 @@ export function AssistantSidebar() {
     open: boolean;
     agentId: string | null;
   }>({ open: false, agentId: null });
+  // 复制失败的内联提示（无确认框可挂，就地展示在侧栏顶部；成功则悄悄进
+  // 编辑抽屉，不需要额外反馈）。
+  const [duplicateError, setDuplicateError] = useState<string | null>(null);
+  // 删除确认框：从编辑抽屉整体迁出（改动 A），迁移前逻辑原样保留——
+  // canDelete（至少保留一个助手）判断、导航离开正打开的被删会话。
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const canDeleteAgent = (agents?.length ?? 0) > 1;
 
   // 本机 Agent 分组（agents 顺序决定分组顺序；running 脉冲点取自其中）。提前
   // 到这里计算：下面「URL 指向的本机会话 → 反查所属 Agent」要用它，不依赖
@@ -387,11 +420,93 @@ export function AssistantSidebar() {
     [removeSession, activeSessionKey, router],
   );
 
-  // Agent 行的编辑铅笔：`ag:<agentId>` 去掉前缀即目标 agentId（远程 Agent
-  // 节点不出这个铅笔，SessionTree 的 AgentRow 已按 info.remote 挡住）。
+  // Agent 行下拉菜单「编辑」：`ag:<agentId>` 去掉前缀即目标 agentId（远程
+  // Agent 节点不出这个菜单，SessionTree 的 AgentRow 已按 info.remote 挡住）。
   const onEditAgent = useCallback((node: NavNode) => {
     setEditor({ open: true, agentId: node.key.slice(AGENT_PREFIX.length) });
   }, []);
+
+  const invalidateAgents = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: agentsQueryKey }),
+    [queryClient],
+  );
+
+  /**
+   * Agent 行下拉菜单「复制」：调 duplicate REST（DB 行 + prompts/skills/
+   * mcp.json 目录整体拷贝，见 `AgentService.duplicate`），成功后失效列表缓存
+   * 并直接打开新副本的编辑抽屉——沿用旧「从现有 Agent 复制」流程「复制后进
+   * 编辑」的体验，用户能立刻改名字/头像，不必回侧栏自己再找一次新副本。
+   */
+  const onDuplicateAgent = useCallback(
+    async (node: NavNode) => {
+      const id = node.key.slice(AGENT_PREFIX.length);
+      setDuplicateError(null);
+      try {
+        const copy = await duplicateAgent(id);
+        await invalidateAgents();
+        setEditor({ open: true, agentId: copy.id });
+      } catch (err) {
+        setDuplicateError(
+          err instanceof Error ? err.message : t("duplicateFailed"),
+        );
+      }
+    },
+    [invalidateAgents, t],
+  );
+
+  /** Agent 行下拉菜单「删除」：只打开确认框，真正删除在 `handleDeleteConfirm`。 */
+  const onDeleteAgent = useCallback((node: NavNode) => {
+    setDeleteError(null);
+    setDeleteTargetId(node.key.slice(AGENT_PREFIX.length));
+  }, []);
+
+  /**
+   * 删除确认——从编辑抽屉整体迁出（改动 A），逻辑原样保留：
+   * 无「当前 Agent」可切，只在「正打开的会话恰好属于被删 Agent」时导航离开
+   * （该会话已不可续聊）；删除的是别的 Agent 时，当前打开的会话与侧栏展开态
+   * 都不受影响。`canDeleteAgent`（至少保留一个助手）为假时按钮不渲染，这里
+   * 再兜底一次防御性判断。
+   */
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!deleteTargetId || !canDeleteAgent) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteAgent(deleteTargetId);
+      await invalidateAgents();
+      const openSessionId =
+        pathname === "/assistant" ? searchParams.get("id") : null;
+      const openSession = openSessionId
+        ? localSessions.find((s) => s.id === openSessionId)
+        : null;
+      if (openSession?.agentId === deleteTargetId) {
+        router.push("/assistant");
+      }
+      // 被删助手的编辑抽屉恰好开着：直接关掉，不留「未找到该助手」的空壳
+      // （删除入口在抽屉 footer 时代删除成功会自动关，双入口解耦后补齐该语义）。
+      setEditor((prev) =>
+        prev.open && prev.agentId === deleteTargetId
+          ? { open: false, agentId: null }
+          : prev,
+      );
+      setDeleteTargetId(null);
+    } catch (err) {
+      setDeleteError(
+        err instanceof Error ? err.message : tEditor("deleteFailed"),
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }, [
+    deleteTargetId,
+    canDeleteAgent,
+    invalidateAgents,
+    pathname,
+    searchParams,
+    localSessions,
+    router,
+    tEditor,
+  ]);
 
   const labels: SessionTreeLabels = useMemo(
     () => ({
@@ -403,6 +518,8 @@ export function AssistantSidebar() {
       deleteConfirmConfirm: tDeleteConfirm("confirm"),
       deleteConfirmCancel: tDeleteConfirm("cancel"),
       editAgent: t("editAgent"),
+      duplicateAgent: t("duplicateAgent"),
+      deleteAgent: t("deleteAgent"),
     }),
     [t, tSessionMenu, tDeleteConfirm],
   );
@@ -414,14 +531,21 @@ export function AssistantSidebar() {
         action={
           <button
             type="button"
-            title={t("newSession")}
-            onClick={() => router.push("/assistant")}
+            title={t("newAgent")}
+            onClick={() => setEditor({ open: true, agentId: null })}
             className="flex h-7 w-7 items-center justify-center rounded-md text-(--shell-sidebar-fg)/70 transition-colors hover:bg-(--shell-sidebar-hover) hover:text-(--shell-sidebar-fg)"
           >
-            <SquarePen className="h-4 w-4" />
+            <Plus className="h-4 w-4" />
           </button>
         }
       />
+      {duplicateError && (
+        <div className="shrink-0 px-3 pt-2">
+          <Alert variant="destructive">
+            <AlertDescription>{duplicateError}</AlertDescription>
+          </Alert>
+        </div>
+      )}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-2">
         <SessionTree
           loading={shouldShowSidebarSkeleton(sessionsStatus, agentsLoading)}
@@ -433,23 +557,63 @@ export function AssistantSidebar() {
           onRenameSession={onRenameSession}
           onDeleteSession={onDeleteSession}
           onEditAgent={onEditAgent}
+          onDuplicateAgent={(node) => void onDuplicateAgent(node)}
+          onDeleteAgent={onDeleteAgent}
           labels={labels}
         />
-      </div>
-      <div className="shrink-0 border-t border-border px-3 py-2">
-        <button
-          type="button"
-          onClick={() => setEditor({ open: true, agentId: null })}
-          className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] text-(--shell-sidebar-fg)/70 transition-colors hover:bg-(--shell-sidebar-hover) hover:text-(--shell-sidebar-fg)"
-        >
-          <Plus className="h-4 w-4" /> {t("newAgent")}
-        </button>
       </div>
       <AgentEditorSheet
         agentId={editor.agentId}
         open={editor.open}
         onOpenChange={(open) => setEditor((s) => ({ ...s, open }))}
       />
+
+      {/* 删除确认框——从编辑抽屉整体迁出（改动 A）。canDeleteAgent 为假时不出
+          确认按钮，只留「取消」+ deleteDisabledHint 说明，保留原「至少保留一个
+          助手」的禁用提示语义。 */}
+      <AlertDialog
+        open={!!deleteTargetId}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteTargetId(null);
+            setDeleteError(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{tEditor("deleteConfirmTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {canDeleteAgent
+                ? tEditor("deleteConfirmDescription")
+                : tEditor("deleteDisabledHint")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {deleteError && (
+            <Alert variant="destructive">
+              <AlertDescription>{deleteError}</AlertDescription>
+            </Alert>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>
+              {tEditor("cancel")}
+            </AlertDialogCancel>
+            {canDeleteAgent && (
+              <AlertDialogAction
+                disabled={deleting}
+                className={buttonVariants({ variant: "destructive" })}
+                onClick={(e) => {
+                  e.preventDefault();
+                  void handleDeleteConfirm();
+                }}
+              >
+                {deleting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                {deleting ? tEditor("deleting") : tEditor("deleteConfirm")}
+              </AlertDialogAction>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

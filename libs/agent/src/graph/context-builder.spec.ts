@@ -3,7 +3,14 @@ import { AccountContextService } from "../account/account-context.service";
 import { AgentContextService } from "../account/agent-context.service";
 import type { McpServerConfig } from "../mcp/mcp.schema";
 import type { McpService } from "../mcp/mcp.service";
-import { buildMcpBlock, ContextBuilder } from "./context-builder";
+import type { PromptFileService } from "../prompts/prompt-file.service";
+import {
+  buildMcpBlock,
+  buildPromptsBlock,
+  ContextBuilder,
+  PROMPTS_BLOCK_MAX_CHARS,
+  PROMPTS_TRUNCATED_NOTICE,
+} from "./context-builder";
 
 describe("buildMcpBlock", () => {
   it("无配置时返回引导文案", () => {
@@ -56,8 +63,11 @@ describe("buildMcpBlock", () => {
   });
 });
 
-/** 造一个装配好 ALS 上下文的 ContextBuilder，便于测 buildMcpMessage/hasMcp。 */
-function makeContextBuilder(mcp: McpService | undefined) {
+/** 造一个装配好 ALS 上下文的 ContextBuilder，便于测 buildMcpMessage/hasMcp 与 buildPromptsMessage/hasPrompts。 */
+function makeContextBuilder(
+  mcp: McpService | undefined,
+  prompts?: PromptFileService,
+) {
   const account = new AccountContextService();
   const agentCtx = new AgentContextService();
   const builder = new ContextBuilder(
@@ -68,6 +78,7 @@ function makeContextBuilder(mcp: McpService | undefined) {
     undefined,
     undefined,
     mcp,
+    prompts,
   );
   return { builder, account, agentCtx };
 }
@@ -93,5 +104,136 @@ describe("ContextBuilder.hasMcp / buildMcpMessage", () => {
     expect(msg.id).toBe("system:mcp");
     expect(msg.content).toContain("- fs（stdio，已启用，本轮已加载 1 个工具）");
     expect(mcp.getLoadedToolNames).toHaveBeenCalledWith("u1", "a1");
+  });
+});
+
+describe("buildPromptsBlock", () => {
+  it("AGENT.md 全文在首 + 其余文件按（调用方已排好的）顺序 + \\n\\n 分隔，不加文件名标头", () => {
+    const block = buildPromptsBlock([
+      { name: "AGENT.md", content: "你是主人格" },
+      { name: "a.md", content: "补充 A" },
+      { name: "b.md", content: "补充 B" },
+    ]);
+    expect(block).toBe("你是主人格\n\n补充 A\n\n补充 B");
+    // 不加文件名标头：拼接结果里不应出现任何文件名字符串
+    expect(block).not.toContain("AGENT.md");
+    expect(block).not.toContain("a.md");
+    expect(block).not.toContain("b.md");
+  });
+
+  it("单文件时原样返回，不产生多余分隔符", () => {
+    const block = buildPromptsBlock([
+      { name: "AGENT.md", content: "只有人格" },
+    ]);
+    expect(block).toBe("只有人格");
+  });
+
+  it("空文件列表返回空字符串（hasPrompts 应在更早处拦掉这种情况，本函数只兜底）", () => {
+    expect(buildPromptsBlock([])).toBe("");
+  });
+
+  it(`超过 ${PROMPTS_BLOCK_MAX_CHARS} 字符时截断，尾行逐字追加「${PROMPTS_TRUNCATED_NOTICE}」`, () => {
+    const longContent = "字".repeat(PROMPTS_BLOCK_MAX_CHARS + 100);
+    const block = buildPromptsBlock([
+      { name: "AGENT.md", content: longContent },
+    ]);
+    expect(block.length).toBeLessThan(longContent.length);
+    expect(block).toBe(
+      `${longContent.slice(0, PROMPTS_BLOCK_MAX_CHARS)}\n${PROMPTS_TRUNCATED_NOTICE}`,
+    );
+    // 尾行逐字匹配，不是子串近似
+    expect(block.endsWith(`\n${PROMPTS_TRUNCATED_NOTICE}`)).toBe(true);
+  });
+
+  it("恰好等于上限时不截断", () => {
+    const exact = "字".repeat(PROMPTS_BLOCK_MAX_CHARS);
+    const block = buildPromptsBlock([{ name: "AGENT.md", content: exact }]);
+    expect(block).toBe(exact);
+    expect(block).not.toContain(PROMPTS_TRUNCATED_NOTICE);
+  });
+});
+
+/** 造一个只读的 PromptFileService 测试替身：list()/read() 均由传入的元信息 + 内容驱动。 */
+function makePromptsFake(
+  entries: {
+    file: string;
+    size: number;
+    mtime: string | null;
+    content?: string;
+  }[],
+): PromptFileService {
+  return {
+    list: vi.fn(() =>
+      entries.map(({ file, size, mtime }) => ({ file, size, mtime })),
+    ),
+    read: vi.fn(
+      (file: string) => entries.find((e) => e.file === file)?.content ?? "",
+    ),
+  } as unknown as PromptFileService;
+}
+
+describe("ContextBuilder.hasPrompts / buildPromptsMessage", () => {
+  it("未注入 PromptFileService 时 hasPrompts 为 false", () => {
+    const { builder } = makeContextBuilder(undefined, undefined);
+    expect(builder.hasPrompts()).toBe(false);
+  });
+
+  it("prompts 目录为空（仅 AGENT.md 占位，mtime=null）时 hasPrompts 为 false", () => {
+    const prompts = makePromptsFake([
+      { file: "AGENT.md", size: 0, mtime: null },
+    ]);
+    const { builder } = makeContextBuilder(undefined, prompts);
+    expect(builder.hasPrompts()).toBe(false);
+  });
+
+  it("文件物理存在但内容全空/纯空白时 hasPrompts 为 false（清空保存后不得注入空系统消息）", () => {
+    const prompts = makePromptsFake([
+      {
+        file: "AGENT.md",
+        size: 0,
+        mtime: "2026-01-01T00:00:00.000Z",
+        content: "",
+      },
+      {
+        file: "blank.md",
+        size: 3,
+        mtime: "2026-01-01T00:00:00.000Z",
+        content: " \n ",
+      },
+    ]);
+    const { builder } = makeContextBuilder(undefined, prompts);
+    expect(builder.hasPrompts()).toBe(false);
+  });
+
+  it("AGENT.md 物理存在时 hasPrompts 为 true，buildPromptsMessage 产出稳定 id system:prompts", () => {
+    const prompts = makePromptsFake([
+      {
+        file: "AGENT.md",
+        size: 6,
+        mtime: "2026-01-01T00:00:00.000Z",
+        content: "你是研发助手",
+      },
+    ]);
+    const { builder } = makeContextBuilder(undefined, prompts);
+    expect(builder.hasPrompts()).toBe(true);
+    const msg = builder.buildPromptsMessage();
+    expect(msg.id).toBe("system:prompts");
+    expect(msg.content).toBe("你是研发助手");
+  });
+
+  it("AGENT.md 占位（未创建）但其余文件存在时：跳过占位、只拼接实际存在的文件", () => {
+    const prompts = makePromptsFake([
+      { file: "AGENT.md", size: 0, mtime: null },
+      {
+        file: "tone.md",
+        size: 4,
+        mtime: "2026-01-01T00:00:00.000Z",
+        content: "保持简洁",
+      },
+    ]);
+    const { builder } = makeContextBuilder(undefined, prompts);
+    expect(builder.hasPrompts()).toBe(true);
+    const msg = builder.buildPromptsMessage();
+    expect(msg.content).toBe("保持简洁");
   });
 });

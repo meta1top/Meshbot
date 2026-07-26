@@ -32,6 +32,11 @@ export type {
 } from "./mcp/mcp.schema";
 export { McpConfigSchema, McpServerConfigSchema } from "./mcp/mcp.schema";
 export { PromptService } from "./prompt/prompt.service";
+export {
+  PROMPT_FILE_MAIN,
+  PromptFileService,
+  isValidPromptFileName,
+} from "./prompts/prompt-file.service";
 export { SkillService } from "./skills/skill.service";
 export type { SkillContent, SkillEntry } from "./skills/skill.types";
 export { ToolRegistry } from "./tools/tool-registry";

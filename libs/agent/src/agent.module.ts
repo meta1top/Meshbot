@@ -10,6 +10,7 @@ import { ModelResolver } from "./graph/model-resolver.service";
 import { ModelRunContext } from "./graph/model-run-context";
 import { ThreadStateService } from "./graph/thread-state.service";
 import { PromptService } from "./prompt/prompt.service";
+import { PromptFileService } from "./prompts/prompt-file.service";
 import { McpService } from "./mcp/mcp.service";
 import { MemoryService } from "./memory/memory.service";
 import { SkillService } from "./skills/skill.service";
@@ -132,6 +133,7 @@ import { McpDisableTool } from "./tools/builtins/mcp-disable.tool";
     McpEnableTool,
     McpDisableTool,
     PromptService,
+    PromptFileService,
     ModelResolver,
     ModelRunContext,
     AccountGraphProvider,
@@ -148,6 +150,7 @@ import { McpDisableTool } from "./tools/builtins/mcp-disable.tool";
     ToolRegistry,
     SkillService,
     McpService,
+    PromptFileService,
     MeshbotConfigModule,
   ],
 })

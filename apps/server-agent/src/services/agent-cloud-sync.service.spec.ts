@@ -9,7 +9,6 @@ function agentFixture(overrides: Partial<Agent> = {}): Agent {
     name: "M",
     avatar: "🤖|#f97316",
     description: "desc",
-    systemPrompt: "",
     defaultModelConfigId: null,
     remoteEnabled: false,
     visibility: "private",

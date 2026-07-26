@@ -1,27 +1,34 @@
 "use client";
 
-import { Alert, AlertDescription, Textarea } from "@meshbot/design";
+import { Alert, AlertDescription, Button, Textarea } from "@meshbot/design";
 import { Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 interface McpEditorProps {
   /** 当前 mcp.json 原始文本（受控）。 */
   value: string;
-  /** 文本变化回调，由调用方负责落地到自己的 state（含脏判定 / 创建流程）。 */
+  /** 文本变化回调，由调用方负责落地到自己的 state（含脏判定）。 */
   onChange: (value: string) => void;
-  /** 内联校验错误（JSON 语法错误 / 后端结构校验失败）；由调用方在保存/创建前
-   *  校验后传入，本组件不再自带保存按钮、不做提交时机的决策。 */
+  /** 内联校验错误（JSON 语法错误 / 后端结构校验失败）；由调用方在保存前校验
+   *  后传入，就地展示，不再像旧版那样切换 tab。 */
   error?: string | null;
-  /** 加载中（编辑态首次拉取既有 mcp.json）。向导态新建没有加载过程。 */
+  /** 加载中（编辑态首次拉取既有 mcp.json）。 */
   loading?: boolean;
   /** 加载失败。 */
   loadFailed?: boolean;
+  /** 相对已保存基线是否有改动——驱动保存按钮的可用态（未改动禁用，隐式提示
+   *  「已保存」，与提示词 tab 的保存按钮同一套语义）。 */
+  dirty: boolean;
+  /** 保存请求是否在途。 */
+  saving?: boolean;
+  /** 保存按钮点击回调——本组件不做提交，只触发调用方（`AgentEditorSheet`）
+   *  编排好的保存动作。 */
+  onSave: () => void;
 }
 
 /**
- * Agent 的 mcp.json 编辑区：受控 Textarea，不再自带保存按钮——JSON 语法/结构
- * 校验与实际提交时机完全交给调用方（`AgentEditorSheet`）统一编排：真实编辑态
- * 随 footer「保存」与基本信息一起提交；新建向导态随最后一步「创建」提交。
+ * Agent 的 mcp.json 编辑区：受控 Textarea + 自带保存按钮——MCP tab 自管保存
+ * （不再随基本信息一起走 footer 提交），JSON 语法校验失败就地内联报错。
  *
  * 不做语法高亮/Monaco——现阶段体量小，纯文本编辑区足够，真需要再升级。
  */
@@ -31,6 +38,9 @@ export function McpEditor({
   error,
   loading,
   loadFailed,
+  dirty,
+  saving,
+  onSave,
 }: McpEditorProps) {
   const t = useTranslations("agent.editor");
 
@@ -67,6 +77,12 @@ export function McpEditor({
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
+          <div className="flex shrink-0 justify-end">
+            <Button type="button" onClick={onSave} disabled={!dirty || saving}>
+              {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {saving ? t("mcpSaving") : t("mcpSave")}
+            </Button>
+          </div>
         </>
       )}
     </div>

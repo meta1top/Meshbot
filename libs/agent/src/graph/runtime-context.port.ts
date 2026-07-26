@@ -16,7 +16,5 @@ export interface RuntimeContextPort {
     timezone: string | null;
     /** 当前 Agent 的名字；注入 system:ctx，让 agent 始终知道自己叫什么。 */
     agentName: string | null;
-    /** 当前 Agent 的人格正文；由 ContextBuilder 组进 system:persona。 */
-    agentSystemPrompt: string | null;
   }>;
 }

@@ -21,10 +21,6 @@ export class Agent extends SnowflakeBaseEntity {
   @Column({ type: "text", default: "" })
   description!: string;
 
-  /** 人格正文。每轮以 system:persona 稳定 id 注入，可随时改、立即对老会话生效。 */
-  @Column({ name: "system_prompt", type: "text", default: "" })
-  systemPrompt!: string;
-
   /** 该 Agent 的默认模型；会话级 modelConfigId 优先于它。 */
   @Column({ name: "default_model_config_id", type: "text", nullable: true })
   defaultModelConfigId!: string | null;

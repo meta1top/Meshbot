@@ -11,10 +11,11 @@ import {
   AccountContextService,
   AgentContextService,
   MeshbotConfigService,
+  PromptFileService,
   type McpService,
   type ThreadStateService,
 } from "@meshbot/lib-agent";
-import { NotFoundException } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { DataSource } from "typeorm";
 import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
@@ -36,7 +37,6 @@ function fixture(name: string) {
     name,
     avatar: "🤖|#f97316",
     description: "",
-    systemPrompt: "你是测试助手",
     defaultModelConfigId: null,
   };
 }
@@ -155,6 +155,7 @@ describe("AgentController", () => {
       config,
       mcp as unknown as McpService,
       account,
+      new PromptFileService(config),
     );
   });
 
@@ -184,7 +185,6 @@ describe("AgentController", () => {
         name: "改名",
       } as never);
       expect(updated.name).toBe("改名");
-      expect(updated.systemPrompt).toBe("你是测试助手");
 
       const list = await controller.list();
       expect(list.some((a) => a.id === created.id)).toBe(true);
@@ -231,16 +231,37 @@ describe("AgentController", () => {
     });
   });
 
-  it("duplicate 复制配置但不复制记忆/工作区/会话", async () => {
+  it("duplicate：源无任何文件时，目标目录仍被建出但不凭空生出 prompts/mcp.json", async () => {
     await run(async () => {
       const src = await controller.create(fixture("源") as never);
       const copy = await controller.duplicate(src.id);
       expect(copy.name).toBe("源 (副本)");
-      expect(copy.systemPrompt).toBe(src.systemPrompt);
       expect(copy.avatar).toBe(src.avatar);
       expect(copy.id).not.toBe(src.id);
-      // 副本磁盘目录未被预先创建——记忆/工作区/MCP 配置不复制，从零开始。
-      expect(existsSync(config.agentDirOf(copy.id))).toBe(false);
+      // 目录拷贝前会 mkdir 目标目录（即便源为空），但不产出源没有的文件。
+      const destDir = config.agentDirOf(copy.id);
+      expect(existsSync(destDir)).toBe(true);
+      expect(existsSync(path.join(destDir, "prompts"))).toBe(false);
+      expect(existsSync(path.join(destDir, "mcp.json"))).toBe(false);
+    });
+  });
+
+  it("duplicate：拷贝源 Agent 已有的 prompts/mcp.json，但不拷贝 memory", async () => {
+    await run(async () => {
+      const src = await controller.create(fixture("源-带文件") as never);
+      const srcDir = config.agentDirOf(src.id);
+      mkdirSync(path.join(srcDir, "prompts"), { recursive: true });
+      writeFileSync(path.join(srcDir, "prompts", "AGENT.md"), "你是研发助手");
+      writeFileSync(path.join(srcDir, "mcp.json"), '{"mcpServers":{}}');
+      mkdirSync(path.join(srcDir, "memory"), { recursive: true });
+      writeFileSync(path.join(srcDir, "memory", "core.md"), "记忆内容");
+
+      const copy = await controller.duplicate(src.id);
+      const destDir = config.agentDirOf(copy.id);
+      expect(existsSync(path.join(destDir, "prompts", "AGENT.md"))).toBe(true);
+      expect(existsSync(path.join(destDir, "mcp.json"))).toBe(true);
+      // 记忆不复制——副本从零开始。
+      expect(existsSync(path.join(destDir, "memory"))).toBe(false);
     });
   });
 
@@ -291,6 +312,91 @@ describe("AgentController", () => {
       await expect(controller.getMcp("ghost")).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe("提示词文件 REST", () => {
+    it("GET prompts：目录不存在时 AGENT.md 仍以空占位首位返回", async () => {
+      await run(async () => {
+        const agent = await agentService.ensureDefault();
+        const list = await controller.listPrompts(agent.id);
+        expect(list).toEqual([{ file: "AGENT.md", size: 0, mtime: null }]);
+      });
+    });
+
+    it("PUT → GET prompts/:file 回读一致；list 反映新文件（AGENT.md 恒首位）", async () => {
+      await run(async () => {
+        const agent = await agentService.ensureDefault();
+        await controller.putPrompt(agent.id, "AGENT.md", {
+          content: "你是测试助手",
+        } as never);
+        await controller.putPrompt(agent.id, "tone.md", {
+          content: "保持简洁",
+        } as never);
+
+        const body = await controller.getPrompt(agent.id, "tone.md");
+        expect(body.content).toBe("保持简洁");
+
+        const list = await controller.listPrompts(agent.id);
+        expect(list.map((f) => f.file)).toEqual(["AGENT.md", "tone.md"]);
+      });
+    });
+
+    it("GET prompts/:file 对不存在的文件返回空字符串", async () => {
+      await run(async () => {
+        const agent = await agentService.ensureDefault();
+        const body = await controller.getPrompt(agent.id, "nope.md");
+        expect(body.content).toBe("");
+      });
+    });
+
+    it("DELETE prompts/:file 删除非主文件成功", async () => {
+      await run(async () => {
+        const agent = await agentService.ensureDefault();
+        await controller.putPrompt(agent.id, "tone.md", {
+          content: "语气",
+        } as never);
+        await controller.deletePrompt(agent.id, "tone.md");
+        const list = await controller.listPrompts(agent.id);
+        expect(list.map((f) => f.file)).not.toContain("tone.md");
+      });
+    });
+
+    it("DELETE prompts/AGENT.md → 400（人格主文件不可删，含大小写变体）", async () => {
+      await run(async () => {
+        const agent = await agentService.ensureDefault();
+        await expect(
+          controller.deletePrompt(agent.id, "AGENT.md"),
+        ).rejects.toThrow(BadRequestException);
+        await expect(
+          controller.deletePrompt(agent.id, "agent.md"),
+        ).rejects.toThrow(BadRequestException);
+      });
+    });
+
+    it("非法文件名（路径穿越 / 非 .md 后缀）→ 400，GET/PUT/DELETE 三端点一致", async () => {
+      await run(async () => {
+        const agent = await agentService.ensureDefault();
+        await expect(controller.getPrompt(agent.id, "../x.md")).rejects.toThrow(
+          BadRequestException,
+        );
+        await expect(
+          controller.putPrompt(agent.id, "x.txt", {
+            content: "x",
+          } as never),
+        ).rejects.toThrow(BadRequestException);
+        await expect(
+          controller.deletePrompt(agent.id, "a/b.md"),
+        ).rejects.toThrow(BadRequestException);
+      });
+    });
+
+    it("不存在的 agentId → 404（prompts 端点同样受 findOrThrow 保护）", async () => {
+      await run(async () => {
+        await expect(controller.listPrompts("ghost")).rejects.toThrow(
+          NotFoundException,
+        );
+      });
     });
   });
 

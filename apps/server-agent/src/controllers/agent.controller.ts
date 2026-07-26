@@ -2,11 +2,14 @@ import { existsSync, readFileSync } from "node:fs";
 import {
   AccountContextService,
   AgentContextService,
+  isValidPromptFileName,
   McpConfigSchema,
   McpService,
   MeshbotConfigService,
+  PROMPT_FILE_MAIN,
+  PromptFileService,
 } from "@meshbot/lib-agent";
-import type { AgentView } from "@meshbot/types-agent";
+import type { AgentView, PromptFileMeta } from "@meshbot/types-agent";
 import {
   BadRequestException,
   Body,
@@ -24,6 +27,8 @@ import {
   AgentUpdateDto,
   AgentViewDto,
   McpRawDto,
+  PromptFileBodyDto,
+  PromptFileMetaDto,
 } from "../dto/agent.dto";
 import type { Agent } from "../entities/agent.entity";
 import { AgentService } from "../services/agent.service";
@@ -35,7 +40,6 @@ function toAgentView(agent: Agent): AgentView {
     name: agent.name,
     avatar: agent.avatar,
     description: agent.description,
-    systemPrompt: agent.systemPrompt,
     defaultModelConfigId: agent.defaultModelConfigId,
     remoteEnabled: agent.remoteEnabled,
     visibility: agent.visibility,
@@ -58,6 +62,7 @@ export class AgentController {
     private readonly config: MeshbotConfigService,
     private readonly mcp: McpService,
     private readonly account: AccountContextService,
+    private readonly prompts: PromptFileService,
   ) {}
 
   /** 当前账号 —— REST 请求已由鉴权拦截器压过账号上下文，这里直接取即可。 */
@@ -110,7 +115,8 @@ export class AgentController {
 
   @Post(":id/duplicate")
   @ApiOperation({
-    summary: "复制 Agent 的配置（不复制记忆/工作区/会话/MCP 配置）",
+    summary:
+      "复制 Agent 的配置（含提示词/技能/MCP 配置；不复制记忆/工作区/会话）",
   })
   @ApiOkResponse({ description: "复制成功，返回新 Agent", type: AgentViewDto })
   async duplicate(@Param("id") id: string): Promise<AgentView> {
@@ -157,5 +163,74 @@ export class AgentController {
     }
     // 写盘 + 失效运行态收敛到 McpService.updateConfig（REST 与自管理工具共用同一入口）。
     await this.agentCtx.run(id, () => this.mcp.updateConfig(() => result.data));
+  }
+
+  /** 文件名前置校验：非法名直接 400，不进 Agent ALS / PromptFileService。 */
+  private assertValidPromptFileName(file: string): void {
+    if (!isValidPromptFileName(file)) {
+      throw new BadRequestException(`非法提示词文件名：${file}`);
+    }
+  }
+
+  @Get(":id/prompts")
+  @ApiOperation({
+    summary:
+      "列出该 Agent 的提示词文件（AGENT.md 恒首位，物理不存在也返回占位；其余按文件名字典序）",
+  })
+  @ApiOkResponse({
+    description: "提示词文件元信息列表",
+    type: PromptFileMetaDto,
+    isArray: true,
+  })
+  async listPrompts(@Param("id") id: string): Promise<PromptFileMeta[]> {
+    await this.agents.findOrThrow(id);
+    return this.agentCtx.run(id, () => this.prompts.list());
+  }
+
+  @Get(":id/prompts/:file")
+  @ApiOperation({ summary: "读取单个提示词文件全文（不存在返回空字符串）" })
+  @ApiOkResponse({ description: "提示词文件正文", type: PromptFileBodyDto })
+  async getPrompt(
+    @Param("id") id: string,
+    @Param("file") file: string,
+  ): Promise<{ content: string }> {
+    await this.agents.findOrThrow(id);
+    this.assertValidPromptFileName(file);
+    return this.agentCtx.run(id, () => ({ content: this.prompts.read(file) }));
+  }
+
+  @Put(":id/prompts/:file")
+  @ApiOperation({
+    summary: "写入单个提示词文件（新建同一端点，落盘前惰性创建 prompts 目录）",
+  })
+  @ApiBody({ type: PromptFileBodyDto })
+  @ApiOkResponse({ description: "已写入" })
+  async putPrompt(
+    @Param("id") id: string,
+    @Param("file") file: string,
+    @Body() body: PromptFileBodyDto,
+  ): Promise<void> {
+    await this.agents.findOrThrow(id);
+    this.assertValidPromptFileName(file);
+    await this.agentCtx.run(id, () => this.prompts.write(file, body.content));
+  }
+
+  @Delete(":id/prompts/:file")
+  @ApiOperation({
+    summary: `删除单个提示词文件（${PROMPT_FILE_MAIN} 是人格主文件，拒绝删除）`,
+  })
+  @ApiOkResponse({ description: "已删除" })
+  async deletePrompt(
+    @Param("id") id: string,
+    @Param("file") file: string,
+  ): Promise<void> {
+    await this.agents.findOrThrow(id);
+    this.assertValidPromptFileName(file);
+    if (file.toLowerCase() === PROMPT_FILE_MAIN.toLowerCase()) {
+      throw new BadRequestException(
+        `${PROMPT_FILE_MAIN} 是人格主文件，不可删除`,
+      );
+    }
+    await this.agentCtx.run(id, () => this.prompts.remove(file));
   }
 }

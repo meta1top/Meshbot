@@ -21,8 +21,8 @@ const END_REASON_TEXT: Record<AgentRunEnd["reason"], string> = {
   error: "远程运行未能建立",
   interrupted: "远程运行已中断",
   done: "远程运行已结束",
-  agent_not_remotable: "目标 Agent 不可远程访问（不存在或未开启远程）",
-  session_agent_mismatch: "该会话不属于所选 Agent",
+  agent_not_remotable: "目标助手不可远程访问（不存在或未开启远程）",
+  session_agent_mismatch: "该会话不属于所选助手",
 };
 
 /**

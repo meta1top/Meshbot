@@ -339,7 +339,6 @@ describe("ContextBuilder.buildContextMessage", () => {
         language: "zh",
         timezone: "Asia/Shanghai",
         agentName: "小M",
-        agentSystemPrompt: null,
       }),
     };
     const { contextBuilder, ctx } = makeGs(fakePort);
@@ -372,8 +371,10 @@ describe("ContextBuilder.buildContextMessage", () => {
 // ─── buildPersonaMessage ────────────────────────────────────────────────────
 //
 // 人格必须每轮刷新（稳定 id system:persona，reducer 原地替换）而非首轮写死：
-// 多 Agent 下用户随时可改 Agent 的 systemPrompt 或切换 Agent，首轮写死会让老
-// 会话永远带着旧人格，且静默不报错（本案全案最容易踩的坑，见 Task 7）。
+// 记忆 core.md 随时可能被 memory 工具改写，首轮写死会让老会话永远带着旧记忆，
+// 且静默不报错（本案全案最容易踩的坑，见 Task 7）。Agent 人格正文已迁移至
+// system:prompts（见 context-builder.spec.ts 的 buildPromptsBlock 系列用例），
+// 本节只覆盖记忆段落的组装与刷新，不再含 agentSystemPrompt。
 
 describe("ContextBuilder.buildPersonaMessage", () => {
   let testDir: string;
@@ -430,36 +431,21 @@ describe("ContextBuilder.buildPersonaMessage", () => {
     expect(msg.id).toBe("system:persona");
   });
 
-  it("人格 = Agent 的 systemPrompt + 记忆段 + LLMUSE 指南", async () => {
-    const fakePort: RuntimeContextPort = {
-      resolve: async () => ({
-        displayName: null,
-        language: null,
-        timezone: null,
-        agentName: "研发助手",
-        agentSystemPrompt: "你是研发助手，只写 TypeScript。",
-      }),
-    };
-    const { contextBuilder } = makeGs(fakePort, { readCore: () => "" });
+  it("人格 = 记忆段（MEMORY_GUIDE + <memory>）+ LLMUSE 指南，不再含 Agent 人格正文", async () => {
+    const { contextBuilder } = makeGs(undefined, {
+      readCore: () => "用户偏好简洁",
+    });
     const msg = await contextBuilder.buildPersonaMessage();
     const content = String(msg.content);
-    expect(content).toContain("你是研发助手，只写 TypeScript。");
     expect(content).toContain(MEMORY_GUIDE);
+    expect(content).toContain("<memory>");
+    expect(content).toContain("用户偏好简洁");
     expect(content).toContain(LLMUSE_GUIDE);
   });
 
-  it("systemPrompt 为空时不产生前导空行", async () => {
-    const fakePort: RuntimeContextPort = {
-      resolve: async () => ({
-        displayName: null,
-        language: null,
-        timezone: null,
-        agentName: "M",
-        agentSystemPrompt: "",
-      }),
-    };
-    const { contextBuilder } = makeGs(fakePort);
+  it("无记忆 core 时：persona 恰好是 MEMORY_GUIDE + LLMUSE_GUIDE，不产生多余空行", async () => {
+    const { contextBuilder } = makeGs(undefined, { readCore: () => "" });
     const msg = await contextBuilder.buildPersonaMessage();
-    expect(String(msg.content).startsWith("\n")).toBe(false);
+    expect(String(msg.content)).toBe(`${MEMORY_GUIDE}\n\n${LLMUSE_GUIDE}`);
   });
 });

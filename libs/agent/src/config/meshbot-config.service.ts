@@ -94,6 +94,15 @@ export class MeshbotConfigService {
   }
 
   /**
+   * 提示词文件根目录：<accountDir>/agents/<agentId>/prompts（按 Agent 隔离）。
+   * AGENT.md（人格主文件）+ 其余任意 *.md，由 PromptFileService 管理；目录本身
+   * 惰性创建（写入时才 mkdir），与 getSkillsDir 同款不预先建目录。
+   */
+  getPromptsDir(): string {
+    return path.join(this.agentDir(), "prompts");
+  }
+
+  /**
    * 指定 Agent 的数据根（显式传 id，不走 ALS）：<accountDir>/agents/<agentId>。
    * 供「删除 Agent」这类需要操作**非当前** Agent 目录的场景使用——不像 `agentDir()`
    * 那样从 `AgentContextService` 读当前 Agent，也不 mkdir（删除前不该凭空建目录）。

@@ -64,8 +64,7 @@ export function createAgentRenamePort(
  * （GraphService.run / ModelResolver.resolveModel()·getTitleModel() 内），
  * AccountContextService.getOrThrow() 安全。全 best-effort：displayName 无身份返 null、
  * language/timezone 无设置返 null、device token 未登录/查无身份返 null（云模型请求带空 Bearer，
- * 由网关侧鉴权拒绝）；当前 agentId 缺失或已删除时 agentName 兜底默认名、agentSystemPrompt 返 null
- * （buildPersonaMessage 据此省略人格正文段）。
+ * 由网关侧鉴权拒绝）；当前 agentId 缺失或已删除时 agentName 兜底默认名。
  * MODEL_CONFIG_READ_PORT 委托 ModelConfigService 合并视图（本地 local 行 + 云端读时
  * 代理 cloud 行）——修复 Critical C-1：旧实现直读 sqlite model_configs 表，云端模型行
  * （不落库）运行时永远解析不出。
@@ -77,7 +76,7 @@ export function createAgentRenamePort(
     TxTypeOrmModule.forFeature([Setting]),
     // CloudIdentityService 由 AuthModule export
     AuthModule,
-    // AgentService 由 AgentsModule export（当前 Agent 的 name / systemPrompt）
+    // AgentService 由 AgentsModule export（当前 Agent 的 name）
     AgentsModule,
     // ModelConfigService 由 SessionModule export（模型配置合并视图）
     SessionModule,
@@ -107,7 +106,6 @@ export function createAgentRenamePort(
             language,
             timezone,
             agentName: agent?.name ?? DEFAULT_AGENT_NAME,
-            agentSystemPrompt: agent?.systemPrompt ?? null,
           };
         },
       }),

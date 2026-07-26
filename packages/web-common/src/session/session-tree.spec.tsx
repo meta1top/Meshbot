@@ -14,7 +14,7 @@ globalThis.ResizeObserver ??= class {
   disconnect() {}
 } as unknown as typeof ResizeObserver;
 
-/** 全字段桩，覆盖 SessionTreeLabels 所有字段（含本任务新增的 editAgent）。 */
+/** 全字段桩，覆盖 SessionTreeLabels 所有字段（含 Agent 行下拉菜单三项）。 */
 const STUB_LABELS: SessionTreeLabels = {
   offline: "离线",
   rename: "重命名",
@@ -24,8 +24,13 @@ const STUB_LABELS: SessionTreeLabels = {
   deleteConfirmConfirm: "删除",
   deleteConfirmCancel: "取消",
   newSession: "新建会话",
-  editAgent: "编辑 Agent",
+  editAgent: "编辑",
+  duplicateAgent: "复制",
+  deleteAgent: "删除助手",
 };
+
+/** Agent 行下拉菜单触发器统一 aria-label="menu"（与 SessionRow 三点菜单同构）。 */
+const AGENT_MENU_TRIGGER_NAME = "menu";
 
 describe("SessionTree agent 节点", () => {
   it("agent 节点渲染头像、名字、running 脉冲点", () => {
@@ -52,7 +57,7 @@ describe("SessionTree agent 节点", () => {
     expect(screen.getByText("🛠")).toBeInTheDocument();
   });
 
-  it("hover agent 节点点编辑按钮调 onEditAgent", async () => {
+  it("hover agent 节点打开菜单点「编辑」调 onEditAgent", async () => {
     const onEditAgent = jest.fn();
     const groups = [
       {
@@ -75,11 +80,117 @@ describe("SessionTree agent 节点", () => {
       />,
     );
     await userEvent.click(
-      screen.getByRole("button", { name: STUB_LABELS.editAgent }),
+      screen.getByRole("button", { name: AGENT_MENU_TRIGGER_NAME }),
+    );
+    await userEvent.click(
+      screen.getByRole("menuitem", { name: STUB_LABELS.editAgent }),
     );
     expect(onEditAgent).toHaveBeenCalledWith(
       expect.objectContaining({ key: "ag:1" }),
     );
+  });
+
+  it("菜单同时含编辑/复制/删除三项，点击「复制」「删除」分别调用对应回调", async () => {
+    const onEditAgent = jest.fn();
+    const onDuplicateAgent = jest.fn();
+    const onDeleteAgent = jest.fn();
+    const groups = [
+      {
+        key: "agents",
+        items: [{ key: "ag:1", label: "研发助手", children: [] }],
+      },
+    ];
+    render(
+      <SessionTree
+        groups={groups}
+        nodeInfo={() => ({
+          kind: "agent",
+          emoji: "🛠",
+          color: "#3b82f6",
+          name: "研发助手",
+          running: false,
+        })}
+        onEditAgent={onEditAgent}
+        onDuplicateAgent={onDuplicateAgent}
+        onDeleteAgent={onDeleteAgent}
+        labels={STUB_LABELS}
+      />,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: AGENT_MENU_TRIGGER_NAME }),
+    );
+    expect(screen.getAllByRole("menuitem")).toHaveLength(3);
+    await userEvent.click(
+      screen.getByRole("menuitem", { name: STUB_LABELS.duplicateAgent }),
+    );
+    expect(onDuplicateAgent).toHaveBeenCalledWith(
+      expect.objectContaining({ key: "ag:1" }),
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: AGENT_MENU_TRIGGER_NAME }),
+    );
+    await userEvent.click(
+      screen.getByRole("menuitem", { name: STUB_LABELS.deleteAgent }),
+    );
+    expect(onDeleteAgent).toHaveBeenCalledWith(
+      expect.objectContaining({ key: "ag:1" }),
+    );
+  });
+
+  it("只传 onDuplicateAgent 时，菜单只出现「复制」一项", async () => {
+    const onDuplicateAgent = jest.fn();
+    const groups = [
+      {
+        key: "agents",
+        items: [{ key: "ag:1", label: "研发助手", children: [] }],
+      },
+    ];
+    render(
+      <SessionTree
+        groups={groups}
+        nodeInfo={() => ({
+          kind: "agent",
+          emoji: "🛠",
+          color: "#3b82f6",
+          name: "研发助手",
+          running: false,
+        })}
+        onDuplicateAgent={onDuplicateAgent}
+        labels={STUB_LABELS}
+      />,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: AGENT_MENU_TRIGGER_NAME }),
+    );
+    const items = screen.getAllByRole("menuitem");
+    expect(items).toHaveLength(1);
+    expect(items[0]).toHaveTextContent(STUB_LABELS.duplicateAgent as string);
+  });
+
+  it("三个回调都未传时，本机 Agent 行不出现菜单触发器", () => {
+    const groups = [
+      {
+        key: "agents",
+        items: [{ key: "ag:1", label: "研发助手", children: [] }],
+      },
+    ];
+    render(
+      <SessionTree
+        groups={groups}
+        nodeInfo={() => ({
+          kind: "agent",
+          emoji: "🛠",
+          color: "#3b82f6",
+          name: "研发助手",
+          running: false,
+        })}
+        labels={STUB_LABELS}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: AGENT_MENU_TRIGGER_NAME }),
+    ).not.toBeInTheDocument();
   });
 
   it("点击 agent 行本体：只展开/收起子节点，不设当前态（无 onSelectAgent 通道）", async () => {
@@ -123,7 +234,7 @@ describe("SessionTree agent 节点", () => {
 });
 
 describe("SessionTree 远程 Agent 节点（review finding #2 补测）", () => {
-  it("远程 Agent 单行渲染「名字 · 设备名」，行高仍 h-7，且不出编辑铅笔（在线也不出）", () => {
+  it("远程 Agent 单行渲染「名字 · 设备名」，行高仍 h-7，且不出菜单触发器（在线也不出，onEditAgent 传了也不出）", () => {
     const onEditAgent = jest.fn();
     const groups = [
       {
@@ -164,7 +275,7 @@ describe("SessionTree 远程 Agent 节点（review finding #2 补测）", () => 
     // 溢出省略：设备名后缀自身 truncate，外层 label 也 truncate。
     expect(host).toHaveClass("truncate");
     expect(
-      screen.queryByRole("button", { name: STUB_LABELS.editAgent }),
+      screen.queryByRole("button", { name: AGENT_MENU_TRIGGER_NAME }),
     ).not.toBeInTheDocument();
     // 单行 → 与本机 Agent 行同一 h-7 节奏，不再有两行的 min-h-9。
     const row = screen.getByText("远程助手").closest("button")?.parentElement;
@@ -316,7 +427,7 @@ describe("SessionTree 远程 Agent 节点（review finding #2 补测）", () => 
     expect(name).not.toHaveClass("max-w-[65%]");
   });
 
-  it("本机 Agent 对照：编辑铅笔正常出现（远程无、本机有）", () => {
+  it("本机 Agent 对照：菜单触发器正常出现（远程无、本机有）", () => {
     const onEditAgent = jest.fn();
     const groups = [
       {
@@ -339,7 +450,7 @@ describe("SessionTree 远程 Agent 节点（review finding #2 补测）", () => 
       />,
     );
     expect(
-      screen.getByRole("button", { name: STUB_LABELS.editAgent }),
+      screen.getByRole("button", { name: AGENT_MENU_TRIGGER_NAME }),
     ).toBeInTheDocument();
   });
 

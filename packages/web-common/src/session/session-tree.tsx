@@ -13,6 +13,7 @@ import {
   TooltipTrigger,
 } from "@meshbot/design";
 import {
+  Copy,
   Loader2,
   MoreHorizontal,
   Pencil,
@@ -59,8 +60,14 @@ export interface SessionTreeLabels {
   deleteConfirmCancel?: string;
   /** 设备行内「新建会话」按钮 title（仅 onNewSession 注入时使用）。 */
   newSession?: string;
-  /** Agent 行编辑按钮 aria-label / title（仅 onEditAgent 注入时使用）。 */
+  /**
+   * Agent 行下拉菜单的三个菜单项文案：编辑 / 复制 / 删除。对应回调
+   * （`onEditAgent`/`onDuplicateAgent`/`onDeleteAgent`）未注入的项不渲染，
+   * 三者全未注入时整个菜单触发器都不出现（远程 Agent 恒如此）。
+   */
   editAgent?: string;
+  duplicateAgent?: string;
+  deleteAgent?: string;
 }
 
 /**
@@ -152,8 +159,12 @@ export interface SessionTreeProps {
   onRenameSession?: (node: NavNode, title: string) => Promise<void> | void;
   /** 删除确认；成功后关闭确认框，失败时确认框留着、按钮恢复可点供重试/取消。 */
   onDeleteSession?: (node: NavNode) => Promise<void> | void;
-  /** Agent 行编辑按钮点击（不传则该按钮不出现）。 */
+  /** Agent 行下拉菜单「编辑」项点击（不传则该项不出现）。 */
   onEditAgent?: (node: NavNode) => void;
+  /** Agent 行下拉菜单「复制」项点击（不传则该项不出现）。 */
+  onDuplicateAgent?: (node: NavNode) => void;
+  /** Agent 行下拉菜单「删除」项点击（不传则该项不出现，红色 destructive）。 */
+  onDeleteAgent?: (node: NavNode) => void;
   labels: SessionTreeLabels;
 }
 
@@ -176,6 +187,8 @@ export function SessionTree({
   onRenameSession,
   onDeleteSession,
   onEditAgent,
+  onDuplicateAgent,
+  onDeleteAgent,
   labels,
 }: SessionTreeProps) {
   const renderRow = (node: NavNode, defaults: SidebarRowProps): ReactNode => {
@@ -222,6 +235,8 @@ export function SessionTree({
             defaults={defaults}
             info={info}
             onEditAgent={onEditAgent}
+            onDuplicateAgent={onDuplicateAgent}
+            onDeleteAgent={onDeleteAgent}
             labels={labels}
           />
         );
@@ -306,36 +321,47 @@ function DeviceRow({
 }
 
 /** Agent 行：chevron（SidebarNav 已在 defaults.icon 给出）+ 圆形头像（色底 emoji）
- *  + 名字 + running 脉冲点 + hover 编辑（复用 SidebarRow 的 actions 出现机制，
- *  不额外造 hover 逻辑）。编辑按钮盒子 h-5 w-5（同 SessionRow 三点菜单触发器），
- *  比早前的 h-6 w-6 更贴合图标——原尺寸在短 Agent 名场景下和行右缘之间留白
- *  明显偏大、视觉不平衡（Bug #2）。行本体点击只做展开/收起（`defaults.onClick`
- *  是 NavItem 的 toggle 分支）——不再有「设为当前 Agent」的并行通道，Agent
- *  是并列关系，没有全局当前态可切。
+ *  + 名字 + running 脉冲点 + hover 三点菜单（复用 SidebarRow 的 actions 出现
+ *  机制，不额外造 hover 逻辑）。菜单触发器盒子 h-5 w-5（同 SessionRow 三点菜单
+ *  触发器），比早前铅笔按钮的 h-6 w-6 更贴合图标——原尺寸在短 Agent 名场景下
+ *  和行右缘之间留白明显偏大、视觉不平衡（Bug #2）。行本体点击只做展开/收起
+ *  （`defaults.onClick` 是 NavItem 的 toggle 分支）——不再有「设为当前 Agent」
+ *  的并行通道，Agent 是并列关系，没有全局当前态可切。
+ *
+ *  菜单三项——编辑（`onEditAgent`）/复制（`onDuplicateAgent`）/删除
+ *  （`onDeleteAgent`，红色 destructive）——各自按回调是否注入独立决定是否渲染；
+ *  三者全未注入（或远程 Agent）则整个菜单触发器都不出现。
  *
  *  远程 Agent（`info.remote`）在同一行名字后跟弱化的「· 宿主设备名」——保持与
  *  本机 Agent 一致的单行 h-7 节奏（早前的两行版实机偏臃肿），放不下先截设备名
  *  （Agent 名 `shrink-0` 优先完整、`max-w-[65%]` 兜底极端长名字），完整信息靠
- *  hover tooltip 补全；无编辑铅笔（远程 Agent 只读，不可
- *  从这里改名/改人设）；宿主离线（`info.online === false`）时整行
- *  `pointer-events-none` 灰化——不可展开/不可点击，右侧换成「离线」徽标（同设备
- *  行的离线呈现）；灰化层的 `pointer-events-none` 让指针事件穿透到外层 tooltip
- *  触发器，所以离线行照样能 hover 出完整信息。 */
+ *  hover tooltip 补全；无菜单（远程 Agent 只读，不可从这里改名/改人设/复制/
+ *  删除）；宿主离线（`info.online === false`）时整行 `pointer-events-none`
+ *  灰化——不可展开/不可点击，右侧换成「离线」徽标（同设备行的离线呈现）；灰化
+ *  层的 `pointer-events-none` 让指针事件穿透到外层 tooltip 触发器，所以离线
+ *  行照样能 hover 出完整信息。 */
 function AgentRow({
   node,
   defaults,
   info,
   onEditAgent,
+  onDuplicateAgent,
+  onDeleteAgent,
   labels,
 }: {
   node: NavNode;
   defaults: SidebarRowProps;
   info: Extract<SessionTreeNodeInfo, { kind: "agent" }>;
   onEditAgent?: (node: NavNode) => void;
+  onDuplicateAgent?: (node: NavNode) => void;
+  onDeleteAgent?: (node: NavNode) => void;
   labels: SessionTreeLabels;
 }) {
   const offline = info.remote === true && info.online === false;
-  const showPencil = !!onEditAgent && !info.remote;
+  // 远程 Agent 恒不出菜单（只读，不可从侧栏改名/改人设/复制/删除）；本机
+  // Agent 只要三个回调任一注入即出现菜单触发器，未注入的项各自不渲染。
+  const showMenu =
+    !info.remote && !!(onEditAgent || onDuplicateAgent || onDeleteAgent);
   const hostName = info.remote ? info.deviceName : undefined;
   const row = (
     <SidebarRow
@@ -389,19 +415,46 @@ function AgentRow({
         ) : undefined
       }
       actions={
-        showPencil ? (
-          <button
-            type="button"
-            title={labels.editAgent}
-            aria-label={labels.editAgent}
-            onClick={(e) => {
-              e.stopPropagation();
-              onEditAgent?.(node);
-            }}
-            className="flex h-5 w-5 items-center justify-center rounded text-(--shell-sidebar-fg)/60 transition-colors hover:bg-(--shell-sidebar-hover) hover:text-(--shell-sidebar-fg)"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
+        showMenu ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label="menu"
+                onClick={(e) => e.stopPropagation()}
+                className="flex h-5 w-5 items-center justify-center rounded text-(--shell-sidebar-fg)/60 transition-colors hover:bg-(--shell-sidebar-hover) hover:text-(--shell-sidebar-fg)"
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              sideOffset={4}
+              className="min-w-[140px]"
+            >
+              {onEditAgent && (
+                <DropdownMenuItem onSelect={() => onEditAgent(node)}>
+                  <Pencil className="h-3.5 w-3.5" />
+                  {labels.editAgent}
+                </DropdownMenuItem>
+              )}
+              {onDuplicateAgent && (
+                <DropdownMenuItem onSelect={() => onDuplicateAgent(node)}>
+                  <Copy className="h-3.5 w-3.5" />
+                  {labels.duplicateAgent}
+                </DropdownMenuItem>
+              )}
+              {onDeleteAgent && (
+                <DropdownMenuItem
+                  destructive
+                  onSelect={() => onDeleteAgent(node)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  {labels.deleteAgent}
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         ) : undefined
       }
     />
