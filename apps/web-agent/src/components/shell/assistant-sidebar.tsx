@@ -482,6 +482,13 @@ export function AssistantSidebar() {
       if (openSession?.agentId === deleteTargetId) {
         router.push("/assistant");
       }
+      // 被删助手的编辑抽屉恰好开着：直接关掉，不留「未找到该助手」的空壳
+      // （删除入口在抽屉 footer 时代删除成功会自动关，双入口解耦后补齐该语义）。
+      setEditor((prev) =>
+        prev.open && prev.agentId === deleteTargetId
+          ? { open: false, agentId: null }
+          : prev,
+      );
       setDeleteTargetId(null);
     } catch (err) {
       setDeleteError(
