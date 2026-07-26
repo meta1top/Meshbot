@@ -100,7 +100,7 @@ describe("RemoteRunTracker", () => {
       "session_agent_mismatch",
     );
     expect((result?.payload as { error: string }).error).toContain(
-      "该会话不属于所选 Agent",
+      "该会话不属于所选助手",
     );
   });
 

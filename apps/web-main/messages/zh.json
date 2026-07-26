@@ -270,10 +270,10 @@
     "remoteSessionTitle": "远程会话",
     "launcher": {
       "title": "开始一个任务",
-      "subtitle": "选择一台已授权设备，把任务交给它的 Agent",
+      "subtitle": "选择一台已授权设备，把任务交给它的助手",
       "placeholder": "输入你的任务或问题",
-      "pickAgent": "选择 Agent",
-      "pickAgentFirst": "请先选择要执行任务的 Agent",
+      "pickAgent": "选择助手",
+      "pickAgentFirst": "请先选择要执行任务的助手",
       "willRunOn": "将在 {device} 上执行",
       "slogan": "你的工作副驾",
       "scenes": {
@@ -282,7 +282,7 @@
         "design": "设计创意"
       },
       "hostOffline": "{device}（离线）",
-      "agentOffline": "所选 Agent 的宿主设备已离线，请重新选择"
+      "agentOffline": "所选助手的宿主设备已离线，请重新选择"
     },
     "input": {
       "attachment": "添加附件",
@@ -290,14 +290,14 @@
     }
   },
   "assistantSidebar": {
-    "title": "Agent",
+    "title": "助手",
     "newSession": "新会话",
     "backToDevices": "返回设备列表",
     "offlineSessionsHint": "设备离线，无法加载会话列表",
     "remoteLoadFailed": "会话列表加载失败",
-    "remoteEmpty": "该 Agent 暂无会话",
-    "empty": "还没有可用的 Agent",
-    "watchFailed": "无法接收该 Agent 的实时更新（设备可能离线或无法远程访问）"
+    "remoteEmpty": "该助手暂无会话",
+    "empty": "还没有可用的助手",
+    "watchFailed": "无法接收该助手的实时更新（设备可能离线或无法远程访问）"
   },
   "session": {
     "assistantName": "助手",
@@ -310,14 +310,14 @@
     "reasoningThinking": "思考中 {seconds}s",
     "reasoningThought": "已思考 {seconds}s",
     "runErrorPrefix": "运行失败：",
-    "runErrorAgentNotRemotable": "该 Agent 不可远程访问（不存在或未开启远程），本次消息未发送",
-    "runErrorSessionAgentMismatch": "该会话不属于所选 Agent，本次消息未发送",
+    "runErrorAgentNotRemotable": "该助手不可远程访问（不存在或未开启远程），本次消息未发送",
+    "runErrorSessionAgentMismatch": "该会话不属于所选助手，本次消息未发送",
     "runErrorOffline": "目标设备已离线，本次消息未发送",
     "hitlSettledElsewhere": "已由其他端应答",
     "watchRejectedPrefix": "无法实时观察这台设备的输出：",
     "watchRejectedOffline": "目标设备已离线",
-    "watchRejectedNotFound": "该 Agent 不可远程访问（不存在或未开启远程）",
-    "watchRejectedSessionAgentMismatch": "该会话不属于所选 Agent",
+    "watchRejectedNotFound": "该助手不可远程访问（不存在或未开启远程）",
+    "watchRejectedSessionAgentMismatch": "该会话不属于所选助手",
     "watchRejectedCrossAccount": "跨账号访问被拒绝",
     "watchRejectedError": "设备处理观察请求时出错",
     "watchRejectedUnknown": "观察通道建立失败",
@@ -354,7 +354,7 @@
       "streamFooterRunning": "子会话 · {count} 条消息 · 输出实时滴流中",
       "streamFooterDone": "子会话 · {count} 条消息",
       "abortedResult": "已手动停止；已完成部分保留在子会话中",
-      "errorResult": "子 Agent 运行失败，未产出结果"
+      "errorResult": "子助手运行失败，未产出结果"
     },
     "artifact": {
       "presentFailed": "呈现失败",
@@ -606,7 +606,7 @@
     "saveFailed": "保存失败，请重试",
     "cancel": "取消",
     "deleteConfirmTitle": "删除该模型配置？",
-    "deleteConfirmDescription": "删除后无法恢复，使用该配置的 Agent 将无法继续调用该模型。",
+    "deleteConfirmDescription": "删除后无法恢复，使用该配置的助手将无法继续调用该模型。",
     "deleteFailed": "删除失败，请重试",
     "toggleFailed": "切换启用状态失败，请重试",
     "dismiss": "关闭"
@@ -804,15 +804,15 @@
     "channels": "频道",
     "directMessages": "私信",
     "newDm": "新建会话",
-    "agentDms": "设备 Agent",
+    "agentDms": "设备助手",
     "empty": "还没有会话",
     "loading": "加载中…",
     "loadFailed": "加载会话失败",
     "online": "在线",
     "offline": "离线",
     "picker": {
-      "title": "选择设备 Agent",
-      "description": "从你的已授权设备中选择一个，开始与它的 Agent 对话。",
+      "title": "选择设备助手",
+      "description": "从你的已授权设备中选择一个，开始与它的助手对话。",
       "loading": "加载设备中…",
       "empty": "没有可用的设备，请先在桌面端登录并授权设备。",
       "loadFailed": "加载设备失败",
@@ -821,7 +821,7 @@
     }
   },
   "imConversation": {
-    "agentFallback": "设备 Agent",
+    "agentFallback": "设备助手",
     "today": "今天",
     "yesterday": "昨天",
     "copy": "复制",
