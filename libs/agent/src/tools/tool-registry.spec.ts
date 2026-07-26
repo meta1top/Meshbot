@@ -1,9 +1,14 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { tool as createLcTool } from "@langchain/core/tools";
 import { DiscoveryService } from "@nestjs/core";
 import { z } from "zod";
 import { AccountContextService } from "../account/account-context.service";
 import { AgentContextService } from "../account/agent-context.service";
+import { MeshbotConfigService } from "../config/meshbot-config.service";
 import { Tool } from "./tool.decorator";
+import { ToolPrefsService } from "./tool-prefs.service";
 import { ToolRegistry } from "./tool-registry";
 import type { MeshbotTool, ToolContext } from "./tool.types";
 
@@ -34,6 +39,17 @@ class DuplicateAlphaTool implements MeshbotTool<{ x: number }, string> {
   readonly schema = z.object({ x: z.number() });
   async execute(args: { x: number }, _ctx: ToolContext): Promise<string> {
     return `dup:${args.x}`;
+  }
+}
+
+@Tool()
+class FakeTodoWriteTool implements MeshbotTool<{ z: string }, string> {
+  // 与真实豁免工具同名（PROTECTED_TOOLS），验证过滤链路对豁免名字的放行。
+  readonly name = "todo_write";
+  readonly description = "Fake todo_write";
+  readonly schema = z.object({ z: z.string() });
+  async execute(args: { z: string }, _ctx: ToolContext): Promise<string> {
+    return `todo:${args.z}`;
   }
 }
 
@@ -171,6 +187,143 @@ describe("ToolRegistry — 按「账号+Agent」隔离 MCP 工具", () => {
     agentCtx.run("agent-a", () => {
       expect(() => registry.list()).not.toThrow();
       expect(registry.list().map((t) => t.name)).toEqual(["alpha"]);
+    });
+  });
+});
+
+describe("ToolRegistry — per-agent 工具启停过滤（ToolPrefsService 接线）", () => {
+  let home: string;
+  let account: AccountContextService;
+  let agentCtx: AgentContextService;
+  let config: MeshbotConfigService;
+  let toolPrefs: ToolPrefsService;
+  let registry: ToolRegistry;
+
+  function runInContext<T>(
+    cloudUserId: string,
+    agentId: string,
+    fn: () => T,
+  ): T {
+    return account.run(cloudUserId, () => agentCtx.run(agentId, fn));
+  }
+
+  beforeEach(() => {
+    home = mkdtempSync(path.join(tmpdir(), "meshbot-tool-registry-"));
+    process.env.MESHBOT_HOME = home;
+    account = new AccountContextService();
+    agentCtx = new AgentContextService();
+    config = new MeshbotConfigService(account, agentCtx);
+    toolPrefs = new ToolPrefsService(config);
+    const alpha = new FakeAlphaTool();
+    const beta = new FakeBetaTool();
+    registry = new ToolRegistry(
+      fakeDiscovery([alpha, beta]),
+      account,
+      agentCtx,
+      toolPrefs,
+    );
+    registry.onModuleInit();
+  });
+
+  afterEach(() => {
+    process.env.MESHBOT_HOME = undefined;
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  it("禁用集生效：三消费口（bindable/list/get）都剔除被禁用的内置工具", () => {
+    runInContext("u1", "agent-a", () => {
+      toolPrefs.setDisabledTools(["alpha"]);
+      expect(registry.get("alpha")).toBeUndefined();
+      expect(registry.list().map((t) => t.name)).toEqual(["beta"]);
+      expect(registry.asLangChainBindable().map((t) => t.name)).toEqual([
+        "beta",
+      ]);
+    });
+  });
+
+  it("MCP 桶不受影响：内置工具被禁用不影响同 Agent 下的 MCP 工具", () => {
+    const mcpTool = makeMcpTool("mcp__fake");
+    const mcpLcTool = makeLcTool("mcp__fake");
+    registry.registerForAgent("u1", "agent-a", mcpTool, mcpLcTool);
+    runInContext("u1", "agent-a", () => {
+      toolPrefs.setDisabledTools(["alpha"]);
+      expect(registry.get("mcp__fake")).toBeDefined();
+      expect(
+        registry
+          .list()
+          .map((t) => t.name)
+          .sort(),
+      ).toEqual(["beta", "mcp__fake"]);
+      expect(
+        registry
+          .asLangChainBindable()
+          .map((t) => t.name)
+          .sort(),
+      ).toEqual(["beta", "mcp__fake"]);
+    });
+  });
+
+  it("ALS 外（无 Agent 上下文）全量返回，不过滤", () => {
+    runInContext("u1", "agent-a", () => {
+      toolPrefs.setDisabledTools(["alpha"]);
+    });
+    // 离开 Agent ALS：getDisabledTools() 内部抛错，registry 应 catch 后不过滤。
+    expect(
+      registry
+        .list()
+        .map((t) => t.name)
+        .sort(),
+    ).toEqual(["alpha", "beta"]);
+    expect(registry.get("alpha")).toBeDefined();
+    expect(
+      registry
+        .asLangChainBindable()
+        .map((t) => t.name)
+        .sort(),
+    ).toEqual(["alpha", "beta"]);
+  });
+
+  it("豁免工具（todo_write）经 ToolPrefsService 写入端剔除，registry 侧仍可见——全链路验证", () => {
+    const todoWrite = new FakeTodoWriteTool();
+    const registryWithProtected = new ToolRegistry(
+      fakeDiscovery([new FakeAlphaTool(), todoWrite]),
+      account,
+      agentCtx,
+      toolPrefs,
+    );
+    registryWithProtected.onModuleInit();
+    runInContext("u1", "agent-a", () => {
+      toolPrefs.setDisabledTools(["alpha", "todo_write"]);
+      expect(registryWithProtected.get("alpha")).toBeUndefined();
+      expect(registryWithProtected.get("todo_write")).toBeDefined();
+      expect(registryWithProtected.list().map((t) => t.name)).toEqual([
+        "todo_write",
+      ]);
+    });
+  });
+
+  it("listBuiltinsUnfiltered 不受禁用影响：全量返回含被禁用工具", () => {
+    runInContext("u1", "agent-a", () => {
+      toolPrefs.setDisabledTools(["alpha"]);
+      expect(
+        registry
+          .listBuiltinsUnfiltered()
+          .map((t) => t.name)
+          .sort(),
+      ).toEqual(["alpha", "beta"]);
+    });
+  });
+
+  it("旧构造签名（不传 ToolPrefsService）行为不变——不过滤", () => {
+    const alpha = new FakeAlphaTool();
+    const legacyRegistry = new ToolRegistry(
+      fakeDiscovery([alpha]),
+      account,
+      agentCtx,
+    );
+    legacyRegistry.onModuleInit();
+    runInContext("u1", "agent-a", () => {
+      expect(legacyRegistry.list().map((t) => t.name)).toEqual(["alpha"]);
     });
   });
 });

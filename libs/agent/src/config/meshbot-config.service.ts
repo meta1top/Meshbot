@@ -117,6 +117,15 @@ export class MeshbotConfigService {
   }
 
   /**
+   * 工具启停配置：<accountDir>/agents/<agentId>/tools.json（按 Agent 隔离）。
+   * 人机共写 `{ disabledTools: string[] }`，由 `ToolPrefsService` 管理；
+   * 文件本身惰性创建（写入时才 mkdir），与 getMcpConfigPath 同款不预先建目录。
+   */
+  getToolsConfigPath(): string {
+    return path.join(this.agentDir(), "tools.json");
+  }
+
+  /**
    * 本地 SQLite 数据库路径（根库）：<meshbotDir>/main.db。
    * 固定共享——所有账号同库（行级 cloudUserId 隔离），不随账号变；
    * 模块初始化期（无账号上下文）也会被调用，故不能账号化。

@@ -40,6 +40,7 @@ export {
 export { SkillService } from "./skills/skill.service";
 export type { SkillContent, SkillEntry } from "./skills/skill.types";
 export { ToolRegistry } from "./tools/tool-registry";
+export { ToolPrefsService } from "./tools/tool-prefs.service";
 export type { MeshbotTool, ToolContext } from "./tools/tool.types";
 export { Tool, TOOL_METADATA_KEY } from "./tools/tool.decorator";
 export {

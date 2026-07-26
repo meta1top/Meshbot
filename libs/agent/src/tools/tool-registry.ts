@@ -1,11 +1,15 @@
 import { tool as createLcTool } from "@langchain/core/tools";
 import type { StructuredToolInterface } from "@langchain/core/tools";
-import { Injectable, OnModuleInit } from "@nestjs/common";
+import { Injectable, OnModuleInit, Optional } from "@nestjs/common";
 import { DiscoveryService } from "@nestjs/core";
 import { AccountContextService } from "../account/account-context.service";
 import { AgentContextService } from "../account/agent-context.service";
 import { TOOL_METADATA_KEY } from "./tool.decorator";
+import { ToolPrefsService } from "./tool-prefs.service";
 import type { MeshbotTool } from "./tool.types";
+
+/** 无禁用工具时复用的空集，避免每次消费口都新建一个 Set。 */
+const EMPTY_DISABLED: ReadonlySet<string> = new Set();
 
 /** 注册项：执行用 meshbotTool，bindTools 用 lcTool。两者一一对应。 */
 interface Entry {
@@ -39,6 +43,7 @@ export class ToolRegistry implements OnModuleInit {
     private readonly discovery: DiscoveryService,
     private readonly account: AccountContextService,
     private readonly agent: AgentContextService,
+    @Optional() private readonly toolPrefs?: ToolPrefsService,
   ) {}
 
   onModuleInit(): void {
@@ -128,26 +133,65 @@ export class ToolRegistry implements OnModuleInit {
     return this.agentEntries.get(agentKey(acct, agentId)) ?? new Map();
   }
 
-  /** LC tool 数组用于 model.bindTools()。内置 + 当前账号+Agent MCP 工具合并。 */
+  /**
+   * 当前 ALS Agent 的禁用工具集合（per-agent 工具启停，Agent 编辑器 v2 第二段）。
+   * 只作用于全局内置 entries，MCP 桶（agentEntries）不受影响——MCP 工具已有
+   * server 级启停，不需要在这里重复过滤。
+   *
+   * 无 ToolPrefsService（未接线，如旧测试直接 `new ToolRegistry(...)` 不传第四参）
+   * 或无 Agent ALS（`getDisabledTools()` 经 `MeshbotConfigService.getToolsConfigPath()`
+   * → `AgentContextService.getOrThrow()` 抛错）时一律不过滤，返回空集——
+   * 与 `currentAgentEntries()` 同款「缺上下文不抛错」处理。
+   */
+  private disabledToolNames(): ReadonlySet<string> {
+    if (!this.toolPrefs) return EMPTY_DISABLED;
+    try {
+      return this.toolPrefs.getDisabledTools();
+    } catch {
+      return EMPTY_DISABLED;
+    }
+  }
+
+  /** 过滤掉被禁用的全局内置 entries；MCP 桶不参与本过滤。 */
+  private enabledBuiltinEntries(): Entry[] {
+    const disabled = this.disabledToolNames();
+    if (disabled.size === 0) return [...this.entries.values()];
+    return [...this.entries.values()].filter(
+      (e) => !disabled.has(e.meshbotTool.name),
+    );
+  }
+
+  /** LC tool 数组用于 model.bindTools()。内置（按当前 Agent 禁用集过滤）+ 当前账号+Agent MCP 工具合并。 */
   asLangChainBindable(): StructuredToolInterface[] {
     return [
-      ...this.entries.values(),
+      ...this.enabledBuiltinEntries(),
       ...this.currentAgentEntries().values(),
     ].map((e) => e.lcTool);
   }
 
+  /** 命中禁用的内置工具与「未注册」同表现，返回 undefined；不影响同名 MCP 工具（MCP 桶不过滤）。 */
   get(name: string): MeshbotTool | undefined {
-    return (
-      this.entries.get(name)?.meshbotTool ??
-      this.currentAgentEntries().get(name)?.meshbotTool
-    );
+    const disabled = this.disabledToolNames();
+    const builtin = disabled.has(name)
+      ? undefined
+      : this.entries.get(name)?.meshbotTool;
+    return builtin ?? this.currentAgentEntries().get(name)?.meshbotTool;
   }
 
   list(): MeshbotTool[] {
     return [
-      ...this.entries.values(),
+      ...this.enabledBuiltinEntries(),
       ...this.currentAgentEntries().values(),
     ].map((e) => e.meshbotTool);
+  }
+
+  /**
+   * 全量内置工具清单，**不受禁用过滤影响**——REST `GET /api/agents/:id/tools`
+   * 需要展示含被禁用项在内的全量列表（供 UI 渲染开关态）。只读口，不含 MCP 工具
+   * （MCP 已有独立的 server 级启停 REST）。
+   */
+  listBuiltinsUnfiltered(): MeshbotTool[] {
+    return [...this.entries.values()].map((e) => e.meshbotTool);
   }
 }
 
