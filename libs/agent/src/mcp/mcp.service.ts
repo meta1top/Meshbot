@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import {
   Injectable,
   Logger,
@@ -7,6 +8,8 @@ import {
 } from "@nestjs/common";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 import { MultiServerMCPClient } from "@langchain/mcp-adapters";
+import { AccountContextService } from "../account/account-context.service";
+import { AgentContextService } from "../account/agent-context.service";
 import { MeshbotConfigService } from "../config/meshbot-config.service";
 import { ToolRegistry } from "../tools/tool-registry";
 import { buildMcpToolAdapter } from "./mcp-tool.adapter";
@@ -70,6 +73,8 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly config: MeshbotConfigService,
     private readonly registry: ToolRegistry,
+    private readonly account: AccountContextService,
+    private readonly agentCtx: AgentContextService,
   ) {}
 
   /**
@@ -279,8 +284,11 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
   /**
    * 读 & 校验当前 Agent 的 mcp.json（Agent 化路径）。文件不存在返 null；
    * JSON / schema 解析失败打日志返 null（配置写坏应被发现，但不拖垮启动）。
+   *
+   * 公开给 ContextBuilder（组装 system:mcp 清单）与自管理工具（mcp_list 等）
+   * 读取配置态；须在账号+Agent ALS 内调用（同 ensureAgent 的契约）。
    */
-  private loadConfig(): McpConfig | null {
+  loadConfig(): McpConfig | null {
     const path = this.config.getMcpConfigPath();
     if (!existsSync(path)) return null;
     let raw: unknown;
@@ -300,6 +308,31 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
       return null;
     }
     return parsed.data;
+  }
+
+  /**
+   * 读-改-写 mcp.json（单一写入真相：REST PUT 与自管理工具共用）。
+   * mutator 拿到当前配置（无文件时为空配置）返回新配置；校验失败抛错不落盘；
+   * 成功落盘后失效当前 Agent 运行态（下次 run 重建）。须在账号+Agent ALS 内调用。
+   */
+  async updateConfig(mutator: (config: McpConfig) => McpConfig): Promise<void> {
+    const current = this.loadConfig() ?? { mcpServers: {} };
+    const next = McpConfigSchema.parse(mutator(structuredClone(current)));
+    const path = this.config.getMcpConfigPath();
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+    await this.teardownAgent(
+      this.account.getOrThrow(),
+      this.agentCtx.getOrThrow(),
+    );
+  }
+
+  /** 该 Agent 本轮运行态已加载的 MCP 工具名（null = 尚无运行态/未加载）。 */
+  getLoadedToolNames(
+    cloudUserId: string,
+    agentId: string,
+  ): ReadonlySet<string> | null {
+    return this.perAgent.get(agentKey(cloudUserId, agentId))?.names ?? null;
   }
 }
 
@@ -323,14 +356,19 @@ function splitAgentKey(key: string): { cloudUserId: string; agentId: string } {
 
 /**
  * 把我们 mcp.json 的 server 配置转成 @langchain/mcp-adapters 期望的形状：
+ * - `enabled === false` 的 server 直接跳过，不建连接（配置本身仍保留在
+ *   mcp.json 里——清单注入 / 自管理工具仍能看到禁用项，只是不会被加载）
  * - stdio：补 `transport: "stdio"` + 默认空 args
  * - http/sse：补 `transport: "streamable_http"`（默认）或用户指定的 transport
+ *
+ * 导出供测试直接单测过滤逻辑，无需起真实/桩 client。
  */
-function mapServersToLangchainShape(
+export function mapServersToLangchainShape(
   servers: Record<string, McpServerConfig>,
 ): Record<string, Record<string, unknown>> {
   const out: Record<string, Record<string, unknown>> = {};
   for (const [name, cfg] of Object.entries(servers)) {
+    if (cfg.enabled === false) continue;
     if (isStdioServer(cfg)) {
       out[name] = {
         transport: "stdio",

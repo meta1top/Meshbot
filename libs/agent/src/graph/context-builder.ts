@@ -1,8 +1,11 @@
 import { SystemMessage } from "@langchain/core/messages";
 import { Inject, Injectable, Optional } from "@nestjs/common";
 import { AccountContextService } from "../account/account-context.service.js";
+import { AgentContextService } from "../account/agent-context.service.js";
 import { MEMORY_GUIDE } from "../memory/memory-guide.js";
 import { MemoryService } from "../memory/memory.service.js";
+import { isStdioServer, type McpServerConfig } from "../mcp/mcp.schema.js";
+import { McpService } from "../mcp/mcp.service.js";
 import { LLMUSE_GUIDE } from "../prompt/llmuse-guide.js";
 import { SkillService } from "../skills/skill.service.js";
 import type { ThreadId } from "./graph.types.js";
@@ -40,17 +43,78 @@ export function buildSkillsBlock(
   ].join("\n");
 }
 
+/**
+ * 组装 `<mcp>` 系统块内容：MCP 工具命名格式说明 + 管理工具引导 + 当前 Agent 的
+ * server 清单（含启用态与本轮加载态）。
+ *
+ * 与 `buildSkillsBlock` 同范式：agent 始终知道自己装了哪些 MCP server，
+ * 无需先调 mcp_list 才知道。清单**包含禁用项**（标「已禁用」，配置仍保留）。
+ * 无任何配置时替换为安装引导，避免空块。
+ *
+ * @param servers 配置态全量 server（含禁用项），来自 `McpService.loadConfig()`
+ * @param loadedNames 运行态已加载的完整工具名集合（`mcp__<server>__<tool>`）；
+ *   null 表示本轮尚未加载（不能等同于「0 个工具」，需用「未加载」区分）
+ */
+export function buildMcpBlock(
+  servers: Record<string, McpServerConfig>,
+  loadedNames: ReadonlySet<string> | null,
+): string {
+  const intro = [
+    "名字形如 mcp__<server>__<tool> 的工具来自 MCP 服务器，由本 Agent 的 mcp.json 配置加载。",
+    "你可以用 mcp_list / mcp_install / mcp_uninstall / mcp_enable / mcp_disable 管理这些服务器（安装需用户确认；变更下一轮对话生效）。",
+  ];
+  const names = Object.keys(servers);
+  if (names.length === 0) {
+    return [
+      "<mcp>",
+      ...intro,
+      "当前未配置任何 MCP 服务器。需要外部工具能力时可用 mcp_install 安装（需用户确认）。",
+      "</mcp>",
+    ].join("\n");
+  }
+  const lines = names.map((name) => {
+    const cfg = servers[name];
+    const protocol = isStdioServer(cfg)
+      ? "stdio"
+      : (cfg.transport ?? "streamable_http");
+    const enabled = cfg.enabled === false ? "已禁用" : "已启用";
+    const loadState =
+      loadedNames === null
+        ? "未加载"
+        : `本轮已加载 ${countToolsForServer(loadedNames, name)} 个工具`;
+    return `- ${name}（${protocol}，${enabled}，${loadState}）`;
+  });
+  return ["<mcp>", ...intro, "已配置的 MCP 服务器:", ...lines, "</mcp>"].join(
+    "\n",
+  );
+}
+
+/** 数已加载工具名集合里属于某 server 的个数（前缀 `mcp__<server>__`）。 */
+function countToolsForServer(
+  loadedNames: ReadonlySet<string>,
+  serverName: string,
+): number {
+  const prefix = `mcp__${serverName}__`;
+  let count = 0;
+  for (const name of loadedNames) {
+    if (name.startsWith(prefix)) count += 1;
+  }
+  return count;
+}
+
 /** 负责组装系统上下文消息、记忆段落、技能目录消息。 */
 @Injectable()
 export class ContextBuilder {
   constructor(
     private readonly account: AccountContextService,
+    private readonly agentCtx: AgentContextService,
     @Optional()
     @Inject(RUNTIME_CONTEXT_PORT)
     private readonly runtimeContext?: RuntimeContextPort,
     @Optional() private readonly memory?: MemoryService,
     @Optional() private readonly skills?: SkillService,
     private readonly modelResolver?: ModelResolver,
+    @Optional() private readonly mcp?: McpService,
   ) {}
 
   /**
@@ -131,5 +195,30 @@ export class ContextBuilder {
   /** 是否注入了 SkillService（streamMessageImpl 据此决定是否推送技能目录消息）。 */
   hasSkills(): boolean {
     return !!this.skills;
+  }
+
+  /**
+   * 组装 MCP 服务器清单消息（稳定 id system:mcp；每 run 刷新、reducer 按 id
+   * 原地更新）。须每轮刷新：改 mcp.json 后老会话下一轮即感知。
+   *
+   * 配置态取 `McpService.loadConfig()`；运行态加载数取
+   * `getLoadedToolNames(cloudUserId, agentId)`，agentId 来自当前 Agent 上下文
+   * （与 McpService 自身读配置文件路径的契约一致，须在账号+Agent ALS 内调用）。
+   */
+  buildMcpMessage(): SystemMessage {
+    const cloudUserId = this.account.getOrThrow();
+    const agentId = this.agentCtx.getOrThrow();
+    const servers = this.mcp?.loadConfig()?.mcpServers ?? {};
+    const loadedNames =
+      this.mcp?.getLoadedToolNames(cloudUserId, agentId) ?? null;
+    return new SystemMessage({
+      id: "system:mcp",
+      content: buildMcpBlock(servers, loadedNames),
+    });
+  }
+
+  /** 是否注入了 McpService（streamMessageImpl 据此决定是否推送 MCP 清单消息）。 */
+  hasMcp(): boolean {
+    return !!this.mcp;
   }
 }

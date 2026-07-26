@@ -106,3 +106,19 @@ describe("ToolCallBlock — HITL 关卡广播（run.hitl_settled，Task 17）", 
     expect(screen.queryByText(/已由其他端应答/)).not.toBeInTheDocument();
   });
 });
+
+describe("ToolCallBlock — mcp_install 挂载点（Task 4）", () => {
+  it("mcp_install 且非 streaming → 挂 McpInstallConfirmCard，能看到 server 名与确认按钮", () => {
+    renderBlock({
+      toolCallId: "tc-4",
+      name: "mcp_install",
+      status: "running",
+      args: {
+        name: "filesystem",
+        server: { command: "npx", args: ["-y", "server-filesystem"] },
+      },
+    });
+    expect(screen.getByText("filesystem")).toBeInTheDocument();
+    expect(screen.getByText("确认安装")).toBeInTheDocument();
+  });
+});

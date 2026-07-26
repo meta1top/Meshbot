@@ -153,6 +153,9 @@ export class GraphRunner {
     if (this.contextBuilder.hasSkills()) {
       inputMessages.push(this.contextBuilder.buildSkillsMessage());
     }
+    if (this.contextBuilder.hasMcp()) {
+      inputMessages.push(this.contextBuilder.buildMcpMessage());
+    }
     for (const input of inputs) {
       inputMessages.push(
         new HumanMessage({ content: input.content, id: input.id }),
@@ -190,16 +193,22 @@ export class GraphRunner {
     opts?: { subAgent?: boolean },
   ): AsyncGenerator<StreamChunk> {
     await this.threadState.sanitizeOrphanToolCalls(threadId);
+    const resumeMessages: BaseMessage[] = [
+      new RemoveMessage({ id: "system:persona" }),
+      await this.contextBuilder.buildPersonaMessage(),
+      new RemoveMessage({ id: "system:ctx" }),
+      await this.contextBuilder.buildContextMessage(threadId),
+    ];
+    // system:mcp 与 persona/ctx 同范式每轮刷新：改 mcp.json 后老会话下一轮即感知。
+    if (this.contextBuilder.hasMcp()) {
+      resumeMessages.push(
+        new RemoveMessage({ id: "system:mcp" }),
+        this.contextBuilder.buildMcpMessage(),
+      );
+    }
     yield* this.runGraphStream(
       threadId,
-      {
-        messages: [
-          new RemoveMessage({ id: "system:persona" }),
-          await this.contextBuilder.buildPersonaMessage(),
-          new RemoveMessage({ id: "system:ctx" }),
-          await this.contextBuilder.buildContextMessage(threadId),
-        ],
-      },
+      { messages: resumeMessages },
       signal,
       opts,
     );

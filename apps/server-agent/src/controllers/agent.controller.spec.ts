@@ -1,4 +1,10 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -51,7 +57,7 @@ describe("AgentController", () => {
   let config: MeshbotConfigService;
   let agentService: AgentService;
   let sessionService: SessionService;
-  let mcp: { teardownAgent: jest.Mock };
+  let mcp: { teardownAgent: jest.Mock; updateConfig: jest.Mock };
   let emitter: { emit: jest.Mock };
   let controller: AgentController;
 
@@ -121,7 +127,20 @@ describe("AgentController", () => {
       fakeModelConfigs as unknown as never,
       emitter as unknown as EventEmitter2,
     );
-    mcp = { teardownAgent: jest.fn().mockResolvedValue(undefined) };
+    // updateConfig 是 McpService 的最小行为替身：读-改-写 mcp.json（走真实
+    // MeshbotConfigService 的 tmp 路径，配合 getMcp 直接读盘断言）+ 调
+    // teardownAgent——对齐真实 McpService.updateConfig 的落盘+teardown 契约，
+    // controller 与自管理工具共用同一入口（Task 1 收敛写路径）。
+    mcp = {
+      teardownAgent: jest.fn().mockResolvedValue(undefined),
+      updateConfig: jest.fn(async (mutator: (c: unknown) => unknown) => {
+        const next = mutator({ mcpServers: {} });
+        const mcpPath = config.getMcpConfigPath();
+        mkdirSync(path.dirname(mcpPath), { recursive: true });
+        writeFileSync(mcpPath, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+        await mcp.teardownAgent(account.getOrThrow(), agentCtx.getOrThrow());
+      }),
+    };
     agentService = new AgentService(
       ds.getRepository(Agent),
       scopedFactory,

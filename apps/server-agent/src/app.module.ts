@@ -36,6 +36,7 @@ import { AskQuestionModule } from "./ask-question.module";
 import { DispatchSubagentModule } from "./dispatch-subagent.module";
 import { DriveToolModule } from "./drive-tool.module";
 import { ImSendModule } from "./im-send.module";
+import { McpConfirmModule } from "./mcp-confirm.module";
 import { QuickAssistantModule } from "./quick-assistant.module";
 import { RuntimeContextModule } from "./runtime-context.module";
 import { SkillModule } from "./skill.module";
@@ -138,6 +139,7 @@ const meshbotDir = resolveMeshbotDir();
     ImContextModule,
     ImSendModule,
     AskQuestionModule,
+    McpConfirmModule,
     DriveToolModule,
     SkillModule,
     QuickAssistantModule,
