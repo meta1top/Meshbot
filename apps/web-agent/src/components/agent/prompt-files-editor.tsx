@@ -193,7 +193,9 @@ export const PromptFilesEditor = forwardRef<
       if (selectedFileRef.current !== targetFile) return;
       setSaveError(err instanceof Error ? err.message : t("promptSaveFailed"));
     } finally {
-      if (selectedFileRef.current === targetFile) setSaving(false);
+      // saving 是「本次保存请求是否在途」的全局态，与当前显示哪个文件无关——
+      // 必须无条件复位，带守卫会在「在途时切走文件」后把保存按钮永久卡死。
+      setSaving(false);
     }
   };
 
