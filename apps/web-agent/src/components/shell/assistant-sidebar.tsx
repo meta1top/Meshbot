@@ -28,7 +28,7 @@ import {
 } from "@meshbot/web-common/shell";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAtomValue, useSetAtom } from "jotai";
-import { Loader2, Plus, SquarePen } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -531,11 +531,11 @@ export function AssistantSidebar() {
         action={
           <button
             type="button"
-            title={t("newSession")}
-            onClick={() => router.push("/assistant")}
+            title={t("newAgent")}
+            onClick={() => setEditor({ open: true, agentId: null })}
             className="flex h-7 w-7 items-center justify-center rounded-md text-(--shell-sidebar-fg)/70 transition-colors hover:bg-(--shell-sidebar-hover) hover:text-(--shell-sidebar-fg)"
           >
-            <SquarePen className="h-4 w-4" />
+            <Plus className="h-4 w-4" />
           </button>
         }
       />
@@ -561,15 +561,6 @@ export function AssistantSidebar() {
           onDeleteAgent={onDeleteAgent}
           labels={labels}
         />
-      </div>
-      <div className="shrink-0 border-t border-border px-3 py-2">
-        <button
-          type="button"
-          onClick={() => setEditor({ open: true, agentId: null })}
-          className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] text-(--shell-sidebar-fg)/70 transition-colors hover:bg-(--shell-sidebar-hover) hover:text-(--shell-sidebar-fg)"
-        >
-          <Plus className="h-4 w-4" /> {t("newAgent")}
-        </button>
       </div>
       <AgentEditorSheet
         agentId={editor.agentId}
