@@ -22,7 +22,6 @@ export const AgentCreateSchema = z.object({
   name: z.string().trim().min(1).max(QUICK_ASSISTANT_NAME_MAX),
   avatar: z.string().min(1).max(64),
   description: z.string().max(200).default(""),
-  systemPrompt: z.string().max(20_000).default(""),
   defaultModelConfigId: z.string().nullable().default(null),
 });
 
@@ -38,7 +37,6 @@ export const AgentViewSchema = z.object({
   name: z.string(),
   avatar: z.string(),
   description: z.string(),
-  systemPrompt: z.string(),
   defaultModelConfigId: z.string().nullable(),
   remoteEnabled: z.boolean(),
   visibility: AgentVisibilitySchema,

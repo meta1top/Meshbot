@@ -7,6 +7,7 @@ import { MemoryService } from "../memory/memory.service.js";
 import { isStdioServer, type McpServerConfig } from "../mcp/mcp.schema.js";
 import { McpService } from "../mcp/mcp.service.js";
 import { LLMUSE_GUIDE } from "../prompt/llmuse-guide.js";
+import { PromptFileService } from "../prompts/prompt-file.service.js";
 import { SkillService } from "../skills/skill.service.js";
 import type { ThreadId } from "./graph.types.js";
 import { ModelResolver } from "./model-resolver.service.js";
@@ -102,6 +103,33 @@ function countToolsForServer(
   return count;
 }
 
+/** system:prompts 单块字符护栏：拼接后超过该字符数截断，防自爆上下文；具名常量供测试复用。 */
+export const PROMPTS_BLOCK_MAX_CHARS = 64_000;
+
+/** 截断提示行——附加在被截断内容末尾，让 agent（与人）都能看出内容不全。 */
+export const PROMPTS_TRUNCATED_NOTICE = "（提示词超长已截断）";
+
+/**
+ * 组装 `system:prompts` 系统块内容：AGENT.md 全文在首 + 其余文件按文件名字典序
+ * 拼接，文件间以 `\n\n` 分隔，**不加文件名标头**——所见即所得的连续人格文本，
+ * 与 `<skills>`/`<mcp>` 那种带说明文案的 XML 块不同（本块就是人格正文本身）。
+ *
+ * 排序职责在调用方（`PromptFileService.list()` 已经是「AGENT.md 首位 + 其余
+ * 字典序」）：本函数只管拼接与护栏截断，是纯函数，不碰文件系统。
+ *
+ * 总量超 `PROMPTS_BLOCK_MAX_CHARS` 字符时截断，尾部追加一行说明——防止用户
+ * 把整个知识库堆进提示词文件把上下文挤爆。
+ *
+ * @param files 已排好序的文件列表（name 仅用于调用方排错，不进入输出）。
+ */
+export function buildPromptsBlock(
+  files: { name: string; content: string }[],
+): string {
+  const joined = files.map((f) => f.content).join("\n\n");
+  if (joined.length <= PROMPTS_BLOCK_MAX_CHARS) return joined;
+  return `${joined.slice(0, PROMPTS_BLOCK_MAX_CHARS)}\n${PROMPTS_TRUNCATED_NOTICE}`;
+}
+
 /** 负责组装系统上下文消息、记忆段落、技能目录消息。 */
 @Injectable()
 export class ContextBuilder {
@@ -115,6 +143,7 @@ export class ContextBuilder {
     @Optional() private readonly skills?: SkillService,
     private readonly modelResolver?: ModelResolver,
     @Optional() private readonly mcp?: McpService,
+    @Optional() private readonly prompts?: PromptFileService,
   ) {}
 
   /**
@@ -161,23 +190,54 @@ export class ContextBuilder {
   /**
    * 组装人格消息（稳定 id system:persona；**每轮刷新**、reducer 按 id 原地更新）。
    *
-   * 内容 = 当前 Agent 的 systemPrompt + 记忆段（MEMORY_GUIDE + core.md）+ LLMUSE 指南。
+   * 内容 = 记忆段（MEMORY_GUIDE + core.md）+ LLMUSE 指南。Agent 的人格正文已
+   * 迁移至 `<agentDir>/prompts/` 文件，改由独立的 system:prompts 消息注入
+   * （见 `buildPromptsMessage`），本消息只保留与 Agent 人格无关的通用行为规范。
    *
-   * 必须每轮刷新而非首轮注入：多 Agent 下用户随时可改 systemPrompt 或切换 Agent，
-   * 首轮写死会让老会话永远带着旧人格，且静默不报错。
+   * 仍保留每轮刷新（而非首轮注入）：记忆 core.md 随时可能被 memory 工具改写，
+   * 首轮写死会让老会话永远带着旧记忆，且静默不报错。
    */
   async buildPersonaMessage(): Promise<SystemMessage> {
-    const ext = this.runtimeContext
-      ? await this.runtimeContext.resolve()
-      : null;
-    const content = [
-      ext?.agentSystemPrompt || "",
-      this.buildMemorySection(),
-      LLMUSE_GUIDE,
-    ]
+    const content = [this.buildMemorySection(), LLMUSE_GUIDE]
       .filter(Boolean)
       .join("\n\n");
     return new SystemMessage({ id: "system:persona", content });
+  }
+
+  /**
+   * 组装提示词文件消息（稳定 id system:prompts；每 run 刷新、reducer 按 id
+   * 原地更新）。内容 = 当前 Agent `prompts/` 目录下 AGENT.md 全文在首 + 其余
+   * `*.md` 按文件名字典序拼接（`buildPromptsBlock`，含 64k 截断护栏）。
+   *
+   * 必须每轮刷新：用户随时可能在提示词 tab 改写文件内容，首轮写死会让老会话
+   * 永远带旧人格，静默不报错（system:persona 曾经踩过的同一类坑）。
+   *
+   * 只取 `list()` 中「物理存在」的文件（`mtime !== null`）——AGENT.md 不存在
+   * 时 `list()` 仍会返回一个占位项（`mtime: null`），不应作为空文本参与拼接
+   * （否则空文件会在文件间产生多余的前导 `\n\n`）。
+   */
+  buildPromptsMessage(): SystemMessage {
+    const metas = this.prompts?.list() ?? [];
+    const files = metas
+      .filter((m) => m.mtime !== null)
+      .map((m) => ({
+        name: m.file,
+        content: this.prompts?.read(m.file) ?? "",
+      }));
+    return new SystemMessage({
+      id: "system:prompts",
+      content: buildPromptsBlock(files),
+    });
+  }
+
+  /**
+   * 是否有可注入的提示词内容（streamMessageImpl 据此决定是否推送 system:prompts）。
+   * 未注入 PromptFileService，或 prompts 目录不存在/全为占位（无一个文件物理存在）
+   * 时均为 false，整条消息省略——避免空块占位浪费上下文。
+   */
+  hasPrompts(): boolean {
+    const metas = this.prompts?.list() ?? [];
+    return metas.some((m) => m.mtime !== null);
   }
 
   /**

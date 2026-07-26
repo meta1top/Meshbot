@@ -1,7 +1,6 @@
 export interface AgentConfig {
   model: string;
   temperature?: number;
-  systemPrompt?: string;
   tools?: string[];
 }
 

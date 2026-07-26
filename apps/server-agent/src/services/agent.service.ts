@@ -108,7 +108,6 @@ export class AgentService {
       name: input.name,
       avatar: input.avatar,
       description: input.description,
-      systemPrompt: input.systemPrompt,
       defaultModelConfigId: input.defaultModelConfigId,
     } as Agent);
     this.emitChanged(created.id);
@@ -223,7 +222,6 @@ export class AgentService {
       name: `${src.name} (副本)`,
       avatar: src.avatar,
       description: src.description,
-      systemPrompt: src.systemPrompt,
       defaultModelConfigId: src.defaultModelConfigId,
     });
   }
@@ -256,7 +254,6 @@ export class AgentService {
       name: DEFAULT_AGENT_NAME,
       avatar: DEFAULT_AGENT_AVATAR,
       description: "",
-      systemPrompt: "",
       defaultModelConfigId: null,
     });
   }

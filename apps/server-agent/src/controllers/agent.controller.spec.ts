@@ -37,7 +37,6 @@ function fixture(name: string) {
     name,
     avatar: "🤖|#f97316",
     description: "",
-    systemPrompt: "你是测试助手",
     defaultModelConfigId: null,
   };
 }
@@ -186,7 +185,6 @@ describe("AgentController", () => {
         name: "改名",
       } as never);
       expect(updated.name).toBe("改名");
-      expect(updated.systemPrompt).toBe("你是测试助手");
 
       const list = await controller.list();
       expect(list.some((a) => a.id === created.id)).toBe(true);
@@ -238,7 +236,6 @@ describe("AgentController", () => {
       const src = await controller.create(fixture("源") as never);
       const copy = await controller.duplicate(src.id);
       expect(copy.name).toBe("源 (副本)");
-      expect(copy.systemPrompt).toBe(src.systemPrompt);
       expect(copy.avatar).toBe(src.avatar);
       expect(copy.id).not.toBe(src.id);
       // 副本磁盘目录未被预先创建——记忆/工作区/MCP 配置不复制，从零开始。

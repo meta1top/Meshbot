@@ -98,8 +98,8 @@ export class GraphRunner {
    *
    * 仅生成 UUID；人格 / 上下文消息在每次 streamMessage 时按需前置，
    * 不在此处写入 checkpointer（checkpointer.put 直写 API 易出错）。
-   * config 当前完全未使用（含 systemPrompt —— 人格统一由 ContextBuilder.buildPersonaMessage
-   * 从当前 Agent 的 systemPrompt 组装，每轮刷新）；保留入参便于后续接入 temperature / model。
+   * config 当前完全未使用（人格正文统一由 ContextBuilder.buildPromptsMessage
+   * 从当前 Agent 的 prompts/ 目录组装，每轮刷新）；保留入参便于后续接入 temperature / model。
    */
   async startSession(_config: AgentConfig): Promise<ThreadId> {
     const threadId = randomUUID();
@@ -146,8 +146,8 @@ export class GraphRunner {
     const inputMessages: BaseMessage[] = [];
     // system:persona / system:ctx / system:skills 全部用稳定 id 每轮重发；
     // reducer 按 id 原地更新（位置不变、不累积），无需先 RemoveMessage 再 Add。
-    // 人格必须每轮刷新：Agent 的 systemPrompt 随时可改，首轮写死会让老会话
-    // 永远带旧人格（静默错误）。
+    // 人格正文（system:prompts）必须每轮刷新：用户随时可能改写提示词文件，
+    // 首轮写死会让老会话永远带旧人格（静默错误）。
     inputMessages.push(await this.contextBuilder.buildPersonaMessage());
     inputMessages.push(await this.contextBuilder.buildContextMessage(threadId));
     if (this.contextBuilder.hasSkills()) {
@@ -155,6 +155,11 @@ export class GraphRunner {
     }
     if (this.contextBuilder.hasMcp()) {
       inputMessages.push(this.contextBuilder.buildMcpMessage());
+    }
+    // system:prompts 同范式每轮刷新：用户随时可能在提示词 tab 改写 prompts/ 目录
+    // 文件，改了下一轮就得感知（对照 system:mcp 刚做过的同款）。
+    if (this.contextBuilder.hasPrompts()) {
+      inputMessages.push(this.contextBuilder.buildPromptsMessage());
     }
     for (const input of inputs) {
       inputMessages.push(
@@ -204,6 +209,13 @@ export class GraphRunner {
       resumeMessages.push(
         new RemoveMessage({ id: "system:mcp" }),
         this.contextBuilder.buildMcpMessage(),
+      );
+    }
+    // system:prompts 同范式每轮刷新：改 prompts/ 文件后老会话下一轮即感知。
+    if (this.contextBuilder.hasPrompts()) {
+      resumeMessages.push(
+        new RemoveMessage({ id: "system:prompts" }),
+        this.contextBuilder.buildPromptsMessage(),
       );
     }
     yield* this.runGraphStream(

@@ -18,6 +18,7 @@ import { ModelRunContext } from "../../src/graph/model-run-context.js";
 import { ThreadStateService } from "../../src/graph/thread-state.service.js";
 import type { RuntimeContextPort } from "../../src/graph/runtime-context.port";
 import { PromptService } from "../../src/prompt/prompt.service";
+import type { PromptFileService } from "../../src/prompts/prompt-file.service";
 import { ToolRegistry } from "../../src/tools/tool-registry";
 import type { MeshbotTool } from "../../src/tools/tool.types";
 
@@ -52,6 +53,7 @@ function makeServices(opts: {
   toolRegistry?: ToolRegistry;
   eventEmitter?: EventEmitter2;
   runtimeContext?: RuntimeContextPort;
+  prompts?: PromptFileService;
 }): { graphRunner: GraphRunner; threadState: ThreadStateService } {
   const toolRegistry =
     opts.toolRegistry ??
@@ -84,6 +86,8 @@ function makeServices(opts: {
     undefined,
     undefined,
     modelResolver,
+    undefined,
+    opts.prompts,
   );
   const threadState = new ThreadStateService(accountGraphProvider);
   const graphRunner = new GraphRunner(
@@ -542,24 +546,40 @@ describe("GraphRunner system:ctx 刷新不累积", () => {
   });
 });
 
-// ─── system:persona 每轮刷新 ────────────────────────────────────────────────
+// ─── system:prompts 每轮刷新 ────────────────────────────────────────────────
 //
-// 背景（Task 7，全案最容易踩的坑）：人格若只在首轮注入 checkpointer，之后永不
-// 刷新——多 Agent 下用户改了 Agent 的 systemPrompt 或换了 Agent，旧会话仍带旧
-// 人格，且静默不报错。同时人格靠稳定 id "system:persona" + mergeMessages
-// reducer「同 id 原地替换」防止在 checkpointer 里越攒越多；如果这个 id 被写
-// 错（大小写 / 拼写），reducer 不会命中替换，新旧两条人格消息会同时留在
-// checkpointer 里、一起进 LLM context——静默故障。
+// 背景（Task 7，全案最容易踩的坑；Task 2 后人格正文从 DB 列迁到 prompts/ 文件，
+// 「随时可改、必须每轮刷新」的风险面从 system:persona 转移到了这里）：提示词
+// 若只在首轮注入 checkpointer，之后永不刷新——用户随时可能在提示词 tab 改写
+// AGENT.md，旧会话仍带旧人格，且静默不报错。同时提示词靠稳定 id
+// "system:prompts" + mergeMessages reducer「同 id 原地替换」防止在
+// checkpointer 里越攒越多；如果这个 id 被写错（大小写 / 拼写），reducer 不会
+// 命中替换，新旧两条提示词消息会同时留在 checkpointer 里、一起进 LLM
+// context——静默故障。
 //
 // 两个用例都真实跑两轮（不替换 pickGraph、不 mock stream），直接读
 // checkpointer 的 getState() 快照断言，跟上面 system:ctx 的验证方式一致：
 // 只看最终 state 才能同时抓住「累积成两条」和「内容没刷新成最新」两类回归。
 
-describe("GraphRunner system:persona 每轮刷新", () => {
+/** 构造一个内容可变的 PromptFileService 测试替身：list() 恒返回单个物理存在的 AGENT.md 项，read() 返回 getContent() 当前值。 */
+function makeMutablePromptsFake(getContent: () => string): PromptFileService {
+  return {
+    list: () => [
+      {
+        file: "AGENT.md",
+        size: getContent().length,
+        mtime: "2026-01-01T00:00:00.000Z",
+      },
+    ],
+    read: () => getContent(),
+  } as unknown as PromptFileService;
+}
+
+describe("GraphRunner system:prompts 每轮刷新", () => {
   let testDir: string;
 
   beforeEach(() => {
-    testDir = mkdtempSync(path.join(tmpdir(), "meshbot-persona-refresh-test-"));
+    testDir = mkdtempSync(path.join(tmpdir(), "meshbot-prompts-refresh-test-"));
     mkdirSync(path.join(testDir, "prompt"), { recursive: true });
   });
 
@@ -567,7 +587,7 @@ describe("GraphRunner system:persona 每轮刷新", () => {
     rmSync(testDir, { recursive: true, force: true });
   });
 
-  it("连续两轮 streamMessage 后 checkpointer 里 system:persona 恰好 1 条（不累积）", async () => {
+  it("连续两轮 streamMessage 后 checkpointer 里 system:prompts 恰好 1 条（不累积）", async () => {
     const ctx = new AccountContextService();
     const configService = new MeshbotConfigService(
       ctx,
@@ -593,7 +613,7 @@ describe("GraphRunner system:persona 每轮刷新", () => {
       }
       async *_streamResponseChunks(): AsyncGenerator<ChatGenerationChunk> {
         this.callCount += 1;
-        const msgId = `msg-persona-${this.callCount}`;
+        const msgId = `msg-prompts-${this.callCount}`;
         yield new ChatGenerationChunk({
           message: new AIMessageChunk({ id: msgId, content: "ok" }),
           text: "ok",
@@ -601,15 +621,7 @@ describe("GraphRunner system:persona 每轮刷新", () => {
       }
     }
 
-    const fakePort: RuntimeContextPort = {
-      resolve: async () => ({
-        displayName: null,
-        language: null,
-        timezone: null,
-        agentName: "M",
-        agentSystemPrompt: "初始人格",
-      }),
-    };
+    const prompts = makeMutablePromptsFake(() => "初始人格");
 
     const { graphRunner: gr, threadState: ts } = makeServices({
       configService,
@@ -617,7 +629,7 @@ describe("GraphRunner system:persona 每轮刷新", () => {
       account: ctx,
       fakeModel: new SimpleModel({}),
       toolRegistry,
-      runtimeContext: fakePort,
+      prompts,
     });
 
     const threadId = await gr.startSession({ model: "fake" });
@@ -631,8 +643,8 @@ describe("GraphRunner system:persona 每轮刷新", () => {
       }
     });
 
-    // 第二轮：仍然真实跑（不替换 pickGraph），systemPrompt 未变——验证即便内容
-    // 相同，reducer 也是原地替换而不是每轮多攒一条
+    // 第二轮：仍然真实跑（不替换 pickGraph），提示词文件内容未变——验证即便
+    // 内容相同，reducer 也是原地替换而不是每轮多攒一条
     await ctx.run(TEST_ACCOUNT, async () => {
       for await (const _ of gr.streamMessage(threadId, [
         { id: "pm-2", content: "hello" },
@@ -646,12 +658,12 @@ describe("GraphRunner system:persona 每轮刷新", () => {
     const snapshot = await ctx.run(TEST_ACCOUNT, () =>
       ts.getMessagesSnapshot(threadId),
     );
-    const personaMsgs = snapshot.filter((m) => m.id === "system:persona");
-    expect(personaMsgs.length).toBe(1);
-    expect(String(personaMsgs[0].content)).toContain("初始人格");
+    const promptsMsgs = snapshot.filter((m) => m.id === "system:prompts");
+    expect(promptsMsgs.length).toBe(1);
+    expect(String(promptsMsgs[0].content)).toContain("初始人格");
   });
 
-  it("改了 Agent 的 systemPrompt，checkpointer 里的 system:persona 仍恰好 1 条且内容是新人格", async () => {
+  it("改了提示词文件内容，checkpointer 里的 system:prompts 仍恰好 1 条且内容是新内容", async () => {
     const ctx = new AccountContextService();
     const configService = new MeshbotConfigService(
       ctx,
@@ -677,7 +689,7 @@ describe("GraphRunner system:persona 每轮刷新", () => {
       }
       async *_streamResponseChunks(): AsyncGenerator<ChatGenerationChunk> {
         this.callCount += 1;
-        const msgId = `msg-persona-b-${this.callCount}`;
+        const msgId = `msg-prompts-b-${this.callCount}`;
         yield new ChatGenerationChunk({
           message: new AIMessageChunk({ id: msgId, content: "ok" }),
           text: "ok",
@@ -685,17 +697,9 @@ describe("GraphRunner system:persona 每轮刷新", () => {
       }
     }
 
-    // 可变 RuntimeContextPort：模拟两轮之间用户改了 Agent 的 systemPrompt
+    // 可变提示词内容：模拟两轮之间用户在提示词 tab 改写了 AGENT.md
     let currentPrompt = "初始人格";
-    const mutablePort: RuntimeContextPort = {
-      resolve: async () => ({
-        displayName: null,
-        language: null,
-        timezone: null,
-        agentName: "M",
-        agentSystemPrompt: currentPrompt,
-      }),
-    };
+    const prompts = makeMutablePromptsFake(() => currentPrompt);
 
     const { graphRunner: gr, threadState: ts } = makeServices({
       configService,
@@ -703,7 +707,7 @@ describe("GraphRunner system:persona 每轮刷新", () => {
       account: ctx,
       fakeModel: new SimpleModel({}),
       toolRegistry,
-      runtimeContext: mutablePort,
+      prompts,
     });
 
     const threadId = await gr.startSession({ model: "fake" });
@@ -730,17 +734,17 @@ describe("GraphRunner system:persona 每轮刷新", () => {
     });
 
     // 直接读 checkpointer 最终 state 快照断言：
-    // 1) system:persona 恰好 1 条——证明 reducer 原地替换、没有把旧的一条也
+    // 1) system:prompts 恰好 1 条——证明 reducer 原地替换，没有把旧的一条也
     //    留下攒成两条（id 写错时会退化成两条不同 id 的消息，这里就会不等于 1）
-    // 2) 内容是第二轮的新人格、且不含第一轮的旧人格
+    // 2) 内容是第二轮的新内容、且不含第一轮的旧内容
     const snapshot = await ctx.run(TEST_ACCOUNT, () =>
       ts.getMessagesSnapshot(threadId),
     );
-    const personaMsgs = snapshot.filter((m) => m.id === "system:persona");
-    expect(personaMsgs.length).toBe(1);
-    const personaContent = String(personaMsgs[0].content);
-    expect(personaContent).toContain("全新人格");
-    expect(personaContent).not.toContain("初始人格");
+    const promptsMsgs = snapshot.filter((m) => m.id === "system:prompts");
+    expect(promptsMsgs.length).toBe(1);
+    const promptsContent = String(promptsMsgs[0].content);
+    expect(promptsContent).toContain("全新人格");
+    expect(promptsContent).not.toContain("初始人格");
   });
 });
 

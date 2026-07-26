@@ -23,7 +23,6 @@ function fixture(name: string) {
     name,
     avatar: "🤖|#f97316",
     description: "",
-    systemPrompt: "",
     defaultModelConfigId: null,
   };
 }
@@ -97,7 +96,6 @@ describe("AgentService", () => {
         name: "研发助手",
         avatar: "🛠️|#3b82f6",
         description: "写代码",
-        systemPrompt: "你是研发助手",
         defaultModelConfigId: null,
       });
       expect(created.id).toBeTruthy();
@@ -116,7 +114,6 @@ describe("AgentService", () => {
           name: "A",
           avatar: "🅰️|#000000",
           description: "",
-          systemPrompt: "",
           defaultModelConfigId: null,
         })
         .then((a) => a.id),
@@ -154,12 +151,10 @@ describe("AgentService", () => {
         name: "旧名",
         avatar: "🤖|#f97316",
         description: "描述",
-        systemPrompt: "提示词",
         defaultModelConfigId: null,
       });
       const updated = await service.update(a.id, { name: "新名" });
       expect(updated.name).toBe("新名");
-      expect(updated.systemPrompt).toBe("提示词");
       expect(updated.description).toBe("描述");
     });
   });
@@ -294,7 +289,6 @@ describe("AgentService", () => {
           name: "源",
           avatar: "🛠️|#3b82f6",
           description: "desc",
-          systemPrompt: "你是源 Agent",
           defaultModelConfigId: null,
         });
         const copy = await service.duplicate(src.id);
@@ -302,7 +296,6 @@ describe("AgentService", () => {
         expect(copy.name).toBe("源 (副本)");
         expect(copy.avatar).toBe(src.avatar);
         expect(copy.description).toBe(src.description);
-        expect(copy.systemPrompt).toBe(src.systemPrompt);
       });
     });
   });

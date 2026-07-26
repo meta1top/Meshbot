@@ -40,7 +40,6 @@ function toAgentView(agent: Agent): AgentView {
     name: agent.name,
     avatar: agent.avatar,
     description: agent.description,
-    systemPrompt: agent.systemPrompt,
     defaultModelConfigId: agent.defaultModelConfigId,
     remoteEnabled: agent.remoteEnabled,
     visibility: agent.visibility,
