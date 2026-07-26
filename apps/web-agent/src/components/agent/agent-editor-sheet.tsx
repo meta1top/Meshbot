@@ -3,16 +3,7 @@
 import {
   Alert,
   AlertDescription,
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
   Button,
-  buttonVariants,
   cn,
   Input,
   Select,
@@ -21,9 +12,6 @@ import {
   SelectTrigger,
   SelectValue,
   Switch,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
 } from "@meshbot/design";
 import { Form, FormItem } from "@meshbot/design/form";
 import { useSchema } from "@meshbot/design/hooks";
@@ -35,14 +23,11 @@ import {
 import { SheetTabBar, UnifiedSheet } from "@meshbot/web-common/shell";
 import { useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
-import { useAtomValue } from "jotai";
 import { Loader2, X } from "lucide-react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { forwardRef, useEffect, useRef, useState } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import { type ZodType, z } from "zod";
-import { sessionsAtom } from "@/atoms/sessions";
 import { AgentAvatarField } from "@/components/agent/agent-avatar-field";
 import { McpEditor } from "@/components/agent/mcp-editor";
 import {
@@ -53,7 +38,6 @@ import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import {
   agentsQueryKey,
   createAgent,
-  deleteAgent,
   getAgentMcp,
   putAgentMcp,
   updateAgent,
@@ -166,14 +150,13 @@ interface AgentEditorSheetProps {
 }
 
 /**
- * Agent 编辑抽屉：新建（单步表单）/ 编辑（基本信息 + 提示词 + MCP 三 tab）/ 删除。
+ * Agent 编辑抽屉：新建（单步表单）/ 编辑（基本信息 + 提示词 + MCP 三 tab）。
  *
- * 「从现有 Agent 复制」入口已移出本组件（改到侧栏菜单，见第三段），新建态
- * 恒是单步表单：name/avatar/description/defaultModel，创建成功直接关闭。
- *
- * 无全局「当前 Agent」概念（Agent 并列，各处就地选）：删除 Agent 后不再
- * 切换任何「当前」，只在「正打开的会话恰好属于被删 Agent」时导航离开
- * （见 `handleDelete`）。
+ * 「从现有 Agent 复制」与「删除」两个入口都已移出本组件，改到侧栏 Agent 行
+ * 下拉菜单（见 `assistant-sidebar.tsx`）——编辑态因此不再有 footer：三个 tab
+ * 各自管自己的保存，关闭只走头部 X（`headerActions`，走 `requestClose` 的脏
+ * 确认逻辑）。新建态恒是单步表单：name/avatar/description/defaultModel，创建
+ * 成功直接关闭。
  */
 export function AgentEditorSheet({
   agentId,
@@ -183,17 +166,11 @@ export function AgentEditorSheet({
   const t = useTranslations("agent.editor");
   const tCommon = useTranslations("common");
   const queryClient = useQueryClient();
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const sessions = useAtomValue(sessionsAtom);
   const { data: agents } = useAgents();
   const { data: modelConfigs } = useModelConfigs();
 
   const [localAgentId, setLocalAgentId] = useState<string | null>(agentId);
   const [submitting, setSubmitting] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   type EditorTab = "basic" | "prompts" | "mcp";
   const [tab, setTab] = useState<EditorTab>("basic");
@@ -251,7 +228,6 @@ export function AgentEditorSheet({
     if (open) {
       setLocalAgentId(agentId);
       setError(null);
-      setDeleteConfirmOpen(false);
       setTab("basic");
       setDiscardOpen(false);
       setPendingTab(null);
@@ -303,7 +279,6 @@ export function AgentEditorSheet({
   const current = agentsReady
     ? (agents.find((a) => a.id === localAgentId) ?? null)
     : null;
-  const canDelete = (agents?.length ?? 0) > 1;
   // 新建态不依赖 agents 加载（没有既有数据要等）；编辑态必须等 agents 就绪
   // 且能找到目标 Agent，才允许 `<Form>` 挂载。
   const formReady = mode === "create" || (agentsReady && current !== null);
@@ -398,96 +373,32 @@ export function AgentEditorSheet({
     }
   };
 
-  const handleDelete = async () => {
-    if (!localAgentId || !canDelete) return;
-    setDeleting(true);
-    setError(null);
-    try {
-      await deleteAgent(localAgentId);
-      await invalidateAgents();
-      // 无「当前 Agent」可切——只在「正打开的会话恰好属于被删 Agent」时导航
-      // 离开（该会话已不可续聊）；删除的是别的 Agent 时，当前打开的会话与
-      // 侧栏展开态都不受影响。
-      const openSessionId =
-        pathname === "/assistant" ? searchParams.get("id") : null;
-      const openSession = openSessionId
-        ? sessions.find((s) => s.id === openSessionId)
-        : null;
-      if (openSession?.agentId === localAgentId) {
-        router.push("/assistant");
-      }
-      setDeleteConfirmOpen(false);
-      onOpenChange(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("deleteFailed"));
-    } finally {
-      setDeleting(false);
-    }
-  };
-
   // 底部固定动作条（UnifiedSheet `footer` 槽，不随正文滚动）：
   // - 新建态：[取消] [创建(brand)]——单步表单，「创建」是表单提交按钮。
-  // - 编辑态：[删除]（左）[关闭]（右）——三个 tab 各自管自己的保存，footer
-  //   不再承担提交职责，「关闭」只是 requestClose 的入口（脏则弹确认）。
-  const footerContent = formReady ? (
-    <>
-      {mode === "edit" && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            {/* disabled 按钮包一层 span：Radix Tooltip 需要可聚焦/可 hover
-                的触发元素，disabled button 不派发 mouseenter。 */}
-            <span className={cn(!canDelete && "cursor-not-allowed")}>
-              <Button
-                type="button"
-                variant="destructive"
-                disabled={!canDelete}
-                className={cn(!canDelete && "pointer-events-none")}
-                onClick={() => setDeleteConfirmOpen(true)}
-              >
-                {t("delete")}
-              </Button>
-            </span>
-          </TooltipTrigger>
-          {!canDelete && (
-            <TooltipContent side="top">
-              {t("deleteDisabledHint")}
-            </TooltipContent>
-          )}
-        </Tooltip>
-      )}
-      <div className="flex-1" />
-      {mode === "edit" ? (
+  // - 编辑态：整体不出 footer（传 undefined）——三个 tab 各自管自己的保存，
+  //   删除功能已迁到侧栏 Agent 行下拉菜单，关闭只走头部 X。
+  const footerContent =
+    formReady && mode === "create" ? (
+      <>
         <Button
           type="button"
           variant="outline"
           onClick={requestClose}
-          disabled={submitting || mcpSaving || deleting}
+          disabled={submitting}
         >
-          {tCommon("close")}
+          {t("cancel")}
         </Button>
-      ) : (
-        <>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={requestClose}
-            disabled={submitting}
-          >
-            {t("cancel")}
-          </Button>
-          <Button
-            type="submit"
-            form={AGENT_EDITOR_FORM_ID}
-            variant="brand"
-            disabled={submitting}
-          >
-            {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            {submitting ? t("saving") : t("create")}
-          </Button>
-        </>
-      )}
-    </>
-  ) : null;
+        <Button
+          type="submit"
+          form={AGENT_EDITOR_FORM_ID}
+          variant="brand"
+          disabled={submitting}
+        >
+          {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          {submitting ? t("saving") : t("create")}
+        </Button>
+      </>
+    ) : undefined;
 
   return (
     <>
@@ -701,33 +612,6 @@ export function AgentEditorSheet({
           setPendingTab(null);
         }}
       />
-
-      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("deleteConfirmTitle")}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("deleteConfirmDescription")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>
-              {t("cancel")}
-            </AlertDialogCancel>
-            <AlertDialogAction
-              disabled={deleting}
-              className={buttonVariants({ variant: "destructive" })}
-              onClick={(e) => {
-                e.preventDefault();
-                handleDelete();
-              }}
-            >
-              {deleting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              {deleting ? t("deleting") : t("deleteConfirm")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   );
 }

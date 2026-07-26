@@ -361,7 +361,10 @@
     "remoteSessionTitle": "Remote session",
     "remoteLoadFailed": "Failed to load remote session",
     "remoteEmpty": "No sessions on this device",
-    "editAgent": "Edit agent",
+    "editAgent": "Edit",
+    "duplicateAgent": "Duplicate",
+    "deleteAgent": "Delete",
+    "duplicateFailed": "Failed to duplicate, please retry",
     "newAgent": "New agent",
     "sessionDeletedElsewhere": "This session was deleted from another device. You've been returned to start."
   },

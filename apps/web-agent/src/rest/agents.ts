@@ -39,9 +39,8 @@ export async function deleteAgent(id: string): Promise<void> {
   await apiClient.delete<void>(`/api/agents/${id}`);
 }
 
-/** 复制 Agent 的配置，返回新 Agent。「从现有 Agent 复制」入口已从编辑抽屉
- *  移出（见 agent-editor-v2 第三段：侧栏菜单「复制」项），本函数暂无调用方，
- *  留给该段接入。 */
+/** 复制 Agent 的配置（含提示词/技能/MCP 配置），返回新 Agent。入口在侧栏 Agent
+ *  行下拉菜单「复制」项（`assistant-sidebar.tsx`）。 */
 export async function duplicateAgent(id: string): Promise<AgentView> {
   const { data } = await apiClient.post<AgentView>(
     `/api/agents/${id}/duplicate`,
