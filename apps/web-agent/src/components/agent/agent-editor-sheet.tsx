@@ -209,12 +209,14 @@ export function AgentEditorSheet({
 
   // 受控 MCP 编辑器状态：`mcpInitial` 是加载/进入时的基线（编辑态=后端已存的
   // mcp.json，向导态=默认占位文本），`mcpValue` 是当前编辑值——两者比较用于
-  // 脏判定与「编辑态保存时是否需要一并提交 MCP」。
+  // 脏判定（并入 requestClose 的聚合脏检测）。编辑态下 MCP tab 自带保存
+  // 按钮独立提交，不再随基本信息一起走 footer「保存」。
   const [mcpValue, setMcpValue] = useState(DEFAULT_MCP_RAW);
   const [mcpInitial, setMcpInitial] = useState(DEFAULT_MCP_RAW);
   const [mcpError, setMcpError] = useState<string | null>(null);
   const [mcpLoading, setMcpLoading] = useState(false);
   const [mcpLoadFailed, setMcpLoadFailed] = useState(false);
+  const [mcpSaving, setMcpSaving] = useState(false);
 
   /** 关闭意图入口：表单脏 / MCP 文本相对基线有改动 / 提示词当前文件有未保存
    *  改动，先弹放弃确认，否则直接关。X 按钮 / ESC 都走这里；遮罩点击不走
@@ -259,6 +261,7 @@ export function AgentEditorSheet({
       setMcpError(null);
       setMcpLoadFailed(false);
       setMcpLoading(false);
+      setMcpSaving(false);
     }
   }, [open]);
 
@@ -328,7 +331,10 @@ export function AgentEditorSheet({
    * - 新建态：单步表单直接创建（`remoteEnabled` 尚无 id 时没有意义，提交前剔除），
    *   成功即刷新列表并关闭抽屉，不再有「创建后进 MCP 步骤」这一环——MCP/提示词
    *   留给创建完成后重新打开编辑抽屉配置。
-   * - 编辑态：基本信息 + （若有改动）MCP 配置一起提交。
+   * - 编辑态：只提交基本信息——MCP / 提示词已改为各 tab 自管保存（见
+   *   {@link handleMcpSave} 与 `PromptFilesEditor`），互不联动。成功后不关闭
+   *   抽屉（footer 只剩「关闭」），用 `reset(values)` 把 RHF 脏基线复位到刚
+   *   提交的值，保证「保存后关闭不触发脏确认」。
    */
   const handleSubmit = async (values: AgentFormValues) => {
     if (mode === "create") {
@@ -351,34 +357,44 @@ export function AgentEditorSheet({
 
     if (!localAgentId) return; // 理论不可达，收窄类型
 
-    let mcpPayload: string | null = null;
-    if (mcpValue !== mcpInitial) {
-      const syntaxErr = mcpJsonSyntaxError(mcpValue);
-      if (syntaxErr) {
-        setMcpError(t("mcpJsonInvalid", { detail: syntaxErr }));
-        setTab("mcp");
-        return; // 阻断保存：基本信息也不提交
-      }
-      // 变化了但清空成空白 ≠「跳过提交」——编辑态文件已存在，必须显式写回
-      // 默认态才能真正清空已保存的配置。
-      mcpPayload = mcpValue.trim() === "" ? DEFAULT_MCP_RAW : mcpValue;
-    }
-
     setSubmitting(true);
     setError(null);
     try {
       await updateAgent(localAgentId, values);
-      if (mcpPayload !== null) {
-        await putAgentMcp(localAgentId, { raw: mcpPayload });
-        setMcpInitial(mcpPayload);
-        setMcpValue(mcpPayload);
-      }
       await invalidateAgents();
-      onOpenChange(false);
+      formApiRef.current?.reset(values);
     } catch (err) {
       setError(extractErrorMessage(err, t("saveFailed")));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  /**
+   * MCP tab 自己的保存动作：语法校验失败就地内联报错（不再像旧版那样跳转
+   * tab），成功后把 `mcpInitial` 同步到刚提交的值——脏检测立即归零，不影响
+   * requestClose 的聚合判定。
+   */
+  const handleMcpSave = async () => {
+    if (!localAgentId) return;
+    const syntaxErr = mcpJsonSyntaxError(mcpValue);
+    if (syntaxErr) {
+      setMcpError(t("mcpJsonInvalid", { detail: syntaxErr }));
+      return;
+    }
+    // 变化了但清空成空白 ≠「跳过提交」——编辑态文件已存在，必须显式写回
+    // 默认态才能真正清空已保存的配置。
+    const payload = mcpValue.trim() === "" ? DEFAULT_MCP_RAW : mcpValue;
+    setMcpSaving(true);
+    setMcpError(null);
+    try {
+      await putAgentMcp(localAgentId, { raw: payload });
+      setMcpInitial(payload);
+      setMcpValue(payload);
+    } catch (err) {
+      setMcpError(extractErrorMessage(err, t("mcpSaveFailed")));
+    } finally {
+      setMcpSaving(false);
     }
   };
 
@@ -411,7 +427,8 @@ export function AgentEditorSheet({
 
   // 底部固定动作条（UnifiedSheet `footer` 槽，不随正文滚动）：
   // - 新建态：[取消] [创建(brand)]——单步表单，「创建」是表单提交按钮。
-  // - 编辑态：[删除] [取消] [保存]——「保存」同样是表单提交按钮。
+  // - 编辑态：[删除]（左）[关闭]（右）——三个 tab 各自管自己的保存，footer
+  //   不再承担提交职责，「关闭」只是 requestClose 的入口（脏则弹确认）。
   const footerContent = formReady ? (
     <>
       {mode === "edit" && (
@@ -439,23 +456,36 @@ export function AgentEditorSheet({
         </Tooltip>
       )}
       <div className="flex-1" />
-      <Button
-        type="button"
-        variant="outline"
-        onClick={requestClose}
-        disabled={submitting}
-      >
-        {t("cancel")}
-      </Button>
-      <Button
-        type="submit"
-        form={AGENT_EDITOR_FORM_ID}
-        variant={mode === "create" ? "brand" : undefined}
-        disabled={submitting}
-      >
-        {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-        {submitting ? t("saving") : mode === "create" ? t("create") : t("save")}
-      </Button>
+      {mode === "edit" ? (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={requestClose}
+          disabled={submitting || mcpSaving || deleting}
+        >
+          {tCommon("close")}
+        </Button>
+      ) : (
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={requestClose}
+            disabled={submitting}
+          >
+            {t("cancel")}
+          </Button>
+          <Button
+            type="submit"
+            form={AGENT_EDITOR_FORM_ID}
+            variant="brand"
+            disabled={submitting}
+          >
+            {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {submitting ? t("saving") : t("create")}
+          </Button>
+        </>
+      )}
     </>
   ) : null;
 
@@ -499,7 +529,9 @@ export function AgentEditorSheet({
         }
         footer={footerContent}
         minWidth={448}
-        defaultWidth="28rem"
+        // 编辑态提示词 tab 是左右两栏结构（文件列表 + 正文），需要更宽的默认
+        // 宽度才不挤；新建态是单步窄表单，维持原宽度即可。
+        defaultWidth={mode === "edit" ? "70vw" : "28rem"}
         // app-no-drag：把面板 z 抬出顶部 DragRegion，头部 X 按钮才可点（Electron）
         className="app-no-drag"
       >
@@ -579,6 +611,23 @@ export function AgentEditorSheet({
                   <RemoteEnabledField />
                 </FormItem>
               )}
+
+              {/* 编辑态：tab 自管保存按钮，仍走 `form` 属性关联提交（Enter 隐式
+                  提交不受影响）；新建态沿用 footer 的「创建」按钮，这里不重复。 */}
+              {mode === "edit" && (
+                <div className="flex justify-end pt-1">
+                  <Button
+                    type="submit"
+                    form={AGENT_EDITOR_FORM_ID}
+                    disabled={submitting}
+                  >
+                    {submitting && (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    )}
+                    {submitting ? t("saving") : t("save")}
+                  </Button>
+                </div>
+              )}
             </Form>
           )}
         </div>
@@ -601,9 +650,9 @@ export function AgentEditorSheet({
           )}
         </div>
 
-        {/* MCP 配置：受控编辑器，不再自带保存按钮——随 footer「保存」与基本
-            信息一起提交。只在编辑态且 formReady 时渲染，避免和加载态同屏
-            出现半截 UI。 */}
+        {/* MCP 配置：受控编辑器 + 自带保存按钮（tab 自管保存，不再随基本信息
+            一起提交）。只在编辑态且 formReady 时渲染，避免和加载态同屏出现
+            半截 UI。 */}
         <div
           className={cn(
             "min-h-0 flex-1 overflow-y-auto p-4",
@@ -620,6 +669,9 @@ export function AgentEditorSheet({
               error={mcpError}
               loading={mcpLoading}
               loadFailed={mcpLoadFailed}
+              dirty={mcpValue !== mcpInitial}
+              saving={mcpSaving}
+              onSave={() => void handleMcpSave()}
             />
           )}
         </div>
