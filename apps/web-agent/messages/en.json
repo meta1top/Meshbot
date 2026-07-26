@@ -767,7 +767,7 @@
       "tabMcp": "MCP",
       "tabTools": "Tools",
       "toolsTitle": "Tool access",
-      "toolsDescription": "Changes take effect on the next reply; disabled tools stay unavailable for the rest of this conversation.",
+      "toolsDescription": "Changes take effect on the next reply; disabled tools take effect from the next conversation turn.",
       "toolsLoadFailed": "Failed to load tool settings, please retry",
       "toolsSaveFailed": "Save failed, please retry",
       "toolsProtectedTooltip": "Core session capability, can't be disabled",
