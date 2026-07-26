@@ -231,15 +231,37 @@ describe("AgentController", () => {
     });
   });
 
-  it("duplicate 复制配置但不复制记忆/工作区/会话", async () => {
+  it("duplicate：源无任何文件时，目标目录仍被建出但不凭空生出 prompts/mcp.json", async () => {
     await run(async () => {
       const src = await controller.create(fixture("源") as never);
       const copy = await controller.duplicate(src.id);
       expect(copy.name).toBe("源 (副本)");
       expect(copy.avatar).toBe(src.avatar);
       expect(copy.id).not.toBe(src.id);
-      // 副本磁盘目录未被预先创建——记忆/工作区/MCP 配置不复制，从零开始。
-      expect(existsSync(config.agentDirOf(copy.id))).toBe(false);
+      // 目录拷贝前会 mkdir 目标目录（即便源为空），但不产出源没有的文件。
+      const destDir = config.agentDirOf(copy.id);
+      expect(existsSync(destDir)).toBe(true);
+      expect(existsSync(path.join(destDir, "prompts"))).toBe(false);
+      expect(existsSync(path.join(destDir, "mcp.json"))).toBe(false);
+    });
+  });
+
+  it("duplicate：拷贝源 Agent 已有的 prompts/mcp.json，但不拷贝 memory", async () => {
+    await run(async () => {
+      const src = await controller.create(fixture("源-带文件") as never);
+      const srcDir = config.agentDirOf(src.id);
+      mkdirSync(path.join(srcDir, "prompts"), { recursive: true });
+      writeFileSync(path.join(srcDir, "prompts", "AGENT.md"), "你是研发助手");
+      writeFileSync(path.join(srcDir, "mcp.json"), '{"mcpServers":{}}');
+      mkdirSync(path.join(srcDir, "memory"), { recursive: true });
+      writeFileSync(path.join(srcDir, "memory", "core.md"), "记忆内容");
+
+      const copy = await controller.duplicate(src.id);
+      const destDir = config.agentDirOf(copy.id);
+      expect(existsSync(path.join(destDir, "prompts", "AGENT.md"))).toBe(true);
+      expect(existsSync(path.join(destDir, "mcp.json"))).toBe(true);
+      // 记忆不复制——副本从零开始。
+      expect(existsSync(path.join(destDir, "memory"))).toBe(false);
     });
   });
 

@@ -1,4 +1,13 @@
 import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import {
   AGENT_EVENTS,
   DEFAULT_AGENT_NAME,
   SESSION_LIFECYCLE_EVENTS,
@@ -296,6 +305,111 @@ describe("AgentService", () => {
         expect(copy.name).toBe("源 (副本)");
         expect(copy.avatar).toBe(src.avatar);
         expect(copy.description).toBe(src.description);
+      });
+    });
+
+    describe("目录级拷贝（prompts / skills / mcp.json）", () => {
+      it("拷贝 prompts 与 mcp.json；不拷贝 memory", async () => {
+        await account.run("acct-1", async () => {
+          const tmpBase = mkdtempSync(path.join(tmpdir(), "agent-dup-"));
+          // 覆盖默认 fakeConfig：按 agentId 落到 tmp 下各自独立子目录，
+          // 与真实 MeshbotConfigService.agentDirOf 的路径语义一致。
+          fakeConfig.agentDirOf.mockImplementation((agentId: string) =>
+            path.join(tmpBase, agentId),
+          );
+          const src = await service.create({
+            name: "源-带文件",
+            avatar: "🛠️|#3b82f6",
+            description: "desc",
+            defaultModelConfigId: null,
+          });
+          const srcDir = fakeConfig.agentDirOf(src.id);
+          mkdirSync(path.join(srcDir, "prompts"), { recursive: true });
+          writeFileSync(
+            path.join(srcDir, "prompts", "AGENT.md"),
+            "你是研发助手",
+          );
+          mkdirSync(path.join(srcDir, "skills", "demo-skill"), {
+            recursive: true,
+          });
+          writeFileSync(
+            path.join(srcDir, "skills", "demo-skill", ".meshbot-install.json"),
+            '{"name":"demo-skill"}',
+          );
+          writeFileSync(path.join(srcDir, "mcp.json"), '{"mcpServers":{}}');
+          mkdirSync(path.join(srcDir, "memory"), { recursive: true });
+          writeFileSync(path.join(srcDir, "memory", "core.md"), "记忆内容");
+
+          const copy = await service.duplicate(src.id);
+          const destDir = fakeConfig.agentDirOf(copy.id);
+
+          expect(
+            readFileSync(path.join(destDir, "prompts", "AGENT.md"), "utf8"),
+          ).toBe("你是研发助手");
+          expect(
+            readFileSync(
+              path.join(
+                destDir,
+                "skills",
+                "demo-skill",
+                ".meshbot-install.json",
+              ),
+              "utf8",
+            ),
+          ).toBe('{"name":"demo-skill"}');
+          expect(readFileSync(path.join(destDir, "mcp.json"), "utf8")).toBe(
+            '{"mcpServers":{}}',
+          );
+          // 记忆不复制——副本从零开始。
+          expect(existsSync(path.join(destDir, "memory"))).toBe(false);
+        });
+      });
+
+      it("源目录为空（无 prompts/skills/mcp.json）时不报错，只建空目标目录", async () => {
+        await account.run("acct-1", async () => {
+          const tmpBase = mkdtempSync(path.join(tmpdir(), "agent-dup-empty-"));
+          fakeConfig.agentDirOf.mockImplementation((agentId: string) =>
+            path.join(tmpBase, agentId),
+          );
+          const src = await service.create({
+            name: "源-空目录",
+            avatar: "🛠️|#3b82f6",
+            description: "",
+            defaultModelConfigId: null,
+          });
+          const copy = await service.duplicate(src.id);
+          expect(existsSync(fakeConfig.agentDirOf(copy.id))).toBe(true);
+        });
+      });
+
+      it("目录拷贝失败时回滚：删除刚建的 DB 行，不留半成品副本", async () => {
+        await account.run("acct-1", async () => {
+          const tmpBase = mkdtempSync(path.join(tmpdir(), "agent-dup-fail-"));
+          const src = await service.create({
+            name: "源-拷贝失败",
+            avatar: "🛠️|#3b82f6",
+            description: "",
+            defaultModelConfigId: null,
+          });
+          const srcDir = path.join(tmpBase, "src");
+          mkdirSync(path.join(srcDir, "prompts"), { recursive: true });
+          writeFileSync(path.join(srcDir, "prompts", "AGENT.md"), "x");
+          // 目标目录路径提前占用成一个普通文件——mkdirSync(destDir, {recursive})
+          // 会因该路径已存在且不是目录而抛错，模拟目录拷贝中途失败。
+          const blockedDest = path.join(tmpBase, "blocked-dest");
+          writeFileSync(blockedDest, "占位文件，制造 mkdir 冲突");
+          fakeConfig.agentDirOf.mockImplementation((agentId: string) =>
+            agentId === src.id ? srcDir : blockedDest,
+          );
+
+          const beforeCount = (await service.list()).length;
+          await expect(service.duplicate(src.id)).rejects.toThrow();
+          const after = await service.list();
+          expect(after).toHaveLength(beforeCount);
+          expect(
+            after.some((a) => a.name.startsWith("源-拷贝失败 (副本)")),
+          ).toBe(false);
+        });
       });
     });
   });

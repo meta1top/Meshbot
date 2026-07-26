@@ -1,4 +1,5 @@
-import { rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import path from "node:path";
 import { Transactional } from "@meshbot/common";
 import {
   AccountContextService,
@@ -212,18 +213,58 @@ export class AgentService {
   }
 
   /**
-   * 复制一个 Agent 的配置（名字加「(副本)」后缀）。
-   * 只复制元数据——记忆 / 工作区 / 已装技能 / MCP 配置**不复制**，副本从零开始
-   * （磁盘目录按新 id 首次访问时才 mkdir，不预先创建）。
+   * 复制一个 Agent 的完整配置（名字加「(副本)」后缀）：
+   * - DB 行：name/avatar/description/defaultModelConfigId；
+   * - 磁盘目录：`prompts/`、`skills/`（含各技能的 `.meshbot-install.json` 清单）、
+   *   `mcp.json` 整体拷贝到新 Agent 目录，源不存在的项跳过。
+   *
+   * 不拷贝 memory/workspace——副本的记忆与工作区从零开始，不继承源 Agent 的运行
+   * 历史。tools.json 目前尚不存在（后续产物），无需处理。
+   *
+   * 目录拷贝失败时整体回滚：删除刚建的 DB 行 + 清理已落盘的目标目录，不留半成品
+   * 副本（不复用 `removeWithData`——其「至少保留一个 Agent」的校验语义是给用户
+   * 主动删除用的，套在回滚场景上会在「账号只有一个 Agent、正在复制它」时误伤）。
    */
   async duplicate(id: string): Promise<Agent> {
     const src = await this.findOrThrow(id);
-    return this.create({
+    const copy = await this.create({
       name: `${src.name} (副本)`,
       avatar: src.avatar,
       description: src.description,
       defaultModelConfigId: src.defaultModelConfigId,
     });
+    try {
+      this.copyAgentFiles(src.id, copy.id);
+    } catch (err) {
+      await this.repo.delete({ id: copy.id });
+      rmSync(this.config.agentDirOf(copy.id), { recursive: true, force: true });
+      // DB 行已回滚删除，但 create() 那次成功的 changed 事件已经发出去了——
+      // 再发一次同 id 的 changed，让侧栏/云端对账下一次拉取时读到「已不存在」，
+      // 纠正掉那条过期的「已创建」信号，不留幽灵 Agent 在客户端缓存里。
+      this.emitChanged(copy.id);
+      throw err;
+    }
+    return copy;
+  }
+
+  /**
+   * 目录级拷贝：显式传源/目标 id（不走 ALS，`agentDirOf` 本就不依赖当前 Agent
+   * 上下文），拷贝前对目标目录 mkdirSync recursive（`agentDirOf` 本身不 mkdir）。
+   */
+  private copyAgentFiles(srcId: string, destId: string): void {
+    const srcDir = this.config.agentDirOf(srcId);
+    const destDir = this.config.agentDirOf(destId);
+    mkdirSync(destDir, { recursive: true });
+    for (const sub of ["prompts", "skills"]) {
+      const srcSub = path.join(srcDir, sub);
+      if (existsSync(srcSub)) {
+        cpSync(srcSub, path.join(destDir, sub), { recursive: true });
+      }
+    }
+    const mcpSrc = path.join(srcDir, "mcp.json");
+    if (existsSync(mcpSrc)) {
+      cpSync(mcpSrc, path.join(destDir, "mcp.json"));
+    }
   }
 
   /**

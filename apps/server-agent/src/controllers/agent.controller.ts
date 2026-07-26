@@ -115,7 +115,8 @@ export class AgentController {
 
   @Post(":id/duplicate")
   @ApiOperation({
-    summary: "复制 Agent 的配置（不复制记忆/工作区/会话/MCP 配置）",
+    summary:
+      "复制 Agent 的配置（含提示词/技能/MCP 配置；不复制记忆/工作区/会话）",
   })
   @ApiOkResponse({ description: "复制成功，返回新 Agent", type: AgentViewDto })
   async duplicate(@Param("id") id: string): Promise<AgentView> {
