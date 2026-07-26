@@ -55,11 +55,31 @@ export const McpRawSchema = z.object({
   raw: z.string(),
 });
 
+/**
+ * 提示词文件元信息（不含正文）：`GET /api/agents/:id/prompts` 列表项。
+ * `mtime` 为 ISO 字符串；AGENT.md 物理不存在时以占位形式出现（size:0, mtime:null）。
+ */
+export const PromptFileMetaSchema = z.object({
+  file: z.string(),
+  size: z.number().int().nonnegative(),
+  mtime: z.string().nullable(),
+});
+
+/**
+ * 提示词文件正文读写载体：`GET/PUT /api/agents/:id/prompts/:file` 共用。
+ * 200_000 字符上限防止单文件无界写入（远大于 64k 注入截断线，留出多文件余量）。
+ */
+export const PromptFileBodySchema = z.object({
+  content: z.string().max(200_000),
+});
+
 export type AgentVisibility = z.infer<typeof AgentVisibilitySchema>;
 export type AgentCreateInput = z.infer<typeof AgentCreateSchema>;
 export type AgentUpdateInput = z.infer<typeof AgentUpdateSchema>;
 export type AgentView = z.infer<typeof AgentViewSchema>;
 export type McpRawInput = z.infer<typeof McpRawSchema>;
+export type PromptFileMeta = z.infer<typeof PromptFileMetaSchema>;
+export type PromptFileBodyInput = z.infer<typeof PromptFileBodySchema>;
 
 /**
  * 其他设备上已注册(remote_enabled)的远程 Agent 对外视图（server-agent 代理云端

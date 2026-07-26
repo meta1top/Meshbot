@@ -11,10 +11,11 @@ import {
   AccountContextService,
   AgentContextService,
   MeshbotConfigService,
+  PromptFileService,
   type McpService,
   type ThreadStateService,
 } from "@meshbot/lib-agent";
-import { NotFoundException } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { DataSource } from "typeorm";
 import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
@@ -155,6 +156,7 @@ describe("AgentController", () => {
       config,
       mcp as unknown as McpService,
       account,
+      new PromptFileService(config),
     );
   });
 
@@ -291,6 +293,91 @@ describe("AgentController", () => {
       await expect(controller.getMcp("ghost")).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe("提示词文件 REST", () => {
+    it("GET prompts：目录不存在时 AGENT.md 仍以空占位首位返回", async () => {
+      await run(async () => {
+        const agent = await agentService.ensureDefault();
+        const list = await controller.listPrompts(agent.id);
+        expect(list).toEqual([{ file: "AGENT.md", size: 0, mtime: null }]);
+      });
+    });
+
+    it("PUT → GET prompts/:file 回读一致；list 反映新文件（AGENT.md 恒首位）", async () => {
+      await run(async () => {
+        const agent = await agentService.ensureDefault();
+        await controller.putPrompt(agent.id, "AGENT.md", {
+          content: "你是测试助手",
+        } as never);
+        await controller.putPrompt(agent.id, "tone.md", {
+          content: "保持简洁",
+        } as never);
+
+        const body = await controller.getPrompt(agent.id, "tone.md");
+        expect(body.content).toBe("保持简洁");
+
+        const list = await controller.listPrompts(agent.id);
+        expect(list.map((f) => f.file)).toEqual(["AGENT.md", "tone.md"]);
+      });
+    });
+
+    it("GET prompts/:file 对不存在的文件返回空字符串", async () => {
+      await run(async () => {
+        const agent = await agentService.ensureDefault();
+        const body = await controller.getPrompt(agent.id, "nope.md");
+        expect(body.content).toBe("");
+      });
+    });
+
+    it("DELETE prompts/:file 删除非主文件成功", async () => {
+      await run(async () => {
+        const agent = await agentService.ensureDefault();
+        await controller.putPrompt(agent.id, "tone.md", {
+          content: "语气",
+        } as never);
+        await controller.deletePrompt(agent.id, "tone.md");
+        const list = await controller.listPrompts(agent.id);
+        expect(list.map((f) => f.file)).not.toContain("tone.md");
+      });
+    });
+
+    it("DELETE prompts/AGENT.md → 400（人格主文件不可删，含大小写变体）", async () => {
+      await run(async () => {
+        const agent = await agentService.ensureDefault();
+        await expect(
+          controller.deletePrompt(agent.id, "AGENT.md"),
+        ).rejects.toThrow(BadRequestException);
+        await expect(
+          controller.deletePrompt(agent.id, "agent.md"),
+        ).rejects.toThrow(BadRequestException);
+      });
+    });
+
+    it("非法文件名（路径穿越 / 非 .md 后缀）→ 400，GET/PUT/DELETE 三端点一致", async () => {
+      await run(async () => {
+        const agent = await agentService.ensureDefault();
+        await expect(controller.getPrompt(agent.id, "../x.md")).rejects.toThrow(
+          BadRequestException,
+        );
+        await expect(
+          controller.putPrompt(agent.id, "x.txt", {
+            content: "x",
+          } as never),
+        ).rejects.toThrow(BadRequestException);
+        await expect(
+          controller.deletePrompt(agent.id, "a/b.md"),
+        ).rejects.toThrow(BadRequestException);
+      });
+    });
+
+    it("不存在的 agentId → 404（prompts 端点同样受 findOrThrow 保护）", async () => {
+      await run(async () => {
+        await expect(controller.listPrompts("ghost")).rejects.toThrow(
+          NotFoundException,
+        );
+      });
     });
   });
 
