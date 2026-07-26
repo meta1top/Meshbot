@@ -234,10 +234,20 @@ export class ContextBuilder {
    * 是否有可注入的提示词内容（streamMessageImpl 据此决定是否推送 system:prompts）。
    * 未注入 PromptFileService，或 prompts 目录不存在/全为占位（无一个文件物理存在）
    * 时均为 false，整条消息省略——避免空块占位浪费上下文。
+   *
+   * 物理存在但**内容全空/纯空白**同样为 false：文件曾写过又被清空时（size=0
+   * 仍是物理文件），若照常注入会产生空 content 的 SystemMessage——部分 provider
+   * 对空 text block 直接 400，该 Agent 所有会话每轮都会炸。以 size>0 先做零成本
+   * 初筛，size>0 但全空白的极端情况由 read+trim 兜底。
    */
   hasPrompts(): boolean {
     const metas = this.prompts?.list() ?? [];
-    return metas.some((m) => m.mtime !== null);
+    return metas.some(
+      (m) =>
+        m.mtime !== null &&
+        m.size > 0 &&
+        (this.prompts?.read(m.file) ?? "").trim() !== "",
+    );
   }
 
   /**

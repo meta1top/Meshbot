@@ -186,6 +186,25 @@ describe("ContextBuilder.hasPrompts / buildPromptsMessage", () => {
     expect(builder.hasPrompts()).toBe(false);
   });
 
+  it("文件物理存在但内容全空/纯空白时 hasPrompts 为 false（清空保存后不得注入空系统消息）", () => {
+    const prompts = makePromptsFake([
+      {
+        file: "AGENT.md",
+        size: 0,
+        mtime: "2026-01-01T00:00:00.000Z",
+        content: "",
+      },
+      {
+        file: "blank.md",
+        size: 3,
+        mtime: "2026-01-01T00:00:00.000Z",
+        content: " \n ",
+      },
+    ]);
+    const { builder } = makeContextBuilder(undefined, prompts);
+    expect(builder.hasPrompts()).toBe(false);
+  });
+
   it("AGENT.md 物理存在时 hasPrompts 为 true，buildPromptsMessage 产出稳定 id system:prompts", () => {
     const prompts = makePromptsFake([
       {
