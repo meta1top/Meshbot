@@ -69,11 +69,12 @@ export class PromptFileService {
     }
 
     const mainKey = PROMPT_FILE_MAIN.toLowerCase();
-    const main = byLowerName.get(mainKey) ?? {
-      file: PROMPT_FILE_MAIN,
-      size: 0,
-      mtime: null,
-    };
+    const existingMain = byLowerName.get(mainKey);
+    // 主文件名统一规范化为常量字面量：磁盘上若被写成非规范大小写（如 agent.md），
+    // 消费方按 file === "AGENT.md" 精确匹配识别主文件时不会误判。
+    const main: PromptFileMeta = existingMain
+      ? { ...existingMain, file: PROMPT_FILE_MAIN }
+      : { file: PROMPT_FILE_MAIN, size: 0, mtime: null };
     byLowerName.delete(mainKey);
     const rest = [...byLowerName.values()].sort((a, b) =>
       a.file.localeCompare(b.file),
