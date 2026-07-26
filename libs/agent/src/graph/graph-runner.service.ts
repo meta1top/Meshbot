@@ -227,10 +227,13 @@ export class GraphRunner {
     opts?: { subAgent?: boolean },
   ): AsyncGenerator<StreamChunk> {
     await this.threadState.sanitizeOrphanToolCalls(threadId);
+    // persona/ctx 恒存在：直接同 id push，mergeMessages 原地替换、位置不动。
+    // 不能配 RemoveMessage——同批「Remove(id)+同 id 新消息」会被 reducer 降级为
+    // 「删原位、尾插」，把 system 消息搬到最新 human 之后（破坏 system 前置与
+    // prompt 缓存前缀）；resume 是 HITL 确认续跑/重试的高频路径，此前每次
+    // resume 都在发生这个漂移（审查升级的既有隐患，随 F2 一并修正）。
     const resumeMessages: BaseMessage[] = [
-      new RemoveMessage({ id: "system:persona" }),
       await this.contextBuilder.buildPersonaMessage(),
-      new RemoveMessage({ id: "system:ctx" }),
       await this.contextBuilder.buildContextMessage(threadId),
     ];
     // 可选系统消息（skills/mcp/prompts）：与 streamMessageImpl 同款「hasX 重建 /
