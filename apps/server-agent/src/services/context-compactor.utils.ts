@@ -20,6 +20,40 @@ export function estimateTokens(m: BaseMessage): number {
   return Math.ceil((text.length + toolCallsLen) / 4);
 }
 
+/** 稳定 id 系统消息的 id 前缀（context-builder 每轮以稳定 id 原地替换写入）。 */
+const STABLE_SYSTEM_ID_PREFIX = "system:";
+
+/**
+ * 从消息数组中剔除稳定 id 系统消息（`system:persona`/`system:ctx`/
+ * `system:skills`/`system:mcp`/`system:prompts`）。
+ *
+ * 这五条消息每轮由 context-builder 以稳定 id 原地替换写入 checkpointer，
+ * 物理位置固定在最前。压缩工作集必须豁免它们——既不进摘要（否则被摘要
+ * LLM 吞掉、白白浪费 token 且摘要内容失真）、也不进 removeIds（否则被
+ * 当场删除；下一轮 graph-runner 用同 id push 系统消息时，reducer 发现
+ * 该 id 已不在旧数组里，只能当"新增消息"处理——追加到数组尾部，导致
+ * 压缩后系统消息从最前漂移到 summary/keep 之后）。
+ *
+ * 返回 { systemMessages, rest }：systemMessages 不出现在这次 update 的
+ * 任何 ops（既不在 removeIds 也不在 keep）里，原样留在 checkpoint 原位；
+ * rest 才是真正参与切分/摘要计算的压缩工作集。
+ */
+export function partitionStableSystemMessages(messages: BaseMessage[]): {
+  systemMessages: BaseMessage[];
+  rest: BaseMessage[];
+} {
+  const systemMessages: BaseMessage[] = [];
+  const rest: BaseMessage[] = [];
+  for (const m of messages) {
+    if (typeof m.id === "string" && m.id.startsWith(STABLE_SYSTEM_ID_PREFIX)) {
+      systemMessages.push(m);
+    } else {
+      rest.push(m);
+    }
+  }
+  return { systemMessages, rest };
+}
+
 /**
  * 从尾部往前累加 token，找切分点。
  *

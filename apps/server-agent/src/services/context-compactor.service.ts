@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import {
   expandToToolBoundary,
   findSplitIndex,
+  partitionStableSystemMessages,
   serializeForSummary,
 } from "./context-compactor.utils";
 import { LlmCallService } from "./llm-call.service";
@@ -114,27 +115,32 @@ export class ContextCompactor {
     const ctx = model.contextWindow;
     const messages = await this.threadState.getMessagesSnapshot(sessionId);
 
-    // 切分
+    // 稳定 id 系统消息（system:persona/ctx/skills/mcp/prompts）先剔除，
+    // 不参与本轮压缩工作集：详见 partitionStableSystemMessages 的 JSDoc。
+    const { rest } = partitionStableSystemMessages(messages);
+
+    // 切分（splitIdx / keep≥2 兜底 / expandToToolBoundary 全部基于剔除
+    // 系统消息后的 rest 计算，而非原始 messages）
     const keepBudget = Math.floor(ctx * COMPACTION_RECENT_RATIO);
-    let splitIdx = findSplitIndex(messages, keepBudget);
-    splitIdx = expandToToolBoundary(messages, splitIdx);
+    let splitIdx = findSplitIndex(rest, keepBudget);
+    splitIdx = expandToToolBoundary(rest, splitIdx);
     if (splitIdx === 0) {
       if (opts.force) throw new CompactionNothingToCompact();
       return null;
     }
     // 保留区不足 2 条 → 强制把 splitIdx 往前挪（让 keep 区至少留 2 条），
     // 哪怕这意味着这一轮没东西可压（splitIdx 被挪到 0）。
-    if (messages.length - splitIdx < 2) {
-      splitIdx = Math.max(0, messages.length - 2);
+    if (rest.length - splitIdx < 2) {
+      splitIdx = Math.max(0, rest.length - 2);
     }
-    // 二次确认 splitIdx：若上面的调整把它压回 0，说明 messages 总条数
+    // 二次确认 splitIdx：若上面的调整把它压回 0，说明 rest 总条数
     // 太少，没东西可压。复用同一套语义：非 force 返 null，force 抛错。
     if (splitIdx === 0) {
       if (opts.force) throw new CompactionNothingToCompact();
       return null;
     }
-    const toSummarize = messages.slice(0, splitIdx);
-    const keep = messages.slice(splitIdx);
+    const toSummarize = rest.slice(0, splitIdx);
+    const keep = rest.slice(splitIdx);
 
     // 发 start 事件
     this.emitter.emit(SESSION_WS_EVENTS.runCompactionStart, {
@@ -163,12 +169,14 @@ export class ContextCompactor {
       throw new CompactionError("Summarize LLM call failed", err);
     }
 
-    // 改写 checkpointer。removeIds 传「所有带 id 的消息」（摘要区 + 保留区）：
-    // 摘要区删掉换摘要；保留区删掉后由 applyCompaction 按序重新 append 到摘要之后，
-    // 实现 [system, summary, ...keep] 的目标顺序。系统提示词无 id，不在此列、自动留最前。
+    // 改写 checkpointer。removeIds 传「rest 中所有带 id 的消息」（摘要区 +
+    // 保留区，不含前面剔除的稳定 id 系统消息）：摘要区删掉换摘要；保留区
+    // 删掉后由 applyCompaction 按序重新 append 到摘要之后，实现
+    // [system..., summary, ...keep] 的目标顺序。系统消息全程未出现在
+    // removeIds/keep 里，reducer 对其原样保序，物理位置天然留在最前。
     try {
       await this.threadState.applyCompaction(sessionId, {
-        removeIds: messages
+        removeIds: rest
           .map((m) => m.id)
           .filter((id): id is string => typeof id === "string"),
         summaryText,

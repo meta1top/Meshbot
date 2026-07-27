@@ -1,4 +1,9 @@
-import { AIMessage, HumanMessage } from "@langchain/core/messages";
+import {
+  AIMessage,
+  HumanMessage,
+  SystemMessage,
+  ToolMessage,
+} from "@langchain/core/messages";
 import type { BaseMessage } from "@langchain/core/messages";
 import {
   ModelResolver,
@@ -24,6 +29,17 @@ function buildMessages(count: number): BaseMessage[] {
     out.push(new AIMessage({ id: `a${i}`, content: "Y".repeat(400) }));
   }
   return out;
+}
+
+/** 五条稳定 id 系统消息：context-builder 每轮以稳定 id 原地替换写入的实际形态。 */
+function buildSystemMessages(): BaseMessage[] {
+  return [
+    new SystemMessage({ id: "system:persona", content: "PERSONA_CONTENT" }),
+    new SystemMessage({ id: "system:ctx", content: "CTX_CONTENT" }),
+    new SystemMessage({ id: "system:skills", content: "SKILLS_CONTENT" }),
+    new SystemMessage({ id: "system:mcp", content: "MCP_CONTENT" }),
+    new SystemMessage({ id: "system:prompts", content: "PROMPTS_CONTENT" }),
+  ];
 }
 
 /** summarize 的典型 usage：input 巨大——它要把整段待压缩历史喂给模型。 */
@@ -273,5 +289,196 @@ describe("ContextCompactor", () => {
 
     await expect(compactor.compact("s1")).resolves.not.toBeNull();
     expect(threadState.applyCompaction).toHaveBeenCalledTimes(1);
+  });
+
+  describe("压缩豁免稳定 id 系统消息", () => {
+    it("① 五条 system:* 消息全部豁免——不进 removeIds、不进 keep，物理位置天然留在 summary 之前", async () => {
+      modelConfig.findEnabled.mockResolvedValue({
+        contextWindow: 10_000,
+      } as never);
+      const systemMsgs = buildSystemMessages();
+      threadState.getMessagesSnapshot.mockResolvedValue([
+        ...systemMsgs,
+        ...buildMessages(10),
+      ]);
+      modelResolver.summarize.mockResolvedValue({
+        text: "MOCK_SUMMARY",
+        usage: USAGE,
+        durationMs: 1,
+      });
+
+      await compactor.compact("s1");
+
+      const applyArg = threadState.applyCompaction.mock.calls[0][1] as {
+        removeIds: string[];
+        keep: BaseMessage[];
+      };
+      const systemIds = systemMsgs.map((m) => m.id);
+      for (const id of systemIds) {
+        expect(applyArg.removeIds).not.toContain(id);
+      }
+      const keepIds = applyArg.keep.map((m) => m.id);
+      for (const id of systemIds) {
+        expect(keepIds).not.toContain(id);
+      }
+      // 未出现在 removeIds/keep 中即代表这次 update 完全不触碰它们——
+      // reducer（mergeMessages）对未提及的旧消息原样保序，物理位置留在最前，
+      // 天然排在 [system..., summary, ...keep] 里 summary 之前。
+    });
+
+    it("② 摘要 LLM 输入不含 system 消息内容", async () => {
+      modelConfig.findEnabled.mockResolvedValue({
+        contextWindow: 10_000,
+      } as never);
+      threadState.getMessagesSnapshot.mockResolvedValue([
+        ...buildSystemMessages(),
+        ...buildMessages(10),
+      ]);
+      modelResolver.summarize.mockResolvedValue({
+        text: "S",
+        usage: USAGE,
+        durationMs: 1,
+      });
+
+      await compactor.compact("s1");
+
+      const serialized = modelResolver.summarize.mock.calls[0][0] as string;
+      expect(serialized).not.toContain("PERSONA_CONTENT");
+      expect(serialized).not.toContain("CTX_CONTENT");
+      expect(serialized).not.toContain("[system]");
+    });
+
+    it("③ removeIds 不含任何 system:* 前缀 id", async () => {
+      modelConfig.findEnabled.mockResolvedValue({
+        contextWindow: 10_000,
+      } as never);
+      threadState.getMessagesSnapshot.mockResolvedValue([
+        ...buildSystemMessages(),
+        ...buildMessages(10),
+      ]);
+      modelResolver.summarize.mockResolvedValue({
+        text: "S",
+        usage: USAGE,
+        durationMs: 1,
+      });
+
+      await compactor.compact("s1");
+
+      const applyArg = threadState.applyCompaction.mock.calls[0][1] as {
+        removeIds: string[];
+      };
+      expect(applyArg.removeIds.length).toBeGreaterThan(0);
+      expect(applyArg.removeIds.every((id) => !id.startsWith("system:"))).toBe(
+        true,
+      );
+    });
+
+    it("④ keep≥2 语义按 rest 计数——system 不占 keep 名额", async () => {
+      // keepBudget = floor(1700 * 0.1) = 170 token
+      modelConfig.findEnabled.mockResolvedValue({
+        contextWindow: 1_700,
+      } as never);
+      const systemMsgs = buildSystemMessages();
+      const rest = [
+        new HumanMessage({ id: "h0", content: "X".repeat(400) }), // ~100 token
+        new AIMessage({ id: "a0", content: "Y".repeat(400) }), // ~100 token
+        new HumanMessage({ id: "h1", content: "X".repeat(400) }), // ~100 token
+        new AIMessage({ id: "a1", content: "Y".repeat(400) }), // ~100 token
+      ];
+      threadState.getMessagesSnapshot.mockResolvedValue([
+        ...systemMsgs,
+        ...rest,
+      ]);
+      modelResolver.summarize.mockResolvedValue({
+        text: "S",
+        usage: USAGE,
+        durationMs: 1,
+      });
+
+      await compactor.compact("s1");
+
+      const applyArg = threadState.applyCompaction.mock.calls[0][1] as {
+        keep: BaseMessage[];
+      };
+      const keepIds = applyArg.keep.map((m) => m.id);
+      // rest 只有 4 条：findSplitIndex 先把 splitIdx 落到只剩 a1（1 条）在
+      // keep 区，keep<2 的兜底把 splitIdx 前移到 rest.length-2=2，
+      // keep 变成 [h1, a1]——全程只数 rest，5 条 system 消息不占名额。
+      expect(keepIds).toEqual(["h1", "a1"]);
+    });
+
+    it("⑤ 纯 system + 1 条 human 的短会话不触发压缩（rest 太少）", async () => {
+      // keepBudget = floor(2_000 * 0.1) = 200 token
+      modelConfig.findEnabled.mockResolvedValue({
+        contextWindow: 2_000,
+      } as never);
+      // system 内容故意设得较长（~100 token/条，共 500 token）：若压缩工作集
+      // 未剔除它们，扫描会把它们计入切分预算，误判"有得压"从而触发压缩；
+      // 剔除后 rest 只剩 1 条 human，天然不够压。
+      const systemMsgs = [
+        new SystemMessage({ id: "system:persona", content: "S".repeat(400) }),
+        new SystemMessage({ id: "system:ctx", content: "S".repeat(400) }),
+        new SystemMessage({ id: "system:skills", content: "S".repeat(400) }),
+        new SystemMessage({ id: "system:mcp", content: "S".repeat(400) }),
+        new SystemMessage({ id: "system:prompts", content: "S".repeat(400) }),
+      ];
+      threadState.getMessagesSnapshot.mockResolvedValue([
+        ...systemMsgs,
+        new HumanMessage({ id: "h0", content: "hi" }),
+      ]);
+
+      const r = await compactor.compact("s1");
+
+      expect(r).toBeNull();
+      expect(modelResolver.summarize).not.toHaveBeenCalled();
+      expect(threadState.applyCompaction).not.toHaveBeenCalled();
+    });
+
+    it("⑥ system 消息存在时，tool 配对完整性仍然保持（切分基于 rest 计算）", async () => {
+      // keepBudget = floor(50 * 0.1) = 5 token
+      modelConfig.findEnabled.mockResolvedValue({
+        contextWindow: 50,
+      } as never);
+      const systemMsgs = buildSystemMessages();
+      const ai1 = new AIMessage({
+        id: "a1",
+        content: "",
+        tool_calls: [{ id: "t1", name: "bash", args: {} }],
+      });
+      const tool1 = new ToolMessage({
+        id: "tr1",
+        tool_call_id: "t1",
+        content: "result",
+      });
+      const rest = [
+        new HumanMessage({ id: "h0", content: "X".repeat(400) }), // ~100 token
+        ai1, // ~10 token（tool_calls 序列化）
+        tool1, // ~2 token
+        new HumanMessage({ id: "h1", content: "hi" }), // ~1 token
+        new HumanMessage({ id: "h2", content: "hi" }), // ~1 token
+      ];
+      threadState.getMessagesSnapshot.mockResolvedValue([
+        ...systemMsgs,
+        ...rest,
+      ]);
+      modelResolver.summarize.mockResolvedValue({
+        text: "S",
+        usage: USAGE,
+        durationMs: 1,
+      });
+
+      await compactor.compact("s1");
+
+      const applyArg = threadState.applyCompaction.mock.calls[0][1] as {
+        keep: BaseMessage[];
+      };
+      const keepIds = applyArg.keep.map((m) => m.id);
+      // ai1 的 tool_call 与 tool1 的 result 必须同进同出，不能被拆散到
+      // 摘要区/保留区两边（否则喂给下一轮 LLM 时孤儿 tool_calls 会 400）。
+      const aiInKeep = keepIds.includes("a1");
+      const toolInKeep = keepIds.includes("tr1");
+      expect(aiInKeep).toBe(toolInKeep);
+      expect(keepIds).toEqual(["h1", "h2"]);
+    });
   });
 });
