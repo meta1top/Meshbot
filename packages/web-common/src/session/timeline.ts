@@ -65,8 +65,10 @@ export interface TimelineMessage {
   reasoningDurationMs?: number;
   toolCalls?: ToolCallView[];
   /**
-   * 结构化元数据（来自 session_message.metadata JSON 列）。
-   * 压缩占位行携带 kind="compaction"；其余消息为 null / undefined。
+   * 结构化元数据（来自 session_message.metadata JSON 列）。role="system" 的
+   * 居中系统事件行携带（见 SystemEventRow）：kind="compaction" 时另带
+   * removedCount/fromMessageId/toMessageId；kind="model_switch" 时另带
+   * fromModel/toModel。普通消息为 null / undefined。
    */
   metadata?: {
     kind: string;

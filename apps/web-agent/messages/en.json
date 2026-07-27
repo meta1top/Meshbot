@@ -275,13 +275,19 @@
       "like": "Like",
       "dislike": "Dislike"
     },
-    "compaction": {
-      "bannerThreshold": "Compacting conversation history…",
-      "bannerCtxExceeded": "Context full; compacting to continue…",
-      "rowTitle": "Compacted {count} earlier messages",
-      "rowExpand": "Show summary",
-      "rowCollapse": "Hide",
-      "toastError": "Compaction failed: {message}"
+    "systemEvent": {
+      "compactionTitle": "Compacted {count} earlier messages",
+      "modelSwitch": "Switched model: {from} → {to}"
+    },
+    "statusLine": {
+      "thinking": {
+        "0": "Thinking…",
+        "1": "Organizing thoughts…",
+        "2": "Structuring the reply…"
+      },
+      "executing": "Running tools…",
+      "streaming": "Writing…",
+      "compacting": "Compacting conversation history…"
     },
     "subagent": {
       "fallbackTitle": "Subtask",

@@ -5,6 +5,7 @@ import {
   type InflightToolCall,
   type MessageUsage,
   type RunChunkEvent,
+  type RunCompactionDoneEvent,
   type RunDoneEvent,
   type RunErrorEvent,
   type RunHitlSettledEvent,
@@ -15,6 +16,7 @@ import {
   type RunSnapshotEvent,
   type RunSubagentSettledEvent,
   type RunSubagentSpawnedEvent,
+  type RunSystemEvent,
   type RunToolCallArgsDeltaEvent,
   type RunToolCallEndEvent,
   type RunToolCallProgressEvent,
@@ -359,6 +361,42 @@ export function settleErrorTimeline(
       ]
     : next;
   return settleUnfinishedToolCalls(withStranded);
+}
+
+/**
+ * 把一条居中系统事件行（压缩完成 / 切模型等）追加进时间线，**幂等**：
+ * `id` 已存在时原样返回（跳过），不产生重复行。
+ *
+ * `run.compaction_done` 与 `run.system_event` 两路 WS 事件共用本函数——两者
+ * 落库的都是 role=system + metadata.kind 的一行，`id` 同源（session_messages.id /
+ * langgraphId），只是事件 payload 形状不同（compaction_done 字段更丰富，见
+ * `RunCompactionDoneEvent` 的历史包袱注释），调用方各自拆出 `(id, kind,
+ * content, metadata)` 后交给本函数统一 append，避免两处渲染逻辑分叉。
+ *
+ * 与「首屏 history / loadMoreHistory 重拉」的幂等是两层不同机制：本函数只管
+ * 「同一次 apply 调用内、同 id 不重复插入时间线」；跨会话切换/翻页时的去重
+ * 由 `apply((current) => ...)` 外层「history 打底、socket 已到的按 id 过滤」
+ * 合并逻辑负责（见本文件订阅 effect 里两处 `initialIds` 合并），两层配合下
+ * 「compaction_done 实时 append 一次 + 之后翻页/切回 history 又拉到同一条」
+ * 不会出现重复系统行。
+ */
+export function appendSystemEventToTimeline(
+  messages: TimelineMessage[],
+  id: string,
+  kind: string,
+  content: string,
+  metadata: Record<string, unknown>,
+): TimelineMessage[] {
+  if (messages.some((m) => m.id === id)) return messages;
+  return [
+    ...messages,
+    {
+      id,
+      role: "system" as const,
+      content,
+      metadata: { kind, ...metadata },
+    },
+  ];
 }
 
 /**
@@ -1194,7 +1232,9 @@ export function useSessionStream(
     socket.on(SESSION_WS_EVENTS.runSubagentSettled, onSubagentSettled);
     socket.on(SESSION_WS_EVENTS.runHitlSettled, onHitlSettled);
 
-    // === Compaction 三事件 —— banner 状态 + 完成后触发 history 重新拉取 ===
+    // === Compaction 三事件 + 通用系统事件 ===
+    // onCompactionStart 只负责驱动 compacting 状态（禁发 + StatusLine「压缩
+    // 中」文案）；顶部 banner 已删除，不再有别的职责。
     const onCompactionStart = (payload: {
       sessionId: string;
       reason: "threshold" | "ctx-exceeded";
@@ -1202,12 +1242,27 @@ export function useSessionStream(
       if (payload.sessionId !== sessionId) return;
       setCompacting(payload.reason);
     };
-    const onCompactionDone = (payload: { sessionId: string }) => {
+    // 压缩完成：事件已带齐占位行完整数据（placeholderId/summary/removedCount/
+    // fromMessageId/toMessageId），直接 append 一条 system+compaction 时间线
+    // 消息，不再依赖重拉 history（原 v1 限制，见 design doc §四）。
+    // `appendSystemEventToTimeline` 按 id 幂等，重复到达（理论上不该发生，
+    // 防御）不会插出重复行。
+    const onCompactionDone = (payload: RunCompactionDoneEvent) => {
       if (payload.sessionId !== sessionId) return;
       setCompacting(null);
-      // 注：history 不是 react-query 管理，没法直接 invalidate。新插入的
-      // compaction 占位行要等用户下次进入 session 或滚动加载时才出现。
-      // v1 接受；v2 可加 fetchHistory 然后 merge 进 messages atom。
+      apply((prev) =>
+        appendSystemEventToTimeline(
+          prev,
+          payload.placeholderId,
+          "compaction",
+          payload.summary,
+          {
+            removedCount: payload.removedCount,
+            fromMessageId: payload.fromMessageId,
+            toMessageId: payload.toMessageId,
+          },
+        ),
+      );
     };
     const onCompactionError = (payload: {
       sessionId: string;
@@ -1215,12 +1270,21 @@ export function useSessionStream(
     }) => {
       if (payload.sessionId !== sessionId) return;
       setCompacting(null);
-      // 暂无统一 toast 库；用 console.warn 占位，banner 自然撤掉即可
+      // 暂无统一 toast 库；用 console.warn 占位，StatusLine 的「压缩中」自然撤掉即可
       console.warn(`[compaction] error: ${payload.error}`);
+    };
+    // 通用系统事件行（目前仅切模型）：与 compaction_done 复用同一套幂等 append。
+    // 不必重拉 history——与 compaction 的实时呈现诉求一致（见 design doc §四）。
+    const onSystemEvent = (e: RunSystemEvent) => {
+      if (e.sessionId !== sessionId) return;
+      apply((prev) =>
+        appendSystemEventToTimeline(prev, e.id, e.kind, e.content, e.metadata),
+      );
     };
     socket.on(SESSION_WS_EVENTS.runCompactionStart, onCompactionStart);
     socket.on(SESSION_WS_EVENTS.runCompactionDone, onCompactionDone);
     socket.on(SESSION_WS_EVENTS.runCompactionError, onCompactionError);
+    socket.on(SESSION_WS_EVENTS.runSystemEvent, onSystemEvent);
 
     return () => {
       cancelled = true;
@@ -1248,6 +1312,7 @@ export function useSessionStream(
       socket.off(SESSION_WS_EVENTS.runCompactionStart, onCompactionStart);
       socket.off(SESSION_WS_EVENTS.runCompactionDone, onCompactionDone);
       socket.off(SESSION_WS_EVENTS.runCompactionError, onCompactionError);
+      socket.off(SESSION_WS_EVENTS.runSystemEvent, onSystemEvent);
     };
   }, [
     sessionId,

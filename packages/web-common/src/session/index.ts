@@ -41,16 +41,6 @@ export {
   type SlashCommandMatch,
 } from "./chat-input";
 export {
-  CompactionBanner,
-  type CompactionBannerLabels,
-  type CompactionBannerProps,
-} from "./compaction-banner";
-export {
-  CompactionRow,
-  type CompactionRowLabels,
-  type CompactionRowProps,
-} from "./compaction-row";
-export {
   ComposerActions,
   type ComposerActionsLabels,
 } from "./composer-actions";
@@ -133,6 +123,11 @@ export {
   toggleSubagentOpen,
   truncate,
 } from "./subagent-card";
+export {
+  SystemEventRow,
+  type SystemEventRowLabels,
+  type SystemEventRowProps,
+} from "./system-event-row";
 export type { TimelineMessage, ToolCallView } from "./timeline";
 export { TodoList } from "./todo-list";
 export { todoStatusMeta } from "./todo-status";

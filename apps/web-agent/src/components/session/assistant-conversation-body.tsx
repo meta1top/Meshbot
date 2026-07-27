@@ -353,7 +353,6 @@ export function AssistantConversationBody({
   const conversations = useAtomValue(conversationsAtom);
   const setArtifact = useSetAtom(previewArtifactAtom);
   const tArtifact = useTranslations("session.artifact");
-  const tCompaction = useTranslations("session.compaction");
 
   const view = (
     <SessionConversationView
@@ -416,7 +415,9 @@ export function AssistantConversationBody({
           onChange={setDraft}
           onSend={(text) => void handleSend(text)}
           onInterrupt={stream.interrupt}
-          isLoading={stream.running}
+          // 压缩中禁发：与 running 共用同一条禁用/隐藏发送逻辑（发送按钮换成
+          // 中断按钮 + Enter 快捷键同步禁用），末尾 StatusLine 同步显「压缩中」。
+          isLoading={stream.running || !!stream.compacting}
           canInterrupt={stream.canInterrupt}
           placeholder={inputPlaceholder}
           commands={commands}
@@ -461,10 +462,6 @@ export function AssistantConversationBody({
       labels={{
         scrollToBottom: t("scrollToBottom"),
         remoteLoadFailed: tRemote("remoteLoadFailed"),
-        compaction: {
-          bannerThreshold: tCompaction("bannerThreshold"),
-          bannerCtxExceeded: tCompaction("bannerCtxExceeded"),
-        },
         messageList: {
           assistantName,
           runErrorPrefix: t("runErrorPrefix"),
@@ -472,10 +469,24 @@ export function AssistantConversationBody({
           reasoningThinking: (seconds) => t("reasoningThinking", { seconds }),
           reasoningThought: (seconds) => t("reasoningThought", { seconds }),
           reasoningProcess: t("reasoningProcess"),
-          compactionRowTitle: (count) => tCompaction("rowTitle", { count }),
+          systemEvent: {
+            compactionTitle: (count) =>
+              t("systemEvent.compactionTitle", { count }),
+            modelSwitch: (from, to) =>
+              t("systemEvent.modelSwitch", { from, to }),
+          },
           runErrorAgentNotRemotable: t("runErrorAgentNotRemotable"),
           runErrorSessionAgentMismatch: t("runErrorSessionAgentMismatch"),
           runErrorOffline: t("runErrorOffline"),
+        },
+        // T2 遗留接线：消息流末尾常驻状态行文案（五态：思考/执行/流式/压缩中，
+        // 思考态额外轮换 3 条变体）。补上后 StatusLine 才会真正点亮——
+        // SessionConversationView 把它当可选字段，缺省时整行不渲染。
+        statusLine: {
+          thinking: toI18nList(t.raw("statusLine.thinking")),
+          executing: [t("statusLine.executing")],
+          streaming: [t("statusLine.streaming")],
+          compacting: [t("statusLine.compacting")],
         },
         toolCall: {
           artifactPresentFailed: tArtifact("presentFailed"),

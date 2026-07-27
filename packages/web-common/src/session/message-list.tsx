@@ -10,10 +10,10 @@ import {
   AssistantMessageActions,
   type AssistantMessageActionsLabels,
 } from "./assistant-message-actions";
-import { CompactionRow } from "./compaction-row";
 import { MarkdownContent } from "./markdown-content";
 import type { ModelConfigLike } from "./model-name";
 import { isReasoningThinking } from "./reasoning-thinking";
+import { SystemEventRow, type SystemEventRowLabels } from "./system-event-row";
 import type { TimelineMessage, ToolCallView } from "./timeline";
 import { ToolCallBlock, type ToolCallBlockLabels } from "./tool-call-block";
 import { UserMessageActions } from "./user-message-actions";
@@ -36,8 +36,8 @@ export interface MessageListLabels {
   reasoningThought: (seconds: string) => string;
   /** 无耗时信息时的兜底标签（如「思考过程」，历史恢复场景）。 */
   reasoningProcess: string;
-  /** 压缩占位行标题，转发给 CompactionRow。 */
-  compactionRowTitle: (count: number) => string;
+  /** 居中系统事件行文案（压缩/切模型），转发给 SystemEventRow。 */
+  systemEvent: SystemEventRowLabels;
   /**
    * 远程二次门控拒绝的专属文案（Bug #13）：`m.errorReason === "agent_not_remotable"`
    * 时展示这条，而不是展示 `errorText` 里未经翻译的原始兜底文本。
@@ -155,7 +155,7 @@ export interface MessageListProps {
  * 转发的 REST/atom 数据，现直接作为本组件 props（`onFeedback`/`onRegenerate`/
  * `modelConfigs`/`resolveImTargetName`/`onPreviewArtifact`/`artifactRemote`/
  * `renderSubagentCard`）——本组件直接渲染 web-common 的
- * `AssistantMessageActions`/`UserMessageActions`/`ToolCallBlock`/`CompactionRow`，
+ * `AssistantMessageActions`/`UserMessageActions`/`ToolCallBlock`/`SystemEventRow`，
  * 不再经过一层 app 专属薄容器。
  *
  * 设计原则：
@@ -192,9 +192,6 @@ export function MessageList({
   return (
     <div className={cn("flex flex-col gap-1", nested ? "py-1" : "pb-6 pt-2")}>
       {messages
-        .filter(
-          (m) => !(m.role === "system" && m.metadata?.kind !== "compaction"),
-        )
         // 全空 assistant 行不渲染（否则是「头像 + 粗体名字 + 空白」的幽灵行）。
         // 根因已在后端修掉（`GraphRunner.flushRound` 的空轮短路：不再为只带
         // finish_reason/usage 的尾随 chunk 发 assistant_done），这里是兜底——
@@ -211,14 +208,19 @@ export function MessageList({
             m.failed === true,
         )
         .map((m) => {
-          // 压缩占位行：role=system + metadata.kind="compaction"
-          if (m.role === "system" && m.metadata?.kind === "compaction") {
+          // 居中系统事件行：role=system + metadata.kind（压缩/切模型）。
+          // 未设 kind（历史遗留 / 非系统行 metadata 缺失）静默跳过；已知 kind
+          // 转给 SystemEventRow，未来新 kind 由该组件自身安全跳过（向后兼容）。
+          if (m.role === "system") {
+            const kind = m.metadata?.kind;
+            if (!kind) return null;
             return (
-              <CompactionRow
+              <SystemEventRow
                 key={m.id}
-                removedCount={(m.metadata.removedCount as number) ?? 0}
-                summary={m.content}
-                labels={{ rowTitle: labels.compactionRowTitle }}
+                kind={kind}
+                content={m.content}
+                metadata={m.metadata}
+                labels={labels.systemEvent}
               />
             );
           }

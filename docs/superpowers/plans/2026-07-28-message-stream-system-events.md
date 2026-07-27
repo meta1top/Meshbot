@@ -79,10 +79,10 @@
 **Interfaces:**
 - Consumes: T1 的 `run.compaction_done`（补字段）/ `run.system_event`；T2 的 StatusLine（禁发时显压缩中）
 
-- [ ] **Step 1: 失败测试**（SystemEventRow 三分支渲染；compaction_done append 幂等；system_event append；未知 kind 跳过）
-- [ ] **Step 2: 实现 SystemEventRow + append**（compaction_done/system_event 两路 append 复用同一 `appendSystemEventToTimeline(id, kind, content, metadata)`，同 id 已在则跳过）
-- [ ] **Step 3: 删 banner + 禁发**（CompactionBanner/CompactionRow 删除，grep 消费方清净；compacting 禁发接线；i18n 文案 zh/en，`sync:locales -- --check`）
-- [ ] **Step 4: 提交**　`pnpm format && pnpm typecheck && pnpm sync:locales -- --check && pnpm --filter @meshbot/web-common test`；commit `feat(web-common): 系统事件行（居中分隔线）实时出现 + 删顶部 banner + 压缩中禁发`
+- [x] **Step 1: 失败测试**（SystemEventRow 三分支渲染；compaction_done append 幂等；system_event append；未知 kind 跳过）
+- [x] **Step 2: 实现 SystemEventRow + append**（compaction_done/system_event 两路 append 复用同一 `appendSystemEventToTimeline(id, kind, content, metadata)`，同 id 已在则跳过）
+- [x] **Step 3: 删 banner + 禁发 + StatusLine 接线**（CompactionBanner/CompactionRow 删除，grep 消费方清净；compacting 禁发接线；**T2 遗留：给 web-agent `assistant-conversation-body.tsx` 的 labels 对象补 `statusLine` i18n 字段**——否则末尾状态行永不可见、T4 无法验收；system 行 compaction/model_switch 文案 + statusLine 五态文案一并加 zh/en，`sync:locales -- --check`）
+- [x] **Step 4: 提交**　`pnpm format && pnpm typecheck && pnpm sync:locales -- --check && pnpm --filter @meshbot/web-common test`；commit `feat(web-common): 系统事件行（居中分隔线）实时出现 + 删顶部 banner + 压缩中禁发`
 
 ---
 

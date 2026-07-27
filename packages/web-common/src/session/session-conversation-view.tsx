@@ -5,10 +5,6 @@ import { ArrowDown } from "lucide-react";
 import type { ReactNode, Ref } from "react";
 import type { ArtifactPreviewTarget } from "./artifact-file-card";
 import type { AssistantMessageActionsLabels } from "./assistant-message-actions";
-import {
-  CompactionBanner,
-  type CompactionBannerLabels,
-} from "./compaction-banner";
 import { MessageList, type MessageListLabels } from "./message-list";
 import { MessageSkeleton } from "./message-skeleton";
 import type { ModelConfigLike } from "./model-name";
@@ -26,8 +22,6 @@ export interface SessionConversationViewLabels {
   scrollToBottom: string;
   /** 历史加载失败提示文案（目前仅 remote 分支会置位）。 */
   remoteLoadFailed: string;
-  /** 转发给 CompactionBanner。 */
-  compaction: CompactionBannerLabels;
   /** 转发给 MessageList 自身渲染用的文案。 */
   messageList: MessageListLabels;
   /**
@@ -53,7 +47,12 @@ export interface SessionConversationViewProps {
   hasMoreHistory: boolean;
   /** 顶部哨兵 ref（调用方的 IntersectionObserver 挂在这个节点上，用于翻页加载更多历史）。 */
   topSentinelRef: Ref<HTMLDivElement>;
-  /** 会话压缩中提示条：非空即 visible=true，值决定文案分支。 */
+  /**
+   * 会话压缩中：非空即压缩进行中。顶部 banner 已删除（长对话滚在底部时永远
+   * 看不到），改由末尾 StatusLine 显「压缩中」+ 完成后系统事件行接管——本字段
+   * 只喂给 `deriveStatusLinePhase`（决定 StatusLine 阶段文案），不再驱动任何
+   * 独立的 banner 渲染。
+   */
   compacting?: "threshold" | "ctx-exceeded" | null;
   /** 已落定的时间线消息（不含 pending）。 */
   timelineMessages: TimelineMessage[];
@@ -107,8 +106,9 @@ export interface SessionConversationViewProps {
 }
 
 /**
- * 助手会话主体的纯装配视图：历史加载态/错误态、顶部哨兵、压缩提示条、
- * 消息时间线、粘底 pending 区 + 滚到底按钮 + 输入区插槽。
+ * 助手会话主体的纯装配视图：历史加载态/错误态、顶部哨兵、消息时间线（居中
+ * 系统事件行随普通消息一起渲染，见 MessageList）、末尾常驻 StatusLine、粘底
+ * pending 区 + 滚到底按钮 + 输入区插槽。
  *
  * 从 `apps/web-agent/src/components/session/assistant-conversation-body.tsx`
  * 拆分迁入（Task 9 骨干批）——「渲染结构」进本组件，「数据装配」（`useSessionStream`/
@@ -205,11 +205,6 @@ export function SessionConversationView({
                 className="flex justify-center py-2 text-xs text-muted-foreground/60"
               />
             )}
-            <CompactionBanner
-              visible={!!compacting}
-              reason={compacting ?? undefined}
-              labels={labels.compaction}
-            />
             {messageListNode}
             {labels.statusLine && (
               <StatusLine phase={statusLinePhase} labels={labels.statusLine} />

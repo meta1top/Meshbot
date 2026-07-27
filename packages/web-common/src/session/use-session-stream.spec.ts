@@ -1,5 +1,6 @@
 import type { TimelineMessage } from "./timeline";
 import {
+  appendSystemEventToTimeline,
   settleErrorTimeline,
   settleInterruptedTimeline,
 } from "./use-session-stream";
@@ -159,5 +160,78 @@ describe("settleErrorTimeline（Bug #13：远程二次门控拒绝后打断按�
       null,
     );
     expect(out[0].toolCalls?.[0].status).toBe("error");
+  });
+});
+
+describe("appendSystemEventToTimeline（run.compaction_done / run.system_event 实时 append，两路复用同一函数）", () => {
+  it("追加一条 role=system 的时间线消息，metadata 携带 kind + 其余附加字段", () => {
+    const out = appendSystemEventToTimeline(
+      [],
+      "comp-1",
+      "compaction",
+      "完整摘要正文",
+      { removedCount: 5, fromMessageId: "m1", toMessageId: "m5" },
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      id: "comp-1",
+      role: "system",
+      content: "完整摘要正文",
+      metadata: {
+        kind: "compaction",
+        removedCount: 5,
+        fromMessageId: "m1",
+        toMessageId: "m5",
+      },
+    });
+  });
+
+  it("model_switch 场景：metadata 携带 fromModel/toModel（T1 落的字段名）", () => {
+    const out = appendSystemEventToTimeline(
+      [],
+      "msw-1",
+      "model_switch",
+      "已切换模型：GPT-4o → Claude",
+      { fromModel: "GPT-4o", toModel: "Claude" },
+    );
+    expect(out[0].metadata).toMatchObject({
+      kind: "model_switch",
+      fromModel: "GPT-4o",
+      toModel: "Claude",
+    });
+  });
+
+  it("幂等：同 id 已在时间线上则原样返回，不重复插入（run.compaction_done 与后续重进 history 拉到同 id 不产生重复行）", () => {
+    const once = appendSystemEventToTimeline(
+      [],
+      "comp-1",
+      "compaction",
+      "摘要",
+      { removedCount: 1 },
+    );
+    const twice = appendSystemEventToTimeline(
+      once,
+      "comp-1",
+      "compaction",
+      "摘要（哪怕内容不同也不覆盖，说明命中了幂等短路而非直接被后来者覆盖）",
+      { removedCount: 999 },
+    );
+    expect(twice).toHaveLength(1);
+    expect(twice).toBe(once); // 引用不变：短路分支直接原样返回，未生成新数组
+    expect(twice[0].content).toBe("摘要");
+  });
+
+  it("追加在已有消息之后（保序，不打乱既有时间线）", () => {
+    const existing: TimelineMessage[] = [
+      { id: "u1", role: "user", content: "hi" },
+    ];
+    const out = appendSystemEventToTimeline(
+      existing,
+      "comp-1",
+      "compaction",
+      "摘要",
+      { removedCount: 1 },
+    );
+    expect(out.map((m) => m.id)).toEqual(["u1", "comp-1"]);
   });
 });

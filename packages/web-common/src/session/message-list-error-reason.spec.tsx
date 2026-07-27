@@ -27,7 +27,10 @@ const LABELS: MessageListLabels = {
   reasoningThinking: (s) => `思考中 ${s}s`,
   reasoningThought: (s) => `已思考 ${s}s`,
   reasoningProcess: "思考过程",
-  compactionRowTitle: (n) => `压缩了 ${n} 条`,
+  systemEvent: {
+    compactionTitle: (n) => `压缩了 ${n} 条`,
+    modelSwitch: (from, to) => `已切换模型：${from} → ${to}`,
+  },
   runErrorAgentNotRemotable: "LABEL_AGENT_NOT_REMOTABLE",
   runErrorSessionAgentMismatch: "LABEL_SESSION_AGENT_MISMATCH",
   runErrorOffline: "LABEL_OFFLINE",
