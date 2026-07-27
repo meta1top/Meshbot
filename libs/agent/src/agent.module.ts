@@ -15,6 +15,7 @@ import { McpService } from "./mcp/mcp.service";
 import { MemoryService } from "./memory/memory.service";
 import { SkillService } from "./skills/skill.service";
 import { ToolRegistry } from "./tools/tool-registry";
+import { ToolPrefsService } from "./tools/tool-prefs.service";
 import { FileStateService } from "./tools/builtins/file-state.service";
 import { BashTool } from "./tools/builtins/bash.tool";
 import { ReadFileTool } from "./tools/builtins/read-file.tool";
@@ -87,6 +88,7 @@ import { McpDisableTool } from "./tools/builtins/mcp-disable.tool";
   ],
   providers: [
     ToolRegistry,
+    ToolPrefsService,
     FileStateService,
     BashTool,
     ReadFileTool,
@@ -148,6 +150,7 @@ import { McpDisableTool } from "./tools/builtins/mcp-disable.tool";
     ThreadStateService,
     PromptService,
     ToolRegistry,
+    ToolPrefsService,
     SkillService,
     McpService,
     PromptFileService,

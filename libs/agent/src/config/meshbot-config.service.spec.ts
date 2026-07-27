@@ -47,6 +47,11 @@ describe("MeshbotConfigService 账号化/Agent 化文件 getter", () => {
         ).toBe(true);
         expect(
           config
+            .getToolsConfigPath()
+            .endsWith("/accounts/u1/agents/agent-1/tools.json"),
+        ).toBe(true);
+        expect(
+          config
             .getWorkspaceDir()
             .endsWith("/accounts/u1/agents/agent-1/workspace"),
         ).toBe(true);
@@ -73,6 +78,7 @@ describe("MeshbotConfigService 账号化/Agent 化文件 getter", () => {
     expect(() => config.getSkillsDir()).toThrow();
     expect(() => config.getPromptDir()).toThrow();
     expect(() => config.getMcpConfigPath()).toThrow();
+    expect(() => config.getToolsConfigPath()).toThrow();
     expect(() => config.getWorkspaceDir()).toThrow();
   });
 

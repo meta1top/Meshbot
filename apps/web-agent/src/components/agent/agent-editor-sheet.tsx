@@ -34,6 +34,7 @@ import {
   PromptFilesEditor,
   type PromptFilesEditorHandle,
 } from "@/components/agent/prompt-files-editor";
+import { ToolPrefsEditor } from "@/components/agent/tool-prefs-editor";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import {
   agentsQueryKey,
@@ -172,7 +173,7 @@ export function AgentEditorSheet({
   const [localAgentId, setLocalAgentId] = useState<string | null>(agentId);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  type EditorTab = "basic" | "prompts" | "mcp";
+  type EditorTab = "basic" | "prompts" | "mcp" | "tools";
   const [tab, setTab] = useState<EditorTab>("basic");
   const [discardOpen, setDiscardOpen] = useState(false);
   // 未保存切 tab（离开「提示词」时）待确认的目标 tab；null 表示当前弹出的
@@ -424,7 +425,7 @@ export function AgentEditorSheet({
             <X className="h-4 w-4" />
           </button>
         }
-        // 新建态是单步表单，不需要 tab 条；编辑态三 tab：基本信息/提示词/MCP。
+        // 新建态是单步表单，不需要 tab 条；编辑态四 tab：基本信息/提示词/MCP/工具。
         headerTabs={
           mode === "edit" ? (
             <SheetTabBar
@@ -432,6 +433,7 @@ export function AgentEditorSheet({
                 { key: "basic", label: t("tabBasic") },
                 { key: "prompts", label: t("tabPrompts") },
                 { key: "mcp", label: t("tabMcp") },
+                { key: "tools", label: t("tabTools") },
               ]}
               active={tab}
               onChange={(k) => requestTabChange(k as EditorTab)}
@@ -584,6 +586,23 @@ export function AgentEditorSheet({
               saving={mcpSaving}
               onSave={() => void handleMcpSave()}
             />
+          )}
+        </div>
+
+        {/* 工具启停：分组开关 + 即时保存（tab 自管，不随 footer）。新建态不
+            渲染（无 agentId 可拉 tools.json）；只在编辑态且 formReady 时挂载，
+            与提示词/MCP tab 一致，keep-mounted 靠 hidden 而非卸载切换。 */}
+        <div
+          className={cn(
+            // 必须是 flex 容器：内层 ToolPrefsEditor 靠 flex-1/min-h-0 拿高度约束
+            // 才能自己滚动；block 外壳会让内层长到内容高、被 overflow-hidden 裁掉
+            // 且无滚动条（真机验收反馈）。hidden 切换时 flex 被覆盖无副作用。
+            "flex min-h-0 flex-1 flex-col overflow-hidden",
+            tab !== "tools" && "hidden",
+          )}
+        >
+          {mode === "edit" && formReady && localAgentId && (
+            <ToolPrefsEditor agentId={localAgentId} />
           )}
         </div>
       </UnifiedSheet>

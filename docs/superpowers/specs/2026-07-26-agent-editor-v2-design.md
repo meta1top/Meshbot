@@ -62,7 +62,7 @@ Agent 的可配置面正在扩大（人格、技能、MCP、工具），但编�
 ### 存储与生效
 
 - `<agentDir>/tools.json`：`{ "disabledTools": string[] }`（人机共写；缺失 = 全启用）
-- 归属新 `ToolPrefsService`（libs/agent）：读缓存 + 写（校验→落盘）；写后无需 teardown（内建工具 bind 每 run 现算）
+- 归属新 `ToolPrefsService`（libs/agent）：每次读盘不缓存（与 McpService/skills 先例一致，改完即下轮生效）+ 写（校验→落盘）；写后无需 teardown（内建工具 bind 每 run 现算）
 - **过滤点**：`ToolRegistry.asLangChainBindable()` / `list()` / `get()` 统一按当前 ALS Agent 的禁用集过滤**全局内建 entries**；MCP 桶不过滤。ALS 外（无 Agent 上下文）不过滤
 - **豁免**：`PROTECTED_TOOLS = ["todo_write", "ask_question"]`（具名常量，libs/types-agent）——写入 tools.json 也无效（读取时剔除），UI 灰置
 

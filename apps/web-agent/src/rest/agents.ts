@@ -6,6 +6,7 @@ import type {
   AgentView,
   McpRawInput,
   PromptFileMeta,
+  ToolPrefsView,
 } from "@meshbot/types-agent";
 import { apiClient } from "@meshbot/web-common";
 import { useQuery } from "@tanstack/react-query";
@@ -101,6 +102,22 @@ export async function deleteAgentPrompt(
   await apiClient.delete<void>(
     `/api/agents/${id}/prompts/${encodeURIComponent(file)}`,
   );
+}
+
+/** 查询该 Agent 的工具启停态（全量内建工具，按分组返回，含禁用/豁免标记）。 */
+export async function getAgentTools(id: string): Promise<ToolPrefsView> {
+  const { data } = await apiClient.get<ToolPrefsView>(
+    `/api/agents/${id}/tools`,
+  );
+  return data;
+}
+
+/** 写入该 Agent 的禁用工具列表（全量覆盖，非增量）。 */
+export async function putAgentTools(
+  id: string,
+  disabledTools: string[],
+): Promise<void> {
+  await apiClient.put<void>(`/api/agents/${id}/tools`, { disabledTools });
 }
 
 /** 当前账号的 Agent 列表（Task 11/12 复用同一份缓存，失效走 agentsQueryKey）。 */
