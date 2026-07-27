@@ -493,10 +493,12 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       : 0;
 
     return (
-      <div className="relative overflow-hidden rounded-md border border-border bg-card">
+      <div className="relative">
         {/* `/` 命令下拉菜单：浮在输入框上方（不在 UnifiedSheet 内，z-50 足够）。
             仅 `commands` 非空且 computeSlashMenu 判定 open 时渲染；未传 commands
-            的输入框（dock/远程会话/新消息页）永远不会走到这里。 */}
+            的输入框（dock/远程会话/新消息页）永远不会走到这里。
+            ⚠️ 必须挂在 overflow-hidden 容器**之外**（bottom-full 往上弹 +
+            overflow-hidden 会把它整个裁掉——「渲染了但不可见」同族坑）。 */}
         {menuState.open && (
           <div
             role="listbox"
@@ -534,163 +536,165 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           </div>
         )}
 
-        {/* `/` 命令内联提示（未知命令 / run() 返回的文案）；未命中过任何命令时不渲染。 */}
-        {commandHint && (
-          <div className="border-b border-border px-3 py-1.5 text-muted-foreground text-xs">
-            {commandHint}
-          </div>
-        )}
-
-        {/* 编辑区（tiptap；StarterKit 输入规则让 markdown 边打边可视化） */}
-        <div className="px-3 pt-2.5 pb-1">
-          <div className="max-h-[200px] w-full overflow-y-auto py-1.5">
-            <EditorContent editor={editor} />
-          </div>
-        </div>
-
-        {/* 底部动作栏：左=前导动作（父传 mock 链）；右=token 环 + 上传 + 发送/中断 */}
-        <div className="flex items-center gap-2 px-2.5 pb-2">
-          {leadingActions && (
-            <div className="flex min-w-0 items-center gap-1">
-              {leadingActions}
+        <div className="overflow-hidden rounded-md border border-border bg-card">
+          {/* `/` 命令内联提示（未知命令 / run() 返回的文案）；未命中过任何命令时不渲染。 */}
+          {commandHint && (
+            <div className="border-b border-border px-3 py-1.5 text-muted-foreground text-xs">
+              {commandHint}
             </div>
           )}
 
-          <div className="ml-auto flex shrink-0 items-center gap-1.5">
-            {trailingActions}
-            {tokenUsage && (
-              <>
-                {modelName && (
-                  <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
-                    {modelName}
-                  </span>
-                )}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="h-4 w-4 cursor-pointer">
-                      <svg
-                        className="h-full w-full -rotate-90"
-                        viewBox="0 0 36 36"
-                        role="img"
-                        aria-label="Token usage"
-                      >
-                        <path
-                          className="text-border"
-                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                        />
-                        <path
-                          className="text-accent transition-all"
-                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeDasharray={`${tokenPercent}, 100`}
-                          strokeWidth="4"
-                        />
-                      </svg>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {tokenUsage.breakdown && labels.usage ? (
-                      <div className="space-y-0.5 text-xs">
-                        <div>
-                          {labels.usage.nextRequestLabel}{" "}
-                          {formatTokens(tokenUsage.current)} /{" "}
-                          {formatTokens(tokenUsage.max)}
-                        </div>
-                        <div>
-                          {labels.usage.inputLabel}{" "}
-                          {formatTokens(tokenUsage.breakdown.inputTokens)}
-                          {tokenUsage.breakdown.cacheReadTokens > 0 &&
-                            `（${labels.usage.cacheLabel} ${formatTokens(tokenUsage.breakdown.cacheReadTokens)}）`}
-                        </div>
-                        <div>
-                          {labels.usage.outputLabel}{" "}
-                          {formatTokens(tokenUsage.breakdown.outputTokens)}
-                          {tokenUsage.breakdown.reasoningTokens > 0 &&
-                            `（${labels.usage.reasoningLabel} ${formatTokens(tokenUsage.breakdown.reasoningTokens)}）`}
-                        </div>
-                        {tokenUsage.breakdown.cumulativeTokens !==
-                          undefined && (
-                          <div>
-                            {labels.usage.cumulativeLabel}{" "}
-                            {formatTokens(
-                              tokenUsage.breakdown.cumulativeTokens,
-                            )}
-                          </div>
-                        )}
-                        <div>
-                          {labels.usage.callCount(
-                            tokenUsage.breakdown.callCount,
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        {formatTokens(tokenUsage.current)} /{" "}
-                        {formatTokens(tokenUsage.max)}
-                      </>
-                    )}
-                  </TooltipContent>
-                </Tooltip>
-              </>
+          {/* 编辑区（tiptap；StarterKit 输入规则让 markdown 边打边可视化） */}
+          <div className="px-3 pt-2.5 pb-1">
+            <div className="max-h-[200px] w-full overflow-y-auto py-1.5">
+              <EditorContent editor={editor} />
+            </div>
+          </div>
+
+          {/* 底部动作栏：左=前导动作（父传 mock 链）；右=token 环 + 上传 + 发送/中断 */}
+          <div className="flex items-center gap-2 px-2.5 pb-2">
+            {leadingActions && (
+              <div className="flex min-w-0 items-center gap-1">
+                {leadingActions}
+              </div>
             )}
 
-            {/* 上传（mock 占位，点击无副作用；真实上传 L1 不做） */}
-            <button
-              type="button"
-              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              title={labels.attachment}
-            >
-              <Paperclip className="h-4 w-4" />
-            </button>
+            <div className="ml-auto flex shrink-0 items-center gap-1.5">
+              {trailingActions}
+              {tokenUsage && (
+                <>
+                  {modelName && (
+                    <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+                      {modelName}
+                    </span>
+                  )}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="h-4 w-4 cursor-pointer">
+                        <svg
+                          className="h-full w-full -rotate-90"
+                          viewBox="0 0 36 36"
+                          role="img"
+                          aria-label="Token usage"
+                        >
+                          <path
+                            className="text-border"
+                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          />
+                          <path
+                            className="text-accent transition-all"
+                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeDasharray={`${tokenPercent}, 100`}
+                            strokeWidth="4"
+                          />
+                        </svg>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {tokenUsage.breakdown && labels.usage ? (
+                        <div className="space-y-0.5 text-xs">
+                          <div>
+                            {labels.usage.nextRequestLabel}{" "}
+                            {formatTokens(tokenUsage.current)} /{" "}
+                            {formatTokens(tokenUsage.max)}
+                          </div>
+                          <div>
+                            {labels.usage.inputLabel}{" "}
+                            {formatTokens(tokenUsage.breakdown.inputTokens)}
+                            {tokenUsage.breakdown.cacheReadTokens > 0 &&
+                              `（${labels.usage.cacheLabel} ${formatTokens(tokenUsage.breakdown.cacheReadTokens)}）`}
+                          </div>
+                          <div>
+                            {labels.usage.outputLabel}{" "}
+                            {formatTokens(tokenUsage.breakdown.outputTokens)}
+                            {tokenUsage.breakdown.reasoningTokens > 0 &&
+                              `（${labels.usage.reasoningLabel} ${formatTokens(tokenUsage.breakdown.reasoningTokens)}）`}
+                          </div>
+                          {tokenUsage.breakdown.cumulativeTokens !==
+                            undefined && (
+                            <div>
+                              {labels.usage.cumulativeLabel}{" "}
+                              {formatTokens(
+                                tokenUsage.breakdown.cumulativeTokens,
+                              )}
+                            </div>
+                          )}
+                          <div>
+                            {labels.usage.callCount(
+                              tokenUsage.breakdown.callCount,
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {formatTokens(tokenUsage.current)} /{" "}
+                          {formatTokens(tokenUsage.max)}
+                        </>
+                      )}
+                    </TooltipContent>
+                  </Tooltip>
+                </>
+              )}
 
-            {/* 运行中只显示中断（发送隐藏，Enter 同步禁用——见 handleSend
+              {/* 上传（mock 占位，点击无副作用；真实上传 L1 不做） */}
+              <button
+                type="button"
+                className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                title={labels.attachment}
+              >
+                <Paperclip className="h-4 w-4" />
+              </button>
+
+              {/* 运行中只显示中断（发送隐藏，Enter 同步禁用——见 handleSend
                 守卫）；想发新消息先停止当前 run。排队追加的后端能力保留，
                 仅不再从此入口暴露。
                 观察态（`canInterrupt=false`，Bug 1 修复）：按钮仍然占位
                 （保持底部动作栏布局不跳动），但改为禁用态——不接 onClick、
                 变灰、title 换成解释文案，不能让用户点了以为真的停了但设备上
                 那个 run 其实还在继续跑。 */}
-            {isLoading ? (
-              canInterrupt ? (
-                <button
-                  type="button"
-                  onClick={handleInterrupt}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center text-destructive transition-colors hover:text-destructive/80"
-                  title={labels.interrupt}
-                >
-                  <Square className="h-4 w-4 fill-current" />
-                </button>
+              {isLoading ? (
+                canInterrupt ? (
+                  <button
+                    type="button"
+                    onClick={handleInterrupt}
+                    className="flex h-8 w-8 shrink-0 items-center justify-center text-destructive transition-colors hover:text-destructive/80"
+                    title={labels.interrupt}
+                  >
+                    <Square className="h-4 w-4 fill-current" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    aria-disabled="true"
+                    className="flex h-8 w-8 shrink-0 cursor-not-allowed items-center justify-center text-muted-foreground/40"
+                    title={labels.interruptUnavailable ?? labels.interrupt}
+                  >
+                    <Square className="h-4 w-4 fill-current" />
+                  </button>
+                )
               ) : (
                 <button
                   type="button"
-                  disabled
-                  aria-disabled="true"
-                  className="flex h-8 w-8 shrink-0 cursor-not-allowed items-center justify-center text-muted-foreground/40"
-                  title={labels.interruptUnavailable ?? labels.interrupt}
+                  onClick={handleSend}
+                  disabled={!hasContent || commandRunning}
+                  className={cn(
+                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors",
+                    hasContent && !commandRunning
+                      ? "bg-(--shell-accent) text-white"
+                      : "text-muted-foreground",
+                  )}
+                  title={labels.send}
                 >
-                  <Square className="h-4 w-4 fill-current" />
+                  <Send className="h-4 w-4" />
                 </button>
-              )
-            ) : (
-              <button
-                type="button"
-                onClick={handleSend}
-                disabled={!hasContent || commandRunning}
-                className={cn(
-                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors",
-                  hasContent && !commandRunning
-                    ? "bg-(--shell-accent) text-white"
-                    : "text-muted-foreground",
-                )}
-                title={labels.send}
-              >
-                <Send className="h-4 w-4" />
-              </button>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>
