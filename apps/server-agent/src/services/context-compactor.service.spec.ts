@@ -144,14 +144,33 @@ describe("ContextCompactor", () => {
     expect(emitSpy).not.toHaveBeenCalled();
   });
 
-  it("force=true 且无可压缩 → 抛 CompactionNothingToCompact", async () => {
+  it("force=true 且工作集≤2 条（摘要区必为空）→ 抛 CompactionNothingToCompact", async () => {
     modelConfig.findEnabled.mockResolvedValue({
       contextWindow: 1_000_000,
     } as never);
-    threadState.getMessagesSnapshot.mockResolvedValue(buildMessages(2));
+    // buildMessages(1) = 1 对 = 2 条：留最近 2 条后摘要区为空，真的没东西可压。
+    threadState.getMessagesSnapshot.mockResolvedValue(buildMessages(1));
     await expect(
       compactor.compact("s1", { force: true, reason: "ctx-exceeded" }),
     ).rejects.toBeInstanceOf(CompactionNothingToCompact);
+  });
+
+  it("force=true + 长对话但都在保留预算内 → 尽力压缩（留最近 2 条、其余摘要）", async () => {
+    // 超大上下文窗口：预算算法判定「都在保留预算内」→ splitIdx=0；
+    // force 应回退到「留最近 2 条」而非抛 CompactionNothingToCompact。
+    modelConfig.findEnabled.mockResolvedValue({
+      contextWindow: 1_000_000,
+    } as never);
+    modelResolver.summarize.mockResolvedValue({
+      text: "摘要",
+      usage: { inputTokens: 10, outputTokens: 5 },
+    } as never);
+    // buildMessages(10) = 10 对 = 20 条工作集 → 留最近 2 条 → 摘要覆盖前 18 条。
+    threadState.getMessagesSnapshot.mockResolvedValue(buildMessages(10));
+    const r = await compactor.compact("s1", { force: true });
+    expect(r).not.toBeNull();
+    expect(r?.removedCount).toBe(18);
+    expect(modelResolver.summarize).toHaveBeenCalledTimes(1);
   });
 
   it("summarize LLM 抛错 → 不动 state + emit Error + 抛 CompactionError", async () => {

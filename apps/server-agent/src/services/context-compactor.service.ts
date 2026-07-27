@@ -123,6 +123,13 @@ export class ContextCompactor {
     // 系统消息后的 rest 计算，而非原始 messages）
     const keepBudget = Math.floor(ctx * COMPACTION_RECENT_RATIO);
     let splitIdx = findSplitIndex(rest, keepBudget);
+    // force（手动 /compact）语义是「尽力压缩」：预算算法判定「都在保留预算内、
+    // 无需压缩」（splitIdx=0）时，回退到「只留最近 2 条、其余全摘要」——否则
+    // 用户主动点了压缩却被「没有可压缩的内容」挡回，很反直觉（对话明明很长）。
+    // 真正没东西可压（rest≤2 条）由下方 rest.length-splitIdx<2 与二次判零兜底。
+    if (splitIdx === 0 && opts.force && rest.length > 2) {
+      splitIdx = rest.length - 2;
+    }
     splitIdx = expandToToolBoundary(rest, splitIdx);
     if (splitIdx === 0) {
       if (opts.force) throw new CompactionNothingToCompact();
