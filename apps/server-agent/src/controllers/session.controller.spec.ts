@@ -220,15 +220,19 @@ describe("SessionController.create() —— agentId 解析与落库校验", () =
 
 describe("SessionController.compact() —— /compact 命令主动触发压缩", () => {
   /** 组装一个仅关心 compact() 的 controller；无关依赖用最小 stub。 */
-  function makeController(compactImpl: jest.Mock) {
+  function makeController(compactImpl: jest.Mock, inflight?: object) {
     const findSessionOrFail = jest.fn().mockResolvedValue(undefined);
     const sessions = { findSessionOrFail } as unknown as SessionService;
     const contextCompactor = {
       compact: compactImpl,
     } as unknown as ContextCompactor;
+    // runner mock：该用例无活跃 run，前置校验放行（真正拦截由 findSessionOrFail 先抛）。
+    const runner = {
+      getInflight: jest.fn().mockReturnValue(inflight ?? null),
+    } as unknown as RunnerService;
     const controller = new SessionController(
       sessions,
-      undefined as never,
+      runner,
       undefined as never,
       undefined as never,
       undefined as never,
@@ -237,8 +241,16 @@ describe("SessionController.compact() —— /compact 命令主动触发压缩",
       undefined as never,
       contextCompactor,
     );
-    return { controller, findSessionOrFail, contextCompactor };
+    return { controller, findSessionOrFail, contextCompactor, runner };
   }
+
+  it("会话有活跃 run → 400 且不触发压缩（并发竞态前置校验）", async () => {
+    const compact = jest.fn();
+    const { controller } = makeController(compact, { messageId: "m1" });
+
+    await expect(controller.compact("s1")).rejects.toThrow("会话正在运行中");
+    expect(compact).not.toHaveBeenCalled();
+  });
 
   it("压缩成功 → 校验会话归属后回 removedCount + summaryPreview（摘要截前 200 字）", async () => {
     const longSummary = "S".repeat(250);
@@ -286,9 +298,14 @@ describe("SessionController.compact() —— /compact 命令主动触发压缩",
     const contextCompactor = {
       compact,
     } as unknown as ContextCompactor;
+    // runner mock：getInflight 默认无活跃 run（压缩前置校验放行）；
+    // 「运行中 → 400」用例单独覆写。
+    const runner = {
+      getInflight: jest.fn().mockReturnValue(null),
+    } as unknown as RunnerService;
     const controller = new SessionController(
       sessions,
-      undefined as never,
+      runner,
       undefined as never,
       undefined as never,
       undefined as never,

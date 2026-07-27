@@ -184,6 +184,13 @@ export class SessionController {
   @ApiOkResponse({ type: CompactSessionResponseDto })
   async compact(@Param("id") id: string): Promise<CompactSessionResponse> {
     await this.sessions.findSessionOrFail(id);
+    // 活跃 run 前置校验（审查 High）：压缩快照→60s 摘要→改写 的窗口若与流式
+    // run 的增量 checkpoint 写并发，过期 removeIds 合并会把 run 新写入的消息
+    // 挤到摘要块之前、甚至切断 tool_call/result 配对（下一轮 provider 400）。
+    // 自动压缩安全是因为它在 runOnce 内串行；手动端点必须自己挡。
+    if (this.runner.getInflight(id)) {
+      throw new BadRequestException("会话正在运行中，请等当前回复完成后再压缩");
+    }
     try {
       const result = await this.contextCompactor.compact(id, { force: true });
       // force:true 时 compact() 要么返回结果要么抛 CompactionNothingToCompact，
