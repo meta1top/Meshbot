@@ -755,7 +755,7 @@
       "deleteConfirmDescription": "This also deletes all of this agent's chats, memory and workspace files. This cannot be undone.",
       "deleteConfirm": "Delete",
       "mcpTitle": "MCP server configuration",
-      "mcpDescription": "Edit this agent's mcp.json. Changes take effect on the next reply.",
+      "mcpDescription": "Edit this agent's mcp.json. Changes take effect immediately — new tools are usable right away.",
       "mcpLoadFailed": "Failed to load MCP configuration, please retry",
       "mcpPlaceholder": "Paste mcp.json content, e.g. Claude Desktop / Claude Code mcpServers config",
       "mcpJsonInvalid": "Invalid JSON: {detail}",

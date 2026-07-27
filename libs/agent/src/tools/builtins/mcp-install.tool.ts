@@ -29,8 +29,8 @@ export class McpInstallTool implements MeshbotTool<Args, string> {
     "Install a new MCP server (stdio command, or http/sse url) into this agent's " +
     "mcp.json. Requires explicit user confirmation before writing — stdio installs " +
     "authorize a persistent local command. Fails if `name` already exists (uninstall " +
-    "or edit it manually instead of overwriting). Takes effect from the next " +
-    "conversation turn — tell the user so.";
+    "or edit it manually instead of overwriting). Takes effect immediately — the " +
+    "new tools are already usable in this very turn.";
   readonly schema = ArgsSchema;
 
   constructor(
@@ -102,7 +102,7 @@ export class McpInstallTool implements MeshbotTool<Args, string> {
     }
     return result(
       "installed",
-      `已安装 MCP 服务器 "${args.name}"。下一轮对话生效——请告知用户。`,
+      `已安装 MCP 服务器 "${args.name}"，已生效（新工具本轮对话内立即可用）——请告知用户。`,
     );
   }
 }

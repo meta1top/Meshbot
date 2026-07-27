@@ -39,6 +39,17 @@ interface AgentMcp {
 }
 
 /**
+ * 已被 `teardownAgent` 移出 `perAgent`、但仍有活跃 run 持有引用
+ * （`refCount > 0`）的运行态：client 关闭延迟到 `release()` 把它降到 0——
+ * 见 `retired` 字段的并发不变量说明。
+ */
+interface RetiredAgentMcp {
+  entry: AgentMcp;
+  /** 挂起时刻，供 `sweepIdle` 的安全网判断「卡住太久」。 */
+  retiredAt: number;
+}
+
+/**
  * MCP 集成入口（v4 按「账号+Agent」懒加载）。生命周期：
  *
  * - 不再登录时一次性起账号全部 MCP —— 5 个 Agent × 3 个 stdio server 登录就要拉
@@ -49,6 +60,23 @@ interface AgentMcp {
  *   `release` 必须在 `finally` 里——否则 run 抛错后引用计数永远漏，回收会
  *   被永久跳过。
  * - `onModuleDestroy`：拆掉所有 Agent 的 client，关子进程 / 长连接。
+ *
+ * **热重载并发不变量**（`reloadAgent` / `updateConfig` 尾调）：`teardownAgent`
+ * 若发现当前 entry `refCount > 0`（有 run 正在用），**不会立即 close
+ * client**——那会打断正在执行中的 MCP 工具调用。而是把 entry 移入
+ * `retired`（挂起列表），`perAgent` 上同 key 立刻换成新建的 entry（新工具
+ * 立即可见，热生效不受影响）。旧 run 结束时调用不带任何身份信息的
+ * `release(cloudUserId, agentId)`——`release` 优先在 `retired` 里找同 key
+ * 最老的一条递减，归零才 close；只有当该 key 没有挂起条目时才落回递减
+ * `perAgent` 里的当前 entry。这保证了：① 旧 entry 的 client 只在其自身引用
+ * 真正归零后才关，不会打断在用的 run；② 新 entry 的 refCount 不会被旧 run
+ * 的 release 误伤（不会出现"新 entry 计数被顶成负数/提前判定可回收"）。
+ * 已知局限：若同一 Agent 存在**跨越同一次 reload 边界的多个并发 run**（一个
+ * 在 reload 前 acquire、另一个在 reload 后 acquire），仅凭 `(cloudUserId,
+ * agentId)` 无法从 release 调用本身分辨它对应哪次 acquire——`retired`
+ * 优先的策略在这种交叉场景下无法保证 100% 精确配对（需要调用方回传
+ * acquire 返回的身份令牌才能根治，但 RunnerService 的调用签名不在本次改
+ * 动范围内）；`sweepIdle` 的安全网会兜底避免真正的永久泄漏。
  */
 @Injectable()
 export class McpService implements OnModuleInit, OnModuleDestroy {
@@ -56,6 +84,13 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
 
   /** `${cloudUserId}:${agentId}` → 该 Agent 的 MCP 运行态。 */
   private readonly perAgent = new Map<string, AgentMcp>();
+
+  /**
+   * `${cloudUserId}:${agentId}` → 该 key 下挂起等待 refCount 归零才关闭的
+   * 旧运行态列表（通常 0~1 条；理论上可能因短时间内多次 reload 而堆叠多条，
+   * 用数组按挂起顺序保留全部）。
+   */
+  private readonly retired = new Map<string, RetiredAgentMcp[]>();
 
   /**
    * `ensureAgent` 按 key 缓存进行中的 promise（进程内 in-flight 去重）。
@@ -189,9 +224,32 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** 活跃 run 结束（解除回收保护）。 */
+  /**
+   * 活跃 run 结束（解除回收保护）。**身份路由**：若该 key 存在挂起的旧
+   * entry（`retired`，即 run 开始时用的是 reload 前的旧运行态），优先递减
+   * 最老的那条——归零则 close 其 client 并移出挂起列表；只有 `retired`
+   * 里没有该 key 的挂起条目时，才落回递减 `perAgent` 里的当前 entry。
+   * 这样即使调用方（RunnerService）不携带任何身份令牌，也不会把旧 run 的
+   * release 误算到 reload 后的新 entry 头上（新 entry 计数虚高会让 sweepIdle
+   * 误判为"仍在使用"更安全；反过来算错到旧 entry 上更危险——旧 entry
+   * 提前归零会在新 run 使用旧 client 的窗口期把它关掉，因此宁可优先扣旧的）。
+   */
   release(cloudUserId: string, agentId: string): void {
-    const entry = this.perAgent.get(agentKey(cloudUserId, agentId));
+    const key = agentKey(cloudUserId, agentId);
+    const retiredList = this.retired.get(key);
+    const oldest = retiredList?.[0];
+    if (retiredList && oldest) {
+      oldest.entry.refCount = Math.max(0, oldest.entry.refCount - 1);
+      if (oldest.entry.refCount === 0) {
+        retiredList.shift();
+        if (retiredList.length === 0) {
+          this.retired.delete(key);
+        }
+        void this.closeEntryClient(key, oldest.entry);
+      }
+      return;
+    }
+    const entry = this.perAgent.get(key);
     if (entry) {
       entry.refCount = Math.max(0, entry.refCount - 1);
       entry.lastUsedAt = Date.now();
@@ -203,6 +261,12 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
    * now 显式传入便于测试；生产由定时器每 5 分钟调一次。
    *
    * refCount > 0 一律跳过——有 run 正在跑时回收会当场抽掉它的工具。
+   *
+   * 安全网：正常情况下 `retired` 条目会在对应 run 的 `release()`（`finally`
+   * 里必调）归零后自然清空；若调用方有 bug 漏调 release 或进程异常导致
+   * refCount 永远卡住，这里按 `retiredAt` 超过闲置阈值强制关闭，避免子
+   * 进程 / 长连接永久泄漏（`release()` 身份路由无法做到 100% 精确匹配，
+   * 见类注释「已知局限」，这层安全网兜底真正的永久泄漏场景）。
    */
   async sweepIdle(now: number): Promise<void> {
     for (const [key, entry] of [...this.perAgent.entries()]) {
@@ -211,9 +275,32 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
       const { cloudUserId, agentId } = splitAgentKey(key);
       await this.teardownAgent(cloudUserId, agentId);
     }
+    for (const [key, list] of [...this.retired.entries()]) {
+      const stale = list.filter((r) => now - r.retiredAt >= IDLE_RECLAIM_MS);
+      if (stale.length === 0) continue;
+      for (const r of stale) {
+        this.logger.warn(
+          `Retired MCP entry for ${key} stuck with refCount=${r.entry.refCount} past idle threshold; force closing (possible release() leak).`,
+        );
+        await this.closeEntryClient(key, r.entry);
+      }
+      const remaining = list.filter((r) => now - r.retiredAt < IDLE_RECLAIM_MS);
+      if (remaining.length > 0) {
+        this.retired.set(key, remaining);
+      } else {
+        this.retired.delete(key);
+      }
+    }
   }
 
-  /** 拆掉单个 Agent 的 MCP 运行态：反注册工具、关闭 client。幂等。 */
+  /**
+   * 拆掉单个 Agent 的 MCP 运行态：反注册工具、关闭 client。幂等。
+   *
+   * **refCount > 0 时不会立即关闭 client**——有 run 正在用（典型场景：
+   * `reloadAgent` 由该 run 自己触发的 MCP 写工具调用引起），当场关闭会打断
+   * 它正在执行中的工具调用。此时把 entry 移入 `retired` 挂起，delay close
+   * 到 `release()` 把它的引用计数降到 0（见 `release` 的身份路由注释）。
+   */
   async teardownAgent(cloudUserId: string, agentId: string): Promise<void> {
     const key = agentKey(cloudUserId, agentId);
     const entry = this.perAgent.get(key);
@@ -222,6 +309,20 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
     }
     this.perAgent.delete(key);
     this.registry.unregisterAgent(cloudUserId, agentId);
+    if (entry.refCount > 0) {
+      const list = this.retired.get(key) ?? [];
+      list.push({ entry, retiredAt: Date.now() });
+      this.retired.set(key, list);
+      this.logger.log(
+        `MCP entry for ${key} retired with refCount=${entry.refCount}; client close deferred until drained.`,
+      );
+      return;
+    }
+    await this.closeEntryClient(key, entry);
+  }
+
+  /** best-effort 关闭 entry 的 client（`client:null` 安全 no-op）。 */
+  private async closeEntryClient(key: string, entry: AgentMcp): Promise<void> {
     if (!entry.client) {
       return;
     }
@@ -252,6 +353,11 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
     this.sweepTimer.unref();
   }
 
+  /**
+   * 进程退出：拆全部 Agent 运行态。`teardownAgent` 对 refCount>0 的 entry
+   * 只会挂 retired、不关闭——但进程都要退出了，没有"等 release 归零"的
+   * 意义，因此这里额外强制关闭全部挂起条目（忽略其 refCount）。
+   */
   async onModuleDestroy(): Promise<void> {
     if (this.sweepTimer) {
       clearInterval(this.sweepTimer);
@@ -260,6 +366,12 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
       const { cloudUserId, agentId } = splitAgentKey(key);
       await this.teardownAgent(cloudUserId, agentId);
     }
+    for (const [key, list] of [...this.retired.entries()]) {
+      for (const r of list) {
+        await this.closeEntryClient(key, r.entry);
+      }
+    }
+    this.retired.clear();
   }
 
   /**
@@ -313,7 +425,10 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
   /**
    * 读-改-写 mcp.json（单一写入真相：REST PUT 与自管理工具共用）。
    * mutator 拿到当前配置（无文件时为空配置）返回新配置；校验失败抛错不落盘；
-   * 成功落盘后失效当前 Agent 运行态（下次 run 重建）。须在账号+Agent ALS 内调用。
+   * 成功落盘后立即 `reloadAgent`（teardown + 重建）——**本轮对话内热生效**：
+   * supervisor 每步现算工具集（`graph.builder` 的 toolsProvider），下一个
+   * supervisor 步就能看到新工具，不必等到下一轮对话。须在账号+Agent ALS
+   * 内调用。
    */
   async updateConfig(mutator: (config: McpConfig) => McpConfig): Promise<void> {
     const current = this.loadConfig() ?? { mcpServers: {} };
@@ -321,10 +436,27 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
     const path = this.config.getMcpConfigPath();
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, `${JSON.stringify(next, null, 2)}\n`, "utf8");
-    await this.teardownAgent(
+    await this.reloadAgent(
       this.account.getOrThrow(),
       this.agentCtx.getOrThrow(),
     );
+  }
+
+  /**
+   * teardown + 立即 `ensureAgent` 重建运行态，供 `updateConfig` 尾调。
+   *
+   * **降级语义**：`ensureAgent`/`doEnsureAgent` 自身已把「新配置连不上」
+   * 兜底为空运行态（`onConnectionError:"ignore"` + `registerEmptyRuntime`），
+   * 从不向外抛错——因此这里不需要额外 try/catch：配置本身合法就应该落盘
+   * 成功，重建连不上只是运行态退化为空，不应该让 `updateConfig` 抛错回滚
+   * 已经写盘的合法配置。
+   */
+  private async reloadAgent(
+    cloudUserId: string,
+    agentId: string,
+  ): Promise<void> {
+    await this.teardownAgent(cloudUserId, agentId);
+    await this.ensureAgent(cloudUserId, agentId);
   }
 
   /** 该 Agent 本轮运行态已加载的 MCP 工具名（null = 尚无运行态/未加载）。 */

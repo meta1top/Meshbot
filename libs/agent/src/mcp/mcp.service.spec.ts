@@ -492,7 +492,7 @@ describe("McpService 按 Agent 懒加载 + 引用计数 + 闲置回收", () => {
       expect(teardownSpy).not.toHaveBeenCalled();
     });
 
-    it("mutator 产物合法 → 先落盘再 teardown（次序断言：teardown 触发时文件必已可见），且失效当前运行态", async () => {
+    it("mutator 产物合法 → 先落盘再 teardown（次序断言：teardown 触发时文件必已可见），且立即重建运行态（热生效，不再是失效等下次 run）", async () => {
       writeMcpJson(home, "u1", "agent-a", ONE_SERVER);
       svc.stubs = [makeStubClient([fakeLcTool("mcp__fs__read")])];
       await runInContext("u1", "agent-a", () =>
@@ -502,6 +502,12 @@ describe("McpService 按 Agent 懒加载 + 引用计数 + 闲置回收", () => {
 
       const target = mcpJsonPath("u1", "agent-a");
       const teardownSpy = vi.spyOn(svc, "teardownAgent");
+      // reload 会立即 ensureAgent 重建，需要给第二次 createClient 备一个 stub。
+      const reloadedStub = makeStubClient([
+        fakeLcTool("mcp__fs__read"),
+        fakeLcTool("mcp__web__fetch"),
+      ]);
+      svc.stubs.push(reloadedStub);
 
       await runInContext("u1", "agent-a", () =>
         svc.updateConfig((cfg) => ({
@@ -520,8 +526,119 @@ describe("McpService 按 Agent 懒加载 + 引用计数 + 闲置回收", () => {
       expect(teardownSpy).toHaveBeenCalledWith("u1", "agent-a");
       expect(teardownCall).toBeGreaterThan(0);
 
-      // teardown 生效：运行态已失效。
-      expect(svc.getLoadedToolNames("u1", "agent-a")).toBeNull();
+      // 热生效：运行态已立即用新配置重建（本轮对话内可见），不是失效等下次 run。
+      expect(svc.createdServers).toHaveLength(2);
+      const names = svc.getLoadedToolNames("u1", "agent-a");
+      expect(names).not.toBeNull();
+      expect([...(names ?? [])].sort()).toEqual([
+        "mcp__fs__read",
+        "mcp__web__fetch",
+      ]);
+    });
+
+    it("reload 后新 client 连不上（getTools 抛错）→ updateConfig 不抛错、不回滚落盘，运行态退化为空", async () => {
+      // Self-review 要求的降级路径：配置本身合法（schema 校验通过、已落盘），
+      // 只是重建连接失败——不能让 updateConfig 向调用方抛错，否则看起来像
+      // "写配置失败"，但实际上文件已经写好了，语义会前后矛盾。
+      writeMcpJson(home, "u1", "agent-a", ONE_SERVER);
+      svc.stubs = [makeStubClient([fakeLcTool("mcp__fs__read")])];
+      await runInContext("u1", "agent-a", () =>
+        svc.ensureAgent("u1", "agent-a"),
+      );
+
+      const target = mcpJsonPath("u1", "agent-a");
+      svc.stubs.push(makeFailingStubClient(new Error("handshake failed")));
+
+      await runInContext("u1", "agent-a", () =>
+        svc.updateConfig((cfg) => ({
+          mcpServers: {
+            ...cfg.mcpServers,
+            web: { command: "echo", args: ["broken"] },
+          },
+        })),
+      );
+
+      // 落盘已经成功，不回滚。
+      expect(existsSync(target)).toBe(true);
+      const written = JSON.parse(readFileSync(target, "utf8"));
+      expect(written.mcpServers.web.command).toBe("echo");
+      // 运行态已登记（非 null），但工具集为空——重建失败的既有降级语义。
+      const names = svc.getLoadedToolNames("u1", "agent-a");
+      expect(names).not.toBeNull();
+      expect([...(names ?? [])]).toEqual([]);
+    });
+
+    it("并发不变量：run 持旧 entry 期间 updateConfig 触发 reload，旧 entry release 不影响新 entry 计数，旧 client 在归零后才 close", async () => {
+      // 复现 brief 里描述的核心风险：teardownAgent 把旧 entry 移出 perAgent
+      // 后，若 release() 仍按 key 查 perAgent，会错误地扣减「reload 后新建的
+      // entry」的引用计数——本用例锁定修复后的正确行为。
+      writeMcpJson(home, "u1", "agent-a", ONE_SERVER);
+      const oldStub = makeStubClient([fakeLcTool("mcp__fs__read")]);
+      svc.stubs = [oldStub];
+      await runInContext("u1", "agent-a", () =>
+        svc.ensureAgent("u1", "agent-a"),
+      );
+
+      // 模拟 RunnerService：run 开始时 acquire，之后才在 run 内部调用
+      // mcp_install 之类的写工具触发 reload。
+      svc.acquire("u1", "agent-a");
+
+      const newStub = makeStubClient([
+        fakeLcTool("mcp__fs__read"),
+        fakeLcTool("mcp__web__fetch"),
+      ]);
+      svc.stubs.push(newStub);
+      await runInContext("u1", "agent-a", () =>
+        svc.updateConfig((cfg) => ({
+          mcpServers: {
+            ...cfg.mcpServers,
+            web: { command: "echo", args: ["web"] },
+          },
+        })),
+      );
+
+      // reload 已经切到新 entry：清单立即热更新，旧 client 尚未关闭（run 仍在用）。
+      const namesAfterReload = svc.getLoadedToolNames("u1", "agent-a");
+      expect([...(namesAfterReload ?? [])].sort()).toEqual([
+        "mcp__fs__read",
+        "mcp__web__fetch",
+      ]);
+      expect(oldStub.close).not.toHaveBeenCalled();
+
+      // 旧 run 结束，release：应该精确命中旧（retired）entry，不影响新 entry。
+      svc.release("u1", "agent-a");
+      expect(oldStub.close).toHaveBeenCalledTimes(1);
+      expect(newStub.close).not.toHaveBeenCalled();
+
+      // 证明新 entry 的引用计数没有被旧 run 的 release 污染：接下来对它走一遍
+      // 标准的 acquire → sweepIdle（有引用不回收）→ release → sweepIdle（回收）
+      // 流程，行为应与「从未发生过 reload」的普通 entry 完全一致。若新 entry
+      // 的计数被污染成非 0 值，这里的 acquire/release 配对会立刻错位。
+      svc.acquire("u1", "agent-a");
+      await svc.sweepIdle(Date.now() + 31 * 60_000);
+      expect(newStub.close).not.toHaveBeenCalled();
+      svc.release("u1", "agent-a");
+      await svc.sweepIdle(Date.now() + 62 * 60_000);
+      expect(newStub.close).toHaveBeenCalledTimes(1);
+    });
+
+    it("并发安全网：teardown 后 retired 条目卡住超过闲置阈值未 release，sweepIdle 强制关闭避免永久泄漏", async () => {
+      writeMcpJson(home, "u1", "agent-a", ONE_SERVER);
+      const oldStub = makeStubClient([fakeLcTool("mcp__fs__read")]);
+      svc.stubs = [oldStub];
+      await runInContext("u1", "agent-a", () =>
+        svc.ensureAgent("u1", "agent-a"),
+      );
+      svc.acquire("u1", "agent-a");
+
+      svc.stubs.push(makeStubClient([fakeLcTool("mcp__fs__read")]));
+      await runInContext("u1", "agent-a", () => svc.updateConfig((cfg) => cfg));
+
+      // 模拟调用方 bug：一直不 release，refCount 永远卡在 1。
+      expect(oldStub.close).not.toHaveBeenCalled();
+      await svc.sweepIdle(Date.now() + 31 * 60_000);
+      // 安全网触发：超过闲置阈值强制关闭，即使 refCount 仍 > 0。
+      expect(oldStub.close).toHaveBeenCalledTimes(1);
     });
 
     it("无文件时 mutator 拿到空配置（mcpServers: {}）", async () => {

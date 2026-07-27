@@ -102,7 +102,7 @@ describe("mcp_list", () => {
 });
 
 describe("mcp_install", () => {
-  it("confirmed 才写入配置，返回文案含「下一轮对话生效」", async () => {
+  it("confirmed 才写入配置，返回文案含「已生效」", async () => {
     const { mcp, getState } = makeFakeMcpService({ mcpServers: {} });
     const port: McpConfirmPort = {
       confirmInstall: vi.fn().mockResolvedValue("confirmed"),
@@ -110,7 +110,7 @@ describe("mcp_install", () => {
     const tool = new McpInstallTool(mcp, port);
     const server = { command: "npx", args: ["-y", "pkg"] };
     const out = await tool.execute({ name: "fs", server }, CTX);
-    expect(out).toContain("下一轮对话生效");
+    expect(out).toContain("已生效");
     expect(getState().mcpServers.fs).toEqual(server);
     expect(port.confirmInstall).toHaveBeenCalledWith(
       { sessionId: "s1", toolCallId: "t1", name: "fs", server },
@@ -188,13 +188,13 @@ describe("mcp_install", () => {
 });
 
 describe("mcp_uninstall", () => {
-  it("删除已存在的 server，返回文案含「下一轮对话生效」", async () => {
+  it("删除已存在的 server，返回文案含「已生效」", async () => {
     const { mcp, getState } = makeFakeMcpService({
       mcpServers: { fs: { command: "npx" } },
     });
     const tool = new McpUninstallTool(mcp);
     const out = await tool.execute({ name: "fs" }, CTX);
-    expect(out).toContain("下一轮对话生效");
+    expect(out).toContain("已生效");
     expect(getState().mcpServers.fs).toBeUndefined();
   });
 
@@ -208,13 +208,13 @@ describe("mcp_uninstall", () => {
 });
 
 describe("mcp_enable / mcp_disable", () => {
-  it("mcp_disable 翻转 enabled 为 false，返回文案含「下一轮对话生效」", async () => {
+  it("mcp_disable 翻转 enabled 为 false，返回文案含「已生效」", async () => {
     const { mcp, getState } = makeFakeMcpService({
       mcpServers: { fs: { command: "npx" } },
     });
     const tool = new McpDisableTool(mcp);
     const out = await tool.execute({ name: "fs" }, CTX);
-    expect(out).toContain("下一轮对话生效");
+    expect(out).toContain("已生效");
     expect(getState().mcpServers.fs?.enabled).toBe(false);
   });
 
@@ -234,7 +234,7 @@ describe("mcp_enable / mcp_disable", () => {
     });
     const tool = new McpEnableTool(mcp);
     const out = await tool.execute({ name: "fs" }, CTX);
-    expect(out).toContain("下一轮对话生效");
+    expect(out).toContain("已生效");
     expect(getState().mcpServers.fs?.enabled).toBe(true);
   });
 

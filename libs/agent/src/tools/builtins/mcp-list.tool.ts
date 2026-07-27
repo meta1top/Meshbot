@@ -22,8 +22,11 @@ export class McpListTool implements MeshbotTool<McpListArgs, string> {
   readonly name = "mcp_list";
   readonly description =
     "List all MCP servers configured for this agent (mcp.json), including " +
-    "disabled ones, plus this run's loaded tool count per server. Use this before " +
-    "deciding to install/uninstall/enable/disable a server.";
+    "disabled ones, plus this run's loaded tool count per server. Reflects the " +
+    "current live runtime state in real time — install/uninstall/enable/disable " +
+    "take effect immediately, so this list is always up to date even within the " +
+    "same turn. Use this before deciding to install/uninstall/enable/disable a " +
+    "server.";
   readonly schema = McpListArgsSchema;
 
   constructor(
