@@ -759,6 +759,7 @@
       "mcpLoadFailed": "加载 MCP 配置失败，请重试",
       "mcpPlaceholder": "粘贴 mcp.json 内容，如 Claude Desktop / Claude Code 的 mcpServers 配置",
       "mcpJsonInvalid": "JSON 格式错误：{detail}",
+      "mcpFormat": "格式化",
       "mcpSave": "保存 MCP 配置",
       "mcpSaving": "保存中…",
       "mcpSaveFailed": "保存失败，请重试",

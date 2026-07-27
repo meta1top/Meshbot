@@ -759,6 +759,7 @@
       "mcpLoadFailed": "Failed to load MCP configuration, please retry",
       "mcpPlaceholder": "Paste mcp.json content, e.g. Claude Desktop / Claude Code mcpServers config",
       "mcpJsonInvalid": "Invalid JSON: {detail}",
+      "mcpFormat": "Format",
       "mcpSave": "Save MCP configuration",
       "mcpSaving": "Saving…",
       "mcpSaveFailed": "Save failed, please retry",
