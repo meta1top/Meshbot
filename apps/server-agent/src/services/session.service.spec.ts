@@ -163,6 +163,14 @@ describe("SessionService", () => {
         emitted.push([event, payload]);
       },
     };
+    // 假 ContextCompactor：只需 isCompacting，测试按需把 sessionId 塞进
+    // compactingSessions 驱动「压缩中」分支（regenerateAfter 守卫用）。
+    const fakeCompactor = {
+      compactingSessions: new Set<string>(),
+      isCompacting(sessionId: string) {
+        return this.compactingSessions.has(sessionId);
+      },
+    };
     rawService = new SessionService(
       ds.getRepository(Session),
       ds.getRepository(PendingMessage),
@@ -174,7 +182,15 @@ describe("SessionService", () => {
       fakeSchedules as unknown as any,
       fakeModelConfigs as unknown as any,
       fakeEmitter as unknown as any,
+      fakeCompactor as unknown as any,
     );
+    // 暴露给 patch(旧模型已删) / regenerateAfter(压缩中拒绝) 测试用
+    (
+      rawService as unknown as { __modelConfigs: typeof fakeModelConfigs }
+    ).__modelConfigs = fakeModelConfigs;
+    (
+      rawService as unknown as { __compactor: typeof fakeCompactor }
+    ).__compactor = fakeCompactor;
     // 暴露给 deleteSession / regenerateAfter 测试用
     (
       rawService as unknown as { __ds: DataSource; __graph: typeof fakeGraph }
@@ -684,6 +700,63 @@ describe("SessionService", () => {
           emitted.filter(([e]) => e === SESSION_WS_EVENTS.runSystemEvent),
         ).toHaveLength(1);
       });
+
+      it("旧模型已被删除 → resolveModelName best-effort 兜底成原始 id，不阻断切换", async () => {
+        const { sessionId } = await service.createSession({
+          content: "x",
+          modelConfigId: "mc-exists",
+        });
+        // 模拟旧模型事后被删除：从白名单摘除，findOneOrFail 会抛 NotFound。
+        const mc = (
+          service as unknown as {
+            __modelConfigs: { __known: Map<string, string> };
+          }
+        ).__modelConfigs;
+        mc.__known.delete("mc-exists");
+
+        await service.patch(sessionId, { modelConfigId: "mc-exists-2" });
+
+        const db = (service as unknown as { __ds: DataSource }).__ds;
+        const rows = await db.query(
+          `SELECT content, metadata FROM session_messages WHERE session_id = ?`,
+          [sessionId],
+        );
+        expect(rows).toHaveLength(1);
+        expect(rows[0].content).toBe("已切换模型：mc-exists → Claude");
+        expect(JSON.parse(rows[0].metadata)).toEqual({
+          kind: "model_switch",
+          fromModel: "mc-exists",
+          toModel: "Claude",
+        });
+        // 切换本身（Session 表主更新）不受旧模型查询失败影响。
+        const s = await service.findSessionOrFail(sessionId);
+        expect(s.modelConfigId).toBe("mc-exists-2");
+      });
+
+      it("recordSystemEvent 抛错 → 附属行失败不回滚 modelConfigId 主更新，emit 仍照常发出", async () => {
+        const { sessionId } = await service.createSession({ content: "x" });
+        const spy = jest
+          .spyOn(SessionMessageService.prototype, "recordSystemEvent")
+          .mockRejectedValueOnce(new Error("db down"));
+        emitted.length = 0;
+        try {
+          const result = await service.patch(sessionId, {
+            modelConfigId: "mc-exists",
+          });
+          // patch 本身不抛错，主更新照常成功
+          expect(result.modelConfigId).toBe("mc-exists");
+          const s = await service.findSessionOrFail(sessionId);
+          expect(s.modelConfigId).toBe("mc-exists");
+          // 系统行落库失败，但 run.system_event 仍广播（对齐 compaction 的
+          // best-effort 语义：DB 写失败只影响历史回放，不影响实时通知）。
+          const sysEvents = emitted.filter(
+            ([e]) => e === SESSION_WS_EVENTS.runSystemEvent,
+          );
+          expect(sysEvents).toHaveLength(1);
+        } finally {
+          spy.mockRestore();
+        }
+      });
     });
   });
 
@@ -1013,6 +1086,54 @@ describe("SessionService", () => {
       await expect(
         service.regenerateAfter(sessionId, `a1-${sessionId}`),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it("压缩中（isCompacting=true）→ 拒绝 ConflictException，cutMessagesAfter 未被调用（守卫先于 checkpointer 改写）", async () => {
+      const { sessionId } = await service.createSession({ content: "x" });
+      await seedSession(sessionId);
+      const compactor = (
+        service as unknown as {
+          __compactor: { compactingSessions: Set<string> };
+        }
+      ).__compactor;
+      compactor.compactingSessions.add(sessionId);
+      await expect(
+        service.regenerateAfter(sessionId, `u1-${sessionId}`),
+      ).rejects.toThrow(ConflictException);
+      // 未删任何 session_messages / llm_calls，且 cutMessagesAfter 从未被调用——
+      // 证明守卫在动 checkpointer 之前就已拦下，而非事后回滚。
+      const ds = (service as unknown as { __ds: DataSource }).__ds;
+      const remain = await ds.query(
+        `SELECT id FROM session_messages WHERE session_id = ?`,
+        [sessionId],
+      );
+      expect(remain).toHaveLength(3);
+      const graph = (
+        service as unknown as {
+          __graph: { __cuts: Array<{ threadId: string; cutoff: string }> };
+        }
+      ).__graph;
+      expect(graph.__cuts).toEqual([]);
+    });
+
+    it("压缩中拒绝只针对该 sessionId，不影响其他会话正常重生成", async () => {
+      const a = await service.createSession({ content: "a" });
+      const b = await service.createSession({ content: "b" });
+      await seedSession(a.sessionId);
+      await seedSession(b.sessionId);
+      const compactor = (
+        service as unknown as {
+          __compactor: { compactingSessions: Set<string> };
+        }
+      ).__compactor;
+      compactor.compactingSessions.add(a.sessionId);
+      await expect(
+        service.regenerateAfter(a.sessionId, `u1-${a.sessionId}`),
+      ).rejects.toThrow(ConflictException);
+      // b 不在压缩集合里，照常成功
+      await expect(
+        service.regenerateAfter(b.sessionId, `u1-${b.sessionId}`),
+      ).resolves.toBeUndefined();
     });
   });
 
