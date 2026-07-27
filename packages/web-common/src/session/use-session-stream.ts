@@ -309,9 +309,11 @@ export function settleInterruptedTimeline(
 /**
  * `run.error` 事件的时间线结算（Bug #13 核心，抽成纯函数脱离 socket/ref 单测）。
  *
- * 常规部分与原实现等价：按 `pendingIds`/`messageId` 标记失败气泡 + 清对应
- * loading 占位 + 收尾未终态工具块；新增 `event.reason` 透传到 `errorReason`，
- * 供渲染层区分「远程二次门控拒绝」等结构化原因走专属文案（见 message-list.tsx）。
+ * 常规部分与原实现等价：按 `pendingIds`/`messageId` 标记失败气泡 + 收尾
+ * 未终态工具块；新增 `event.reason` 透传到 `errorReason`，供渲染层区分
+ * 「远程二次门控拒绝」等结构化原因走专属文案（见 message-list.tsx）。不再
+ * 清 `loading-${id}` 占位——该机制已收敛为消息流末尾的 StatusLine，run 失败
+ * 时 `running` 转 false，StatusLine 自然停止渲染，无需额外清理。
  *
  * `strandedSend` 非空时（远程续写的用户输入在 `run.human` 落地前就被拒绝，
  * 从未在 timeline 出现过——`use-session-stream.ts` 的 `remotePendingSendRef`
@@ -330,23 +332,19 @@ export function settleErrorTimeline(
 ): TimelineMessage[] {
   const failedIds = new Set<string>(event.pendingIds);
   if (event.messageId) failedIds.add(event.messageId);
-  const loadingIdsToDrop = new Set<string>();
-  for (const id of failedIds) loadingIdsToDrop.add(`loading-${id}`);
   const errorText = event.error.slice(0, 200);
-  const next = messages
-    .filter((m) => !loadingIdsToDrop.has(m.id))
-    .map((m) =>
-      failedIds.has(m.id)
-        ? {
-            ...m,
-            failed: true,
-            pending: false,
-            streaming: false,
-            errorText,
-            ...(event.reason ? { errorReason: event.reason } : {}),
-          }
-        : m,
-    );
+  const next = messages.map((m) =>
+    failedIds.has(m.id)
+      ? {
+          ...m,
+          failed: true,
+          pending: false,
+          streaming: false,
+          errorText,
+          ...(event.reason ? { errorReason: event.reason } : {}),
+        }
+      : m,
+  );
   const withStranded = strandedSend
     ? [
         ...next,
@@ -457,42 +455,24 @@ export function useSessionStream(
 
   /**
    * onHuman 触发：把指定 user 消息从当前位置抽出、追加到数组末尾，清 pending
-   * 标记（→ 离开 pending 区，进入聊天列表），并保证末尾存在 loading 占位 assistant 气泡。
+   * 标记（→ 离开 pending 区，进入聊天列表）。
    *
    * 用户手动发送时 messageId 由前端生成、append 同步用同一 id，run.human 到达时能 find 到。
    * 服务端注入的消息（如定时任务触发）前端没有乐观气泡，idx===-1，按事件携带的 content 新建。
+   *
+   * 不再 append `loading-${id}` 占位 assistant 气泡——「等首个 token」这段
+   * 过渡态现由消息流末尾的 `StatusLine` 展示（纯展示，不进 timeline 数组，
+   * 见 status-line.tsx / deriveStatusLinePhase 的兜底 thinking 分支）。
    */
   const migrateHumanToTimeline = useCallback(
     (messageId: string, content: string): void => {
       apply((prev) => {
         const idx = prev.findIndex((m) => m.id === messageId);
         if (idx === -1) {
-          const withoutLoading = prev.filter((m) => !m.loading);
-          return [
-            ...withoutLoading,
-            { id: messageId, role: "user" as const, content },
-            {
-              id: `loading-${messageId}`,
-              role: "assistant" as const,
-              content: "",
-              loading: true,
-            },
-          ];
+          return [...prev, { id: messageId, role: "user" as const, content }];
         }
-        // 同 batch 多条 user 时（onHuman 连发多次），第一次会 append loading，
-        // 后续每次必须把 loading 重新抽出再附到末尾，否则后到的 user 会被插在
-        // loading 上面，loading 卡在用户消息中间。
         const target = { ...prev[idx], pending: false };
-        const withoutTarget = [...prev.slice(0, idx), ...prev.slice(idx + 1)];
-        const existingLoading = withoutTarget.find((m) => m.loading);
-        const withoutLoading = withoutTarget.filter((m) => !m.loading);
-        const loading = existingLoading ?? {
-          id: `loading-${messageId}`,
-          role: "assistant" as const,
-          content: "",
-          loading: true,
-        };
-        return [...withoutLoading, target, loading];
+        return [...prev.slice(0, idx), ...prev.slice(idx + 1), target];
       });
     },
     [apply],
@@ -751,16 +731,12 @@ export function useSessionStream(
       if (e.sessionId !== sessionId) return;
       setRunning(true);
       apply((prev) => {
-        // 首个 reasoning 到达：清掉 loading 占位。任何时候至多有 1 个 loading
-        // （migrateHumanToTimeline 用 `if (next.some(m => m.loading)) return next`
-        // 保证），全清安全；不动 user 的 pending 标记（那个只由 run.human 清）。
-        const withoutLoading = prev.filter((m) => !m.loading);
-        const idx = withoutLoading.findIndex((m) => m.id === e.messageId);
+        const idx = prev.findIndex((m) => m.id === e.messageId);
         // 不存在则创建 assistant 占位：reasoningStartedAt 设为现在，
         // content 为空（等 onChunk 到达时填）
         if (idx === -1) {
           return [
-            ...withoutLoading,
+            ...prev,
             {
               id: e.messageId,
               role: "assistant" as const,
@@ -770,7 +746,7 @@ export function useSessionStream(
             },
           ];
         }
-        const copy = [...withoutLoading];
+        const copy = [...prev];
         const existing = copy[idx];
         copy[idx] = {
           ...existing,
@@ -814,14 +790,11 @@ export function useSessionStream(
       if (e.sessionId !== sessionId) return;
       setRunning(true);
       apply((prev) => {
-        // 首个 chunk 到达：
-        // 1) 清掉 loading 占位（任何时候至多 1 个，全清安全）
-        // 2) 该消息若有进行中的 reasoning（startedAt 已设、durationMs 未设），
-        //    在第一次 chunk 到达时锁定 reasoningDurationMs
+        // 首个 chunk 到达：该消息若有进行中的 reasoning（startedAt 已设、
+        // durationMs 未设），在第一次 chunk 到达时锁定 reasoningDurationMs。
         //
         // pending user 标记的清理交给 run.human 事件（服务端真相），不在这里顺手做。
-        const withoutLoading = prev.filter((m) => !m.loading);
-        return withoutLoading.map((m) => {
+        return prev.map((m) => {
           if (m.id === e.messageId) {
             const next = m.failed ? { ...m, failed: false } : m;
             if (
@@ -852,11 +825,10 @@ export function useSessionStream(
       // 进行态由工具块自己呈现（与 onToolArgsDelta 建壳时的判断一致）。
       const streaming = e.content !== "" || e.toolCalls.length === 0;
       apply((prev) => {
-        const withoutLoading = prev.filter((m) => !m.loading);
-        const idx = withoutLoading.findIndex((m) => m.id === e.messageId);
+        const idx = prev.findIndex((m) => m.id === e.messageId);
         if (idx === -1) {
           return [
-            ...withoutLoading,
+            ...prev,
             {
               id: e.messageId,
               role: "assistant" as const,
@@ -871,14 +843,14 @@ export function useSessionStream(
                     toolCalls: mergeInflightToolCalls(
                       undefined,
                       e.toolCalls,
-                      collectToolCallIds(withoutLoading),
+                      collectToolCallIds(prev),
                     ),
                   }
                 : {}),
             },
           ];
         }
-        const copy = [...withoutLoading];
+        const copy = [...prev];
         const existing = copy[idx];
         copy[idx] = {
           ...existing,
@@ -891,7 +863,7 @@ export function useSessionStream(
           toolCalls: mergeInflightToolCalls(
             existing.toolCalls,
             e.toolCalls,
-            collectToolCallIds(withoutLoading, existing.id),
+            collectToolCallIds(prev, existing.id),
           ),
         };
         return copy;
@@ -962,11 +934,7 @@ export function useSessionStream(
       // 个别 provider 流里不带 id → 跳过预览，等 onToolStart。
       const toolCallId = e.toolCallId;
       if (!toolCallId) return;
-      apply((rawPrev) => {
-        // 决策轮（tool_calls、content 空）没有 reasoning/chunk 事件（云网关不透传
-        // reasoning，空 delta 不发 chunk），loading 占位无人清 → 「…」悬置在工具块
-        // 上方。本轮首个工具事件到达即视为 LLM 已应答，清掉占位。
-        const prev = rawPrev.filter((m) => !m.loading);
+      apply((prev) => {
         // 1) 全时间线找同 toolCallId 的既有块：只累加 argsText，status 原样保留。
         const ownerIdx = prev.findIndex((m) =>
           m.toolCalls?.some((t) => t.toolCallId === toolCallId),
@@ -1037,9 +1005,7 @@ export function useSessionStream(
      */
     const onToolStart = (e: RunToolCallStartEvent) => {
       if (e.sessionId !== sessionId) return;
-      apply((rawPrev) => {
-        // 同 onToolArgsDelta：本轮首个工具事件到达即视为 LLM 已应答，清 loading 占位。
-        const prev = rawPrev.filter((m) => !m.loading);
+      apply((prev) => {
         const upgrade = (m: TimelineMessage): TimelineMessage => {
           // tool_call 开始 = 本轮 LLM 文本已收尾。
           // 1) 锁住 reasoningDurationMs，否则「思考中 Xs」会一直跳到本轮 LLM 结束才能切回「已思考」。
@@ -1151,9 +1117,9 @@ export function useSessionStream(
           };
           return copy;
         }
-        // 宿主消息也不在：建壳。此路径下本轮 LLM 已应答完毕，loading 占位一并清掉。
+        // 宿主消息也不在：建壳。
         return [
-          ...prev.filter((m) => !m.loading),
+          ...prev,
           {
             id: e.messageId,
             role: "assistant" as const,
@@ -1301,7 +1267,7 @@ export function useSessionStream(
    * append 传同一 id 给后端。这样 run.human 到达时能直接按 id 找到目标气泡迁移，
    * 不需要 tempId 替换 / pendingHumanIdsRef 缓存。
    *
-   * loading 占位 + 迁出 pending 区到聊天区末尾，全部交给 onHuman 处理。
+   * 迁出 pending 区到聊天区末尾，全部交给 onHuman 处理。
    */
   const send = useCallback(
     async (msg: string): Promise<boolean> => {

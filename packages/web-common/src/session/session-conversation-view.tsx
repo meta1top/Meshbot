@@ -13,6 +13,11 @@ import { MessageList, type MessageListLabels } from "./message-list";
 import { MessageSkeleton } from "./message-skeleton";
 import type { ModelConfigLike } from "./model-name";
 import { PendingList, type PendingListLabels } from "./pending-list";
+import {
+  deriveStatusLinePhase,
+  StatusLine,
+  type StatusLineLabels,
+} from "./status-line";
 import type { TimelineMessage, ToolCallView } from "./timeline";
 import type { ToolCallBlockLabels } from "./tool-call-block";
 
@@ -25,6 +30,13 @@ export interface SessionConversationViewLabels {
   compaction: CompactionBannerLabels;
   /** 转发给 MessageList 自身渲染用的文案。 */
   messageList: MessageListLabels;
+  /**
+   * 转发给消息流末尾常驻状态行（StatusLine）的阶段文案。可选——省略时
+   * 本组件不渲染 StatusLine（渐进接入：调用方尚未补齐 i18n 文案前不展示，
+   * 而不是打印未翻译的兜底英文/占位符）。web-agent/web-main 侧接线补文案
+   * 后传入即可点亮该行，见 `deriveStatusLinePhase` 的阶段派生逻辑。
+   */
+  statusLine?: StatusLineLabels;
   /** 转发给 ToolCallBlock（经 MessageList 透传）。 */
   toolCall: ToolCallBlockLabels;
   /** 转发给 PendingList。 */
@@ -165,6 +177,14 @@ export function SessionConversationView({
       labels={labels.messageList}
     />
   );
+  // 末尾常驻状态行的阶段：compacting > 工具运行中 > 思考中 > 流式产出中 >
+  // 兜底思考中；running 与 compacting 均为假时 null（不渲染）。派生逻辑见
+  // status-line.tsx 的 deriveStatusLinePhase（单测覆盖优先级五态）。
+  const statusLinePhase = deriveStatusLinePhase({
+    running,
+    compacting,
+    messages: timelineMessages,
+  });
 
   return (
     <>
@@ -191,6 +211,9 @@ export function SessionConversationView({
               labels={labels.compaction}
             />
             {messageListNode}
+            {labels.statusLine && (
+              <StatusLine phase={statusLinePhase} labels={labels.statusLine} />
+            )}
           </>
         )}
       </div>

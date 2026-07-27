@@ -23,7 +23,12 @@ export interface MessageListLabels {
   assistantName: string;
   /** run 失败提示行前缀（如「运行失败："）。 */
   runErrorPrefix: string;
-  /** loading 三点跳动的 aria-label（如「正在生成回复」）。 */
+  /**
+   * @deprecated loading 假消息机制已收敛为消息流末尾的 `StatusLine`
+   * （见 `status-line.tsx`），本组件内部不再消费这个字段。字段本身仍保留
+   * 在接口里只是为了不破坏既有调用方（web-agent/web-main 仍在传）——
+   * 待这些调用方随 StatusLine 接线清理时一并删除。
+   */
   generatingReply: string;
   /** 推理中标签，`{seconds}` 由调用方格式化好传入（如「思考中 3.2s」）。 */
   reasoningThinking: (seconds: string) => string;
@@ -202,7 +207,6 @@ export function MessageList({
             !!m.content ||
             !!m.reasoning ||
             (m.toolCalls?.length ?? 0) > 0 ||
-            m.loading === true ||
             m.streaming === true ||
             m.failed === true,
         )
@@ -249,14 +253,15 @@ export function MessageList({
                   />
                 ) : null}
                 {/*
-                气泡仅在「有可见正文 / loading / streaming / failed」时出现。
+                气泡仅在「有可见正文 / streaming / failed」时出现。
                 中间决策轮（仅 reasoning + toolCalls、content 空）不出气泡 —— 否则
                 空 div 也算 flex gap-2 一个 item，让「思考过程 ↔ tool 块」之间多一段空白。
                 toolCalls 自身有独立块（下方渲染），不靠这里撑场。
+                等首个 token 的过渡态不再由这里渲染 TypingDots——已收敛为消息流
+                末尾的 StatusLine（纯展示、不进 timeline，见 status-line.tsx）。
               */}
                 {(m.role === "user" ||
                   m.content ||
-                  m.loading ||
                   m.streaming ||
                   m.failed) && (
                   <div
@@ -265,14 +270,10 @@ export function MessageList({
                       m.failed && "text-destructive",
                     )}
                   >
-                    {m.loading ? (
-                      <TypingDots label={labels.generatingReply} />
-                    ) : (
-                      <MarkdownContent
-                        text={stripLlmuse(m.content)}
-                        streaming={m.role === "assistant" && m.streaming}
-                      />
-                    )}
+                    <MarkdownContent
+                      text={stripLlmuse(m.content)}
+                      streaming={m.role === "assistant" && m.streaming}
+                    />
                   </div>
                 )}
                 {m.failed && (m.errorText || m.errorReason) && (
@@ -341,21 +342,6 @@ export function MessageList({
           );
         })}
     </div>
-  );
-}
-
-/** "..." 三点跳动 loading 指示器（等首个 chunk 时显示）。颜色调淡避免视觉重量。 */
-function TypingDots({ label }: { label: string }) {
-  return (
-    <span
-      role="status"
-      aria-label={label}
-      className="inline-flex items-center gap-1 align-middle"
-    >
-      <span className="h-1 w-1 animate-bounce rounded-full bg-muted-foreground/40 [animation-delay:-0.3s]" />
-      <span className="h-1 w-1 animate-bounce rounded-full bg-muted-foreground/40 [animation-delay:-0.15s]" />
-      <span className="h-1 w-1 animate-bounce rounded-full bg-muted-foreground/40" />
-    </span>
   );
 }
 

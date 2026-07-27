@@ -106,6 +106,13 @@ export {
 } from "./session-tree";
 export type { SessionSocketLike } from "./socket-like";
 export {
+  deriveStatusLinePhase,
+  StatusLine,
+  type StatusLineLabels,
+  type StatusLinePhase,
+  type StatusLineProps,
+} from "./status-line";
+export {
   claimSubagentOnTimeline,
   countToolCalls,
   deriveLiveAction,

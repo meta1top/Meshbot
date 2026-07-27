@@ -45,11 +45,6 @@ export interface TimelineMessage {
   pending?: boolean;
   /** 流式输出中（仅 assistant）：尾部追加闪烁光标。 */
   streaming?: boolean;
-  /**
-   * 等待首个 chunk 的 assistant 占位（仅 assistant）：
-   * 已发出用户消息但 LLM 还没返回任何 token。渲染为转圈。
-   */
-  loading?: boolean;
   failed?: boolean;
   /** run 失败的错误原因（仅实时 run.error 事件携带；历史恢复的 failed 行无此值）。 */
   errorText?: string;

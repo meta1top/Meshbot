@@ -91,12 +91,9 @@ describe("settleInterruptedTimeline（Bug #4：打断后思考计时器不停）
 });
 
 describe("settleErrorTimeline（Bug #13：远程二次门控拒绝后打断按钮卡死/消息消失）", () => {
-  it("按 pendingIds/messageId 标记失败 + 清对应 loading 占位", () => {
+  it("按 pendingIds/messageId 标记失败", () => {
     const out = settleErrorTimeline(
-      [
-        { id: "u1", role: "user", content: "hi", pending: true },
-        { id: "loading-u1", role: "assistant", content: "", loading: true },
-      ],
+      [{ id: "u1", role: "user", content: "hi", pending: true }],
       { messageId: null, pendingIds: ["u1"], error: "boom" },
       null,
     );
@@ -105,7 +102,6 @@ describe("settleErrorTimeline（Bug #13：远程二次门控拒绝后打断按�
       pending: false,
       errorText: "boom",
     });
-    expect(out.find((m) => m.id === "loading-u1")).toBeUndefined();
   });
 
   it("event.reason 透传到 errorReason，供渲染层走专属文案分支", () => {
