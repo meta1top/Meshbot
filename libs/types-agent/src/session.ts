@@ -552,6 +552,18 @@ export const RetryResponseSchema = z.object({
 export type RetryResponse = z.infer<typeof RetryResponseSchema>;
 
 /**
+ * POST /api/sessions/:id/compact 出参（`/compact` 命令用，force=true 主动触发）。
+ * `summaryPreview` 与 WS `run.compaction_done` 的同名字段同口径（摘要前 200 字）。
+ */
+export const CompactSessionResponseSchema = z.object({
+  removedCount: z.number(),
+  summaryPreview: z.string(),
+});
+export type CompactSessionResponse = z.infer<
+  typeof CompactSessionResponseSchema
+>;
+
+/**
  * socket: session.title_updated —— SessionTitleService 后台 LLM 生成完成。
  * Gateway namespace 广播；前端 sidebar / sessions atom 局部更新 title。
  */

@@ -1,6 +1,7 @@
 import { createZodDto } from "@meshbot/common";
 import {
   AppendMessageSchema,
+  CompactSessionResponseSchema,
   CreateSessionSchema,
   MessageFeedbackSchema,
   SessionListResponseSchema,
@@ -35,3 +36,8 @@ export class ConfirmToolCallDto extends createZodDto(confirmToolCallSchema) {}
 
 /** POST /api/sessions/:sessionId/answer 入参 DTO（提交 ask_question 回答）。 */
 export class AnswerQuestionsDto extends createZodDto(answerQuestionsSchema) {}
+
+/** POST /api/sessions/:id/compact 出参 DTO（Swagger 类型声明用）。 */
+export class CompactSessionResponseDto extends createZodDto(
+  CompactSessionResponseSchema,
+) {}
