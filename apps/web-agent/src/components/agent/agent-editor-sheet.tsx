@@ -34,6 +34,7 @@ import {
   PromptFilesEditor,
   type PromptFilesEditorHandle,
 } from "@/components/agent/prompt-files-editor";
+import { SkillManager } from "@/components/agent/skill-manager";
 import { ToolPrefsEditor } from "@/components/agent/tool-prefs-editor";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import {
@@ -173,7 +174,7 @@ export function AgentEditorSheet({
   const [localAgentId, setLocalAgentId] = useState<string | null>(agentId);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  type EditorTab = "basic" | "prompts" | "mcp" | "tools";
+  type EditorTab = "basic" | "prompts" | "skills" | "mcp" | "tools";
   const [tab, setTab] = useState<EditorTab>("basic");
   const [discardOpen, setDiscardOpen] = useState(false);
   // 未保存切 tab（离开「提示词」时）待确认的目标 tab；null 表示当前弹出的
@@ -425,13 +426,14 @@ export function AgentEditorSheet({
             <X className="h-4 w-4" />
           </button>
         }
-        // 新建态是单步表单，不需要 tab 条；编辑态四 tab：基本信息/提示词/MCP/工具。
+        // 新建态是单步表单，不需要 tab 条；编辑态五 tab：基本信息/提示词/技能/MCP/工具。
         headerTabs={
           mode === "edit" ? (
             <SheetTabBar
               items={[
                 { key: "basic", label: t("tabBasic") },
                 { key: "prompts", label: t("tabPrompts") },
+                { key: "skills", label: t("tabSkills") },
                 { key: "mcp", label: t("tabMcp") },
                 { key: "tools", label: t("tabTools") },
               ]}
@@ -560,6 +562,21 @@ export function AgentEditorSheet({
               agentId={localAgentId}
               onDirtyChange={setPromptDirty}
             />
+          )}
+        </div>
+
+        {/* 技能：已装管理 + 简版市场安装（发布/详情等重功能不搬，见
+            SkillManager 组件注释）。keep-mounted 靠 hidden 切换；外壳必须
+            flex flex-col——工具 tab 曾因 block 外壳裁内容无滚动条踩坑，此处
+            照抄同款容器写法。只在编辑态且 formReady 时挂载，与其余 tab 一致。 */}
+        <div
+          className={cn(
+            "flex min-h-0 flex-1 flex-col overflow-hidden",
+            tab !== "skills" && "hidden",
+          )}
+        >
+          {mode === "edit" && formReady && localAgentId && (
+            <SkillManager agentId={localAgentId} />
           )}
         </div>
 
