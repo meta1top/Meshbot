@@ -74,7 +74,7 @@ describe("ContextCompactor", () => {
       findEnabled: jest.fn(),
     } as unknown as jest.Mocked<ModelConfigService>;
     sessionMessages = {
-      recordCompactionPlaceholder: jest.fn(),
+      recordSystemEvent: jest.fn(),
     } as unknown as jest.Mocked<SessionMessageService>;
     llmCalls = {
       record: jest.fn(),
@@ -120,9 +120,17 @@ describe("ContextCompactor", () => {
     expect(applyArg.keep.length).toBeGreaterThan(0);
     // removeIds 应覆盖全部带 id 的消息（摘要区 + 保留区），不只摘要区
     expect(applyArg.removeIds.length).toBe(20);
-    expect(sessionMessages.recordCompactionPlaceholder).toHaveBeenCalledTimes(
-      1,
-    );
+    expect(sessionMessages.recordSystemEvent).toHaveBeenCalledTimes(1);
+    // recordSystemEvent 的泛化调用形态：kind=compaction，metadata 不含 kind
+    // （由 session-message.service 落库时自动拼进去）。
+    const systemEventArg = sessionMessages.recordSystemEvent.mock.calls[0][0];
+    expect(systemEventArg.kind).toBe("compaction");
+    expect(systemEventArg.content).toBe("MOCK_SUMMARY");
+    // removedCount 是摘要区（toSummarize.length），与前面断言的 removeIds.length
+    // （摘要区 + 保留区合计 20）不同口径——此处只需与 doneArg 保持一致即可。
+    expect(systemEventArg.metadata).toMatchObject({
+      removedCount: 11,
+    });
     const startEmits = emitSpy.mock.calls.filter(
       ([name]) => name === SESSION_WS_EVENTS.runCompactionStart,
     );
@@ -131,6 +139,18 @@ describe("ContextCompactor", () => {
     );
     expect(startEmits).toHaveLength(1);
     expect(doneEmits).toHaveLength(1);
+    // done 事件补齐 4 个字段：placeholderId/summary/fromMessageId/toMessageId，
+    // 前端凭它直接 append 占位行到 timeline，不必重拉 history。
+    const doneArg = doneEmits[0][1] as {
+      placeholderId: string;
+      summary: string;
+      fromMessageId: string;
+      toMessageId: string;
+    };
+    expect(doneArg.placeholderId).toBe(systemEventArg.id);
+    expect(doneArg.summary).toBe("MOCK_SUMMARY");
+    expect(doneArg.fromMessageId).toBe("h0");
+    expect(doneArg.toMessageId).toBeTruthy();
   });
 
   it("toSummarize 为空（非 force）→ return null 不调 LLM", async () => {
@@ -208,6 +228,44 @@ describe("ContextCompactor", () => {
     expect(threadState.applyCompaction).toHaveBeenCalledTimes(1);
   });
 
+  describe("isCompacting（给 RunnerService kick 前置守卫用）", () => {
+    it("在途压缩期间返回 true，压缩完成后回落 false", async () => {
+      modelConfig.findEnabled.mockResolvedValue({
+        contextWindow: 10_000,
+      } as never);
+      threadState.getMessagesSnapshot.mockResolvedValue(buildMessages(10));
+      let resolveSum!: (v: SummarizeResult) => void;
+      modelResolver.summarize.mockReturnValue(
+        new Promise<SummarizeResult>((r) => {
+          resolveSum = r;
+        }),
+      );
+      expect(compactor.isCompacting("s1")).toBe(false);
+      const p = compactor.compact("s1");
+      expect(compactor.isCompacting("s1")).toBe(true);
+      resolveSum({ text: "S", usage: null, durationMs: 0 });
+      await p;
+      expect(compactor.isCompacting("s1")).toBe(false);
+    });
+
+    it("不影响其他 sessionId（per-session 隔离）", async () => {
+      modelConfig.findEnabled.mockResolvedValue({
+        contextWindow: 10_000,
+      } as never);
+      threadState.getMessagesSnapshot.mockResolvedValue(buildMessages(10));
+      let resolveSum!: (v: SummarizeResult) => void;
+      modelResolver.summarize.mockReturnValue(
+        new Promise<SummarizeResult>((r) => {
+          resolveSum = r;
+        }),
+      );
+      const p = compactor.compact("s1");
+      expect(compactor.isCompacting("s2")).toBe(false);
+      resolveSum({ text: "S", usage: null, durationMs: 0 });
+      await p;
+    });
+  });
+
   it("findEnabled 返 null（无启用 model）→ 抛 CompactionError", async () => {
     modelConfig.findEnabled.mockResolvedValue(null as never);
     await expect(compactor.compact("s1")).rejects.toBeInstanceOf(
@@ -230,7 +288,7 @@ describe("ContextCompactor", () => {
     expect(r).toBeNull();
     expect(modelResolver.summarize).not.toHaveBeenCalled();
     expect(threadState.applyCompaction).not.toHaveBeenCalled();
-    expect(sessionMessages.recordCompactionPlaceholder).not.toHaveBeenCalled();
+    expect(sessionMessages.recordSystemEvent).not.toHaveBeenCalled();
   });
 
   it("getMessagesSnapshot 抛错 → 透传抛错（不 emit start）", async () => {
@@ -269,8 +327,7 @@ describe("ContextCompactor", () => {
     expect(arg.modelName).toBe("我的模型");
     // messageId 必须是压缩占位消息的 id：压缩不属于任何对话轮次，
     // 占位消息是它在时间线上的化身，且 llm_calls.message_id 非空。
-    const placeholderArg =
-      sessionMessages.recordCompactionPlaceholder.mock.calls[0][0];
+    const placeholderArg = sessionMessages.recordSystemEvent.mock.calls[0][0];
     expect(arg.messageId).toBe(placeholderArg.id);
   });
 

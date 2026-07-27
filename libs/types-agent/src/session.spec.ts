@@ -2,6 +2,7 @@ import { describe, expect, it } from "@jest/globals";
 import {
   CreateSessionResponseSchema,
   CreateSessionSchema,
+  HistoryMessageSchema,
   HistoryResponseSchema,
   PendingMessageStatus,
   RetryResponseSchema,
@@ -10,6 +11,7 @@ import {
   RunCompactionErrorEventSchema,
   RunCompactionStartEventSchema,
   RunHitlSettledEventSchema,
+  RunSystemEventSchema,
   RunUsageEventSchema,
   SESSION_WS_EVENTS,
   SessionDeleteResponseSchema,
@@ -327,14 +329,32 @@ describe("Context compaction WS events", () => {
     ).toThrow();
   });
 
-  it("RunCompactionDoneEvent 含 removedCount + summaryPreview", () => {
+  it("RunCompactionDoneEvent 含 placeholderId/removedCount/summaryPreview/summary/fromMessageId/toMessageId", () => {
     const v = RunCompactionDoneEventSchema.parse({
       sessionId: "s1",
+      placeholderId: "comp-1",
       removedCount: 12,
       summaryPreview: "用户问了酒店评价…",
+      summary: "用户问了酒店评价…（全文）",
+      fromMessageId: "m1",
+      toMessageId: "m12",
     });
+    expect(v.placeholderId).toBe("comp-1");
     expect(v.removedCount).toBe(12);
     expect(v.summaryPreview).toBe("用户问了酒店评价…");
+    expect(v.summary).toBe("用户问了酒店评价…（全文）");
+    expect(v.fromMessageId).toBe("m1");
+    expect(v.toMessageId).toBe("m12");
+  });
+
+  it("RunCompactionDoneEvent 缺任一新增字段 → 校验失败（契约先行，暴露消费点）", () => {
+    expect(() =>
+      RunCompactionDoneEventSchema.parse({
+        sessionId: "s1",
+        removedCount: 12,
+        summaryPreview: "预览",
+      }),
+    ).toThrow();
   });
 
   it("RunCompactionErrorEvent 仅 sessionId + error 字符串", () => {
@@ -346,10 +366,54 @@ describe("Context compaction WS events", () => {
     ).toEqual({ sessionId: "s1", error: "timeout" });
   });
 
-  it("SESSION_WS_EVENTS 包含三个 compaction 事件名", () => {
+  it("SESSION_WS_EVENTS 包含四个系统事件行相关事件名", () => {
     expect(SESSION_WS_EVENTS.runCompactionStart).toBe("run.compaction_start");
     expect(SESSION_WS_EVENTS.runCompactionDone).toBe("run.compaction_done");
     expect(SESSION_WS_EVENTS.runCompactionError).toBe("run.compaction_error");
+    expect(SESSION_WS_EVENTS.runSystemEvent).toBe("run.system_event");
+  });
+
+  it("RunSystemEvent：kind=model_switch 校验通过", () => {
+    const v = RunSystemEventSchema.parse({
+      sessionId: "s1",
+      id: "msw-1",
+      kind: "model_switch",
+      content: "已切换模型：A → B",
+      metadata: { fromModel: "A", toModel: "B" },
+    });
+    expect(v.kind).toBe("model_switch");
+    expect(v.metadata).toEqual({ fromModel: "A", toModel: "B" });
+  });
+
+  it("RunSystemEvent：kind 只接受 compaction/model_switch，其余枚举外的值拒绝", () => {
+    expect(() =>
+      RunSystemEventSchema.parse({
+        sessionId: "s1",
+        id: "x1",
+        kind: "unknown_kind",
+        content: "x",
+        metadata: {},
+      }),
+    ).toThrow();
+  });
+
+  it("HistoryMessage.metadata 判别式随 kind 扩展：compaction / model_switch 均通过，未知 kind 拒绝", () => {
+    expect(
+      HistoryMessageSchema.parse({
+        id: "m1",
+        role: "system",
+        content: "已切换模型：A → B",
+        metadata: { kind: "model_switch", fromModel: "A", toModel: "B" },
+      }).metadata,
+    ).toEqual({ kind: "model_switch", fromModel: "A", toModel: "B" });
+    expect(() =>
+      HistoryMessageSchema.parse({
+        id: "m2",
+        role: "system",
+        content: "x",
+        metadata: { kind: "unknown_kind" },
+      }),
+    ).toThrow();
   });
 
   it("SessionTotalsSchema 含 lastInputTokens 字段", () => {

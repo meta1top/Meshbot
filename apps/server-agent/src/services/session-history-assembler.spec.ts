@@ -183,6 +183,44 @@ describe("assembleHistoryMessages —— subSessionId / 其他字段", () => {
     expect(messages[1]?.metadata?.kind).toBe("compaction");
   });
 
+  it("model_switch metadata 正确投影（切模型系统行）", () => {
+    const { messages } = assembleHistoryMessages({
+      rows: [
+        {
+          id: "s1",
+          role: "system",
+          content: "已切换模型：A → B",
+          metadata: JSON.stringify({
+            kind: "model_switch",
+            fromModel: "A",
+            toModel: "B",
+          }),
+        },
+      ],
+      hasMore: false,
+    });
+    expect(messages[0]?.metadata).toEqual({
+      kind: "model_switch",
+      fromModel: "A",
+      toModel: "B",
+    });
+  });
+
+  it("未识别的 metadata.kind → 投影为 null（前端安全跳过，向后兼容未来新 kind）", () => {
+    const { messages } = assembleHistoryMessages({
+      rows: [
+        {
+          id: "s1",
+          role: "system",
+          content: "未来的系统行",
+          metadata: JSON.stringify({ kind: "future_kind", foo: "bar" }),
+        },
+      ],
+      hasMore: false,
+    });
+    expect(messages[0]?.metadata).toBeNull();
+  });
+
   it("toolCalls JSON 解析失败 → 退化为无工具的普通消息，不整批抛错", () => {
     const { messages } = assembleHistoryMessages({
       rows: [

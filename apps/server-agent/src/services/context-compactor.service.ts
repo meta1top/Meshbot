@@ -62,7 +62,7 @@ export class CompactionNothingToCompact extends Error {
  * 会话上下文压缩器（per-sessionId 锁 + 同步等待）。
  *
  * - `compact(sessionId)` 是入口：进锁 → 取 messages → 算切分 → summarize →
- *   applyCompaction → recordCompactionPlaceholder → emit done。
+ *   applyCompaction → recordSystemEvent(kind=compaction) → emit done。
  * - 失败时 emit error 抛 CompactionError；调用方（runner）决定是否兜底。
  * - 并发同 sessionId 第二次调用直接 await 第一次的 Promise。
  *
@@ -87,6 +87,16 @@ export class ContextCompactor {
   shouldCompact(lastInputTokens: number, contextWindow: number): boolean {
     if (!contextWindow || contextWindow <= 0) return false;
     return lastInputTokens / contextWindow >= COMPACTION_TRIGGER_RATIO;
+  }
+
+  /**
+   * 给 RunnerService kick 前置守卫用：某 session 当前是否有在途压缩
+   * （`locks` map 命中即为真）。与 `/compact` 端点已有的「run 中禁压缩」
+   * 守卫双向对称——本方法堵住反向竞态（压缩中禁新 run），彻底防止两者
+   * 并发改写同一 session 的 checkpointer 状态。
+   */
+  isCompacting(sessionId: string): boolean {
+    return this.locks.has(sessionId);
   }
 
   /** 入口：同步等待压缩完成。同 sessionId 并发会被锁串行化。 */
@@ -199,18 +209,23 @@ export class ContextCompactor {
 
     // 占位行（失败仅 log，不回滚）
     const placeholderId = `comp-${randomUUID()}`;
+    const fromMessageId = toSummarize[0].id ?? "";
+    const toMessageId = toSummarize[toSummarize.length - 1].id ?? "";
     try {
-      await this.sessionMessages.recordCompactionPlaceholder({
+      await this.sessionMessages.recordSystemEvent({
         id: placeholderId,
         sessionId,
-        summary: summaryText,
-        removedCount: toSummarize.length,
-        fromMessageId: toSummarize[0].id ?? "",
-        toMessageId: toSummarize[toSummarize.length - 1].id ?? "",
+        kind: "compaction",
+        content: summaryText,
+        metadata: {
+          removedCount: toSummarize.length,
+          fromMessageId,
+          toMessageId,
+        },
       });
     } catch (err) {
       this.logger.warn(
-        `recordCompactionPlaceholder failed; checkpointer 已正确，仅 UI 占位行丢失 session=${sessionId}: ${err instanceof Error ? err.message : String(err)}`,
+        `recordSystemEvent(compaction) failed; checkpointer 已正确，仅 UI 占位行丢失 session=${sessionId}: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
 
@@ -249,11 +264,15 @@ export class ContextCompactor {
       );
     }
 
-    // done
+    // done：补齐占位行完整数据，前端直接 append 到 timeline 不必重拉 history。
     this.emitter.emit(SESSION_WS_EVENTS.runCompactionDone, {
       sessionId,
+      placeholderId,
       removedCount: toSummarize.length,
       summaryPreview: summaryText.slice(0, 200),
+      summary: summaryText,
+      fromMessageId,
+      toMessageId,
     });
 
     this.logger.log(

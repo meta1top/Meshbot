@@ -2,13 +2,18 @@ import { Transactional } from "@meshbot/common";
 import type {
   AppendMessageInput,
   CreateSessionInput,
+  RunSystemEvent,
   SessionCreatedEvent,
   SessionDeletedEvent,
   SessionRenamedEvent,
   SessionStatus,
   SessionSummary,
 } from "@meshbot/types-agent";
-import { SESSION_LIFECYCLE_EVENTS, stripLlmuse } from "@meshbot/types-agent";
+import {
+  SESSION_LIFECYCLE_EVENTS,
+  SESSION_WS_EVENTS,
+  stripLlmuse,
+} from "@meshbot/types-agent";
 import { ThreadStateService } from "@meshbot/lib-agent";
 import {
   BadRequestException,
@@ -18,6 +23,7 @@ import {
 } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
+import { randomUUID } from "node:crypto";
 import { In, Repository } from "typeorm";
 import { ScopedRepository } from "../account/scoped-repository";
 import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
@@ -561,14 +567,21 @@ export class SessionService {
   }
 
   /**
-   * 更新会话 title / pinned。至少传一项（Zod 在控制器 DTO 层已保证）。
+   * 更新会话 title / pinned / modelConfigId。至少传一项（Zod 在控制器 DTO 层已保证）。
    * pinned: true → 写当前时间到 pinned_at；pinned: false → null。
    * 单表 update，无需事务。
+   *
+   * modelConfigId **真的变化**（与会话当前值不同）时额外落一条系统事件行
+   * （role=system + kind=model_switch）+ 广播 `run.system_event`，供消息流实时
+   * 呈现「已切换模型：旧 → 新」——纯 session 字段 PATCH，本无 run，落行 + emit
+   * 走这条同步路径即可，不经 runner。旧模型名若已被删/不可达，best-effort
+   * 兜底成原始 id，不阻断本次切换。
    */
   async patch(
     sessionId: string,
     input: { title?: string; pinned?: boolean; modelConfigId?: string },
   ): Promise<SessionSummary> {
+    const before = await this.findSessionOrFail(sessionId);
     const changes: Partial<Session> = {};
     if (input.title !== undefined) {
       changes.title = input.title;
@@ -577,10 +590,27 @@ export class SessionService {
     if (input.pinned !== undefined) {
       changes.pinnedAt = input.pinned ? new Date() : null;
     }
+    let modelSwitchEvent: RunSystemEvent | null = null;
     if (input.modelConfigId !== undefined) {
       // 校验归属：按账号作用域查询，他账号/不存在的 id 统一 404，防越权指认。
-      await this.modelConfigs.findOneOrFail(input.modelConfigId);
+      const newModel = await this.modelConfigs.findOneOrFail(
+        input.modelConfigId,
+      );
       changes.modelConfigId = input.modelConfigId;
+      // 仅在真的改了值时才组系统行——同值 PATCH（如前端幂等重放）不留噪音行。
+      if (input.modelConfigId !== before.modelConfigId) {
+        const fromModel = before.modelConfigId
+          ? await this.resolveModelName(before.modelConfigId)
+          : "默认模型";
+        const toModel = newModel.name;
+        modelSwitchEvent = {
+          sessionId,
+          id: `msw-${randomUUID()}`,
+          kind: "model_switch",
+          content: `已切换模型：${fromModel} → ${toModel}`,
+          metadata: { fromModel, toModel },
+        };
+      }
     }
     await this.sessionRepo.update({ id: sessionId }, changes);
     const s = await this.findSessionOrFail(sessionId);
@@ -592,7 +622,30 @@ export class SessionService {
         title: s.title,
       } satisfies SessionRenamedEvent);
     }
+    if (modelSwitchEvent) {
+      await this.sessionMessages.recordSystemEvent({
+        id: modelSwitchEvent.id,
+        sessionId,
+        kind: "model_switch",
+        content: modelSwitchEvent.content,
+        metadata: modelSwitchEvent.metadata,
+      });
+      this.emitter.emit(SESSION_WS_EVENTS.runSystemEvent, modelSwitchEvent);
+    }
     return toSummary(s);
+  }
+
+  /**
+   * 查模型显示名，供切模型系统行文案用；模型已被删除/不可达时 best-effort
+   * 兜底成原始 id，不因为查旧模型名失败而阻断本次切换。
+   */
+  private async resolveModelName(modelConfigId: string): Promise<string> {
+    try {
+      const m = await this.modelConfigs.findOneOrFail(modelConfigId);
+      return m.name;
+    } catch {
+      return modelConfigId;
+    }
   }
 
   /**

@@ -149,17 +149,25 @@ export class RunnerService implements OnModuleInit {
     } satisfies SessionStatusChangedEvent);
   }
 
-  /** 启动消费循环（fire-and-forget）。已有消费循环则跳过（防重入）。 */
+  /**
+   * 启动消费循环（fire-and-forget）。已有消费循环则跳过（防重入）；压缩中
+   * 也拒绝新 run（`ContextCompactor.isCompacting`）——与 `/compact` 端点已有
+   * 的「run 中禁压缩」守卫双向对称，避免新 run 与压缩并发改写同一 session
+   * 的 checkpointer 状态（消息序错乱/tool 配对断裂）。压缩结束后下一次 kick
+   * （消息发送 / 定时任务等）会自然放行，此处不重试排队。
+   */
   kick(sessionId: string): void {
     if (this.running.has(sessionId)) return;
+    if (this.compactor.isCompacting(sessionId)) return;
     void this.kickAndWait(sessionId).catch((err) => {
       this.logger.error(`run loop crashed for ${sessionId}`, err);
     });
   }
 
-  /** 启动重试消费（fire-and-forget）。重试 failed 消息。 */
+  /** 启动重试消费（fire-and-forget）。重试 failed 消息；压缩中同样拒绝（见 {@link kick}）。 */
   kickRetry(sessionId: string): void {
     if (this.running.has(sessionId)) return;
+    if (this.compactor.isCompacting(sessionId)) return;
     void this.kickRetryAndWait(sessionId).catch((err) => {
       this.logger.error(`retry loop crashed for ${sessionId}`, err);
     });

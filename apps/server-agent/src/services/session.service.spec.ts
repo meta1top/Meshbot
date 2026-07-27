@@ -7,6 +7,7 @@ import {
 import { AccountContextService, ThreadStateService } from "@meshbot/lib-agent";
 import {
   SESSION_LIFECYCLE_EVENTS,
+  SESSION_WS_EVENTS,
   type CreateSessionInput,
 } from "@meshbot/types-agent";
 import { DataSource } from "typeorm";
@@ -138,17 +139,22 @@ describe("SessionService", () => {
         this.__deletions.push(sessionId);
       },
     };
-    // 假 ModelConfigService：白名单内的 id 视为存在，其余抛 NotFoundException
-    // （真实实现按账号作用域查询，他账号 id 同样命中「不存在」路径）。
+    // 假 ModelConfigService：白名单内的 id 视为存在（带 name，供切模型系统行
+    // 文案用），其余抛 NotFoundException（真实实现按账号作用域查询，他账号 id
+    // 同样命中「不存在」路径）。
     const fakeModelConfigs = {
-      __known: new Set<string>(["mc-exists"]),
+      __known: new Map<string, string>([
+        ["mc-exists", "GPT-4"],
+        ["mc-exists-2", "Claude"],
+      ]),
       async findOneOrFail(id: string) {
-        if (!this.__known.has(id)) {
+        const name = this.__known.get(id);
+        if (name === undefined) {
           throw new (require("@nestjs/common").NotFoundException)(
             `ModelConfig ${id} not found`,
           );
         }
-        return { id } as never;
+        return { id, name } as never;
       },
     };
     emitted = [];
@@ -583,6 +589,101 @@ describe("SessionService", () => {
       await expect(service.patch("nope", { title: "x" })).rejects.toThrow(
         NotFoundException,
       );
+    });
+
+    describe("modelConfigId 变更 → 切模型系统行 + run.system_event", () => {
+      it("从未设置切到具体模型：fromModel='默认模型' + 落 system 行 + emit", async () => {
+        const { sessionId } = await service.createSession({ content: "x" });
+        emitted.length = 0;
+        await service.patch(sessionId, { modelConfigId: "mc-exists" });
+
+        const db = (service as unknown as { __ds: DataSource }).__ds;
+        const rows = await db.query(
+          `SELECT role, content, metadata FROM session_messages WHERE session_id = ?`,
+          [sessionId],
+        );
+        expect(rows).toHaveLength(1);
+        expect(rows[0].role).toBe("system");
+        expect(rows[0].content).toBe("已切换模型：默认模型 → GPT-4");
+        expect(JSON.parse(rows[0].metadata)).toEqual({
+          kind: "model_switch",
+          fromModel: "默认模型",
+          toModel: "GPT-4",
+        });
+
+        const sysEvents = emitted.filter(
+          ([e]) => e === SESSION_WS_EVENTS.runSystemEvent,
+        );
+        expect(sysEvents).toHaveLength(1);
+        expect(sysEvents[0][1]).toMatchObject({
+          sessionId,
+          kind: "model_switch",
+          content: "已切换模型：默认模型 → GPT-4",
+          metadata: { fromModel: "默认模型", toModel: "GPT-4" },
+        });
+      });
+
+      it("已设置模型再切到另一个：fromModel 取旧模型名", async () => {
+        const { sessionId } = await service.createSession({
+          content: "x",
+          modelConfigId: "mc-exists",
+        });
+        emitted.length = 0;
+        await service.patch(sessionId, { modelConfigId: "mc-exists-2" });
+
+        const db = (service as unknown as { __ds: DataSource }).__ds;
+        const rows = await db.query(
+          `SELECT content FROM session_messages WHERE session_id = ?`,
+          [sessionId],
+        );
+        expect(rows).toHaveLength(1);
+        expect(rows[0].content).toBe("已切换模型：GPT-4 → Claude");
+      });
+
+      it("patch 相同 modelConfigId（无实际变化）→ 不落行、不 emit", async () => {
+        const { sessionId } = await service.createSession({
+          content: "x",
+          modelConfigId: "mc-exists",
+        });
+        emitted.length = 0;
+        await service.patch(sessionId, { modelConfigId: "mc-exists" });
+
+        const db = (service as unknown as { __ds: DataSource }).__ds;
+        const rows = await db.query(
+          `SELECT id FROM session_messages WHERE session_id = ?`,
+          [sessionId],
+        );
+        expect(rows).toHaveLength(0);
+        expect(
+          emitted.filter(([e]) => e === SESSION_WS_EVENTS.runSystemEvent),
+        ).toHaveLength(0);
+      });
+
+      it("modelConfigId 不存在 → 不落行、不 emit（NotFoundException 已在别处覆盖）", async () => {
+        const { sessionId } = await service.createSession({ content: "x" });
+        emitted.length = 0;
+        await expect(
+          service.patch(sessionId, { modelConfigId: "mc-ghost" }),
+        ).rejects.toThrow(NotFoundException);
+        expect(
+          emitted.filter(([e]) => e === SESSION_WS_EVENTS.runSystemEvent),
+        ).toHaveLength(0);
+      });
+
+      it("同时改 title 和 modelConfigId → 两个事件都发（renamed + system_event）", async () => {
+        const { sessionId } = await service.createSession({ content: "x" });
+        emitted.length = 0;
+        await service.patch(sessionId, {
+          title: "新标题",
+          modelConfigId: "mc-exists",
+        });
+        expect(
+          emitted.filter(([e]) => e === SESSION_LIFECYCLE_EVENTS.renamed),
+        ).toHaveLength(1);
+        expect(
+          emitted.filter(([e]) => e === SESSION_WS_EVENTS.runSystemEvent),
+        ).toHaveLength(1);
+      });
     });
   });
 

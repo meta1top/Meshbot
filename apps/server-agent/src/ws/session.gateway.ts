@@ -17,6 +17,7 @@ import {
   type RunReasoningDoneEvent,
   type RunSubagentSettledEvent,
   type RunSubagentSpawnedEvent,
+  type RunSystemEvent,
   type RunToolCallArgsDeltaEvent,
   type RunToolCallEndEvent,
   type RunToolCallProgressEvent,
@@ -243,6 +244,17 @@ export class SessionGateway extends BaseWebSocketGateway {
     this.server
       .to(payload.sessionId)
       .emit(SESSION_WS_EVENTS.runCompactionError, payload);
+  }
+
+  /**
+   * SessionService.patch → run.system_event → 转发到房间（对照 run.compaction_done
+   * 转发）。切模型等通用系统事件行的实时下发，前端收到后直接 append 到 timeline。
+   */
+  @OnEvent(SESSION_WS_EVENTS.runSystemEvent)
+  onRunSystemEvent(payload: RunSystemEvent): void {
+    this.server
+      .to(payload.sessionId)
+      .emit(SESSION_WS_EVENTS.runSystemEvent, payload);
   }
 
   /** DispatchSubagentService → run.subagent_spawned → 转发到父会话房间。 */
