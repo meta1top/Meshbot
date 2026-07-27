@@ -10,6 +10,8 @@
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@codemirror/lang-json": "^6.0.2",
+    "@codemirror/lint": "^6.9.7",
     "@hookform/resolvers": "^5",
     "@meshbot/design": "workspace:*",
     "@meshbot/types": "workspace:*",
@@ -20,6 +22,7 @@
     "@tiptap/pm": "^3.27.1",
     "@tiptap/react": "^3.27.1",
     "@tiptap/starter-kit": "^3.27.1",
+    "@uiw/react-codemirror": "^4.25.11",
     "axios": "^1.16.0",
     "cronstrue": "^3.14.0",
     "highlight.js": "^11.11.1",
