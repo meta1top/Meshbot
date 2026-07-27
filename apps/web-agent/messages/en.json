@@ -190,6 +190,11 @@
     "send": "Send",
     "interrupt": "Interrupt",
     "attachment": "Add attachment",
+    "commandUnknown": "Unknown command: {name}",
+    "commands": {
+      "compactDescription": "Compact the current session's context",
+      "compactFailed": "Compaction failed, please try again later"
+    },
     "format": {
       "bold": "Bold",
       "italic": "Italic",

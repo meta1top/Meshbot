@@ -4,7 +4,9 @@ import { stripLlmuse } from "@meshbot/types-agent";
 import {
   type ArtifactPreviewTarget,
   SessionConversationView,
+  type SlashCommand,
 } from "@meshbot/web-common/session";
+import axios from "axios";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useTranslations } from "next-intl";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
@@ -41,10 +43,30 @@ import {
 } from "@/lib/session-transport";
 import { useModelConfigs } from "@/rest/model-config";
 import {
+  compactSession,
   deletePendingMessage,
   regenerateMessage,
   setMessageFeedback,
 } from "@/rest/session";
+
+/**
+ * 从错误对象里提取展示文案：优先取后端 400 响应体的 `message`（如
+ * `/compact` 无可压缩内容的友好中文提示），其次取 `Error.message`，都没有
+ * 则用调用方给的兜底——与 `agent-editor-sheet.tsx` / `tool-prefs-editor.tsx`
+ * 的同名逻辑一致（未共享抽取，各处都很短，各自保持组件自包含）。
+ */
+function extractErrorMessage(err: unknown, fallback: string): string {
+  if (
+    axios.isAxiosError(err) &&
+    err.response?.data &&
+    typeof err.response.data === "object" &&
+    "message" in err.response.data &&
+    typeof (err.response.data as { message?: unknown }).message === "string"
+  ) {
+    return (err.response.data as { message: string }).message;
+  }
+  return err instanceof Error ? err.message : fallback;
+}
 
 interface AssistantConversationBodyProps {
   /** 当前会话 ID，由 page 传入（渲染时必有）。远程会话时是 B 上的会话 id。 */
@@ -235,6 +257,31 @@ export function AssistantConversationBody({
   };
 
   /**
+   * `/` 命令注册表：目前只有 `/compact`（主动触发上下文压缩）。只在本地会话
+   * 注入——远程会话（`remoteAgentId` 非空）的 id 是 B 上的会话 id，本地 REST
+   * `POST /api/sessions/:id/compact` 对它无意义（404），故不传 `commands`，
+   * ChatInput 未传 commands 时行为与现状一致：`/` 开头文本照常发送。
+   * 成功不额外提示——压缩卡片经 WS `run.compaction_done` 自然出现在消息流；
+   * 400（无可压缩内容）/ 其他异常都把后端友好消息透传为内联提示。
+   */
+  const commands: SlashCommand[] | undefined = remoteAgentId
+    ? undefined
+    : [
+        {
+          name: "compact",
+          description: tChat("commands.compactDescription"),
+          run: async () => {
+            try {
+              await compactSession(id);
+              return undefined;
+            } catch (err) {
+              return extractErrorMessage(err, tChat("commands.compactFailed"));
+            }
+          },
+        },
+      ];
+
+  /**
    * 删除一条 pending 消息。
    * - 200：本地从 messages 移除
    * - 404：消息已不存在，本地也移除（兜底）
@@ -372,6 +419,7 @@ export function AssistantConversationBody({
           isLoading={stream.running}
           canInterrupt={stream.canInterrupt}
           placeholder={inputPlaceholder}
+          commands={commands}
           trailingActions={
             <ModelSelect value={sessionModelId} onChange={handleModelChange} />
           }
@@ -396,6 +444,7 @@ export function AssistantConversationBody({
             interrupt: tChat("interrupt"),
             interruptUnavailable: tChat("interruptUnavailable"),
             send: tChat("send"),
+            commandUnknown: (name) => tChat("commandUnknown", { name }),
             usage: {
               nextRequestLabel: t("usage.nextRequestLabel"),
               inputLabel: t("usage.inputLabel"),

@@ -8,4 +8,5 @@ export {
   type ChatInputHandle,
   type ChatInputLabels,
   type ChatInputProps,
+  type SlashCommand,
 } from "@meshbot/web-common/session";

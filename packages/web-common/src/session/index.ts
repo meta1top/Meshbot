@@ -36,6 +36,9 @@ export {
   type ChatInputHandle,
   type ChatInputLabels,
   type ChatInputProps,
+  matchSlashCommand,
+  type SlashCommand,
+  type SlashCommandMatch,
 } from "./chat-input";
 export {
   CompactionBanner,

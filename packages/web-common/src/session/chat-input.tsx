@@ -28,6 +28,50 @@ function getMarkdown(storage: unknown): string {
 }
 
 /**
+ * `/` 命令（小而可扩展机制的首个消费者，`/compact` 见调用方接线）。
+ * `name` 不带前导斜杠；`run()` 返回 string 时作为内联提示展示，返回
+ * undefined 视为静默成功（如压缩卡片自己会经 WS 出现在消息流，无需额外提示）。
+ */
+export interface SlashCommand {
+  name: string;
+  description: string;
+  run: () => Promise<string | undefined>;
+}
+
+/**
+ * 发送拦截判定结果：
+ * - "none"：未传 `commands`，或文本不构成命令——按现状原样发送（不改变行为）。
+ * - "command"：首词精确匹配到已注册命令。
+ * - "unknown"：文本以 `/` 开头但首词未匹配任何已注册命令。
+ */
+export type SlashCommandMatch =
+  | { kind: "none" }
+  | { kind: "command"; command: SlashCommand }
+  | { kind: "unknown"; name: string };
+
+/**
+ * 判定发送文本是否命中 `/` 命令。纯函数，独立导出便于单测（tiptap 编辑器在
+ * jsdom 下不便驱动，逻辑与渲染分离）。
+ *
+ * 匹配规则：trim 后以 "/" 开头，取首词（按空白切分取第一段）去掉前导 "/"
+ * 作为命令名，在 `commands` 里精确匹配 `name`。当前唯一命令 `/compact` 无
+ * 参数，首词精确匹配即可；未来若命令带参数，参数解析下沉到各命令的
+ * `run()` 自己处理（此处只切首词，不假设参数形态）。
+ */
+export function matchSlashCommand(
+  text: string,
+  commands?: SlashCommand[],
+): SlashCommandMatch {
+  if (!commands || commands.length === 0) return { kind: "none" };
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("/")) return { kind: "none" };
+  const firstWord = trimmed.split(/\s+/)[0] ?? "";
+  const name = firstWord.slice(1);
+  const command = commands.find((c) => c.name === name);
+  return command ? { kind: "command", command } : { kind: "unknown", name };
+}
+
+/**
  * 文案注入（原 `useTranslations("chatInput")` / `useTranslations("session")`
  * 内部调用，Task 1 迁入 web-common 后改调用方传入）。`attachment`/`interrupt`
  * 始终渲染（底部动作栏固定按钮）；`placeholder`/`send`/`usage` 均可选——
@@ -51,6 +95,12 @@ export interface ChatInputLabels {
   interruptUnavailable?: string;
   /** 发送按钮 title。 */
   send?: string;
+  /**
+   * `/xxx` 未匹配到任何已注册命令时的内联提示文案（仅传入 `commands` 时可能
+   * 用到）。入参 `name` 含前导斜杠（如 `"/foo"`）。未传时静默不提示——与其余
+   * 可选 label 缺省即降级展示的约定一致，不在组件内硬编码兜底文案。
+   */
+  commandUnknown?: (name: string) => string;
   /** token 用量 tooltip 明细文案（仅 `tokenUsage.breakdown` 存在时用到）。 */
   usage?: {
     nextRequestLabel: string;
@@ -79,6 +129,14 @@ export interface ChatInputProps {
    */
   canInterrupt?: boolean;
   placeholder?: string;
+  /**
+   * `/` 命令注册表（小而可扩展机制，首个消费者 `/compact`）。未传（默认）时
+   * 行为与现状完全一致——`/` 开头的文本照常当普通消息发送，不做任何拦截。
+   * 传入后：发送文本首词精确匹配到某条命令 → 调用其 `run()`（不触发
+   * `onSend`、清空输入、执行期禁止重复触发）；未匹配任何命令 → 内联提示
+   * （见 `labels.commandUnknown`），同样不发送。
+   */
+  commands?: SlashCommand[];
   /** 底部动作栏左侧的前导动作（如 ComposerActions 的 技能/连应用/权限 mock 链）。 */
   leadingActions?: ReactNode;
   /** 右下动作区（token 环左侧）的选择器（如模型选择）；不传不渲染。 */
@@ -134,6 +192,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       isLoading = false,
       canInterrupt = true,
       placeholder,
+      commands,
       leadingActions,
       trailingActions,
       modelName,
@@ -149,6 +208,11 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     // 编辑器空态镜像：驱动发送按钮 disabled。不能直接读 editor.isEmpty——
     // 受控同步走 emitUpdate:false 不触发重渲，直读会拿到陈旧渲染帧的值。
     const [isEmpty, setIsEmpty] = useState(true);
+
+    // `/` 命令内联提示（未知命令 / run() 返回的文案）；输入框上方展示。
+    const [commandHint, setCommandHint] = useState<string | null>(null);
+    // 命令 run() 执行期：禁止重复触发（Enter 与按钮共用同一守卫）。
+    const [commandRunning, setCommandRunning] = useState(false);
 
     const editor = useEditor({
       immediatelyRender: false,
@@ -186,6 +250,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       onUpdate: ({ editor: e }) => {
         onChange(getMarkdown(e.storage));
         setIsEmpty(e.isEmpty);
+        // 用户继续编辑即视为已看到/在处理提示，清掉旧的内联命令提示。
+        setCommandHint(null);
       },
     });
 
@@ -193,13 +259,45 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       // 运行中禁止发送（与发送按钮隐藏一致）：Enter 快捷键与按钮同一守卫，
       // 避免「按钮没了但快捷键还能发」的不一致。
       if (isLoading) return;
+      // 命令执行期禁止重复触发（Enter 与按钮共用同一守卫）。
+      if (commandRunning) return;
       if (!editor) return;
       const md = getMarkdown(editor.storage).trim();
       if (!md) return;
+
+      const match = matchSlashCommand(md, commands);
+      if (match.kind === "command") {
+        // 命中命令：不触发 onSend，立即清空输入（与普通发送一致的即时反馈），
+        // run() 异步执行期间禁止重复触发。
+        editor.commands.clearContent();
+        onChange("");
+        setCommandHint(null);
+        setCommandRunning(true);
+        match.command
+          .run()
+          .then((result) => {
+            if (result) setCommandHint(result);
+          })
+          .catch((err: unknown) => {
+            setCommandHint(err instanceof Error ? err.message : String(err));
+          })
+          .finally(() => setCommandRunning(false));
+        return;
+      }
+      if (match.kind === "unknown") {
+        // 未匹配到任何已注册命令：不发送，仅内联提示（未提供 commandUnknown
+        // label 时静默——不在组件内硬编码兜底文案，见该字段的文档）。
+        if (labels.commandUnknown) {
+          setCommandHint(labels.commandUnknown(`/${match.name}`));
+        }
+        return;
+      }
+
       onSend?.(md);
       editor.commands.clearContent();
       onChange("");
-    }, [editor, onSend, onChange, isLoading]);
+      setCommandHint(null);
+    }, [editor, onSend, onChange, isLoading, commands, commandRunning, labels]);
 
     // 每次 handleSend 更新时同步到 ref，让 handleKeyDown 读到最新版本
     useEffect(() => {
@@ -248,6 +346,13 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
 
     return (
       <div className="overflow-hidden rounded-md border border-border bg-card">
+        {/* `/` 命令内联提示（未知命令 / run() 返回的文案）；未命中过任何命令时不渲染。 */}
+        {commandHint && (
+          <div className="border-b border-border px-3 py-1.5 text-muted-foreground text-xs">
+            {commandHint}
+          </div>
+        )}
+
         {/* 编辑区（tiptap；StarterKit 输入规则让 markdown 边打边可视化） */}
         <div className="px-3 pt-2.5 pb-1">
           <div className="max-h-[200px] w-full overflow-y-auto py-1.5">
@@ -386,10 +491,10 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               <button
                 type="button"
                 onClick={handleSend}
-                disabled={!hasContent}
+                disabled={!hasContent || commandRunning}
                 className={cn(
                   "flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors",
-                  hasContent
+                  hasContent && !commandRunning
                     ? "bg-(--shell-accent) text-white"
                     : "text-muted-foreground",
                 )}
