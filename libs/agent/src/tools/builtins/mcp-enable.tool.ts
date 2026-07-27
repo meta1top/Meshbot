@@ -1,8 +1,14 @@
 import { Injectable } from "@nestjs/common";
 import { z } from "zod";
+import { AccountContextService } from "../../account/account-context.service";
+import { AgentContextService } from "../../account/agent-context.service";
 import { McpService } from "../../mcp/mcp.service";
 import { Tool } from "../tool.decorator";
 import type { MeshbotTool, ToolContext } from "../tool.types";
+import {
+  countLoadedToolsForServer,
+  describeLoadOutcome,
+} from "./mcp-load-outcome.helper";
 import { toggleMcpServerEnabled } from "./mcp-toggle.helper";
 
 const ArgsSchema = z.object({
@@ -24,7 +30,11 @@ export class McpEnableTool implements MeshbotTool<Args, string> {
     "exist. Takes effect immediately — its tools are usable in this very turn.";
   readonly schema = ArgsSchema;
 
-  constructor(private readonly mcp: McpService) {}
+  constructor(
+    private readonly mcp: McpService,
+    private readonly account: AccountContextService,
+    private readonly agentCtx: AgentContextService,
+  ) {}
 
   async execute(args: Args, _ctx: ToolContext): Promise<string> {
     const result = await toggleMcpServerEnabled(this.mcp, args.name, true);
@@ -34,6 +44,14 @@ export class McpEnableTool implements MeshbotTool<Args, string> {
     if (result === "already") {
       return `MCP 服务器 "${args.name}" 已是启用状态。`;
     }
-    return `已启用 MCP 服务器 "${args.name}"，已生效（新工具本轮对话内立即可用）——请告知用户。`;
+    // updateConfig 已在 toggleMcpServerEnabled 内部触发 reload，按实际加载
+    // 结果诚实分流：连接失败/零工具不能说「已生效」。
+    const loadedCount = countLoadedToolsForServer(
+      this.mcp,
+      this.account.getOrThrow(),
+      this.agentCtx.getOrThrow(),
+      args.name,
+    );
+    return `已启用 MCP 服务器 "${args.name}"，${describeLoadOutcome(loadedCount, "启用")}`;
   }
 }

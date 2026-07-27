@@ -50,6 +50,15 @@ interface RetiredAgentMcp {
 }
 
 /**
+ * `acquire()` 返回给调用方的不透明身份句柄，`release()` 时原样传回做**精确
+ * 身份匹配**（而不是按 `(cloudUserId, agentId)` 键去 `perAgent`/`retired`
+ * 里"猜"该扣哪个 entry）。对外只是 `object`——调用方（`RunnerService`）只需
+ * 原样保存、在 `finally` 里传回，不应假设/依赖其内部结构；内部实现上它就是
+ * 那次 acquire 命中的 `AgentMcp` 引用本身，`release` 用 `===` 比对定位。
+ */
+export type AgentMcpHandle = object;
+
+/**
  * MCP 集成入口（v4 按「账号+Agent」懒加载）。生命周期：
  *
  * - 不再登录时一次性起账号全部 MCP —— 5 个 Agent × 3 个 stdio server 登录就要拉
@@ -65,18 +74,25 @@ interface RetiredAgentMcp {
  * 若发现当前 entry `refCount > 0`（有 run 正在用），**不会立即 close
  * client**——那会打断正在执行中的 MCP 工具调用。而是把 entry 移入
  * `retired`（挂起列表），`perAgent` 上同 key 立刻换成新建的 entry（新工具
- * 立即可见，热生效不受影响）。旧 run 结束时调用不带任何身份信息的
- * `release(cloudUserId, agentId)`——`release` 优先在 `retired` 里找同 key
- * 最老的一条递减，归零才 close；只有当该 key 没有挂起条目时才落回递减
- * `perAgent` 里的当前 entry。这保证了：① 旧 entry 的 client 只在其自身引用
- * 真正归零后才关，不会打断在用的 run；② 新 entry 的 refCount 不会被旧 run
- * 的 release 误伤（不会出现"新 entry 计数被顶成负数/提前判定可回收"）。
- * 已知局限：若同一 Agent 存在**跨越同一次 reload 边界的多个并发 run**（一个
- * 在 reload 前 acquire、另一个在 reload 后 acquire），仅凭 `(cloudUserId,
- * agentId)` 无法从 release 调用本身分辨它对应哪次 acquire——`retired`
- * 优先的策略在这种交叉场景下无法保证 100% 精确配对（需要调用方回传
- * acquire 返回的身份令牌才能根治，但 RunnerService 的调用签名不在本次改
- * 动范围内）；`sweepIdle` 的安全网会兜底避免真正的永久泄漏。
+ * 立即可见，热生效不受影响）。
+ *
+ * **身份精确匹配**（不是按 key 猜测）：`acquire()` 返回一个不透明的
+ * `AgentMcpHandle`（本质是那次 acquire 命中的 entry 引用），调用方必须原样
+ * 保存并在 `release()` 时传回。`release` 用 `===` 精确定位该 handle 对应
+ * 的 entry——是当前 `perAgent` 里的那个就直接递减；是 `retired` 挂起里的
+ * 那个就在挂起列表里递减，归零才 `close`；两处都找不到（entry 已关闭 /
+ * 传入了不认识的 handle）则 no-op + warn，绝不误伤任何在用状态。这保证了
+ * 即使多个并发 run 共享同一个 entry、且中途发生了 reload（旧 entry 被挂起、
+ * 新 entry 顶替同一个 key），每次 release 也只会精确命中调用方自己那次
+ * acquire 拿到的那个 entry——不会出现「新 run 的 release 误砍了旧 entry
+ * 的配额，导致旧 entry 在其真正的持有者还没结束时就被提前 close」这类
+ * 按 key 猜测必然存在的错配风险（早期版本按 key 猜测的 FIFO 启发式已被
+ * 淘汰，见本文件历史/测试里 "run A/D 共享 entry1、run C 交错 release"
+ * 场景的专门用例）。
+ *
+ * `retired` 列表本身依然保留——不是给身份匹配兜底，而是给**极端异常路径**
+ * 兜底（例如 handle 因调用方 bug 丢失、或 release 从未被调用）：`sweepIdle`
+ * 的安全网仍按 `retiredAt` 超过闲置阈值强制关闭，避免这种情况下的永久泄漏。
  */
 @Injectable()
 export class McpService implements OnModuleInit, OnModuleDestroy {
@@ -215,45 +231,75 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** 标记该 Agent 有活跃 run（回收保护）。 */
-  acquire(cloudUserId: string, agentId: string): void {
+  /**
+   * 标记该 Agent 有活跃 run（回收保护），返回一个身份句柄——调用方须原样
+   * 保存并在 `release()` 时传回（详见 `AgentMcpHandle` 类型注释）。该 Agent
+   * 尚无运行态（`ensureAgent` 未调用过 / 已被拆掉）时返回 `null`。
+   */
+  acquire(cloudUserId: string, agentId: string): AgentMcpHandle | null {
     const entry = this.perAgent.get(agentKey(cloudUserId, agentId));
-    if (entry) {
-      entry.refCount += 1;
-      entry.lastUsedAt = Date.now();
+    if (!entry) {
+      return null;
     }
+    entry.refCount += 1;
+    entry.lastUsedAt = Date.now();
+    return entry;
   }
 
   /**
-   * 活跃 run 结束（解除回收保护）。**身份路由**：若该 key 存在挂起的旧
-   * entry（`retired`，即 run 开始时用的是 reload 前的旧运行态），优先递减
-   * 最老的那条——归零则 close 其 client 并移出挂起列表；只有 `retired`
-   * 里没有该 key 的挂起条目时，才落回递减 `perAgent` 里的当前 entry。
-   * 这样即使调用方（RunnerService）不携带任何身份令牌，也不会把旧 run 的
-   * release 误算到 reload 后的新 entry 头上（新 entry 计数虚高会让 sweepIdle
-   * 误判为"仍在使用"更安全；反过来算错到旧 entry 上更危险——旧 entry
-   * 提前归零会在新 run 使用旧 client 的窗口期把它关掉，因此宁可优先扣旧的）。
+   * 活跃 run 结束（解除回收保护）。**按身份精确匹配**：`handle` 是调用方在
+   * 对应 `acquire()` 拿到的引用，这里先看它是不是 `perAgent` 里的当前
+   * entry（正常路径，直接递减）；不是则去 `retired` 挂起列表里按 `===`
+   * 找到它（reload 把它挂起的情形），归零才 `close` 并移出列表。两处都找
+   * 不到——entry 已经关闭，或者传入了一个不认识的 handle——no-op + warn，
+   * **绝不**退化为「猜一个 entry 硬扣」（早期版本按 `(cloudUserId,
+   * agentId)` key 猜测最老挂起条目的 FIFO 启发式已被淘汰：多个并发 run
+   * 共享同一 entry、且其中一个 run 触发 reload 时，无关的第三个 run 提前
+   * release 会把 FIFO 猜测命中同一个挂起 entry，导致它在真正的持有者还没
+   * 结束前就被提前 close——见 `mcp.service.spec.ts` 里 "run A/D 共享 entry1、
+   * run C 交错 release" 的专门用例）。`handle` 为 `null`（对应 `acquire()`
+   * 当时就没拿到 entry）时安静 no-op，语义等同"本来就没什么可释放的"。
    */
-  release(cloudUserId: string, agentId: string): void {
+  release(
+    cloudUserId: string,
+    agentId: string,
+    handle: AgentMcpHandle | null,
+  ): void {
+    if (!handle) {
+      return;
+    }
     const key = agentKey(cloudUserId, agentId);
+    const entry = handle as AgentMcp;
+
+    const current = this.perAgent.get(key);
+    if (current === entry) {
+      entry.refCount = Math.max(0, entry.refCount - 1);
+      entry.lastUsedAt = Date.now();
+      return;
+    }
+
     const retiredList = this.retired.get(key);
-    const oldest = retiredList?.[0];
-    if (retiredList && oldest) {
-      oldest.entry.refCount = Math.max(0, oldest.entry.refCount - 1);
-      if (oldest.entry.refCount === 0) {
-        retiredList.shift();
+    const idx = retiredList?.findIndex((r) => r.entry === entry) ?? -1;
+    if (retiredList && idx >= 0) {
+      const retiredItem = retiredList[idx];
+      retiredItem.entry.refCount = Math.max(0, retiredItem.entry.refCount - 1);
+      if (retiredItem.entry.refCount === 0) {
+        retiredList.splice(idx, 1);
         if (retiredList.length === 0) {
           this.retired.delete(key);
         }
-        void this.closeEntryClient(key, oldest.entry);
+        void this.closeEntryClient(key, retiredItem.entry);
       }
       return;
     }
-    const entry = this.perAgent.get(key);
-    if (entry) {
-      entry.refCount = Math.max(0, entry.refCount - 1);
-      entry.lastUsedAt = Date.now();
-    }
+
+    // 身份不匹配：entry 既不是当前运行态、也不在挂起列表里——正常生命周期
+    // 里 entry 只会经历 current → retired → closed 三态，closed 后不该再
+    // 被 release。理论上不该发生（stale handle / 重复 release 之类调用方
+    // bug），防御性 no-op，不猜测、不误伤任何在用状态，只记警告便于定位。
+    this.logger.warn(
+      `release() identity mismatch for ${key}: handle's entry is neither the current nor a retired runtime (already closed, or a stale/duplicate handle) — ignored, no refCount mutated.`,
+    );
   }
 
   /**
@@ -263,10 +309,9 @@ export class McpService implements OnModuleInit, OnModuleDestroy {
    * refCount > 0 一律跳过——有 run 正在跑时回收会当场抽掉它的工具。
    *
    * 安全网：正常情况下 `retired` 条目会在对应 run 的 `release()`（`finally`
-   * 里必调）归零后自然清空；若调用方有 bug 漏调 release 或进程异常导致
-   * refCount 永远卡住，这里按 `retiredAt` 超过闲置阈值强制关闭，避免子
-   * 进程 / 长连接永久泄漏（`release()` 身份路由无法做到 100% 精确匹配，
-   * 见类注释「已知局限」，这层安全网兜底真正的永久泄漏场景）。
+   * 里必调，且现在按身份精确匹配）归零后自然清空；这里仍保留按 `retiredAt`
+   * 超过闲置阈值强制关闭的兜底——照顾调用方 bug 弄丢 handle、或 release
+   * 从未被调用等异常路径，避免子进程 / 长连接永久泄漏。
    */
   async sweepIdle(now: number): Promise<void> {
     for (const [key, entry] of [...this.perAgent.entries()]) {

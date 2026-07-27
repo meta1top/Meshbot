@@ -533,6 +533,13 @@ export class RunnerService implements OnModuleInit {
    * 拉起该 Agent 的 MCP（已就绪则只刷新 lastUsedAt），`acquire` 挂引用计数
    * 防止闲置回收在 run 进行中把工具抽走；`release` 必须在 finally 里——否则
    * run 抛错时引用计数永久泄漏，该 Agent 的 MCP 再也回收不掉。
+   *
+   * **必须保存 `acquire()` 的返回值并原样传给 `release()`**（MCP 写操作热
+   * 生效，Task 3）：`McpService.updateConfig` 现在会在配置落盘后立即
+   * teardown + 重建运行态，同一个 `(cloudUserId, agentId)` key 下的 entry
+   * 可能在本次 run 进行中被替换——`release` 靠这个身份句柄精确匹配到本次
+   * run 真正持有引用的那个 entry，而不是按 key 去当前 Map 里瞎猜（reload
+   * 后同 key 对应的已经是另一个 entry 了）。
    */
   private async consumeRunStream(
     sessionId: string,
@@ -557,7 +564,7 @@ export class RunnerService implements OnModuleInit {
       session?.modelConfigId || agent?.defaultModelConfigId || null;
     await this.agentCtx.run(agentId, async () => {
       await this.mcp.ensureAgent(cloudUserId, agentId);
-      this.mcp.acquire(cloudUserId, agentId);
+      const mcpHandle = this.mcp.acquire(cloudUserId, agentId);
       try {
         await this.modelRunCtx.run(modelOverride, () =>
           this.consumeRunStreamInCtx(
@@ -570,7 +577,7 @@ export class RunnerService implements OnModuleInit {
           ),
         );
       } finally {
-        this.mcp.release(cloudUserId, agentId);
+        this.mcp.release(cloudUserId, agentId, mcpHandle);
       }
     });
   }
