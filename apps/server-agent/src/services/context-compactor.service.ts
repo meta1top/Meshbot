@@ -136,22 +136,22 @@ export class ContextCompactor {
     // force（手动 /compact）语义是「尽力压缩」：预算算法判定「都在保留预算内、
     // 无需压缩」（splitIdx=0）时，回退到「只留最近 2 条、其余全摘要」——否则
     // 用户主动点了压缩却被「没有可压缩的内容」挡回，很反直觉（对话明明很长）。
-    // 真正没东西可压（rest≤2 条）由下方 rest.length-splitIdx<2 与二次判零兜底。
+    // 真正没东西可压（rest≤2 条）由下方 keep≥2 兜底 + expand 后的判零兜底。
     if (splitIdx === 0 && opts.force && rest.length > 2) {
       splitIdx = rest.length - 2;
     }
-    splitIdx = expandToToolBoundary(rest, splitIdx);
-    if (splitIdx === 0) {
-      if (opts.force) throw new CompactionNothingToCompact();
-      return null;
-    }
-    // 保留区不足 2 条 → 强制把 splitIdx 往前挪（让 keep 区至少留 2 条），
-    // 哪怕这意味着这一轮没东西可压（splitIdx 被挪到 0）。
+    // 保留区不足 2 条 → 强制把 splitIdx 往前挪（让 keep 区至少留 2 条）。
     if (rest.length - splitIdx < 2) {
       splitIdx = Math.max(0, rest.length - 2);
     }
-    // 二次确认 splitIdx：若上面的调整把它压回 0，说明 rest 总条数
-    // 太少，没东西可压。复用同一套语义：非 force 返 null，force 抛错。
+    // expandToToolBoundary 必须是**最后**一步切点调整：它把切点右移以保
+    // tool_call/result 配对完整。若在 keep≥2 兜底之前做，兜底会把切点重新拉回
+    // rest.length-2，切断刚修好的配对——尾轮用过工具的短对话 force 压缩时，
+    // ToolMessage 落 keep 而 owner AI 进摘要被删 → 孤儿 tool result → 下一轮
+    // provider 400（sanitizeOrphanToolCalls 只救反方向）。终审 Important。
+    splitIdx = expandToToolBoundary(rest, splitIdx);
+    // 判零兜底：expand 右移到底（整尾是一条 tool 链）或 rest 太少压回 0，
+    // 都说明没东西可压。非 force 返 null，force 抛错。
     if (splitIdx === 0) {
       if (opts.force) throw new CompactionNothingToCompact();
       return null;

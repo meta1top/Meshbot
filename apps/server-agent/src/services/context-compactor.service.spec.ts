@@ -193,6 +193,60 @@ describe("ContextCompactor", () => {
     expect(modelResolver.summarize).toHaveBeenCalledTimes(1);
   });
 
+  it("force=true + 尾轮用过工具（AI tool_calls → Tool → AI）→ 不切断配对，keep 不留孤儿 ToolMessage", async () => {
+    // 终审 Important 回归：预算内短对话，尾部是「最后一轮用了工具」的最常见形态。
+    // 若 keep≥2 兜底切在 rest.length-2（=ToolMessage）而 expand 未在其后修正，
+    // owner AI 会进摘要区被删、ToolMessage 落 keep 成孤儿 → 下一轮 provider 400。
+    modelConfig.findEnabled.mockResolvedValue({
+      contextWindow: 1_000_000,
+    } as never);
+    modelResolver.summarize.mockResolvedValue({
+      text: "摘要",
+      usage: { inputTokens: 10, outputTokens: 5 },
+    } as never);
+    // 6 条：h0, a1, h2, a3(tool_calls:tc1), tr4(tool_call_id:tc1), a5
+    // 预算内 → force 回退 splitIdx=4（留最近 2 条 = tr4,a5）——但 tr4 的 owner
+    // a3 在摘要区，expand 必须把 splitIdx 右移到 5（把 tr4 也推进摘要区）。
+    const msgs: BaseMessage[] = [
+      new HumanMessage({ id: "h0", content: "hi" }),
+      new AIMessage({ id: "a1", content: "hello" }),
+      new HumanMessage({ id: "h2", content: "用工具" }),
+      new AIMessage({
+        id: "a3",
+        content: "",
+        tool_calls: [{ id: "tc1", name: "bash", args: {} }],
+      }),
+      new ToolMessage({ id: "tr4", tool_call_id: "tc1", content: "结果" }),
+      new AIMessage({ id: "a5", content: "完成" }),
+    ];
+    threadState.getMessagesSnapshot.mockResolvedValue(msgs);
+    await compactor.compact("s1", { force: true });
+    const applyArg = threadState.applyCompaction.mock.calls[0][1] as {
+      keep: BaseMessage[];
+    };
+    // keep 里不得有 owner 在摘要区的孤儿 ToolMessage：tr4 的 owner a3 已进摘要，
+    // 所以 tr4 也必须在摘要区，不能出现在 keep。
+    const keepIds = applyArg.keep.map((m) => m.id);
+    expect(keepIds).not.toContain("tr4");
+    // keep 里若有 ToolMessage，其 owner 必须也在 keep（配对完整）。
+    const orphanTool = applyArg.keep.find(
+      (m) =>
+        m._getType() === "tool" &&
+        !applyArg.keep.some(
+          (o) =>
+            o._getType() === "ai" &&
+            (
+              o as BaseMessage & { tool_calls?: { id?: string }[] }
+            ).tool_calls?.some(
+              (c) =>
+                c.id ===
+                (m as BaseMessage & { tool_call_id?: string }).tool_call_id,
+            ),
+        ),
+    );
+    expect(orphanTool).toBeUndefined();
+  });
+
   it("summarize LLM 抛错 → 不动 state + emit Error + 抛 CompactionError", async () => {
     modelConfig.findEnabled.mockResolvedValue({
       contextWindow: 10_000,
