@@ -594,7 +594,10 @@ export function AgentEditorSheet({
             与提示词/MCP tab 一致，keep-mounted 靠 hidden 而非卸载切换。 */}
         <div
           className={cn(
-            "min-h-0 flex-1 overflow-hidden",
+            // 必须是 flex 容器：内层 ToolPrefsEditor 靠 flex-1/min-h-0 拿高度约束
+            // 才能自己滚动；block 外壳会让内层长到内容高、被 overflow-hidden 裁掉
+            // 且无滚动条（真机验收反馈）。hidden 切换时 flex 被覆盖无副作用。
+            "flex min-h-0 flex-1 flex-col overflow-hidden",
             tab !== "tools" && "hidden",
           )}
         >
