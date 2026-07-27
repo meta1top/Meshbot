@@ -1,4 +1,8 @@
-import { matchSlashCommand, type SlashCommand } from "./chat-input";
+import {
+  computeSlashMenu,
+  matchSlashCommand,
+  type SlashCommand,
+} from "./chat-input";
 
 /**
  * `/` 命令发送拦截的判定逻辑（`ChatInput.handleSend` 里唯一的分支依据）。
@@ -77,6 +81,90 @@ describe("matchSlashCommand — 非命令文本（不以 / 开头）恒 'none'",
     const compact = makeCompactCommand();
     expect(matchSlashCommand("、这是一句话", [compact])).toEqual({
       kind: "none",
+    });
+  });
+});
+
+/**
+ * `/` 命令下拉菜单的触发+过滤判定（`ChatInput` 输入时实时调用，驱动菜单
+ * 弹出/收起与候选项过滤）。比 `matchSlashCommand` 更严格：整个文本必须
+ * 恰好是 "/" + 连续非空白字符，出现空格即视为「已经在打参数/正文」而收起。
+ */
+describe("computeSlashMenu — 前缀过滤", () => {
+  it("/co 前缀匹配 compact → open=true，filtered 含 compact", () => {
+    const compact = makeCompactCommand();
+    const result = computeSlashMenu("/co", [compact]);
+    expect(result).toEqual({ open: true, query: "co", filtered: [compact] });
+  });
+
+  it("单独一个 / → open=true，query 为空串，filtered 是全部命令（空前缀匹配一切）", () => {
+    const compact = makeCompactCommand();
+    const other = makeCompactCommand({ name: "other", description: "另一个" });
+    const result = computeSlashMenu("/", [compact, other]);
+    expect(result).toEqual({
+      open: true,
+      query: "",
+      filtered: [compact, other],
+    });
+  });
+
+  it("精确匹配单个命令名 → filtered 只含该命令（startsWith 对完整匹配同样成立）", () => {
+    const compact = makeCompactCommand();
+    const result = computeSlashMenu("/compact", [compact]);
+    expect(result).toEqual({
+      open: true,
+      query: "compact",
+      filtered: [compact],
+    });
+  });
+});
+
+describe("computeSlashMenu — 无匹配", () => {
+  it("前缀不匹配任何命令 → open 仍为 true，但 filtered 为空数组（渲染空态行）", () => {
+    const compact = makeCompactCommand();
+    const result = computeSlashMenu("/xyz", [compact]);
+    expect(result).toEqual({ open: true, query: "xyz", filtered: [] });
+  });
+});
+
+describe("computeSlashMenu — 非 / 开头或已过首词不触发", () => {
+  it("未传 commands → 恒关闭", () => {
+    expect(computeSlashMenu("/co")).toEqual({
+      open: false,
+      query: "",
+      filtered: [],
+    });
+  });
+
+  it("普通文本（不以 / 开头）→ 不触发", () => {
+    const compact = makeCompactCommand();
+    expect(computeSlashMenu("你好", [compact])).toEqual({
+      open: false,
+      query: "",
+      filtered: [],
+    });
+  });
+
+  it("首词后已出现空格（光标已过首词，进入正文/参数）→ 收起菜单", () => {
+    const compact = makeCompactCommand();
+    expect(computeSlashMenu("/compact ", [compact])).toEqual({
+      open: false,
+      query: "",
+      filtered: [],
+    });
+    expect(computeSlashMenu("/compact 顺便清一下", [compact])).toEqual({
+      open: false,
+      query: "",
+      filtered: [],
+    });
+  });
+
+  it("空字符串文本 → 不触发", () => {
+    const compact = makeCompactCommand();
+    expect(computeSlashMenu("", [compact])).toEqual({
+      open: false,
+      query: "",
+      filtered: [],
     });
   });
 });

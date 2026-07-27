@@ -191,6 +191,7 @@
     "interrupt": "Interrupt",
     "attachment": "Add attachment",
     "commandUnknown": "Unknown command: {name}",
+    "commandMenuEmpty": "No matching commands",
     "commands": {
       "compactDescription": "Compact the current session's context",
       "compactFailed": "Compaction failed, please try again later"

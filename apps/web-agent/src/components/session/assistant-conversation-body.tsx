@@ -445,6 +445,7 @@ export function AssistantConversationBody({
             interruptUnavailable: tChat("interruptUnavailable"),
             send: tChat("send"),
             commandUnknown: (name) => tChat("commandUnknown", { name }),
+            commandMenuEmpty: tChat("commandMenuEmpty"),
             usage: {
               nextRequestLabel: t("usage.nextRequestLabel"),
               inputLabel: t("usage.inputLabel"),

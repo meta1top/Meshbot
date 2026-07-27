@@ -71,6 +71,41 @@ export function matchSlashCommand(
   return command ? { kind: "command", command } : { kind: "unknown", name };
 }
 
+/** `/` 命令下拉菜单的当前状态（见 `computeSlashMenu`）。 */
+export interface SlashMenuState {
+  open: boolean;
+  /** 去掉前导 "/" 的过滤前缀（如输入 "/co" 时为 "co"）。 */
+  query: string;
+  /** 按 `query` 前缀过滤后的候选命令，保持 `commands` 原有顺序。 */
+  filtered: SlashCommand[];
+}
+
+const CLOSED_SLASH_MENU: SlashMenuState = {
+  open: false,
+  query: "",
+  filtered: [],
+};
+
+/**
+ * 判定是否该浮出 `/` 命令下拉菜单，并按前缀过滤候选项。纯函数，独立导出
+ * 便于单测（同 `matchSlashCommand` 的理由：tiptap 编辑器在 jsdom 下不便驱动）。
+ *
+ * 触发条件（比 `matchSlashCommand` 更严格，用于「输入中」而非「发送时」）：
+ * 整个文本恰好是 "/" + 连续非空白字符，即光标仍在首词内、尚未出现空格后的
+ * 正文——一旦打出空格，菜单就该收起（用户已经在打参数/正文，不再是选命令）。
+ * 未传 `commands` 时恒返回关闭态，调用方在这类输入框上完全不会触发本行为。
+ */
+export function computeSlashMenu(
+  text: string,
+  commands?: SlashCommand[],
+): SlashMenuState {
+  if (!commands || commands.length === 0) return CLOSED_SLASH_MENU;
+  if (!/^\/\S*$/.test(text)) return CLOSED_SLASH_MENU;
+  const query = text.slice(1);
+  const filtered = commands.filter((c) => c.name.startsWith(query));
+  return { open: true, query, filtered };
+}
+
 /**
  * 文案注入（原 `useTranslations("chatInput")` / `useTranslations("session")`
  * 内部调用，Task 1 迁入 web-common 后改调用方传入）。`attachment`/`interrupt`
@@ -101,6 +136,12 @@ export interface ChatInputLabels {
    * 可选 label 缺省即降级展示的约定一致，不在组件内硬编码兜底文案。
    */
   commandUnknown?: (name: string) => string;
+  /**
+   * `/` 命令下拉菜单在当前前缀无任何匹配项时的空态行文案（仅传入 `commands`
+   * 时可能用到）。未传时不渲染空态行（菜单仍会打开，只是没有任何一行）——
+   * 同 `commandUnknown` 的缺省降级约定。
+   */
+  commandMenuEmpty?: string;
   /** token 用量 tooltip 明细文案（仅 `tokenUsage.breakdown` 存在时用到）。 */
   usage?: {
     nextRequestLabel: string;
@@ -204,6 +245,12 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     // sendFnRef 让 handleKeyDown（在 useEditor 配置对象中捕获）
     // 始终能调用到最新的 handleSend，绕开闭包陈旧问题。
     const sendFnRef = useRef<() => void>(() => {});
+    // menuKeyDownRef 同理：让同一个 handleKeyDown 始终能调用到最新的
+    // handleMenuKeyDown（定义见下方，effect 里同步）。与 sendFnRef 一起在
+    // useEditor 之前声明，避免 editorProps.handleKeyDown 里的闭包引用到
+    // 声明顺序在它之后的变量（虽然实际调用发生在渲染完成之后，行为上没有
+    // 问题，但放一起更符合本文件既有的书写习惯，读起来更直白）。
+    const menuKeyDownRef = useRef<(key: string) => boolean>(() => false);
 
     // 编辑器空态镜像：驱动发送按钮 disabled。不能直接读 editor.isEmpty——
     // 受控同步走 emitUpdate:false 不触发重渲，直读会拿到陈旧渲染帧的值。
@@ -213,6 +260,24 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     const [commandHint, setCommandHint] = useState<string | null>(null);
     // 命令 run() 执行期：禁止重复触发（Enter 与按钮共用同一守卫）。
     const [commandRunning, setCommandRunning] = useState(false);
+
+    // `/` 命令下拉菜单状态 + 高亮项索引。菜单状态需要在 ProseMirror 的
+    // handleKeyDown（闭包在 useEditor 配置对象里固化，见下方 menuKeyDownRef
+    // 注释）里同步读到最新值，React state 的渲染延迟不够用，所以每次
+    // setState 都同步镜像一份到 ref，读写口径统一收敛在下面两个 setter。
+    const menuStateRef = useRef<SlashMenuState>(CLOSED_SLASH_MENU);
+    const [menuState, setMenuStateRaw] =
+      useState<SlashMenuState>(CLOSED_SLASH_MENU);
+    const setMenuState = useCallback((next: SlashMenuState) => {
+      menuStateRef.current = next;
+      setMenuStateRaw(next);
+    }, []);
+    const highlightIndexRef = useRef(0);
+    const [highlightIndex, setHighlightIndexRaw] = useState(0);
+    const setHighlightIndex = useCallback((next: number) => {
+      highlightIndexRef.current = next;
+      setHighlightIndexRaw(next);
+    }, []);
 
     const editor = useEditor({
       immediatelyRender: false,
@@ -237,8 +302,16 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         transformPastedHTML: (html) =>
           html.replace(/\s(?:style|class|bgcolor|color|align)="[^"]*"/gi, ""),
         handleKeyDown: (_view, event) => {
-          // IME 组合期间不拦截 Enter
+          // IME 组合期间不拦截任何按键（含菜单的方向键/Enter/Esc）
           if (event.isComposing || event.keyCode === 229) return false;
+          // 命令菜单开着时，↑↓/Enter/Esc 优先交给菜单；菜单没消费（未打开或
+          // 非这几个键）才落到下面的普通发送/换行逻辑——menuKeyDownRef 同
+          // sendFnRef 的道理：本对象在 useEditor 里固化，必须走 ref 转发才能
+          // 读到最新的菜单状态与命令列表。
+          if (menuKeyDownRef.current(event.key)) {
+            event.preventDefault();
+            return true;
+          }
           if (event.key === "Enter" && !event.shiftKey) {
             event.preventDefault();
             sendFnRef.current();
@@ -248,12 +321,88 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         },
       },
       onUpdate: ({ editor: e }) => {
-        onChange(getMarkdown(e.storage));
+        const text = getMarkdown(e.storage);
+        onChange(text);
         setIsEmpty(e.isEmpty);
         // 用户继续编辑即视为已看到/在处理提示，清掉旧的内联命令提示。
         setCommandHint(null);
+        // 每次内容变化都重新判定命令菜单该不该开、过滤哪些项；过滤结果变了
+        // 旧的高亮位置就没意义，统一回到第一项。
+        setMenuState(computeSlashMenu(text, commands));
+        setHighlightIndex(0);
       },
     });
+
+    /**
+     * 执行一条命令的唯一入口（菜单 Enter / 菜单点击 / 无菜单时的直接 Enter
+     * 精确匹配三条路径共用）：运行中或已有命令在执行时忽略（同一守卫，双重
+     * 兜底——handleSend 顶部已挡一次，这里再挡一次是因为菜单 Enter 走
+     * menuKeyDownRef 直连，不经过 handleSend 那层）。
+     */
+    const executeCommand = useCallback(
+      (command: SlashCommand) => {
+        if (isLoading || commandRunning) return;
+        editor?.commands.clearContent();
+        onChange("");
+        setCommandHint(null);
+        setMenuState(CLOSED_SLASH_MENU);
+        setCommandRunning(true);
+        command
+          .run()
+          .then((result) => {
+            if (result) setCommandHint(result);
+          })
+          .catch((err: unknown) => {
+            setCommandHint(err instanceof Error ? err.message : String(err));
+          })
+          .finally(() => setCommandRunning(false));
+      },
+      [editor, onChange, isLoading, commandRunning, setMenuState],
+    );
+
+    /**
+     * 菜单开着时处理 ↑↓/Enter/Esc；返回 true 表示已消费（调用方需
+     * preventDefault，不再往下落到发送/换行/光标移动）。非这几个键或菜单
+     * 未打开时返回 false，原样放行。
+     */
+    const handleMenuKeyDown = useCallback(
+      (key: string): boolean => {
+        const state = menuStateRef.current;
+        if (!state.open) return false;
+        const len = state.filtered.length;
+        if (key === "ArrowDown") {
+          setHighlightIndex(
+            len === 0 ? 0 : (highlightIndexRef.current + 1) % len,
+          );
+          return true;
+        }
+        if (key === "ArrowUp") {
+          setHighlightIndex(
+            len === 0 ? 0 : (highlightIndexRef.current - 1 + len) % len,
+          );
+          return true;
+        }
+        if (key === "Escape") {
+          // 只关菜单，不清输入——用户可能还想接着改这句命令。
+          setMenuState(CLOSED_SLASH_MENU);
+          return true;
+        }
+        if (key === "Enter") {
+          const highlighted = state.filtered[highlightIndexRef.current];
+          if (highlighted) executeCommand(highlighted);
+          // 空态（无匹配项）时也吞掉 Enter：菜单开着就不该落到发送/换行。
+          return true;
+        }
+        return false;
+      },
+      [executeCommand, setMenuState, setHighlightIndex],
+    );
+
+    // 每次 handleMenuKeyDown 更新时同步到 ref（声明见组件顶部），让
+    // handleKeyDown 读到最新版本。
+    useEffect(() => {
+      menuKeyDownRef.current = handleMenuKeyDown;
+    }, [handleMenuKeyDown]);
 
     const handleSend = useCallback(() => {
       // 运行中禁止发送（与发送按钮隐藏一致）：Enter 快捷键与按钮同一守卫，
@@ -267,21 +416,11 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
 
       const match = matchSlashCommand(md, commands);
       if (match.kind === "command") {
-        // 命中命令：不触发 onSend，立即清空输入（与普通发送一致的即时反馈），
-        // run() 异步执行期间禁止重复触发。
-        editor.commands.clearContent();
-        onChange("");
-        setCommandHint(null);
-        setCommandRunning(true);
-        match.command
-          .run()
-          .then((result) => {
-            if (result) setCommandHint(result);
-          })
-          .catch((err: unknown) => {
-            setCommandHint(err instanceof Error ? err.message : String(err));
-          })
-          .finally(() => setCommandRunning(false));
+        // 命中命令：交给 executeCommand 统一处理（不触发 onSend、清空输入、
+        // run() 执行期禁止重复触发）。这条路径主要覆盖菜单已经关闭的场景
+        // （如文本末尾带了空格——见 computeSlashMenu 的触发条件），菜单开着
+        // 时 Enter 已被 handleMenuKeyDown 先一步消费，走不到这里。
+        executeCommand(match.command);
         return;
       }
       if (match.kind === "unknown") {
@@ -297,7 +436,16 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       editor.commands.clearContent();
       onChange("");
       setCommandHint(null);
-    }, [editor, onSend, onChange, isLoading, commands, commandRunning, labels]);
+    }, [
+      editor,
+      onSend,
+      onChange,
+      isLoading,
+      commands,
+      commandRunning,
+      labels,
+      executeCommand,
+    ]);
 
     // 每次 handleSend 更新时同步到 ref，让 handleKeyDown 读到最新版本
     useEffect(() => {
@@ -345,7 +493,47 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       : 0;
 
     return (
-      <div className="overflow-hidden rounded-md border border-border bg-card">
+      <div className="relative overflow-hidden rounded-md border border-border bg-card">
+        {/* `/` 命令下拉菜单：浮在输入框上方（不在 UnifiedSheet 内，z-50 足够）。
+            仅 `commands` 非空且 computeSlashMenu 判定 open 时渲染；未传 commands
+            的输入框（dock/远程会话/新消息页）永远不会走到这里。 */}
+        {menuState.open && (
+          <div
+            role="listbox"
+            aria-label="/ commands"
+            className="absolute inset-x-0 bottom-full z-50 mb-1 max-h-60 overflow-y-auto rounded-xl border border-border bg-popover p-1 text-popover-foreground shadow-md"
+          >
+            {menuState.filtered.length === 0
+              ? labels.commandMenuEmpty && (
+                  <div className="px-2 py-1.5 text-muted-foreground text-xs">
+                    {labels.commandMenuEmpty}
+                  </div>
+                )
+              : menuState.filtered.map((cmd, i) => (
+                  <button
+                    key={cmd.name}
+                    type="button"
+                    role="option"
+                    aria-selected={i === highlightIndex}
+                    onMouseEnter={() => setHighlightIndex(i)}
+                    onClick={() => executeCommand(cmd)}
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-popover-foreground transition-colors",
+                      i === highlightIndex &&
+                        "bg-accent text-accent-foreground",
+                    )}
+                  >
+                    <span className="shrink-0 font-mono text-xs">
+                      /{cmd.name}
+                    </span>
+                    <span className="truncate text-muted-foreground text-xs">
+                      {cmd.description}
+                    </span>
+                  </button>
+                ))}
+          </div>
+        )}
+
         {/* `/` 命令内联提示（未知命令 / run() 返回的文案）；未命中过任何命令时不渲染。 */}
         {commandHint && (
           <div className="border-b border-border px-3 py-1.5 text-muted-foreground text-xs">
