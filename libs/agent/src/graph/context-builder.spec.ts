@@ -3,7 +3,9 @@ import { AccountContextService } from "../account/account-context.service";
 import { AgentContextService } from "../account/agent-context.service";
 import type { McpServerConfig } from "../mcp/mcp.schema";
 import type { McpService } from "../mcp/mcp.service";
+import { buildLlmuseGuide } from "../prompt/llmuse-guide";
 import type { PromptFileService } from "../prompts/prompt-file.service";
+import type { ToolPrefsService } from "../tools/tool-prefs.service";
 import {
   buildMcpBlock,
   buildPromptsBlock,
@@ -67,6 +69,7 @@ describe("buildMcpBlock", () => {
 function makeContextBuilder(
   mcp: McpService | undefined,
   prompts?: PromptFileService,
+  toolPrefs?: ToolPrefsService,
 ) {
   const account = new AccountContextService();
   const agentCtx = new AgentContextService();
@@ -79,6 +82,7 @@ function makeContextBuilder(
     undefined,
     mcp,
     prompts,
+    toolPrefs,
   );
   return { builder, account, agentCtx };
 }
@@ -235,5 +239,66 @@ describe("ContextBuilder.hasPrompts / buildPromptsMessage", () => {
     expect(builder.hasPrompts()).toBe(true);
     const msg = builder.buildPromptsMessage();
     expect(msg.content).toBe("保持简洁");
+  });
+});
+
+// ─── buildPersonaMessage 的 LLMUSE 联动（禁用工具不再被教调用） ───────────────
+
+/** 造一个固定返回 disabled 的 ToolPrefsService 测试替身。 */
+function fakeToolPrefs(disabled: ReadonlySet<string>): ToolPrefsService {
+  return {
+    getDisabledTools: () => disabled,
+  } as unknown as ToolPrefsService;
+}
+
+/** 造一个「调用即抛错」的 ToolPrefsService 测试替身，模拟脱离 Agent ALS 的场景。 */
+function throwingToolPrefs(): ToolPrefsService {
+  return {
+    getDisabledTools: () => {
+      throw new Error("AgentContext: 当前无活跃 Agent 上下文");
+    },
+  } as unknown as ToolPrefsService;
+}
+
+describe("ContextBuilder.buildPersonaMessage 的 LLMUSE 联动", () => {
+  it("未注入 ToolPrefsService：不过滤，等同全启（行为同现状）", async () => {
+    const { builder } = makeContextBuilder(undefined, undefined, undefined);
+    const msg = await builder.buildPersonaMessage();
+    expect(String(msg.content)).toContain(buildLlmuseGuide(new Set()));
+  });
+
+  it("注入 ToolPrefsService 部分禁用：persona 只含未禁用的 IM 工具行", async () => {
+    const toolPrefs = fakeToolPrefs(new Set(["im_list_members"]));
+    const { builder } = makeContextBuilder(undefined, undefined, toolPrefs);
+    const msg = await builder.buildPersonaMessage();
+    const content = String(msg.content);
+    expect(content).not.toContain("im_list_members");
+    expect(content).toContain("im_unread_overview");
+    expect(content).toContain("im_read_conversation");
+  });
+
+  it("三个 IM 工具全禁用：persona 不再含「调用 IM 工具」整段指引", async () => {
+    const toolPrefs = fakeToolPrefs(
+      new Set([
+        "im_unread_overview",
+        "im_read_conversation",
+        "im_list_members",
+      ]),
+    );
+    const { builder } = makeContextBuilder(undefined, undefined, toolPrefs);
+    const msg = await builder.buildPersonaMessage();
+    const content = String(msg.content);
+    expect(content).not.toContain("调用 IM 工具");
+    expect(content).not.toContain("im_unread_overview");
+  });
+
+  it("ToolPrefsService 抛错（脱离 Agent ALS）：不过滤，不冒泡异常，等同未注入", async () => {
+    const { builder } = makeContextBuilder(
+      undefined,
+      undefined,
+      throwingToolPrefs(),
+    );
+    const msg = await builder.buildPersonaMessage();
+    expect(String(msg.content)).toContain(buildLlmuseGuide(new Set()));
   });
 });

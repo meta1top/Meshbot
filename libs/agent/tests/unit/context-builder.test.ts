@@ -17,7 +17,7 @@ import { ThreadStateService } from "../../src/graph/thread-state.service.js";
 import type { RuntimeContextPort } from "../../src/graph/runtime-context.port";
 import { MEMORY_GUIDE } from "../../src/memory/memory-guide";
 import type { MemoryService } from "../../src/memory/memory.service";
-import { LLMUSE_GUIDE } from "../../src/prompt/llmuse-guide.js";
+import { buildLlmuseGuide } from "../../src/prompt/llmuse-guide.js";
 import { PromptService } from "../../src/prompt/prompt.service";
 import { ToolRegistry } from "../../src/tools/tool-registry";
 
@@ -440,12 +440,14 @@ describe("ContextBuilder.buildPersonaMessage", () => {
     expect(content).toContain(MEMORY_GUIDE);
     expect(content).toContain("<memory>");
     expect(content).toContain("用户偏好简洁");
-    expect(content).toContain(LLMUSE_GUIDE);
+    expect(content).toContain(buildLlmuseGuide(new Set()));
   });
 
-  it("无记忆 core 时：persona 恰好是 MEMORY_GUIDE + LLMUSE_GUIDE，不产生多余空行", async () => {
+  it("无记忆 core 时：persona 恰好是 MEMORY_GUIDE + LLMUSE 指南（全启），不产生多余空行", async () => {
     const { contextBuilder } = makeGs(undefined, { readCore: () => "" });
     const msg = await contextBuilder.buildPersonaMessage();
-    expect(String(msg.content)).toBe(`${MEMORY_GUIDE}\n\n${LLMUSE_GUIDE}`);
+    expect(String(msg.content)).toBe(
+      `${MEMORY_GUIDE}\n\n${buildLlmuseGuide(new Set())}`,
+    );
   });
 });
