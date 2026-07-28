@@ -33,6 +33,13 @@ export function useChatScroll(opts: {
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
   /** 触发自动滚的依赖：可见消息列表（长度/末条变化即跟随）。 */
   messages: unknown[];
+  /**
+   * 末尾活动信号（running || compacting）：末尾 StatusLine 是从状态派生、
+   * **不在 messages 数组里**——它的出现/消失不改 messages，若不单列进依赖，
+   * `/compact`（无任何 timeline 消息变化，只有 compacting 翻真）时吸底 effect
+   * 不重跑、状态行冒出来却不滚到底。把它加进 follow 依赖即可跟随。
+   */
+  tailActivity?: unknown;
   /** 是否还有更早历史（false 时不挂顶部哨兵 IO）。 */
   hasMore: boolean;
   /** 顶部哨兵进入视口时调用（上拉加载更早）。 */
@@ -80,6 +87,7 @@ export function useChatScroll(opts: {
    * 新消息 / 流式增量到达：吸底时跟随到底（instant）。
    * 首次有内容（进入会话 / 切会话后首条）直接吸底到底；messages 清空时重置首次哨兵。
    */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tailActivity 是「触发依赖」——不在 effect 体内读取，但正是要靠它变化触发吸底（末尾 StatusLine 不在 messages 里）
   useEffect(() => {
     if (opts.messages.length === 0) {
       initialScrollDoneRef.current = false;
@@ -96,7 +104,7 @@ export function useChatScroll(opts: {
     }
     if (!stickRef.current) return;
     scrollToEnd();
-  }, [opts.messages, scrollToEnd]);
+  }, [opts.messages, opts.tailActivity, scrollToEnd]);
 
   // 顶部哨兵进入滚动容器视口 → 上拉加载更早历史。
   // root 用滚动容器（而非默认 viewport）：聊天在内部容器滚动，viewport 判可见在

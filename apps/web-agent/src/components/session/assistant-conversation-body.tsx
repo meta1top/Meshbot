@@ -238,6 +238,9 @@ export function AssistantConversationBody({
   const { stickToBottom, scrollToBottom, topSentinelRef } = useChatScroll({
     scrollContainerRef: scrollRef,
     messages: timelineMessages,
+    // 末尾 StatusLine 由 running/compacting 派生（不在 messages 里）——喂进吸底
+    // 依赖，/compact 时状态行出现能跟随滚到底。
+    tailActivity: `${stream.running}:${stream.compacting ?? ""}`,
     hasMore: stream.hasMoreHistory,
     onLoadMore: () => void stream.loadMoreHistory(),
   });

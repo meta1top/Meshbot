@@ -86,13 +86,14 @@ export function StatusLine({
   const text = variants[variantIndex % variants.length];
 
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="flex items-center gap-2 px-2 py-1.5 text-sm text-muted-foreground"
-    >
-      <ThreeDots />
-      <span>{text}</span>
+    // 与消息行同构缩进：px-2 + gap-3 + 头像列宽 w-7 占位，让文案左缘对齐正文
+    // （而非贴墙）；否则三点紧贴左墙、与带头像的消息不成一列。
+    <div role="status" aria-live="polite" className="flex gap-3 px-2 py-1.5">
+      <div className="w-7 shrink-0" aria-hidden />
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <ThreeDots />
+        <span>{text}</span>
+      </div>
     </div>
   );
 }
