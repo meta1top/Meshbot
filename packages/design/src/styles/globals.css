@@ -252,3 +252,31 @@ html.theme-switching *::after {
 .mb-hairline-grid > * + * {
   border-top: 1px solid var(--border);
 }
+
+/* 末尾 StatusLine 的橙色 logo「呼吸节奏」转动：刻意非 linear——ease-in-out 让
+   转速中段快、两端慢，叠加 scale/opacity 脉冲形成"吸气—呼气"的呼吸律动，区别于
+   死板匀速的 linear 自旋（用户明确要"不要线性傻转"）。整段用 ease-in-out，迭代
+   接缝处首尾都处于慢速，速度连续无跳变。prefers-reduced-motion 时停转、保留静态
+   logo（无障碍）。 */
+@keyframes mb-breathe-spin {
+  0% {
+    transform: rotate(0deg) scale(0.86);
+    opacity: 0.5;
+  }
+  50% {
+    transform: rotate(180deg) scale(1.06);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(360deg) scale(0.86);
+    opacity: 0.5;
+  }
+}
+.mb-breathe-spin {
+  animation: mb-breathe-spin 2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mb-breathe-spin {
+    animation: none;
+  }
+}

@@ -175,6 +175,77 @@ describe("deriveStatusLinePhase — 阶段派生优先级（compacting > 工具�
     ).toBe("streaming");
   });
 
+  it("HITL 关卡挂起（ask_question status=running 且未 settled）→ null，不顶「思考中/正在执行」", () => {
+    expect(
+      deriveStatusLinePhase({
+        running: true,
+        compacting: null,
+        messages: [
+          assistantMsg({
+            toolCalls: [
+              { toolCallId: "q1", name: "ask_question", status: "running" },
+            ],
+          }),
+        ],
+      }),
+    ).toBeNull();
+  });
+
+  it("HITL 关卡挂起同理覆盖 im_send_message 确认卡 → null", () => {
+    expect(
+      deriveStatusLinePhase({
+        running: true,
+        compacting: null,
+        messages: [
+          assistantMsg({
+            toolCalls: [
+              {
+                toolCallId: "s1",
+                name: "im_send_message",
+                status: "running",
+              },
+            ],
+          }),
+        ],
+      }),
+    ).toBeNull();
+  });
+
+  it("HITL 已应答（hitlSettledBy 置位，run 恢复执行）→ 回到 executing，不再隐藏", () => {
+    expect(
+      deriveStatusLinePhase({
+        running: true,
+        compacting: null,
+        messages: [
+          assistantMsg({
+            toolCalls: [
+              {
+                toolCallId: "q1",
+                name: "ask_question",
+                status: "running",
+                hitlSettledBy: "local",
+              },
+            ],
+          }),
+        ],
+      }),
+    ).toBe("executing");
+  });
+
+  it("非 HITL 工具（bash）running 不受影响 → executing（回归护栏）", () => {
+    expect(
+      deriveStatusLinePhase({
+        running: true,
+        compacting: null,
+        messages: [
+          assistantMsg({
+            toolCalls: [{ toolCallId: "t1", name: "bash", status: "running" }],
+          }),
+        ],
+      }),
+    ).toBe("executing");
+  });
+
   it("兜底：running 为真但最后一条是 user（run 刚起、尚无 assistant 信号）→ thinking", () => {
     expect(
       deriveStatusLinePhase({

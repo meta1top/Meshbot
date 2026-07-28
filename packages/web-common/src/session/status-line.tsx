@@ -39,6 +39,20 @@ export interface StatusLineProps {
 const DEFAULT_ROTATE_INTERVAL_MS = 3000;
 
 /**
+ * HITL（human-in-the-loop）关卡型工具名——这些工具的卡片会挂起 run 等用户
+ * 应答（确认/取消/回答）。与 tool-call-block.tsx 里走特化确认/提问卡的工具集
+ * 对齐（present_file/todo_write 是纯展示、不挂起，不在此列）。挂起等人期间
+ * 末尾状态行应隐藏，见 {@link deriveStatusLinePhase}。
+ */
+const HITL_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "im_send_message",
+  "ask_question",
+  "drive_share",
+  "drive_create_share",
+  "mcp_install",
+]);
+
+/**
  * 消息流末尾常驻状态行：run 进行期间（含压缩中）在列表末尾恒渲染一行，
  * 三点动画 + 按阶段区分的文案。
  *
@@ -91,21 +105,30 @@ export function StatusLine({
     <div role="status" aria-live="polite" className="flex gap-3 px-2 py-1.5">
       <div className="w-7 shrink-0" aria-hidden />
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <ThreeDots />
+        <BreathingLogo />
         <span>{text}</span>
       </div>
     </div>
   );
 }
 
-/** "..." 三点跳动指示器，视觉从原 message-list.tsx 的 TypingDots 迁移而来。 */
-function ThreeDots() {
+/**
+ * 橙色品牌 logo「呼吸节奏」转动指示器（取代原三点跳动 TypingDots）。
+ * 动画是 globals.css 的 `.mb-breathe-spin`（rotate + scale/opacity 脉冲，
+ * ease-in-out 非线性），刻意不用死板的 linear 自旋。logo.svg 本身即焦橙
+ * (#fa771c)，无需滤色；两端 app（web-agent / web-main）都在 web 根伺服
+ * `/logo.svg`。`alt=""` + `aria-hidden`：纯装饰，语义由外层 role="status" 承载。
+ */
+function BreathingLogo() {
   return (
-    <span aria-hidden className="inline-flex items-center gap-1 align-middle">
-      <span className="h-1 w-1 animate-bounce rounded-full bg-muted-foreground/40 [animation-delay:-0.3s]" />
-      <span className="h-1 w-1 animate-bounce rounded-full bg-muted-foreground/40 [animation-delay:-0.15s]" />
-      <span className="h-1 w-1 animate-bounce rounded-full bg-muted-foreground/40" />
-    </span>
+    <img
+      src="/logo.svg"
+      alt=""
+      aria-hidden
+      width={16}
+      height={16}
+      className="mb-breathe-spin h-4 w-4 shrink-0"
+    />
   );
 }
 
@@ -114,11 +137,20 @@ function ThreeDots() {
  *
  * 优先级（从高到低）：
  * 1. `compacting` 为真 → `"compacting"`
- * 2. 最后一条消息是 assistant 且有工具卡处于 `running` → `"executing"`
- * 3. 最后一条 assistant 消息 reasoning 仍在思考中（{@link isReasoningThinking}）→ `"thinking"`
- * 4. 最后一条 assistant 消息正文流式产出中（`streaming===true`）→ `"streaming"`
- * 5. 兜底（`running` 为真但以上都不命中，如 run 刚起、尚无任何信号；或最后
+ * 2. 最后一条 assistant 消息有 HITL 关卡卡片正挂起等用户应答 → `null`（不渲染）
+ * 3. 最后一条消息是 assistant 且有工具卡处于 `running` → `"executing"`
+ * 4. 最后一条 assistant 消息 reasoning 仍在思考中（{@link isReasoningThinking}）→ `"thinking"`
+ * 5. 最后一条 assistant 消息正文流式产出中（`streaming===true`）→ `"streaming"`
+ * 6. 兜底（`running` 为真但以上都不命中，如 run 刚起、尚无任何信号；或最后
  *    一条消息是 user——已发出但 assistant 还没来得及建任何占位）→ `"thinking"`
+ *
+ * 第 2 条（HITL 挂起）：`im_send_message` / `ask_question` / `drive_*` /
+ * `mcp_install` 的确认/提问卡挂起 run 等用户点确认或作答时，run 是「挂起等人」
+ * 而非「Agent 在干活」——此刻末尾若还顶一行"思考中/正在执行"会误导用户以为
+ * Agent 仍在跑（该卡 `status==="running"` 本会命中第 3 条判成 executing）。判据是
+ * 卡片仍在等人：`status==="running"` 且尚未 settled（`!hitlSettledBy`，见
+ * ToolCallView 该字段 JSDoc）。用户应答后 `hitlSettledBy` 置位或卡片进终态
+ * （ok/error），run 恢复执行，状态行照常回到 executing/thinking。
  *
  * `running` 与 `compacting` 均为假时返回 `null`（不渲染）。
  */
@@ -134,6 +166,18 @@ export function deriveStatusLinePhase(params: {
   if (!running) return null;
   const last = messages[messages.length - 1];
   if (last?.role === "assistant") {
+    // HITL 关卡挂起（等用户确认/作答）→ 不渲染。必须先于下方 running→executing
+    // 判定，否则挂起中的确认卡（status==="running"）会被误判成"正在执行"。
+    if (
+      last.toolCalls?.some(
+        (t) =>
+          HITL_TOOL_NAMES.has(t.name) &&
+          t.status === "running" &&
+          !t.hitlSettledBy,
+      )
+    ) {
+      return null;
+    }
     if (last.toolCalls?.some((t) => t.status === "running")) {
       return "executing";
     }

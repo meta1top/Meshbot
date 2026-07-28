@@ -208,8 +208,9 @@ export function SessionConversationView({
             {messageListNode}
             {labels.statusLine && (
               // -mt-4 抵消 messageListNode 尾部 pb-6 的过大留白（状态行是消息流
-              // 延续，应紧贴最后一条消息）；pb-2 给输入区留一点呼吸，不至于贴住。
-              <div className="-mt-4 pb-2">
+              // 延续，应紧贴最后一条消息）；pb-6 给输入区留足呼吸，避免贴住底部
+              // （pb-2 实测仍偏近，用户反馈"距离底部还是有点近"后加大到 pb-6）。
+              <div className="-mt-4 pb-6">
                 <StatusLine
                   phase={statusLinePhase}
                   labels={labels.statusLine}
