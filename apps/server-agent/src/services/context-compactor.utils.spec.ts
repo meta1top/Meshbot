@@ -1,9 +1,15 @@
-import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
+import {
+  AIMessage,
+  HumanMessage,
+  SystemMessage,
+  ToolMessage,
+} from "@langchain/core/messages";
 import {
   estimateTokens,
   expandToToolBoundary,
   findSplitIndex,
   isContextLengthError,
+  partitionStableSystemMessages,
   serializeForSummary,
 } from "./context-compactor.utils";
 
@@ -167,5 +173,48 @@ describe("isContextLengthError", () => {
   it("不相关错误返 false", () => {
     expect(isContextLengthError(new Error("network failure"))).toBe(false);
     expect(isContextLengthError({ status: 500 } as never)).toBe(false);
+  });
+});
+
+describe("partitionStableSystemMessages", () => {
+  it("id 以 system: 开头的消息进 systemMessages，其余进 rest，且各自保持原相对顺序", () => {
+    const sys1 = new SystemMessage({ id: "system:persona", content: "P" });
+    const sys2 = new SystemMessage({ id: "system:ctx", content: "C" });
+    const h0 = new HumanMessage({ id: "h0", content: "hi" });
+    const a0 = new AIMessage({ id: "a0", content: "yo" });
+    const { systemMessages, rest } = partitionStableSystemMessages([
+      sys1,
+      sys2,
+      h0,
+      a0,
+    ]);
+    expect(systemMessages).toEqual([sys1, sys2]);
+    expect(rest).toEqual([h0, a0]);
+  });
+
+  it("system 消息不必在头部——partition 只看 id 前缀，不看位置", () => {
+    const h0 = new HumanMessage({ id: "h0", content: "hi" });
+    const sys1 = new SystemMessage({ id: "system:persona", content: "P" });
+    const { systemMessages, rest } = partitionStableSystemMessages([h0, sys1]);
+    expect(systemMessages).toEqual([sys1]);
+    expect(rest).toEqual([h0]);
+  });
+
+  it("id 缺失或不含 system: 前缀的消息一律进 rest", () => {
+    const noId = new HumanMessage({ content: "no id" });
+    const other = new HumanMessage({ id: "h1", content: "normal" });
+    const { systemMessages, rest } = partitionStableSystemMessages([
+      noId,
+      other,
+    ]);
+    expect(systemMessages).toEqual([]);
+    expect(rest).toEqual([noId, other]);
+  });
+
+  it("空数组输入 → 两边都空", () => {
+    expect(partitionStableSystemMessages([])).toEqual({
+      systemMessages: [],
+      rest: [],
+    });
   });
 });

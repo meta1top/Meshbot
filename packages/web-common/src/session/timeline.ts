@@ -45,11 +45,6 @@ export interface TimelineMessage {
   pending?: boolean;
   /** 流式输出中（仅 assistant）：尾部追加闪烁光标。 */
   streaming?: boolean;
-  /**
-   * 等待首个 chunk 的 assistant 占位（仅 assistant）：
-   * 已发出用户消息但 LLM 还没返回任何 token。渲染为转圈。
-   */
-  loading?: boolean;
   failed?: boolean;
   /** run 失败的错误原因（仅实时 run.error 事件携带；历史恢复的 failed 行无此值）。 */
   errorText?: string;
@@ -70,8 +65,10 @@ export interface TimelineMessage {
   reasoningDurationMs?: number;
   toolCalls?: ToolCallView[];
   /**
-   * 结构化元数据（来自 session_message.metadata JSON 列）。
-   * 压缩占位行携带 kind="compaction"；其余消息为 null / undefined。
+   * 结构化元数据（来自 session_message.metadata JSON 列）。role="system" 的
+   * 居中系统事件行携带（见 SystemEventRow）：kind="compaction" 时另带
+   * removedCount/fromMessageId/toMessageId；kind="model_switch" 时另带
+   * fromModel/toModel。普通消息为 null / undefined。
    */
   metadata?: {
     kind: string;

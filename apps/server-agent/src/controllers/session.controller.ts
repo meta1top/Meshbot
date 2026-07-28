@@ -1,5 +1,6 @@
 import { AccountContextService } from "@meshbot/lib-agent";
 import {
+  type CompactSessionResponse,
   type CreateSessionResponse,
   type DeletePendingResponse,
   type HistoryResponse,
@@ -14,6 +15,7 @@ import {
   confirmToolCallSchema,
 } from "@meshbot/types-agent";
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -27,6 +29,7 @@ import { ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import {
   AnswerQuestionsDto,
   AppendMessageDto,
+  CompactSessionResponseDto,
   ConfirmToolCallDto,
   CreateSessionDto,
   MessageFeedbackDto,
@@ -36,6 +39,10 @@ import {
 } from "../dto/session.dto";
 import { AgentService } from "../services/agent.service";
 import { ConfirmationService } from "../services/confirmation.service";
+import {
+  CompactionNothingToCompact,
+  ContextCompactor,
+} from "../services/context-compactor.service";
 import { LlmCallService } from "../services/llm-call.service";
 import { RunnerService } from "../services/runner.service";
 import { assembleHistoryMessages } from "../services/session-history-assembler";
@@ -56,6 +63,7 @@ export class SessionController {
     private readonly confirmation: ConfirmationService,
     private readonly account: AccountContextService,
     private readonly agents: AgentService,
+    private readonly contextCompactor: ContextCompactor,
   ) {}
 
   /**
@@ -162,6 +170,44 @@ export class SessionController {
         : {}),
       byMessage,
     };
+  }
+
+  /**
+   * 主动触发一次会话上下文压缩（`/compact` 命令用）。`force:true`——没东西可压时
+   * `ContextCompactor` 抛 `CompactionNothingToCompact`，这里映射成 400 友好提示；
+   * per-session 锁已在 `ContextCompactor` 内建，无需额外防重入。压缩事件
+   * （`run.compaction_start`/`run.compaction_done`）由 `ContextCompactor` 内部广播，
+   * 压缩卡片经 WS 出现在消息流，本端点只需回最小结果供调用方兜底展示。
+   */
+  @Post(":id/compact")
+  @ApiOperation({ summary: "主动触发会话上下文压缩" })
+  @ApiOkResponse({ type: CompactSessionResponseDto })
+  async compact(@Param("id") id: string): Promise<CompactSessionResponse> {
+    await this.sessions.findSessionOrFail(id);
+    // 活跃 run 前置校验（审查 High）：压缩快照→60s 摘要→改写 的窗口若与流式
+    // run 的增量 checkpoint 写并发，过期 removeIds 合并会把 run 新写入的消息
+    // 挤到摘要块之前、甚至切断 tool_call/result 配对（下一轮 provider 400）。
+    // 自动压缩安全是因为它在 runOnce 内串行；手动端点必须自己挡。
+    if (this.runner.getInflight(id)) {
+      throw new BadRequestException("会话正在运行中，请等当前回复完成后再压缩");
+    }
+    try {
+      const result = await this.contextCompactor.compact(id, { force: true });
+      // force:true 时 compact() 要么返回结果要么抛 CompactionNothingToCompact，
+      // 不会是 null；下面的判空只是让 TS 满意，真正兜底在 catch 分支。
+      if (!result) {
+        throw new BadRequestException("当前会话没有可压缩的内容");
+      }
+      return {
+        removedCount: result.removedCount,
+        summaryPreview: result.summary.slice(0, 200),
+      };
+    } catch (err) {
+      if (err instanceof CompactionNothingToCompact) {
+        throw new BadRequestException("当前会话没有可压缩的内容");
+      }
+      throw err;
+    }
   }
 
   /** 重试该会话所有失败消息：failed → processing → resume run。 */

@@ -1,6 +1,10 @@
-import { NotFoundException } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
 import type { CreateSessionDto } from "../dto/session.dto";
 import type { AgentService } from "../services/agent.service";
+import {
+  CompactionNothingToCompact,
+  type ContextCompactor,
+} from "../services/context-compactor.service";
 import type { LlmCallService } from "../services/llm-call.service";
 import type { RunnerService } from "../services/runner.service";
 import type { SessionMessageService } from "../services/session-message.service";
@@ -56,6 +60,7 @@ describe("SessionController.history byMessage（id==langgraphId 回归）", () =
       undefined as never,
       undefined as never,
       undefined as never,
+      undefined as never,
     );
 
     const res = await controller.history("s1", { limit: "10" });
@@ -102,6 +107,7 @@ describe("SessionController.history 嵌套卡 subSessionId 关联", () => {
         listPage: async () => ({ messages: [assistantRow], hasMore: false }),
       } as unknown as SessionMessageService,
       {} as unknown as SessionTitleService,
+      undefined as never,
       undefined as never,
       undefined as never,
       undefined as never,
@@ -157,6 +163,7 @@ describe("SessionController.create() —— agentId 解析与落库校验", () =
       undefined as never,
       undefined as never,
       agents,
+      undefined as never,
     );
     return { controller, createSession, agents };
   }
@@ -208,5 +215,109 @@ describe("SessionController.create() —— agentId 解析与落库校验", () =
     expect(createSession).toHaveBeenCalledWith(
       expect.objectContaining({ agentId: "explicit-agent" }),
     );
+  });
+});
+
+describe("SessionController.compact() —— /compact 命令主动触发压缩", () => {
+  /** 组装一个仅关心 compact() 的 controller；无关依赖用最小 stub。 */
+  function makeController(compactImpl: jest.Mock, inflight?: object) {
+    const findSessionOrFail = jest.fn().mockResolvedValue(undefined);
+    const sessions = { findSessionOrFail } as unknown as SessionService;
+    const contextCompactor = {
+      compact: compactImpl,
+    } as unknown as ContextCompactor;
+    // runner mock：该用例无活跃 run，前置校验放行（真正拦截由 findSessionOrFail 先抛）。
+    const runner = {
+      getInflight: jest.fn().mockReturnValue(inflight ?? null),
+    } as unknown as RunnerService;
+    const controller = new SessionController(
+      sessions,
+      runner,
+      undefined as never,
+      undefined as never,
+      undefined as never,
+      undefined as never,
+      undefined as never,
+      undefined as never,
+      contextCompactor,
+    );
+    return { controller, findSessionOrFail, contextCompactor, runner };
+  }
+
+  it("会话有活跃 run → 400 且不触发压缩（并发竞态前置校验）", async () => {
+    const compact = jest.fn();
+    const { controller } = makeController(compact, { messageId: "m1" });
+
+    await expect(controller.compact("s1")).rejects.toThrow("会话正在运行中");
+    expect(compact).not.toHaveBeenCalled();
+  });
+
+  it("压缩成功 → 校验会话归属后回 removedCount + summaryPreview（摘要截前 200 字）", async () => {
+    const longSummary = "S".repeat(250);
+    const compact = jest.fn().mockResolvedValue({
+      removedCount: 5,
+      summary: longSummary,
+    });
+    const { controller, findSessionOrFail } = makeController(compact);
+
+    const res = await controller.compact("s1");
+
+    expect(findSessionOrFail).toHaveBeenCalledWith("s1");
+    expect(compact).toHaveBeenCalledWith("s1", { force: true });
+    expect(res.removedCount).toBe(5);
+    expect(res.summaryPreview).toBe(longSummary.slice(0, 200));
+    expect(res.summaryPreview.length).toBe(200);
+  });
+
+  it("没东西可压（CompactionNothingToCompact）→ 映射为 400 友好中文提示", async () => {
+    const compact = jest
+      .fn()
+      .mockRejectedValue(new CompactionNothingToCompact());
+    const { controller } = makeController(compact);
+
+    await expect(controller.compact("s1")).rejects.toThrow(BadRequestException);
+    await expect(controller.compact("s1")).rejects.toThrow(
+      "当前会话没有可压缩的内容",
+    );
+  });
+
+  it("其他异常（如 CompactionError）→ 原样透传，不吞不改写", async () => {
+    const boom = new Error("summarize LLM 调用失败");
+    const compact = jest.fn().mockRejectedValue(boom);
+    const { controller } = makeController(compact);
+
+    await expect(controller.compact("s1")).rejects.toThrow(boom);
+  });
+
+  it("会话不存在 → findSessionOrFail 先抛错，不会调用 compact", async () => {
+    const findSessionOrFail = jest
+      .fn()
+      .mockRejectedValue(new NotFoundException("会话不存在：ghost"));
+    const sessions = { findSessionOrFail } as unknown as SessionService;
+    const compact = jest.fn();
+    const contextCompactor = {
+      compact,
+    } as unknown as ContextCompactor;
+    // runner mock：getInflight 默认无活跃 run（压缩前置校验放行）；
+    // 「运行中 → 400」用例单独覆写。
+    const runner = {
+      getInflight: jest.fn().mockReturnValue(null),
+    } as unknown as RunnerService;
+    const controller = new SessionController(
+      sessions,
+      runner,
+      undefined as never,
+      undefined as never,
+      undefined as never,
+      undefined as never,
+      undefined as never,
+      undefined as never,
+      contextCompactor,
+    );
+
+    await expect(controller.compact("ghost")).rejects.toThrow(
+      NotFoundException,
+    );
+    expect(compact).not.toHaveBeenCalled();
   });
 });

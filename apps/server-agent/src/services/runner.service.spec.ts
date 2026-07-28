@@ -176,8 +176,13 @@ function fakeCompactor() {
     shouldCompactReturns: false,
     compactCalls: [] as { sessionId: string; opts?: unknown }[],
     compactError: null as Error | null,
+    /** 测试按需置入「正在压缩」的 sessionId 集合，驱动 isCompacting 返回值。 */
+    compactingSessions: new Set<string>(),
     shouldCompact(_lastInput: number, _ctx: number) {
       return this.shouldCompactReturns;
+    },
+    isCompacting(sessionId: string) {
+      return this.compactingSessions.has(sessionId);
     },
     async compact(sessionId: string, opts?: unknown) {
       this.compactCalls.push({ sessionId, opts });
@@ -243,6 +248,17 @@ function fakeLlmCallServiceWithLast(lastInput: number) {
       return { inputTokens: lastInput };
     },
   };
+}
+
+/**
+ * 等 `kick()`/`kickRetry()`（fire-and-forget，无返回 Promise 可 await）驱动的
+ * 异步链跑完。测试替身全程无真实 I/O / 定时器，多轮 setImmediate 足以把
+ * 微任务队列排空——与 session-title.service.spec.ts 的同款 flushPromises 一致。
+ */
+async function flushPromises(times = 10): Promise<void> {
+  for (let i = 0; i < times; i++) {
+    await new Promise((r) => setImmediate(r));
+  }
 }
 
 describe("RunnerService", () => {
@@ -392,6 +408,87 @@ describe("RunnerService", () => {
     await runner.kickRetryAndWait("s1");
     expect(sess.store[0].status).toBe("processed");
     expect(chunks[0]?.messageId).toBe("msg-r");
+  });
+
+  describe("kick / kickRetry 压缩并发守卫（isCompacting 为真时拒新 run）", () => {
+    it("kick：isCompacting=true 时 no-op，不消费 pending", async () => {
+      const sess = fakeSessionService();
+      const compactor = fakeCompactor();
+      compactor.compactingSessions.add("s1");
+      sess.enqueue("s1", "hi");
+      const runner = new RunnerService(
+        sess as never,
+        fakeGraphRunner() as never,
+        new EventEmitter2(),
+        fakeLlmCallService() as never,
+        fakeSessionMessageService() as never,
+        compactor as never,
+        fakeModelConfig() as never,
+        new AccountContextService(),
+        new ModelRunContext(),
+        new AgentContextService(),
+        fakeAgentService() as never,
+        fakeMcpService() as never,
+      );
+      runner.kick("s1");
+      await flushPromises();
+      expect(sess.claimPendingCalls).toBe(0);
+      expect(sess.store[0].status).toBe("pending");
+    });
+
+    it("kickRetry：isCompacting=true 时 no-op，不消费 failed", async () => {
+      const sess = fakeSessionService();
+      const compactor = fakeCompactor();
+      compactor.compactingSessions.add("s1");
+      sess.enqueue("s1", "hi");
+      sess.store[0].status = "failed";
+      const runner = new RunnerService(
+        sess as never,
+        fakeGraphRunner() as never,
+        new EventEmitter2(),
+        fakeLlmCallService() as never,
+        fakeSessionMessageService() as never,
+        compactor as never,
+        fakeModelConfig() as never,
+        new AccountContextService(),
+        new ModelRunContext(),
+        new AgentContextService(),
+        fakeAgentService() as never,
+        fakeMcpService() as never,
+      );
+      runner.kickRetry("s1");
+      await flushPromises();
+      expect(sess.claimFailedCalls).toBe(0);
+      expect(sess.store[0].status).toBe("failed");
+    });
+
+    it("kick：isCompacting=false（不在压缩中）时正常消费（回归，变异守卫条件不会误伤）", async () => {
+      const sess = fakeSessionService();
+      const compactor = fakeCompactor();
+      // 压缩集合里放的是别的 session，不应影响 s1
+      compactor.compactingSessions.add("other-session");
+      sess.enqueue("s1", "hi");
+      const runner = new RunnerService(
+        sess as never,
+        fakeGraphRunner() as never,
+        new EventEmitter2(),
+        fakeLlmCallService() as never,
+        fakeSessionMessageService() as never,
+        compactor as never,
+        fakeModelConfig() as never,
+        new AccountContextService(),
+        new ModelRunContext(),
+        new AgentContextService(),
+        fakeAgentService() as never,
+        fakeMcpService() as never,
+      );
+      // 显式经 kick()（守卫所在的入口）而非 kickAndWait，确保守卫的
+      // "不误伤非压缩会话" 这条路径本身被覆盖，而不只是 kickAndWait 本体。
+      runner.kick("s1");
+      await flushPromises();
+      expect(sess.claimPendingCalls).toBeGreaterThan(0);
+      expect(sess.store.every((m) => m.status === "processed")).toBe(true);
+    });
   });
 
   it("getInflight：run 进行中可取到累加快照", async () => {

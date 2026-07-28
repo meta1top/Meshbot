@@ -190,6 +190,12 @@
     "send": "Send",
     "interrupt": "Interrupt",
     "attachment": "Add attachment",
+    "commandUnknown": "Unknown command: {name}",
+    "commandMenuEmpty": "No matching commands",
+    "commands": {
+      "compactDescription": "Compact the current session's context",
+      "compactFailed": "Compaction failed, please try again later"
+    },
     "format": {
       "bold": "Bold",
       "italic": "Italic",
@@ -269,13 +275,19 @@
       "like": "Like",
       "dislike": "Dislike"
     },
-    "compaction": {
-      "bannerThreshold": "Compacting conversation history…",
-      "bannerCtxExceeded": "Context full; compacting to continue…",
-      "rowTitle": "Compacted {count} earlier messages",
-      "rowExpand": "Show summary",
-      "rowCollapse": "Hide",
-      "toastError": "Compaction failed: {message}"
+    "systemEvent": {
+      "compactionTitle": "Compacted {count} earlier messages",
+      "modelSwitch": "Switched model: {from} → {to}"
+    },
+    "statusLine": {
+      "thinking": {
+        "0": "Thinking…",
+        "1": "Organizing thoughts…",
+        "2": "Structuring the reply…"
+      },
+      "executing": "Running tools…",
+      "streaming": "Writing…",
+      "compacting": "Compacting conversation history…"
     },
     "subagent": {
       "fallbackTitle": "Subtask",
@@ -755,7 +767,7 @@
       "deleteConfirmDescription": "This also deletes all of this agent's chats, memory and workspace files. This cannot be undone.",
       "deleteConfirm": "Delete",
       "mcpTitle": "MCP server configuration",
-      "mcpDescription": "Edit this agent's mcp.json. Changes take effect on the next reply.",
+      "mcpDescription": "Edit this agent's mcp.json. Changes take effect immediately — new tools are usable right away.",
       "mcpLoadFailed": "Failed to load MCP configuration, please retry",
       "mcpPlaceholder": "Paste mcp.json content, e.g. Claude Desktop / Claude Code mcpServers config",
       "mcpJsonInvalid": "Invalid JSON: {detail}",

@@ -22,8 +22,8 @@ export class McpUninstallTool implements MeshbotTool<Args, string> {
   readonly name = "mcp_uninstall";
   readonly description =
     "Remove an MCP server configuration from this agent's mcp.json by name. " +
-    "Errors if the name does not exist. Takes effect from the next conversation " +
-    "turn — tell the user so.";
+    "Errors if the name does not exist. Takes effect immediately — its tools " +
+    "are gone from this very turn onward.";
   readonly schema = ArgsSchema;
 
   constructor(private readonly mcp: McpService) {}
@@ -44,6 +44,6 @@ export class McpUninstallTool implements MeshbotTool<Args, string> {
       }
       throw err;
     }
-    return `已卸载 MCP 服务器 "${args.name}"。下一轮对话生效——请告知用户。`;
+    return `已卸载 MCP 服务器 "${args.name}"，已生效（本轮对话内立即不可用）——请告知用户。`;
   }
 }

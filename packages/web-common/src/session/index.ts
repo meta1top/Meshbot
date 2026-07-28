@@ -36,17 +36,10 @@ export {
   type ChatInputHandle,
   type ChatInputLabels,
   type ChatInputProps,
+  matchSlashCommand,
+  type SlashCommand,
+  type SlashCommandMatch,
 } from "./chat-input";
-export {
-  CompactionBanner,
-  type CompactionBannerLabels,
-  type CompactionBannerProps,
-} from "./compaction-banner";
-export {
-  CompactionRow,
-  type CompactionRowLabels,
-  type CompactionRowProps,
-} from "./compaction-row";
 export {
   ComposerActions,
   type ComposerActionsLabels,
@@ -103,6 +96,13 @@ export {
 } from "./session-tree";
 export type { SessionSocketLike } from "./socket-like";
 export {
+  deriveStatusLinePhase,
+  StatusLine,
+  type StatusLineLabels,
+  type StatusLinePhase,
+  type StatusLineProps,
+} from "./status-line";
+export {
   claimSubagentOnTimeline,
   countToolCalls,
   deriveLiveAction,
@@ -123,6 +123,11 @@ export {
   toggleSubagentOpen,
   truncate,
 } from "./subagent-card";
+export {
+  SystemEventRow,
+  type SystemEventRowLabels,
+  type SystemEventRowProps,
+} from "./system-event-row";
 export type { TimelineMessage, ToolCallView } from "./timeline";
 export { TodoList } from "./todo-list";
 export { todoStatusMeta } from "./todo-status";

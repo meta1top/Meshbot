@@ -147,16 +147,25 @@ export const HistoryMessageSchema = z.object({
   reasoning: z.string().optional(),
   toolCalls: z.array(HistoryToolCallSchema).optional(),
   /**
-   * 结构化附加元数据（JSON 反序列化后）。压缩占位行携带 kind="compaction" 以供前端
-   * 渲染 CompactionRow 替代普通系统消息。
+   * 结构化附加元数据（JSON 反序列化后）。role="system" 行携带 kind 供前端识别
+   * 渲染成居中系统事件行（SystemEventRow）而非普通消息：
+   * - kind="compaction"：压缩占位行，可展开摘要
+   * - kind="model_switch"：切模型提示行，metadata 存新旧模型名
    */
   metadata: z
-    .object({
-      kind: z.literal("compaction"),
-      removedCount: z.number(),
-      fromMessageId: z.string(),
-      toMessageId: z.string(),
-    })
+    .discriminatedUnion("kind", [
+      z.object({
+        kind: z.literal("compaction"),
+        removedCount: z.number(),
+        fromMessageId: z.string(),
+        toMessageId: z.string(),
+      }),
+      z.object({
+        kind: z.literal("model_switch"),
+        fromModel: z.string(),
+        toModel: z.string(),
+      }),
+    ])
     .nullable()
     .optional(),
   /** assistant 消息反馈（点赞/不喜欢）；其余为 null/缺省。 */
@@ -510,13 +519,28 @@ export type RunCompactionStartEvent = z.infer<
   typeof RunCompactionStartEventSchema
 >;
 
-/** socket: run.compaction_done —— 压缩完成。 */
+/**
+ * socket: run.compaction_done —— 压缩完成。
+ *
+ * `placeholderId`/`summary`/`fromMessageId`/`toMessageId` 补齐占位行完整数据
+ * （此前仅 sessionId + removedCount + summaryPreview，前端要重拉 history 才能
+ * 看到占位行）：前端收到本事件后可直接 append 一条 system+compaction 消息到
+ * timeline，不再依赖重拉。字段口径与 session_messages 的 compaction 占位行、
+ * `HistoryMessage.metadata`（kind="compaction"）完全一致。
+ */
 export const RunCompactionDoneEventSchema = z.object({
   sessionId: z.string(),
+  /** 压缩占位行 id（session_messages.id / langgraphId），前端据此去重 append。 */
+  placeholderId: z.string(),
   /** 被压缩进摘要的原 messages 条数。 */
   removedCount: z.number(),
   /** 摘要文本的前 200 字预览，便于前端 banner 顺手展示。 */
   summaryPreview: z.string(),
+  /** 摘要全文，供前端展开显示（与占位行 content 同源）。 */
+  summary: z.string(),
+  /** 被压缩区间的起止原始 messageId。 */
+  fromMessageId: z.string(),
+  toMessageId: z.string(),
 });
 export type RunCompactionDoneEvent = z.infer<
   typeof RunCompactionDoneEventSchema
@@ -530,6 +554,28 @@ export const RunCompactionErrorEventSchema = z.object({
 export type RunCompactionErrorEvent = z.infer<
   typeof RunCompactionErrorEventSchema
 >;
+
+/**
+ * socket: run.system_event —— 通用系统事件行实时下发（切模型等）。
+ *
+ * 与 `HistoryMessage`（role="system" + metadata.kind）同源：后端落库的同时
+ * 广播本事件，前端收到后直接 append 一条 system 消息到 timeline，不必重拉
+ * history（与 `run.compaction_done` 的 append 逻辑复用同一套幂等去重）。
+ * compaction 目前仍走专门的 `run.compaction_done`（历史包袱，字段更丰富）；
+ * 本事件供 compaction 之外的系统行种类（目前只有 model_switch）使用，kind
+ * 枚举随 `HistoryMessage.metadata` 的 kind 判别式同步扩展。
+ */
+export const RunSystemEventSchema = z.object({
+  sessionId: z.string(),
+  /** session_messages.id（= langgraphId），前端据此去重 append。 */
+  id: z.string(),
+  kind: z.enum(["compaction", "model_switch"]),
+  /** 展示文案（与 HistoryMessage.content 同源）。 */
+  content: z.string(),
+  /** 结构化附加数据（不含 kind），与 HistoryMessage.metadata 除 kind 外的部分同源。 */
+  metadata: z.record(z.string(), z.unknown()),
+});
+export type RunSystemEvent = z.infer<typeof RunSystemEventSchema>;
 
 /**
  * DELETE /api/sessions/:sessionId/pending-messages/:messageId 响应载荷。
@@ -550,6 +596,18 @@ export const RetryResponseSchema = z.object({
   retried: z.boolean(),
 });
 export type RetryResponse = z.infer<typeof RetryResponseSchema>;
+
+/**
+ * POST /api/sessions/:id/compact 出参（`/compact` 命令用，force=true 主动触发）。
+ * `summaryPreview` 与 WS `run.compaction_done` 的同名字段同口径（摘要前 200 字）。
+ */
+export const CompactSessionResponseSchema = z.object({
+  removedCount: z.number(),
+  summaryPreview: z.string(),
+});
+export type CompactSessionResponse = z.infer<
+  typeof CompactSessionResponseSchema
+>;
 
 /**
  * socket: session.title_updated —— SessionTitleService 后台 LLM 生成完成。
@@ -603,6 +661,7 @@ export const SESSION_WS_EVENTS = {
   runCompactionStart: "run.compaction_start",
   runCompactionDone: "run.compaction_done",
   runCompactionError: "run.compaction_error",
+  runSystemEvent: "run.system_event",
   runSubagentSpawned: "run.subagent_spawned",
   runSubagentSettled: "run.subagent_settled",
   runHitlSettled: "run.hitl_settled",

@@ -2,28 +2,36 @@ import { Transactional } from "@meshbot/common";
 import type {
   AppendMessageInput,
   CreateSessionInput,
+  RunSystemEvent,
   SessionCreatedEvent,
   SessionDeletedEvent,
   SessionRenamedEvent,
   SessionStatus,
   SessionSummary,
 } from "@meshbot/types-agent";
-import { SESSION_LIFECYCLE_EVENTS, stripLlmuse } from "@meshbot/types-agent";
+import {
+  SESSION_LIFECYCLE_EVENTS,
+  SESSION_WS_EVENTS,
+  stripLlmuse,
+} from "@meshbot/types-agent";
 import { ThreadStateService } from "@meshbot/lib-agent";
 import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
+import { randomUUID } from "node:crypto";
 import { In, Repository } from "typeorm";
 import { ScopedRepository } from "../account/scoped-repository";
 import { ScopedRepositoryFactory } from "../account/scoped-repository.factory";
 import { PendingMessage } from "../entities/pending-message.entity";
 import { Session } from "../entities/session.entity";
 import { CheckpointerCleanupService } from "./checkpointer-cleanup.service";
+import { ContextCompactor } from "./context-compactor.service";
 import { LlmCallService } from "./llm-call.service";
 import { ModelConfigService } from "./model-config.service";
 import { ScheduleService } from "./schedule.service";
@@ -50,6 +58,7 @@ function toSummary(s: Session): SessionSummary {
 /** 会话与待处理用户消息的归属 Service。 */
 @Injectable()
 export class SessionService {
+  private readonly logger = new Logger(SessionService.name);
   /** Session 账号作用域仓库（自动按当前账号过滤/盖章）。 */
   private readonly sessionRepo: ScopedRepository<Session>;
   /** PendingMessage 账号作用域仓库（自动按当前账号过滤/盖章）。 */
@@ -75,6 +84,7 @@ export class SessionService {
     private readonly schedules: ScheduleService,
     private readonly modelConfigs: ModelConfigService,
     private readonly emitter: EventEmitter2,
+    private readonly compactor: ContextCompactor,
   ) {
     // 包裹 tx-aware 注入代理：作用域仓库的操作仍参与外层 @Transactional 边界
     this.sessionRepo = scopedFactory.create(rawSessionRepo);
@@ -561,14 +571,27 @@ export class SessionService {
   }
 
   /**
-   * 更新会话 title / pinned。至少传一项（Zod 在控制器 DTO 层已保证）。
+   * 更新会话 title / pinned / modelConfigId。至少传一项（Zod 在控制器 DTO 层已保证）。
    * pinned: true → 写当前时间到 pinned_at；pinned: false → null。
    * 单表 update，无需事务。
+   *
+   * modelConfigId **真的变化**（与会话当前值不同）时额外落一条系统事件行
+   * （role=system + kind=model_switch）+ 广播 `run.system_event`，供消息流实时
+   * 呈现「已切换模型：旧 → 新」——纯 session 字段 PATCH，本无 run，落行 + emit
+   * 走这条同步路径即可，不经 runner。旧模型名若已被删/不可达，best-effort
+   * 兜底成原始 id，不阻断本次切换。
+   *
+   * `sessionRepo.update`（Session 表）与 `recordSystemEvent`（SessionMessage
+   * 表）是跨表写，但**不包 `@Transactional`**：modelConfigId 落列是本方法的主效果，
+   * 系统事件行是附属产物——`recordSystemEvent` 失败只 log 不向上抛（对齐
+   * ContextCompactor 压缩占位行同款 best-effort 语义），避免「系统行插入失败」
+   * 反向拖累「modelConfigId 明明改成功了」的主更新一起报错回滚。
    */
   async patch(
     sessionId: string,
     input: { title?: string; pinned?: boolean; modelConfigId?: string },
   ): Promise<SessionSummary> {
+    const before = await this.findSessionOrFail(sessionId);
     const changes: Partial<Session> = {};
     if (input.title !== undefined) {
       changes.title = input.title;
@@ -577,10 +600,27 @@ export class SessionService {
     if (input.pinned !== undefined) {
       changes.pinnedAt = input.pinned ? new Date() : null;
     }
+    let modelSwitchEvent: RunSystemEvent | null = null;
     if (input.modelConfigId !== undefined) {
       // 校验归属：按账号作用域查询，他账号/不存在的 id 统一 404，防越权指认。
-      await this.modelConfigs.findOneOrFail(input.modelConfigId);
+      const newModel = await this.modelConfigs.findOneOrFail(
+        input.modelConfigId,
+      );
       changes.modelConfigId = input.modelConfigId;
+      // 仅在真的改了值时才组系统行——同值 PATCH（如前端幂等重放）不留噪音行。
+      if (input.modelConfigId !== before.modelConfigId) {
+        const fromModel = before.modelConfigId
+          ? await this.resolveModelName(before.modelConfigId)
+          : "默认模型";
+        const toModel = newModel.name;
+        modelSwitchEvent = {
+          sessionId,
+          id: `msw-${randomUUID()}`,
+          kind: "model_switch",
+          content: `已切换模型：${fromModel} → ${toModel}`,
+          metadata: { fromModel, toModel },
+        };
+      }
     }
     await this.sessionRepo.update({ id: sessionId }, changes);
     const s = await this.findSessionOrFail(sessionId);
@@ -592,7 +632,37 @@ export class SessionService {
         title: s.title,
       } satisfies SessionRenamedEvent);
     }
+    if (modelSwitchEvent) {
+      // 附属行失败不回滚主更新：modelConfigId 已经落库，仅 log，不阻断 patch。
+      try {
+        await this.sessionMessages.recordSystemEvent({
+          id: modelSwitchEvent.id,
+          sessionId,
+          kind: "model_switch",
+          content: modelSwitchEvent.content,
+          metadata: modelSwitchEvent.metadata,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `recordSystemEvent(model_switch) failed; modelConfigId 已落，仅 UI 系统行丢失 session=${sessionId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+      this.emitter.emit(SESSION_WS_EVENTS.runSystemEvent, modelSwitchEvent);
+    }
     return toSummary(s);
+  }
+
+  /**
+   * 查模型显示名，供切模型系统行文案用；模型已被删除/不可达时 best-effort
+   * 兜底成原始 id，不因为查旧模型名失败而阻断本次切换。
+   */
+  private async resolveModelName(modelConfigId: string): Promise<string> {
+    try {
+      const m = await this.modelConfigs.findOneOrFail(modelConfigId);
+      return m.name;
+    } catch {
+      return modelConfigId;
+    }
   }
 
   /**
@@ -733,8 +803,18 @@ export class SessionService {
    *
    * 不删 pending_messages：该 user 消息已 processed；pending 表是独立的
    * 入队队列，与 checkpointer state 解耦。
+   *
+   * **压缩并发守卫**：`cutMessagesAfter` 会同步改写 checkpointer（getState→
+   * updateState），若与压缩的 `applyCompaction`（同样 getState→updateState）
+   * 并发命中同一 thread，会导致消息序错乱/tool 配对断裂——与 `RunnerService.kick`
+   * 的 `isCompacting` 守卫是同一类竞态，且更紧迫：`kickResume` 内的守卫为时已晚，
+   * `cutMessagesAfter` 在它之前就已经动了 checkpointer。因此守卫必须放在本方法
+   * 入口——它是 controller `regenerate()` 与 checkpointer 之间唯一的收口点。
    */
   async regenerateAfter(sessionId: string, messageId: string): Promise<void> {
+    if (this.compactor.isCompacting(sessionId)) {
+      throw new ConflictException("会话压缩中，请稍候");
+    }
     await this.findSessionOrFail(sessionId);
     const msg = await this.sessionMessages.findByIdOrFail(messageId);
     if (msg.sessionId !== sessionId) {

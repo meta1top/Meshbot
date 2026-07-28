@@ -21,8 +21,8 @@ export class McpDisableTool implements MeshbotTool<Args, string> {
   readonly description =
     "Disable an MCP server by name — its config is kept but no connection is " +
     "established. Idempotent — disabling an already-disabled server succeeds as " +
-    "a no-op. Errors if the name does not exist. Takes effect from the next " +
-    "conversation turn — tell the user so.";
+    "a no-op. Errors if the name does not exist. Takes effect immediately — its " +
+    "tools are gone from this very turn onward.";
   readonly schema = ArgsSchema;
 
   constructor(private readonly mcp: McpService) {}
@@ -35,6 +35,6 @@ export class McpDisableTool implements MeshbotTool<Args, string> {
     if (result === "already") {
       return `MCP 服务器 "${args.name}" 已是禁用状态。`;
     }
-    return `已禁用 MCP 服务器 "${args.name}"。下一轮对话生效——请告知用户。`;
+    return `已禁用 MCP 服务器 "${args.name}"，已生效（本轮对话内立即不可用）——请告知用户。`;
   }
 }

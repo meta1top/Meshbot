@@ -701,10 +701,6 @@ function RemoteSessionViewReady({
           labels={{
             scrollToBottom: t("scrollToBottom"),
             remoteLoadFailed: t("remoteLoadFailed"),
-            compaction: {
-              bannerThreshold: t("compaction.bannerThreshold"),
-              bannerCtxExceeded: t("compaction.bannerCtxExceeded"),
-            },
             messageList: {
               assistantName: t("assistantName"),
               runErrorPrefix: t("runErrorPrefix"),
@@ -713,8 +709,12 @@ function RemoteSessionViewReady({
                 t("reasoningThinking", { seconds }),
               reasoningThought: (seconds) => t("reasoningThought", { seconds }),
               reasoningProcess: t("reasoningProcess"),
-              compactionRowTitle: (count) =>
-                t("compaction.rowTitle", { count }),
+              systemEvent: {
+                compactionTitle: (count) =>
+                  t("systemEvent.compactionTitle", { count }),
+                modelSwitch: (from, to) =>
+                  t("systemEvent.modelSwitch", { from, to }),
+              },
               runErrorAgentNotRemotable: t("runErrorAgentNotRemotable"),
               runErrorSessionAgentMismatch: t("runErrorSessionAgentMismatch"),
               runErrorOffline: t("runErrorOffline"),

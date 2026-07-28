@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import {
   expandToToolBoundary,
   findSplitIndex,
+  partitionStableSystemMessages,
   serializeForSummary,
 } from "./context-compactor.utils";
 import { LlmCallService } from "./llm-call.service";
@@ -61,7 +62,7 @@ export class CompactionNothingToCompact extends Error {
  * 会话上下文压缩器（per-sessionId 锁 + 同步等待）。
  *
  * - `compact(sessionId)` 是入口：进锁 → 取 messages → 算切分 → summarize →
- *   applyCompaction → recordCompactionPlaceholder → emit done。
+ *   applyCompaction → recordSystemEvent(kind=compaction) → emit done。
  * - 失败时 emit error 抛 CompactionError；调用方（runner）决定是否兜底。
  * - 并发同 sessionId 第二次调用直接 await 第一次的 Promise。
  *
@@ -86,6 +87,16 @@ export class ContextCompactor {
   shouldCompact(lastInputTokens: number, contextWindow: number): boolean {
     if (!contextWindow || contextWindow <= 0) return false;
     return lastInputTokens / contextWindow >= COMPACTION_TRIGGER_RATIO;
+  }
+
+  /**
+   * 给 RunnerService kick 前置守卫用：某 session 当前是否有在途压缩
+   * （`locks` map 命中即为真）。与 `/compact` 端点已有的「run 中禁压缩」
+   * 守卫双向对称——本方法堵住反向竞态（压缩中禁新 run），彻底防止两者
+   * 并发改写同一 session 的 checkpointer 状态。
+   */
+  isCompacting(sessionId: string): boolean {
+    return this.locks.has(sessionId);
   }
 
   /** 入口：同步等待压缩完成。同 sessionId 并发会被锁串行化。 */
@@ -114,27 +125,39 @@ export class ContextCompactor {
     const ctx = model.contextWindow;
     const messages = await this.threadState.getMessagesSnapshot(sessionId);
 
-    // 切分
+    // 稳定 id 系统消息（system:persona/ctx/skills/mcp/prompts）先剔除，
+    // 不参与本轮压缩工作集：详见 partitionStableSystemMessages 的 JSDoc。
+    const { rest } = partitionStableSystemMessages(messages);
+
+    // 切分（splitIdx / keep≥2 兜底 / expandToToolBoundary 全部基于剔除
+    // 系统消息后的 rest 计算，而非原始 messages）
     const keepBudget = Math.floor(ctx * COMPACTION_RECENT_RATIO);
-    let splitIdx = findSplitIndex(messages, keepBudget);
-    splitIdx = expandToToolBoundary(messages, splitIdx);
+    let splitIdx = findSplitIndex(rest, keepBudget);
+    // force（手动 /compact）语义是「尽力压缩」：预算算法判定「都在保留预算内、
+    // 无需压缩」（splitIdx=0）时，回退到「只留最近 2 条、其余全摘要」——否则
+    // 用户主动点了压缩却被「没有可压缩的内容」挡回，很反直觉（对话明明很长）。
+    // 真正没东西可压（rest≤2 条）由下方 keep≥2 兜底 + expand 后的判零兜底。
+    if (splitIdx === 0 && opts.force && rest.length > 2) {
+      splitIdx = rest.length - 2;
+    }
+    // 保留区不足 2 条 → 强制把 splitIdx 往前挪（让 keep 区至少留 2 条）。
+    if (rest.length - splitIdx < 2) {
+      splitIdx = Math.max(0, rest.length - 2);
+    }
+    // expandToToolBoundary 必须是**最后**一步切点调整：它把切点右移以保
+    // tool_call/result 配对完整。若在 keep≥2 兜底之前做，兜底会把切点重新拉回
+    // rest.length-2，切断刚修好的配对——尾轮用过工具的短对话 force 压缩时，
+    // ToolMessage 落 keep 而 owner AI 进摘要被删 → 孤儿 tool result → 下一轮
+    // provider 400（sanitizeOrphanToolCalls 只救反方向）。终审 Important。
+    splitIdx = expandToToolBoundary(rest, splitIdx);
+    // 判零兜底：expand 右移到底（整尾是一条 tool 链）或 rest 太少压回 0，
+    // 都说明没东西可压。非 force 返 null，force 抛错。
     if (splitIdx === 0) {
       if (opts.force) throw new CompactionNothingToCompact();
       return null;
     }
-    // 保留区不足 2 条 → 强制把 splitIdx 往前挪（让 keep 区至少留 2 条），
-    // 哪怕这意味着这一轮没东西可压（splitIdx 被挪到 0）。
-    if (messages.length - splitIdx < 2) {
-      splitIdx = Math.max(0, messages.length - 2);
-    }
-    // 二次确认 splitIdx：若上面的调整把它压回 0，说明 messages 总条数
-    // 太少，没东西可压。复用同一套语义：非 force 返 null，force 抛错。
-    if (splitIdx === 0) {
-      if (opts.force) throw new CompactionNothingToCompact();
-      return null;
-    }
-    const toSummarize = messages.slice(0, splitIdx);
-    const keep = messages.slice(splitIdx);
+    const toSummarize = rest.slice(0, splitIdx);
+    const keep = rest.slice(splitIdx);
 
     // 发 start 事件
     this.emitter.emit(SESSION_WS_EVENTS.runCompactionStart, {
@@ -163,12 +186,14 @@ export class ContextCompactor {
       throw new CompactionError("Summarize LLM call failed", err);
     }
 
-    // 改写 checkpointer。removeIds 传「所有带 id 的消息」（摘要区 + 保留区）：
-    // 摘要区删掉换摘要；保留区删掉后由 applyCompaction 按序重新 append 到摘要之后，
-    // 实现 [system, summary, ...keep] 的目标顺序。系统提示词无 id，不在此列、自动留最前。
+    // 改写 checkpointer。removeIds 传「rest 中所有带 id 的消息」（摘要区 +
+    // 保留区，不含前面剔除的稳定 id 系统消息）：摘要区删掉换摘要；保留区
+    // 删掉后由 applyCompaction 按序重新 append 到摘要之后，实现
+    // [system..., summary, ...keep] 的目标顺序。系统消息全程未出现在
+    // removeIds/keep 里，reducer 对其原样保序，物理位置天然留在最前。
     try {
       await this.threadState.applyCompaction(sessionId, {
-        removeIds: messages
+        removeIds: rest
           .map((m) => m.id)
           .filter((id): id is string => typeof id === "string"),
         summaryText,
@@ -184,18 +209,23 @@ export class ContextCompactor {
 
     // 占位行（失败仅 log，不回滚）
     const placeholderId = `comp-${randomUUID()}`;
+    const fromMessageId = toSummarize[0].id ?? "";
+    const toMessageId = toSummarize[toSummarize.length - 1].id ?? "";
     try {
-      await this.sessionMessages.recordCompactionPlaceholder({
+      await this.sessionMessages.recordSystemEvent({
         id: placeholderId,
         sessionId,
-        summary: summaryText,
-        removedCount: toSummarize.length,
-        fromMessageId: toSummarize[0].id ?? "",
-        toMessageId: toSummarize[toSummarize.length - 1].id ?? "",
+        kind: "compaction",
+        content: summaryText,
+        metadata: {
+          removedCount: toSummarize.length,
+          fromMessageId,
+          toMessageId,
+        },
       });
     } catch (err) {
       this.logger.warn(
-        `recordCompactionPlaceholder failed; checkpointer 已正确，仅 UI 占位行丢失 session=${sessionId}: ${err instanceof Error ? err.message : String(err)}`,
+        `recordSystemEvent(compaction) failed; checkpointer 已正确，仅 UI 占位行丢失 session=${sessionId}: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
 
@@ -234,11 +264,15 @@ export class ContextCompactor {
       );
     }
 
-    // done
+    // done：补齐占位行完整数据，前端直接 append 到 timeline 不必重拉 history。
     this.emitter.emit(SESSION_WS_EVENTS.runCompactionDone, {
       sessionId,
+      placeholderId,
       removedCount: toSummarize.length,
       summaryPreview: summaryText.slice(0, 200),
+      summary: summaryText,
+      fromMessageId,
+      toMessageId,
     });
 
     this.logger.log(

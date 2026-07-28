@@ -1,6 +1,7 @@
 "use client";
 
 import type {
+  CompactSessionResponse,
   CreateSessionResponse,
   DeletePendingResponse,
   HistoryResponse,
@@ -83,6 +84,22 @@ export async function fetchHistory(
   const qs = params.toString();
   const { data } = await apiClient.get<HistoryResponse>(
     `/api/sessions/${sessionId}/history${qs ? `?${qs}` : ""}`,
+  );
+  return data;
+}
+
+/**
+ * 主动触发一次会话上下文压缩（`/compact` 命令用）。成功不代表已经压缩了很久
+ * 的历史——摘要卡片经 WS `run.compaction_done` 自然出现在消息流；调用方无需
+ * 用本次返回值再画一张卡。没东西可压时后端 400，`err.response.data.message`
+ * 是可直接展示的中文友好提示（见 SessionController.compact 的 JSDoc）。
+ */
+export async function compactSession(
+  sessionId: string,
+): Promise<CompactSessionResponse> {
+  const { data } = await apiClient.post<CompactSessionResponse>(
+    `/api/sessions/${sessionId}/compact`,
+    {},
   );
   return data;
 }

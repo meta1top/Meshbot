@@ -1,10 +1,16 @@
 import { Inject, Injectable, Optional } from "@nestjs/common";
 import { z } from "zod";
+import { AccountContextService } from "../../account/account-context.service";
+import { AgentContextService } from "../../account/agent-context.service";
 import { McpServerConfigSchema } from "../../mcp/mcp.schema";
 import { McpService } from "../../mcp/mcp.service";
 import { MCP_CONFIRM_PORT, type McpConfirmPort } from "../mcp-confirm.port";
 import { Tool } from "../tool.decorator";
 import type { MeshbotTool, ToolContext } from "../tool.types";
+import {
+  countLoadedToolsForServer,
+  describeLoadOutcome,
+} from "./mcp-load-outcome.helper";
 
 const ArgsSchema = z.object({
   name: z.string().min(1).describe("Unique MCP server name (mcp.json key)"),
@@ -29,12 +35,14 @@ export class McpInstallTool implements MeshbotTool<Args, string> {
     "Install a new MCP server (stdio command, or http/sse url) into this agent's " +
     "mcp.json. Requires explicit user confirmation before writing — stdio installs " +
     "authorize a persistent local command. Fails if `name` already exists (uninstall " +
-    "or edit it manually instead of overwriting). Takes effect from the next " +
-    "conversation turn — tell the user so.";
+    "or edit it manually instead of overwriting). Takes effect immediately — the " +
+    "new tools are already usable in this very turn.";
   readonly schema = ArgsSchema;
 
   constructor(
     private readonly mcp: McpService,
+    private readonly account: AccountContextService,
+    private readonly agentCtx: AgentContextService,
     @Optional()
     @Inject(MCP_CONFIRM_PORT)
     private readonly port?: McpConfirmPort,
@@ -100,9 +108,18 @@ export class McpInstallTool implements MeshbotTool<Args, string> {
       }
       throw err;
     }
+    // 落盘 + reload 已经跑完（updateConfig 尾调），按实际加载结果诚实分流
+    // 文案：连接失败/零工具时不能说「已生效」，否则模型会向用户报一个连
+    // 不通的假可用状态。
+    const loadedCount = countLoadedToolsForServer(
+      this.mcp,
+      this.account.getOrThrow(),
+      this.agentCtx.getOrThrow(),
+      args.name,
+    );
     return result(
       "installed",
-      `已安装 MCP 服务器 "${args.name}"。下一轮对话生效——请告知用户。`,
+      `已安装 MCP 服务器 "${args.name}"，${describeLoadOutcome(loadedCount, "安装")}`,
     );
   }
 }

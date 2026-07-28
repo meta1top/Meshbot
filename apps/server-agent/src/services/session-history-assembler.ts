@@ -20,7 +20,10 @@ export interface HistoryAssemblyRow {
   toolCalls?: string | null;
   /** `role="tool"` 行专用：本行是哪次 tool_call 的执行结果。 */
   toolCallId?: string | null;
-  /** 原始 metadata JSON 列：压缩占位行携带 kind="compaction"、tool 行携带 ok。 */
+  /**
+   * 原始 metadata JSON 列：系统事件行携带 kind="compaction"/"model_switch"、
+   * tool 行携带 ok。
+   */
   metadata?: string | null;
 }
 
@@ -95,14 +98,12 @@ export function assembleHistoryMessages(
         role: r.role as "user" | "assistant" | "system",
         content: r.content,
         ...(r.reasoning ? { reasoning: r.reasoning } : {}),
+        // 系统事件行的 kind 判别式随 HistoryMessage.metadata 的 discriminatedUnion
+        // 同步扩展（目前 compaction / model_switch）；未识别的 kind（含缺失）一律
+        // 投影为 null——前端安全跳过，不当普通消息误显示结构化 JSON。
         metadata:
-          meta && meta.kind === "compaction"
-            ? (meta as unknown as {
-                kind: "compaction";
-                removedCount: number;
-                fromMessageId: string;
-                toMessageId: string;
-              })
+          meta && (meta.kind === "compaction" || meta.kind === "model_switch")
+            ? (meta as unknown as HistoryMessage["metadata"])
             : null,
         feedback: fb,
       };

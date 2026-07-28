@@ -6,9 +6,10 @@ import { MEMORY_GUIDE } from "../memory/memory-guide.js";
 import { MemoryService } from "../memory/memory.service.js";
 import { isStdioServer, type McpServerConfig } from "../mcp/mcp.schema.js";
 import { McpService } from "../mcp/mcp.service.js";
-import { LLMUSE_GUIDE } from "../prompt/llmuse-guide.js";
+import { buildLlmuseGuide } from "../prompt/llmuse-guide.js";
 import { PromptFileService } from "../prompts/prompt-file.service.js";
 import { SkillService } from "../skills/skill.service.js";
+import { ToolPrefsService } from "../tools/tool-prefs.service.js";
 import type { ThreadId } from "./graph.types.js";
 import { ModelResolver } from "./model-resolver.service.js";
 import {
@@ -130,6 +131,9 @@ export function buildPromptsBlock(
   return `${joined.slice(0, PROMPTS_BLOCK_MAX_CHARS)}\n${PROMPTS_TRUNCATED_NOTICE}`;
 }
 
+/** 无禁用工具时复用的空集，避免每次消费口都新建一个 Set。 */
+const EMPTY_DISABLED_TOOLS: ReadonlySet<string> = new Set();
+
 /** 负责组装系统上下文消息、记忆段落、技能目录消息。 */
 @Injectable()
 export class ContextBuilder {
@@ -144,6 +148,7 @@ export class ContextBuilder {
     private readonly modelResolver?: ModelResolver,
     @Optional() private readonly mcp?: McpService,
     @Optional() private readonly prompts?: PromptFileService,
+    @Optional() private readonly toolPrefs?: ToolPrefsService,
   ) {}
 
   /**
@@ -190,18 +195,41 @@ export class ContextBuilder {
   /**
    * 组装人格消息（稳定 id system:persona；**每轮刷新**、reducer 按 id 原地更新）。
    *
-   * 内容 = 记忆段（MEMORY_GUIDE + core.md）+ LLMUSE 指南。Agent 的人格正文已
-   * 迁移至 `<agentDir>/prompts/` 文件，改由独立的 system:prompts 消息注入
-   * （见 `buildPromptsMessage`），本消息只保留与 Agent 人格无关的通用行为规范。
+   * 内容 = 记忆段（MEMORY_GUIDE + core.md）+ LLMUSE 指南（按当前 Agent 的禁用
+   * 工具集过滤 IM 工具指引行）。Agent 的人格正文已迁移至 `<agentDir>/prompts/`
+   * 文件，改由独立的 system:prompts 消息注入（见 `buildPromptsMessage`），
+   * 本消息只保留与 Agent 人格无关的通用行为规范。
    *
    * 仍保留每轮刷新（而非首轮注入）：记忆 core.md 随时可能被 memory 工具改写，
-   * 首轮写死会让老会话永远带着旧记忆，且静默不报错。
+   * 首轮写死会让老会话永远带着旧记忆，且静默不报错；工具启停同理，禁用后
+   * 下一轮就该停止再教模型调用。
    */
   async buildPersonaMessage(): Promise<SystemMessage> {
-    const content = [this.buildMemorySection(), LLMUSE_GUIDE]
+    const content = [
+      this.buildMemorySection(),
+      buildLlmuseGuide(this.disabledImTools()),
+    ]
       .filter(Boolean)
       .join("\n\n");
     return new SystemMessage({ id: "system:persona", content });
+  }
+
+  /**
+   * 当前 Agent 的禁用工具集合，供 `buildLlmuseGuide` 过滤 IM 工具指引行。
+   *
+   * 无 ToolPrefsService（未接线，如旧测试/harness 不传第九参）或无 Agent ALS
+   * （`getDisabledTools()` 经 `MeshbotConfigService.getToolsConfigPath()` →
+   * `AgentContextService.getOrThrow()` 抛错，例如脱离 Agent 上下文的调用时机）
+   * 时一律不过滤，返回空集——与 `ToolRegistry.disabledToolNames()` 同款
+   * 「缺上下文不抛错」处理。
+   */
+  private disabledImTools(): ReadonlySet<string> {
+    if (!this.toolPrefs) return EMPTY_DISABLED_TOOLS;
+    try {
+      return this.toolPrefs.getDisabledTools();
+    } catch {
+      return EMPTY_DISABLED_TOOLS;
+    }
   }
 
   /**

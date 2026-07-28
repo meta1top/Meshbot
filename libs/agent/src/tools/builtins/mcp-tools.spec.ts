@@ -102,20 +102,50 @@ describe("mcp_list", () => {
 });
 
 describe("mcp_install", () => {
-  it("confirmed 才写入配置，返回文案含「下一轮对话生效」", async () => {
-    const { mcp, getState } = makeFakeMcpService({ mcpServers: {} });
+  it("confirmed 且加载到工具 → 写入配置，返回文案含「已生效」+ 加载数量", async () => {
+    const { mcp, getState, getLoadedToolNames } = makeFakeMcpService({
+      mcpServers: {},
+    });
+    // reload 后该 server 实际加载到 1 个工具——诚实分流的「成功」路径。
+    getLoadedToolNames.mockReturnValue(new Set(["mcp__fs__read"]));
     const port: McpConfirmPort = {
       confirmInstall: vi.fn().mockResolvedValue("confirmed"),
     };
-    const tool = new McpInstallTool(mcp, port);
+    const tool = new McpInstallTool(mcp, accountCtx, agentCtx, port);
     const server = { command: "npx", args: ["-y", "pkg"] };
-    const out = await tool.execute({ name: "fs", server }, CTX);
-    expect(out).toContain("下一轮对话生效");
+    const out = await runInContext(() =>
+      tool.execute({ name: "fs", server }, CTX),
+    );
+    expect(out).toContain("已生效");
+    expect(out).toContain("加载了 1 个工具");
     expect(getState().mcpServers.fs).toEqual(server);
     expect(port.confirmInstall).toHaveBeenCalledWith(
       { sessionId: "s1", toolCallId: "t1", name: "fs", server },
       CTX.signal,
     );
+  });
+
+  it("confirmed 但 reload 后零工具（连接失败）→ 写入配置成功，但返回文案诚实反映「未生效」，不包含「已生效」", async () => {
+    // 复现审查要求的诚实性场景：配置本身合法已落盘，但新 server 连不上 /
+    // 未加载到任何工具——不能向模型报「已生效」，否则模型会向用户报一个
+    // 连不通的假可用状态。
+    const { mcp, getState, getLoadedToolNames } = makeFakeMcpService({
+      mcpServers: {},
+    });
+    getLoadedToolNames.mockReturnValue(new Set()); // 该 server 零工具
+    const port: McpConfirmPort = {
+      confirmInstall: vi.fn().mockResolvedValue("confirmed"),
+    };
+    const tool = new McpInstallTool(mcp, accountCtx, agentCtx, port);
+    const server = { command: "npx", args: ["-y", "pkg"] };
+    const out = await runInContext(() =>
+      tool.execute({ name: "fs", server }, CTX),
+    );
+    expect(out).not.toContain("已生效");
+    expect(out).toContain("配置已保存");
+    expect(out).toContain("mcp_list");
+    // 落盘仍然成功——不能因为连接失败就回滚已经合法写入的配置。
+    expect(getState().mcpServers.fs).toEqual(server);
   });
 
   it.each([
@@ -127,10 +157,9 @@ describe("mcp_install", () => {
     const port: McpConfirmPort = {
       confirmInstall: vi.fn().mockResolvedValue(outcome),
     };
-    const tool = new McpInstallTool(mcp, port);
-    const out = await tool.execute(
-      { name: "fs", server: { command: "npx" } },
-      CTX,
+    const tool = new McpInstallTool(mcp, accountCtx, agentCtx, port);
+    const out = await runInContext(() =>
+      tool.execute({ name: "fs", server: { command: "npx" } }, CTX),
     );
     expect(out).toContain(keyword);
     expect(updateConfig).not.toHaveBeenCalled();
@@ -141,10 +170,9 @@ describe("mcp_install", () => {
       mcpServers: { fs: { command: "npx" } },
     });
     const port: McpConfirmPort = { confirmInstall: vi.fn() };
-    const tool = new McpInstallTool(mcp, port);
-    const out = await tool.execute(
-      { name: "fs", server: { command: "npx" } },
-      CTX,
+    const tool = new McpInstallTool(mcp, accountCtx, agentCtx, port);
+    const out = await runInContext(() =>
+      tool.execute({ name: "fs", server: { command: "npx" } }, CTX),
     );
     expect(out).toContain("已存在");
     expect(port.confirmInstall).not.toHaveBeenCalled();
@@ -167,20 +195,18 @@ describe("mcp_install", () => {
     const port: McpConfirmPort = {
       confirmInstall: vi.fn().mockResolvedValue("confirmed"),
     };
-    const tool = new McpInstallTool(mcp, port);
-    const out = await tool.execute(
-      { name: "fs", server: { command: "npx" } },
-      CTX,
+    const tool = new McpInstallTool(mcp, accountCtx, agentCtx, port);
+    const out = await runInContext(() =>
+      tool.execute({ name: "fs", server: { command: "npx" } }, CTX),
     );
     expect(out).toContain("已存在");
   });
 
   it("未注入 MCP_CONFIRM_PORT 时返回不支持确认，不写入", async () => {
     const { mcp, updateConfig } = makeFakeMcpService({ mcpServers: {} });
-    const tool = new McpInstallTool(mcp, undefined);
-    const out = await tool.execute(
-      { name: "fs", server: { command: "npx" } },
-      CTX,
+    const tool = new McpInstallTool(mcp, accountCtx, agentCtx, undefined);
+    const out = await runInContext(() =>
+      tool.execute({ name: "fs", server: { command: "npx" } }, CTX),
     );
     expect(out).toContain("不支持确认");
     expect(updateConfig).not.toHaveBeenCalled();
@@ -188,13 +214,13 @@ describe("mcp_install", () => {
 });
 
 describe("mcp_uninstall", () => {
-  it("删除已存在的 server，返回文案含「下一轮对话生效」", async () => {
+  it("删除已存在的 server，返回文案含「已生效」", async () => {
     const { mcp, getState } = makeFakeMcpService({
       mcpServers: { fs: { command: "npx" } },
     });
     const tool = new McpUninstallTool(mcp);
     const out = await tool.execute({ name: "fs" }, CTX);
-    expect(out).toContain("下一轮对话生效");
+    expect(out).toContain("已生效");
     expect(getState().mcpServers.fs).toBeUndefined();
   });
 
@@ -208,13 +234,13 @@ describe("mcp_uninstall", () => {
 });
 
 describe("mcp_enable / mcp_disable", () => {
-  it("mcp_disable 翻转 enabled 为 false，返回文案含「下一轮对话生效」", async () => {
+  it("mcp_disable 翻转 enabled 为 false，返回文案含「已生效」", async () => {
     const { mcp, getState } = makeFakeMcpService({
       mcpServers: { fs: { command: "npx" } },
     });
     const tool = new McpDisableTool(mcp);
     const out = await tool.execute({ name: "fs" }, CTX);
-    expect(out).toContain("下一轮对话生效");
+    expect(out).toContain("已生效");
     expect(getState().mcpServers.fs?.enabled).toBe(false);
   });
 
@@ -228,13 +254,27 @@ describe("mcp_enable / mcp_disable", () => {
     expect(getState().mcpServers.fs?.enabled).toBe(false);
   });
 
-  it("mcp_enable 翻转 enabled 为 true", async () => {
-    const { mcp, getState } = makeFakeMcpService({
+  it("mcp_enable 翻转 enabled 为 true，加载到工具 → 返回文案含「已生效」", async () => {
+    const { mcp, getState, getLoadedToolNames } = makeFakeMcpService({
       mcpServers: { fs: { command: "npx", enabled: false } },
     });
-    const tool = new McpEnableTool(mcp);
-    const out = await tool.execute({ name: "fs" }, CTX);
-    expect(out).toContain("下一轮对话生效");
+    getLoadedToolNames.mockReturnValue(new Set(["mcp__fs__read"]));
+    const tool = new McpEnableTool(mcp, accountCtx, agentCtx);
+    const out = await runInContext(() => tool.execute({ name: "fs" }, CTX));
+    expect(out).toContain("已生效");
+    expect(getState().mcpServers.fs?.enabled).toBe(true);
+  });
+
+  it("mcp_enable 翻转成功但 reload 后零工具（连接失败）→ 返回文案诚实反映「未生效」", async () => {
+    const { mcp, getState, getLoadedToolNames } = makeFakeMcpService({
+      mcpServers: { fs: { command: "npx", enabled: false } },
+    });
+    getLoadedToolNames.mockReturnValue(new Set()); // 该 server 零工具
+    const tool = new McpEnableTool(mcp, accountCtx, agentCtx);
+    const out = await runInContext(() => tool.execute({ name: "fs" }, CTX));
+    expect(out).not.toContain("已生效");
+    expect(out).toContain("配置已保存");
+    // enabled 翻转本身仍然成功——不能因为连接失败就回滚。
     expect(getState().mcpServers.fs?.enabled).toBe(true);
   });
 
@@ -242,16 +282,18 @@ describe("mcp_enable / mcp_disable", () => {
     const { mcp } = makeFakeMcpService({
       mcpServers: { fs: { command: "npx" } }, // enabled 缺省 = true
     });
-    const tool = new McpEnableTool(mcp);
-    const out = await tool.execute({ name: "fs" }, CTX);
+    const tool = new McpEnableTool(mcp, accountCtx, agentCtx);
+    const out = await runInContext(() => tool.execute({ name: "fs" }, CTX));
     expect(out).toContain("已是启用状态");
   });
 
   it("不存在的 server enable/disable 均报错", async () => {
     const { mcp } = makeFakeMcpService({ mcpServers: {} });
-    const enableOut = await new McpEnableTool(mcp).execute(
-      { name: "ghost" },
-      CTX,
+    const enableOut = await runInContext(() =>
+      new McpEnableTool(mcp, accountCtx, agentCtx).execute(
+        { name: "ghost" },
+        CTX,
+      ),
     );
     const disableOut = await new McpDisableTool(mcp).execute(
       { name: "ghost" },

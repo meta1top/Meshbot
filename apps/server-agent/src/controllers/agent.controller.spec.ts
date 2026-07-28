@@ -163,6 +163,10 @@ describe("AgentController", () => {
     // 与 AgentService 共用同一个假 emitter：进程内真实只有一个 EventEmitter2 单例
     // （app.module 的 EventEmitterModule.forRoot() @Global 提供），这里保持同款。
     emitter = { emit: jest.fn() };
+    // 假 ContextCompactor：本测试不覆盖压缩场景，isCompacting 恒 false。
+    const fakeCompactor = {
+      isCompacting: () => false,
+    };
     sessionService = new SessionService(
       ds.getRepository(Session),
       ds.getRepository(PendingMessage),
@@ -174,6 +178,7 @@ describe("AgentController", () => {
       fakeSchedules as unknown as never,
       fakeModelConfigs as unknown as never,
       emitter as unknown as EventEmitter2,
+      fakeCompactor as unknown as never,
     );
     // updateConfig 是 McpService 的最小行为替身：读-改-写 mcp.json（走真实
     // MeshbotConfigService 的 tmp 路径，配合 getMcp 直接读盘断言）+ 调

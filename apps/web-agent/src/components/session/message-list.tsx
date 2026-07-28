@@ -84,7 +84,7 @@ interface MessageListProps {
  * 这是 Task 8（`tool-call-block.tsx`）与 Task 7（`assistant-message-actions.tsx`/
  * `user-message-actions.tsx`）三个薄容器在 Task 9 的合并——`MessageList` 迁入
  * web-common 后直接渲染 web-common 版 `AssistantMessageActions`/
- * `UserMessageActions`/`ToolCallBlock`/`CompactionRow`，不再经过原来那层
+ * `UserMessageActions`/`ToolCallBlock`/`SystemEventRow`，不再经过原来那层
  * app 专属中间组件，三者的接线逻辑收敛进本文件（原三个薄容器文件已删除，
  * 唯一消费方就是本文件）。
  */
@@ -175,7 +175,11 @@ export function MessageList({
         reasoningThinking: (seconds) => t("reasoningThinking", { seconds }),
         reasoningThought: (seconds) => t("reasoningThought", { seconds }),
         reasoningProcess: t("reasoningProcess"),
-        compactionRowTitle: (count) => t("compaction.rowTitle", { count }),
+        systemEvent: {
+          compactionTitle: (count) =>
+            t("systemEvent.compactionTitle", { count }),
+          modelSwitch: (from, to) => t("systemEvent.modelSwitch", { from, to }),
+        },
         runErrorAgentNotRemotable: t("runErrorAgentNotRemotable"),
         runErrorSessionAgentMismatch: t("runErrorSessionAgentMismatch"),
         runErrorOffline: t("runErrorOffline"),

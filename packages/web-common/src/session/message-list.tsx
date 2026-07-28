@@ -10,10 +10,10 @@ import {
   AssistantMessageActions,
   type AssistantMessageActionsLabels,
 } from "./assistant-message-actions";
-import { CompactionRow } from "./compaction-row";
 import { MarkdownContent } from "./markdown-content";
 import type { ModelConfigLike } from "./model-name";
 import { isReasoningThinking } from "./reasoning-thinking";
+import { SystemEventRow, type SystemEventRowLabels } from "./system-event-row";
 import type { TimelineMessage, ToolCallView } from "./timeline";
 import { ToolCallBlock, type ToolCallBlockLabels } from "./tool-call-block";
 import { UserMessageActions } from "./user-message-actions";
@@ -23,7 +23,12 @@ export interface MessageListLabels {
   assistantName: string;
   /** run 失败提示行前缀（如「运行失败："）。 */
   runErrorPrefix: string;
-  /** loading 三点跳动的 aria-label（如「正在生成回复」）。 */
+  /**
+   * @deprecated loading 假消息机制已收敛为消息流末尾的 `StatusLine`
+   * （见 `status-line.tsx`），本组件内部不再消费这个字段。字段本身仍保留
+   * 在接口里只是为了不破坏既有调用方（web-agent/web-main 仍在传）——
+   * 待这些调用方随 StatusLine 接线清理时一并删除。
+   */
   generatingReply: string;
   /** 推理中标签，`{seconds}` 由调用方格式化好传入（如「思考中 3.2s」）。 */
   reasoningThinking: (seconds: string) => string;
@@ -31,8 +36,8 @@ export interface MessageListLabels {
   reasoningThought: (seconds: string) => string;
   /** 无耗时信息时的兜底标签（如「思考过程」，历史恢复场景）。 */
   reasoningProcess: string;
-  /** 压缩占位行标题，转发给 CompactionRow。 */
-  compactionRowTitle: (count: number) => string;
+  /** 居中系统事件行文案（压缩/切模型），转发给 SystemEventRow。 */
+  systemEvent: SystemEventRowLabels;
   /**
    * 远程二次门控拒绝的专属文案（Bug #13）：`m.errorReason === "agent_not_remotable"`
    * 时展示这条，而不是展示 `errorText` 里未经翻译的原始兜底文本。
@@ -150,7 +155,7 @@ export interface MessageListProps {
  * 转发的 REST/atom 数据，现直接作为本组件 props（`onFeedback`/`onRegenerate`/
  * `modelConfigs`/`resolveImTargetName`/`onPreviewArtifact`/`artifactRemote`/
  * `renderSubagentCard`）——本组件直接渲染 web-common 的
- * `AssistantMessageActions`/`UserMessageActions`/`ToolCallBlock`/`CompactionRow`，
+ * `AssistantMessageActions`/`UserMessageActions`/`ToolCallBlock`/`SystemEventRow`，
  * 不再经过一层 app 专属薄容器。
  *
  * 设计原则：
@@ -187,9 +192,6 @@ export function MessageList({
   return (
     <div className={cn("flex flex-col gap-1", nested ? "py-1" : "pb-6 pt-2")}>
       {messages
-        .filter(
-          (m) => !(m.role === "system" && m.metadata?.kind !== "compaction"),
-        )
         // 全空 assistant 行不渲染（否则是「头像 + 粗体名字 + 空白」的幽灵行）。
         // 根因已在后端修掉（`GraphRunner.flushRound` 的空轮短路：不再为只带
         // finish_reason/usage 的尾随 chunk 发 assistant_done），这里是兜底——
@@ -202,19 +204,23 @@ export function MessageList({
             !!m.content ||
             !!m.reasoning ||
             (m.toolCalls?.length ?? 0) > 0 ||
-            m.loading === true ||
             m.streaming === true ||
             m.failed === true,
         )
         .map((m) => {
-          // 压缩占位行：role=system + metadata.kind="compaction"
-          if (m.role === "system" && m.metadata?.kind === "compaction") {
+          // 居中系统事件行：role=system + metadata.kind（压缩/切模型）。
+          // 未设 kind（历史遗留 / 非系统行 metadata 缺失）静默跳过；已知 kind
+          // 转给 SystemEventRow，未来新 kind 由该组件自身安全跳过（向后兼容）。
+          if (m.role === "system") {
+            const kind = m.metadata?.kind;
+            if (!kind) return null;
             return (
-              <CompactionRow
+              <SystemEventRow
                 key={m.id}
-                removedCount={(m.metadata.removedCount as number) ?? 0}
-                summary={m.content}
-                labels={{ rowTitle: labels.compactionRowTitle }}
+                kind={kind}
+                content={m.content}
+                metadata={m.metadata}
+                labels={labels.systemEvent}
               />
             );
           }
@@ -249,14 +255,15 @@ export function MessageList({
                   />
                 ) : null}
                 {/*
-                气泡仅在「有可见正文 / loading / streaming / failed」时出现。
+                气泡仅在「有可见正文 / streaming / failed」时出现。
                 中间决策轮（仅 reasoning + toolCalls、content 空）不出气泡 —— 否则
                 空 div 也算 flex gap-2 一个 item，让「思考过程 ↔ tool 块」之间多一段空白。
                 toolCalls 自身有独立块（下方渲染），不靠这里撑场。
+                等首个 token 的过渡态不再由这里渲染 TypingDots——已收敛为消息流
+                末尾的 StatusLine（纯展示、不进 timeline，见 status-line.tsx）。
               */}
                 {(m.role === "user" ||
                   m.content ||
-                  m.loading ||
                   m.streaming ||
                   m.failed) && (
                   <div
@@ -265,14 +272,10 @@ export function MessageList({
                       m.failed && "text-destructive",
                     )}
                   >
-                    {m.loading ? (
-                      <TypingDots label={labels.generatingReply} />
-                    ) : (
-                      <MarkdownContent
-                        text={stripLlmuse(m.content)}
-                        streaming={m.role === "assistant" && m.streaming}
-                      />
-                    )}
+                    <MarkdownContent
+                      text={stripLlmuse(m.content)}
+                      streaming={m.role === "assistant" && m.streaming}
+                    />
                   </div>
                 )}
                 {m.failed && (m.errorText || m.errorReason) && (
@@ -341,21 +344,6 @@ export function MessageList({
           );
         })}
     </div>
-  );
-}
-
-/** "..." 三点跳动 loading 指示器（等首个 chunk 时显示）。颜色调淡避免视觉重量。 */
-function TypingDots({ label }: { label: string }) {
-  return (
-    <span
-      role="status"
-      aria-label={label}
-      className="inline-flex items-center gap-1 align-middle"
-    >
-      <span className="h-1 w-1 animate-bounce rounded-full bg-muted-foreground/40 [animation-delay:-0.3s]" />
-      <span className="h-1 w-1 animate-bounce rounded-full bg-muted-foreground/40 [animation-delay:-0.15s]" />
-      <span className="h-1 w-1 animate-bounce rounded-full bg-muted-foreground/40" />
-    </span>
   );
 }
 

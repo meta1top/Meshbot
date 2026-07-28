@@ -4,7 +4,9 @@ import { stripLlmuse } from "@meshbot/types-agent";
 import {
   type ArtifactPreviewTarget,
   SessionConversationView,
+  type SlashCommand,
 } from "@meshbot/web-common/session";
+import axios from "axios";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useTranslations } from "next-intl";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
@@ -41,10 +43,30 @@ import {
 } from "@/lib/session-transport";
 import { useModelConfigs } from "@/rest/model-config";
 import {
+  compactSession,
   deletePendingMessage,
   regenerateMessage,
   setMessageFeedback,
 } from "@/rest/session";
+
+/**
+ * 从错误对象里提取展示文案：优先取后端 400 响应体的 `message`（如
+ * `/compact` 无可压缩内容的友好中文提示），其次取 `Error.message`，都没有
+ * 则用调用方给的兜底——与 `agent-editor-sheet.tsx` / `tool-prefs-editor.tsx`
+ * 的同名逻辑一致（未共享抽取，各处都很短，各自保持组件自包含）。
+ */
+function extractErrorMessage(err: unknown, fallback: string): string {
+  if (
+    axios.isAxiosError(err) &&
+    err.response?.data &&
+    typeof err.response.data === "object" &&
+    "message" in err.response.data &&
+    typeof (err.response.data as { message?: unknown }).message === "string"
+  ) {
+    return (err.response.data as { message: string }).message;
+  }
+  return err instanceof Error ? err.message : fallback;
+}
 
 interface AssistantConversationBodyProps {
   /** 当前会话 ID，由 page 传入（渲染时必有）。远程会话时是 B 上的会话 id。 */
@@ -216,6 +238,9 @@ export function AssistantConversationBody({
   const { stickToBottom, scrollToBottom, topSentinelRef } = useChatScroll({
     scrollContainerRef: scrollRef,
     messages: timelineMessages,
+    // 末尾 StatusLine 由 running/compacting 派生（不在 messages 里）——喂进吸底
+    // 依赖，/compact 时状态行出现能跟随滚到底。
+    tailActivity: `${stream.running}:${stream.compacting ?? ""}`,
     hasMore: stream.hasMoreHistory,
     onLoadMore: () => void stream.loadMoreHistory(),
   });
@@ -233,6 +258,31 @@ export function AssistantConversationBody({
     chatInputRef.current?.focus(text);
     setGlobalAlertMessage(t("cannotSendWhileRunning"));
   };
+
+  /**
+   * `/` 命令注册表：目前只有 `/compact`（主动触发上下文压缩）。只在本地会话
+   * 注入——远程会话（`remoteAgentId` 非空）的 id 是 B 上的会话 id，本地 REST
+   * `POST /api/sessions/:id/compact` 对它无意义（404），故不传 `commands`，
+   * ChatInput 未传 commands 时行为与现状一致：`/` 开头文本照常发送。
+   * 成功不额外提示——压缩卡片经 WS `run.compaction_done` 自然出现在消息流；
+   * 400（无可压缩内容）/ 其他异常都把后端友好消息透传为内联提示。
+   */
+  const commands: SlashCommand[] | undefined = remoteAgentId
+    ? undefined
+    : [
+        {
+          name: "compact",
+          description: tChat("commands.compactDescription"),
+          run: async () => {
+            try {
+              await compactSession(id);
+              return undefined;
+            } catch (err) {
+              return extractErrorMessage(err, tChat("commands.compactFailed"));
+            }
+          },
+        },
+      ];
 
   /**
    * 删除一条 pending 消息。
@@ -306,7 +356,6 @@ export function AssistantConversationBody({
   const conversations = useAtomValue(conversationsAtom);
   const setArtifact = useSetAtom(previewArtifactAtom);
   const tArtifact = useTranslations("session.artifact");
-  const tCompaction = useTranslations("session.compaction");
 
   const view = (
     <SessionConversationView
@@ -369,9 +418,12 @@ export function AssistantConversationBody({
           onChange={setDraft}
           onSend={(text) => void handleSend(text)}
           onInterrupt={stream.interrupt}
-          isLoading={stream.running}
+          // 压缩中禁发：与 running 共用同一条禁用/隐藏发送逻辑（发送按钮换成
+          // 中断按钮 + Enter 快捷键同步禁用），末尾 StatusLine 同步显「压缩中」。
+          isLoading={stream.running || !!stream.compacting}
           canInterrupt={stream.canInterrupt}
           placeholder={inputPlaceholder}
+          commands={commands}
           trailingActions={
             <ModelSelect value={sessionModelId} onChange={handleModelChange} />
           }
@@ -396,6 +448,8 @@ export function AssistantConversationBody({
             interrupt: tChat("interrupt"),
             interruptUnavailable: tChat("interruptUnavailable"),
             send: tChat("send"),
+            commandUnknown: (name) => tChat("commandUnknown", { name }),
+            commandMenuEmpty: tChat("commandMenuEmpty"),
             usage: {
               nextRequestLabel: t("usage.nextRequestLabel"),
               inputLabel: t("usage.inputLabel"),
@@ -411,10 +465,6 @@ export function AssistantConversationBody({
       labels={{
         scrollToBottom: t("scrollToBottom"),
         remoteLoadFailed: tRemote("remoteLoadFailed"),
-        compaction: {
-          bannerThreshold: tCompaction("bannerThreshold"),
-          bannerCtxExceeded: tCompaction("bannerCtxExceeded"),
-        },
         messageList: {
           assistantName,
           runErrorPrefix: t("runErrorPrefix"),
@@ -422,10 +472,24 @@ export function AssistantConversationBody({
           reasoningThinking: (seconds) => t("reasoningThinking", { seconds }),
           reasoningThought: (seconds) => t("reasoningThought", { seconds }),
           reasoningProcess: t("reasoningProcess"),
-          compactionRowTitle: (count) => tCompaction("rowTitle", { count }),
+          systemEvent: {
+            compactionTitle: (count) =>
+              t("systemEvent.compactionTitle", { count }),
+            modelSwitch: (from, to) =>
+              t("systemEvent.modelSwitch", { from, to }),
+          },
           runErrorAgentNotRemotable: t("runErrorAgentNotRemotable"),
           runErrorSessionAgentMismatch: t("runErrorSessionAgentMismatch"),
           runErrorOffline: t("runErrorOffline"),
+        },
+        // T2 遗留接线：消息流末尾常驻状态行文案（五态：思考/执行/流式/压缩中，
+        // 思考态额外轮换 3 条变体）。补上后 StatusLine 才会真正点亮——
+        // SessionConversationView 把它当可选字段，缺省时整行不渲染。
+        statusLine: {
+          thinking: toI18nList(t.raw("statusLine.thinking")),
+          executing: [t("statusLine.executing")],
+          streaming: [t("statusLine.streaming")],
+          compacting: [t("statusLine.compacting")],
         },
         toolCall: {
           artifactPresentFailed: tArtifact("presentFailed"),

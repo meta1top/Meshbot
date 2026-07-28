@@ -794,10 +794,9 @@
       "attachment": "Add attachment",
       "stopUnavailable": "Cannot interrupt while observing: this run was not started from this device"
     },
-    "compaction": {
-      "bannerThreshold": "Compacting conversation history…",
-      "bannerCtxExceeded": "Context full; compacting to continue…",
-      "rowTitle": "Compacted {count} earlier messages"
+    "systemEvent": {
+      "compactionTitle": "Compacted {count} earlier messages",
+      "modelSwitch": "Switched model: {from} → {to}"
     },
     "subagent": {
       "fallbackTitle": "Subtask",

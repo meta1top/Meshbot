@@ -7,6 +7,7 @@ import {
   traceIdMiddleware,
 } from "@meshbot/common";
 import { NestFactory, Reflector } from "@nestjs/core";
+import { json, urlencoded } from "express";
 import type { NextFunction, Request, Response } from "express";
 import { I18nService } from "nestjs-i18n";
 import { AppModule } from "./app.module";
@@ -48,7 +49,10 @@ async function bootstrap() {
   const host = "0.0.0.0";
   const port = await resolvePort(host);
 
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
+  // JSON 体积上限手动接管（Nest 默认 body-parser 100kb）：提示词文件 PUT(上限 200k 字符)与大 DTO 同理会撞 100kb 默认限,与云端网关对称抬高
+  app.use(json({ limit: "20mb" }));
+  app.use(urlencoded({ extended: true, limit: "20mb" }));
 
   app.enableCors({
     origin: true,

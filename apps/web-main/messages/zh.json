@@ -334,10 +334,9 @@
       "attachment": "添加附件",
       "stopUnavailable": "观察态下无法中断：这个 run 不是本端发起的"
     },
-    "compaction": {
-      "bannerThreshold": "会话历史压缩中…",
-      "bannerCtxExceeded": "上下文已满，正在压缩历史以继续…",
-      "rowTitle": "已压缩 {count} 条早期消息"
+    "systemEvent": {
+      "compactionTitle": "已压缩 {count} 条早期消息",
+      "modelSwitch": "已切换模型：{from} → {to}"
     },
     "subagent": {
       "fallbackTitle": "子任务",

@@ -351,14 +351,13 @@ describe("SessionMessageService", () => {
     expect(row?.toolCalls).toBe(JSON.stringify(calls));
   });
 
-  it("recordCompactionPlaceholder 写 role=system + metadata kind=compaction", async () => {
-    await service.recordCompactionPlaceholder({
+  it("recordSystemEvent(kind=compaction) 写 role=system + metadata kind=compaction（原 recordCompactionPlaceholder 行为回归）", async () => {
+    await service.recordSystemEvent({
       id: "comp-1",
       sessionId: "s1",
-      summary: "用户问了 X，已尝试 Y",
-      removedCount: 5,
-      fromMessageId: "m1",
-      toMessageId: "m5",
+      kind: "compaction",
+      content: "用户问了 X，已尝试 Y",
+      metadata: { removedCount: 5, fromMessageId: "m1", toMessageId: "m5" },
     });
     const row = await ds
       .getRepository(SessionMessage)
@@ -374,22 +373,40 @@ describe("SessionMessageService", () => {
     });
   });
 
-  it("recordCompactionPlaceholder id 已存在视为幂等成功，不重复 insert", async () => {
-    await service.recordCompactionPlaceholder({
-      id: "comp-1",
+  it("recordSystemEvent(kind=model_switch) 写 role=system + metadata kind=model_switch", async () => {
+    await service.recordSystemEvent({
+      id: "msw-1",
       sessionId: "s1",
-      summary: "first",
-      removedCount: 1,
-      fromMessageId: "a",
-      toMessageId: "b",
+      kind: "model_switch",
+      content: "已切换模型：A → B",
+      metadata: { fromModel: "A", toModel: "B" },
     });
-    await service.recordCompactionPlaceholder({
+    const row = await ds
+      .getRepository(SessionMessage)
+      .findOneBy({ langgraphId: "msw-1" });
+    expect(row?.role).toBe("system");
+    expect(row?.content).toBe("已切换模型：A → B");
+    expect(JSON.parse(row?.metadata as string)).toEqual({
+      kind: "model_switch",
+      fromModel: "A",
+      toModel: "B",
+    });
+  });
+
+  it("recordSystemEvent id 已存在视为幂等成功，不重复 insert", async () => {
+    await service.recordSystemEvent({
       id: "comp-1",
       sessionId: "s1",
-      summary: "second",
-      removedCount: 2,
-      fromMessageId: "c",
-      toMessageId: "d",
+      kind: "compaction",
+      content: "first",
+      metadata: { removedCount: 1, fromMessageId: "a", toMessageId: "b" },
+    });
+    await service.recordSystemEvent({
+      id: "comp-1",
+      sessionId: "s1",
+      kind: "compaction",
+      content: "second",
+      metadata: { removedCount: 2, fromMessageId: "c", toMessageId: "d" },
     });
     const rows = await ds
       .getRepository(SessionMessage)

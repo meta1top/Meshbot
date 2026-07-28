@@ -179,17 +179,20 @@ export class ThreadStateService {
 
   /**
    * 一次性 updateState 重排压缩结果，让 LLM 看到的顺序是：
-   *   [原系统提示词（若有，无 id 不会被删，自动留在最前）] [新摘要 system] [保留区 messages]
+   *   [稳定 id 系统消息（system:*，调用方已从工作集剔除、不进 removeIds，原位保留）]
+   *   [新摘要 system] [保留区 messages]
    *
    * 实现：reducer 是 `kept.concat(appended)`，只能 append、不能插中间。所以：
-   * - removeIds 传入「所有带 id 的消息」（摘要区 + 保留区），把它们从 state 删掉；
-   * - 系统提示词由 `new SystemMessage(prompt)` 创建时无 id，reducer 的 `!m.id`
-   *   分支让它无条件保留在原位（首条），不需要也无法 remove；
+   * - removeIds 由调用方（ContextCompactor）传入「工作集 rest 的全部 id」——
+   *   **不含 `system:*` 前缀的稳定 id 系统消息**（persona/ctx/skills/mcp/prompts
+   *   五条都有 id；旧注释「系统提示词无 id 自动留最前」的假设已失效，曾因此
+   *   把它们吞进摘要并删除、导致下一轮同 id push 尾插漂移——修缮 T2 根治）；
+   * - 未被 remove 的消息 reducer 原位保留；
    * - 然后按 [摘要, ...保留区原对象] 顺序 append。保留区消息复用原对象（id 不变），
    *   被删后又重新加回 → 等效"移动到摘要之后"。
    *
-   * 最终 state = [system(留), summary, ...keep]，摘要位于保留区之前，时序正确，
-   * 且 system 仍在最前（跨 provider 友好）。
+   * 最终 state = [system:*(原位), summary, ...keep]。已知边界：修复前被旧 bug
+   * 漂移到中后部的 system 消息不会被回移（本修复只阻止继续恶化，不回修存量）。
    */
   async applyCompaction(
     threadId: ThreadId,

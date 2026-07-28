@@ -39,14 +39,21 @@ export interface RecordToolResultInput {
   ok?: boolean;
 }
 
-/** 写 compaction 占位行入参。id 调用方自行生成（建议 `comp-${uuid}` 或时间戳）。 */
-export interface RecordCompactionPlaceholderInput {
+/**
+ * 写一条系统事件行入参（role=system + metadata.kind）。id 调用方自行生成
+ * （建议按 kind 加前缀，如 `comp-${uuid}` / `msw-${uuid}`，便于 DB 里按前缀
+ * 肉眼区分）。`metadata` 不含 kind——insertWithSeq 落库时自动拼进去，与
+ * `HistoryMessage.metadata`（含 kind）的对外形状保持一致。
+ */
+export interface RecordSystemEventInput {
   id: string;
   sessionId: string;
-  summary: string;
-  removedCount: number;
-  fromMessageId: string;
-  toMessageId: string;
+  /** 系统事件类型：压缩占位 / 切模型。与 HistoryMessage.metadata.kind 同枚举。 */
+  kind: "compaction" | "model_switch";
+  /** 展示文案（HistoryMessage.content）。 */
+  content: string;
+  /** 结构化附加数据（不含 kind）。 */
+  metadata: Record<string, unknown>;
 }
 
 /** listPage 返回。 */
@@ -235,31 +242,25 @@ export class SessionMessageService {
   }
 
   /**
-   * 写一条 compaction 占位行（role=system，metadata 标 kind=compaction）。
-   * 幂等：同 id 已存在直接返回。
+   * 写一条系统事件行（role=system，metadata 标 kind）。幂等：同 id 已存在直接返回。
    *
-   * UI 在 message-list 渲染时识别 metadata.kind === "compaction" 走折叠组件，
-   * 不当普通系统消息显示。
+   * 泛化自原 `recordCompactionPlaceholder`（压缩占位行是本方法的一个 kind 实例）；
+   * UI 在 message-list 渲染时识别 `metadata.kind` 走 SystemEventRow 居中展示，
+   * 不当普通消息显示——`compaction` 可展开摘要，`model_switch` 纯文案提示，
+   * 未知 kind 前端安全跳过（向后兼容未来新 kind）。
    */
-  async recordCompactionPlaceholder(
-    input: RecordCompactionPlaceholderInput,
-  ): Promise<void> {
+  async recordSystemEvent(input: RecordSystemEventInput): Promise<void> {
     const exists = await this.repo.findOneBy({ langgraphId: input.id });
     if (exists) return;
     await this.insertWithSeq({
       langgraphId: input.id,
       sessionId: input.sessionId,
       role: "system",
-      content: input.summary,
+      content: input.content,
       reasoning: null,
       toolCalls: null,
       toolCallId: null,
-      metadata: JSON.stringify({
-        kind: "compaction",
-        removedCount: input.removedCount,
-        fromMessageId: input.fromMessageId,
-        toMessageId: input.toMessageId,
-      }),
+      metadata: JSON.stringify({ kind: input.kind, ...input.metadata }),
     });
   }
 

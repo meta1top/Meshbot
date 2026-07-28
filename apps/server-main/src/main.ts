@@ -5,6 +5,7 @@ import {
   ResponseInterceptor,
   traceIdMiddleware,
 } from "@meshbot/common";
+import { json, urlencoded } from "express";
 import { Logger } from "@nestjs/common";
 import { NestFactory, Reflector } from "@nestjs/core";
 import { I18nService } from "nestjs-i18n";
@@ -51,7 +52,12 @@ async function bootstrap() {
     );
   }
 
-  const app = await NestFactory.create(AppModule.forRoot(config));
+  const app = await NestFactory.create(AppModule.forRoot(config), {
+    bodyParser: false,
+  });
+  // JSON 体积上限手动接管（Nest 默认 body-parser 100kb）：模型网关 /api/v1/chat/completions 转发全量消息历史,长对话轻松超 100kb,曾致 413 request entity too large
+  app.use(json({ limit: "20mb" }));
+  app.use(urlencoded({ extended: true, limit: "20mb" }));
 
   // CORS：token 型 API（Bearer 显式携带，无 cookie 会话），镜像 server-agent 的写法。
   // 解除 web-main(3102) → server-main(3200) 本地 dev 跨端口阻塞；生产同源反代下无副作用。
